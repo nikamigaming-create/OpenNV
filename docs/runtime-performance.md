@@ -1,5 +1,60 @@
 # Runtime performance and CPU scheduling
 
+## Source-scoped DDS image reuse
+
+A fresh player-material audit observes 208 DDS creations/uploads while building
+the actual first- and third-person player actors from the owned checkpoint.
+Repeated body, Pip-Boy and equipped weapon sources account for much of this
+work. A separate sampled loading trace places player material construction
+beneath presentation rebuild; those inclusive samples are not GPU durations.
+
+Immutable DDS images now share a source-owned LRU cache. Materials and their
+animation state remain independent. Keys retain exact source, normal-map mode
+and logical-path context, and a hit additionally requires the same live payload
+array. Changed or reread source bytes therefore miss. The cache weakly retains
+CPU payloads and bounds retained uploaded image data to 128 MiB and 4,096 entries;
+this is not a bound on total graphics-driver memory. Existing mip, alpha and
+format handling remains in the original image creation path. Eviction and
+source retirement release references without disposing images still owned by
+live materials. A retired source refuses new cached loads.
+
+The owned audit now observes 51 DDS creations/uploads, including four outside
+the new cache, with 157 cache hits and 47 retained entries (11,377,004 image-data
+bytes). All 101 audited actor-part surface bindings retain exactly the same
+shader, parameter, source and image-data signature. Explicit source retirement
+empties the cache and preserves those still-live bindings. This coverage does
+not include every weapon attachment or final-eye pixels. Synthetic checks cover
+payload identity, normal separation, independent materials, LRU bounds, changed
+payloads, live owners after eviction/retirement and oversized uncached images.
+
+Separate optimized official-engine Vulkan/Forward+ processes Continue copies
+of the same checkpoint with recording, builds and detailed snapshots off.
+Before/after wall times are 30.26 and 21.17 seconds, with largest observed loading
+intervals of 1,534.66 and 1,063.26 ms. Both quit normally and preserve the original
+checkpoint. An unrelated game workload was present; this ordered pair is not a
+controlled speedup measurement. Second-scale freezes, combat spikes and physical
+headset CPU/GPU timing remain unacceptable and open.
+
+The updated export also Continues the previously verified qualifying limb-save
+in a new process. It restores the exact saved 0.088888889-second reaction phase,
+retains 15.599999 health and 14.400001 limb damage, completes the reaction and
+resumes attack without reaction error, then exits zero. Two fresh shot/save
+trials complete F5 but miss the required limb reaction (miss/torso hit); they do
+not re-establish the complete fresh-hit persistence sequence on this export.
+Ordinary Continue/main-menu/Continue/quit also exits zero with source readers
+drained and the original checkpoint unchanged.
+
+After building the managed project, the recording-free owned material audit is:
+
+```powershell
+& $Godot --path runtime --xr-mode off res://tools/NativePlayerRigAudit/NativePlayerRigAudit.tscn -- --materials $OwnedData $PrivateCheckpoint equipped $FreshPrivateReport
+```
+
+Use a fresh private report path. The audit constructs production actors, reads
+material image signatures and tests source retirement; it does not run combat
+or certify final-eye rendering. Its construction timings include observation
+and must not be used as an optimized gameplay benchmark.
+
 ## Navigation source reuse during continuation
 
 The trace after PR #217 places roughly 1,170 ms of scene-thread time in

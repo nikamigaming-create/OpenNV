@@ -2362,7 +2362,8 @@ internal static partial class RuntimeNativeNifMeshBuilder
             if (string.IsNullOrEmpty(logicalPath))
                 return null;
             var (payload, source) = ReadTexture(logicalPath);
-            var texture = NativeDdsTexture.Load(payload, source, normal);
+            var owner = _contentSource ?? RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("Owned texture source is absent.");
+            var texture = NativeDdsTexture.LoadCached(owner, payload, source, normal, logicalPath);
             texture.SetMeta("opennv_source_texture", source);
             texture.SetMeta("opennv_logical_texture", logicalPath);
             return texture;

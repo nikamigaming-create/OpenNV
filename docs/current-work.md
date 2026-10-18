@@ -9,11 +9,37 @@ physical-headset acceptance; selected component passes cannot close it.
 
 ## Current owner
 
-Next owner: the measured player-presentation/material loading stall and combat
-frame pacing. Start the next block on a fresh codex branch from verified
-main/origin/main after checked publication of the dependency repair below. The
-navigation, rig diagnostic and XR viewport-transition repairs are integrated;
-the viewport contract is described in [xr-session-lifetime.md](xr-session-lifetime.md).
+Current owner: codex/player-material-stall, from verified main/origin/main
+0001e5697672d7ec16c0f6038e82156b0b50ef51 with no outstanding task PR. PR #221
+passed every hosted check and is merged. Next divergence: measured player
+presentation/material loading stalls and combat frame pacing. The navigation,
+rig diagnostic and XR viewport-transition repairs are integrated; the viewport
+contract is described in [xr-session-lifetime.md](xr-session-lifetime.md).
+
+A fresh official-engine export binds its managed product version, runtime-tree
+hash and executable/pack/assembly digests. Keep it separate from the experimental
+source engine below for before/after comparisons. New loading investigations and
+the corrected private readiness/retirement helper are under
+local/vr-rig-repair-20261018 and local/save-combat-repair-20261017/material-source-*.
+An unrelated recording workload was observed during the newer baseline; do not
+treat that sample or a diagnostic trace as uncontended performance acceptance.
+Source-bound player material observations identify repeated DDS creation. The
+candidate source-owned image cache reduces 208 creations/uploads to 51, retaining
+the exact signature of 101 audited actor-part surface bindings. Materials remain
+independent; existing source/mip/alpha handling is preserved. The cache bounds
+retained image data to 128 MiB and releases references on source retirement while
+live material bindings remain exact. Synthetic and owned retirement checks pass.
+The ordered before/after loading pair is 30.26 versus 21.17 seconds, with maximum
+observed intervals of 1,534.66 versus 1,063.26 ms. The unrelated game workload
+precludes controlled speedup claims, and the remaining freeze is unacceptable.
+The full official-editor runtime gate passes. The updated executable cold-loads
+the previously verified qualifying reaction save at its exact retained phase,
+preserves health/injury, completes the reaction and resumes attack without a
+reaction error, then exits zero. Two new shot/save trials complete F5 but do not
+produce the qualifying limb reaction (one misses, one hits the torso), so they
+do not repeat the full hit-to-reaction-save proof. Native Continue/main-menu/
+Continue/quit also passes with readers drained, exit zero and the original
+checkpoint unchanged. Details and coverage limits are in runtime-performance.md.
 
 The pinned Godot profile leak is repaired in a separately identified experimental
 source template. The reviewed patch records created RIDs once in the interface's

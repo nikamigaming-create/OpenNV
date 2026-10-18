@@ -1,22 +1,58 @@
 using Godot;
 using System.Diagnostics;
+using System.Runtime.CompilerServices;
+using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Formats.Gamebryo;
 
 namespace OpenNV.Runtime.Presentation.Rendering;
 
 internal static class NativeDdsTexture
 {
+    private static readonly ConditionalWeakTable<RuntimeLiveContentSource, NativeDdsTextureCache> Caches = new();
     internal static Action<Image.Format, int, int, double, double>? UploadObserver { get; set; }
+    internal static Action<string, bool, int, bool, double>? LoadObserver { get; set; }
 
     internal static Texture2D Load(byte[] payload, string source, bool normal = false)
+        => LoadCore(payload, source, normal, out _);
+
+    internal static Texture2D LoadCached(RuntimeLiveContentSource owner, byte[] payload, string source,
+        bool normal = false, string? logicalPath = null)
     {
-        if (FalloutDdsMipChain.ReadPartial(payload) is { } partial) return NativePartialMipTexture.Create(payload, partial);
+        var cache = Caches.GetValue(owner, content =>
+        {
+            var created = new NativeDdsTextureCache(128L * 1024 * 1024);
+            content.RegisterRetirement(created.Retire);
+            return created;
+        });
+        return cache.Get(new(source, normal, logicalPath), payload, () =>
+        {
+            var texture = LoadCore(payload, source, normal, out var bytes);
+            return (texture, bytes);
+        });
+    }
+
+    internal static object? CacheState(RuntimeLiveContentSource owner) => Caches.TryGetValue(owner, out var cache) ? cache.State : null;
+
+    private static Texture2D LoadCore(byte[] payload, string source, bool normal, out long uploadedBytes)
+    {
+        var observer = LoadObserver;
+        var started = observer is null ? 0 : Stopwatch.GetTimestamp();
+        if (FalloutDdsMipChain.ReadPartial(payload) is { } partial)
+        {
+            var partialTexture = NativePartialMipTexture.Create(payload, partial);
+            uploadedBytes = partial.Levels.Sum(level => (long)level.Bytes);
+            observer?.Invoke(source, normal, payload.Length, true, Stopwatch.GetElapsedTime(started).TotalMilliseconds);
+            return partialTexture;
+        }
         using var image = new Image();
         var error = image.LoadDdsFromBuffer(payload);
         if (error != Error.Ok || image.IsEmpty()) throw new InvalidDataException($"Owned DDS decoding failed: {source}, {error}.");
         if (normal && image.GetFormat() == Image.Format.L8)
             throw new NotSupportedException($"Normal texture has an unsupported single-channel format: {source}");
-        return Create(image);
+        var texture = Create(image);
+        uploadedBytes = image.GetDataSize();
+        observer?.Invoke(source, normal, payload.Length, false, Stopwatch.GetElapsedTime(started).TotalMilliseconds);
+        return texture;
     }
 
     internal static ImageTexture Create(Image image)

@@ -22,6 +22,9 @@ internal sealed partial class RuntimeLiveContentSource : IDisposable
     private readonly ConcurrentDictionary<string, string> _archiveResources =
         new(StringComparer.OrdinalIgnoreCase);
     private readonly SourcePayloadCache _payloads = new(512L * 1024 * 1024);
+    private readonly object _retirementGate = new();
+    private readonly List<Action> _retirement = [];
+    private bool _retired;
     private readonly ConcurrentDictionary<string, string> _archiveWinners =
         new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, LoosePayload> _loosePayloads =
@@ -326,11 +329,32 @@ internal sealed partial class RuntimeLiveContentSource : IDisposable
         // Warmup owns archive handles too; do not let it reopen them after disposal.
         try { ArchiveWarmup.GetAwaiter().GetResult(); }
         catch (Exception) { /* A failed warmup still has to release every opened archive. */ }
-        _payloads.Clear();
-        foreach (var archive in _openArchives.Values)
+        Action[] retirement;
+        lock (_retirementGate)
         {
-            if (archive.IsValueCreated)
-                archive.Value.Dispose();
+            _retired = true;
+            retirement = [.. _retirement]; _retirement.Clear();
+        }
+        try
+        {
+            foreach (var release in retirement) release();
+        }
+        finally
+        {
+            _payloads.Clear();
+            foreach (var archive in _openArchives.Values)
+                if (archive.IsValueCreated) archive.Value.Dispose();
+        }
+    }
+
+    // Dependents release retained references, never scene/GPU objects here:
+    // preparation-only sources can also retire on a worker thread.
+    internal void RegisterRetirement(Action release)
+    {
+        lock (_retirementGate)
+        {
+            ObjectDisposedException.ThrowIf(_retired, this);
+            _retirement.Add(release);
         }
     }
 

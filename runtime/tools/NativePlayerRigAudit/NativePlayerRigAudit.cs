@@ -12,6 +12,10 @@ public partial class NativePlayerRigAudit : Node3D
         try
         {
             var args = OS.GetCmdlineUserArgs();
+            if (args is ["--materials", .. var materialArgs])
+            {
+                await AuditMaterials(materialArgs); GetTree().Quit(); return;
+            }
             if (args.Length is not (4 or 5)) throw new ArgumentException("Expected owned Data, native save, weapon editor ID, private report path and optional private capture directory.");
             RuntimeLiveContentSource.Configure(args[0], RuntimeLiveContentSource.FalloutNewVegasGame);
             using var content = RuntimeLiveContentSource.Current!;

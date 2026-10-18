@@ -181,6 +181,7 @@ public partial class NativeNifInstanceAudit : Node
             ExerciseParticleChannels();
             ExerciseParticleShapesColors();
             ExerciseDdsImages();
+            ExerciseTextureReuse();
             ExerciseTextureAddressing();
             ExerciseHeadTracking();
             ExerciseAuthoredDecalSurfaces();

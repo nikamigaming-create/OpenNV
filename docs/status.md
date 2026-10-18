@@ -17,7 +17,7 @@ the evidence-backed repair inventory and work order.
 | Audio/UI | Wrist page changes are visible; complete interaction/input release remains unaccepted. Radio broadcast scheduling is unbound. Audio mix/sync is not certified by this review. |
 | Traversal | Cross-cell NPC/creature route owners, authored floor destinations and the prior Cheyenne saloon portal remain open. |
 | Fast travel | Earlier bounded flat/XR travel worked. Final population and saving after travel remain unaccepted. |
-| Performance | Fresh optimized flat recording-free baseline retains roughly 26-29 ms settled rolling p95. A subsequent approach records a 203 ms streaming upload and 83 ms commit. Particle work, wrapper finalization and loading publication remain active repairs; no headset timing acceptance. |
+| Performance | Source-owned immutable DDS reuse reduces the selected player construction from 208 uploads to 51 with identical 101 audited actor-part bindings and verified retirement. An ordered, contended loading pair is 30.26 versus 21.17 seconds; the latter still has a 1,063 ms interval. Streaming, combat spikes, save capture/write and headset timing remain open. |
 | Builds | Package g passed earlier build/hash/component checks, then failed the user's playtest. The selected private 90-second development edit is not acceptance evidence. |
 | Content | Official ESM selection logged; installed loose/resource winners still need provenance review. Native extensions disabled; pristine vanilla is not established by plugin selection alone. |
 | FO3 | Earlier rendered New Game reached birth stage 22. No accepted standalone FO3 VR release. |
