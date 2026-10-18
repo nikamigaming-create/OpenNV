@@ -52,9 +52,18 @@ internal sealed class RuntimeNativePlayerPackage
             _soundEvents.Restore(audio.Events, stack);
             if (_soundEvents.Events.Count != 0 || _soundEvents.OwnedLanes.Any()) EnsureSounds();
         }
+        // Weapon and package events belong to the same persistent engine-player
+        // history and finite playback owner, including saves during gunfire.
+        _player.BindWeaponSoundOwner(EnsureSounds);
     }
 
     internal FalloutFormKey? CurrentPackage => _package?.Form;
+    internal bool AudioCaptureReady => _soundEvents.CanCapture && _sounds?.CanCaptureSilent != false;
+    internal IReadOnlyList<FalloutFiniteSoundVoice>? PendingFiniteAudio =>
+        _sounds?.CanAwaitFiniteCompletion == true ? _sounds.PendingFiniteVoices : null;
+    internal string? AudioSaveBlocker => AudioCaptureReady ? null :
+        PendingFiniteAudio is { Count: > 0 } ? "source-finite-audio" : "player-audio-continuation";
+
     internal FalloutPlayerPackageAudioSnapshot CaptureAudio()
     {
         if (_sounds is not null && !_sounds.CanCaptureSilent)

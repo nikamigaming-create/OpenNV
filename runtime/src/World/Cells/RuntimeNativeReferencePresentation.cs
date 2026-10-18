@@ -97,13 +97,13 @@ internal partial class RuntimeNativeReferencePresentation : Node
             if (_nodes.Remove(key, out var node))
             {
                 UnbindObjectAnimation(key);
+                // A warm model is only a construction cache. It has left the
+                // authoritative resident set, so attached loops unload exactly
+                // as they do when its model is freed. Finite voices stay hosted.
+                NativeOwnedAnimationSoundPlayer.UnloadSourceLoops(node);
                 GamebryoReferenceEnableRuntime.Apply(node, false);
                 if (retainWarm?.Invoke(previous[key]) == true) _warmNodes.Add(key, (previous[key], node));
-                else
-                {
-                    NativeOwnedAnimationSoundPlayer.UnloadSourceLoops(node);
-                    node.QueueFree();
-                }
+                else node.QueueFree();
             }
             _enabled.Remove(key); _fadeGeometry.Remove(key); _publishedOpacity.Remove(key);
         }

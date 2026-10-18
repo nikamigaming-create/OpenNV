@@ -12,12 +12,12 @@ the evidence-backed repair inventory and work order.
 | Combat | User rejects combat. Deathclaw attack variants, embedded emitters and faction assistance fail in the session log. Earlier gecko/Viper/coyote checks remain bounded only. |
 | VR rig | Visible severe rifle hand/forearm deformation around source recording 32:10-32:48. Physical VR acceptance failed. |
 | Launch/render | Visible local launcher plus Vulkan Continue recovered world output after a white D3D12 session. Shader, view-count/texture-array and XR retirement errors still require reproduction and repair. |
-| Saves | Earlier spatial/residency fixes passed selected checks; this session has an actual failed manual save from unsupported hit-reaction NIF version 27 continuation. This is the next implementation blocker. |
+| Saves | Stream-27/empty-note layout and native reaction cold-resume checks pass. Persistent player weapon/effect audio and residency lifetime repairs allow ordinary F5 after firing; a damaged coyote's injury/health survives separate-process Continue and combat resumes. Ordinary F5 during the qualifying limb reaction remains open. |
 | Quest/scripts | Some wrist pages and dialogue render. AddReputation, conversation conditions, script control flow, activation/trigger lookup and actor-value/effect owners fail in the session log. Campaign progression is unaccepted. |
 | Audio/UI | Wrist page changes are visible; complete interaction/input release remains unaccepted. Radio broadcast scheduling is unbound. Audio mix/sync is not certified by this review. |
 | Traversal | Cross-cell NPC/creature route owners, authored floor destinations and the prior Cheyenne saloon portal remain open. |
 | Fast travel | Earlier bounded flat/XR travel worked. Final population and saving after travel remain unaccepted. |
-| Performance | User session is rejected. Capture cadence does not prove headset frame timing; settled recording-free measurement is required. |
+| Performance | Fresh optimized flat recording-free baseline retains roughly 26-29 ms settled rolling p95. A subsequent approach records a 203 ms streaming upload and 83 ms commit. Particle work, wrapper finalization and loading publication remain active repairs; no headset timing acceptance. |
 | Builds | Package g passed earlier build/hash/component checks, then failed the user's playtest. The selected private 90-second development edit is not acceptance evidence. |
 | Content | Official ESM selection logged; installed loose/resource winners still need provenance review. Native extensions disabled; pristine vanilla is not established by plugin selection alone. |
 | FO3 | Earlier rendered New Game reached birth stage 22. No accepted standalone FO3 VR release. |

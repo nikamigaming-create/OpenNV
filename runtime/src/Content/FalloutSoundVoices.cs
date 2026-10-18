@@ -180,6 +180,7 @@ internal sealed class FalloutSoundVoices(FalloutPluginStack records)
     }
     private FalloutFormKey ValidateReference(FalloutFormKey reference)
     {
+        if (reference == records.RuntimeFormKey(0x14)) return reference;
         var source = records.GetEffective(reference);
         if (source.Signature is not ("ACHR" or "ACRE" or "REFR"))
             throw new InvalidDataException("Sound source filter is not an object reference.");

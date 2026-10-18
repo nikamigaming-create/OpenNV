@@ -12,7 +12,7 @@ internal partial class RuntimeNativeOpeningStageDriver
     internal FalloutScriptManualSaveRequests ManualSourceSaveRequests => _scripts.ScriptManualSaves;
     private string? SourceManualSaveFailure => _scripts.ScriptManualSaves.Receipt is { Disposition: "failed" } receipt
         ? $"Source ForceSave request {receipt.Generation} failed: {receipt.Error}" : null;
-    private string? SourceAnimationSoundSaveBlocker => _scripts.References!.AnimationSoundSaveBlocker;
+    private string? SourceAnimationSoundSaveBlocker => _scripts.References!.AnimationSoundSaveBlocker ?? _playerPackage?.AudioSaveBlocker;
 
     private void BindSourceManualSaves()
     {

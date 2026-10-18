@@ -1051,10 +1051,10 @@ internal static partial class RuntimeNativeNifMeshBuilder
             FalloutNifControllerSequence sequence)
         {
             if (sequence.Frequency != 1.0f || sequence.StartTime < 0.0f ||
-                sequence.StopTime <= sequence.StartTime || sequence.Weight != 1.0f ||
-                sequence.AnimationNotes != -1 || sequence.UnknownShort is not (null or 0))
+                sequence.StopTime <= sequence.StartTime || sequence.Weight != 1.0f)
                 throw new NotSupportedException(
                     $"NIF sequence {sequence.Block.Index} has an unsupported timing contract.");
+            _source.RequireNoActiveAnimationNotes(sequence);
             var channels = new List<RuntimeNifControllerChannel>();
             foreach (var link in sequence.ControlledBlocks)
             {

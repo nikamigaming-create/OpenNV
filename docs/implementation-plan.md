@@ -43,14 +43,17 @@ those failures remain open despite that passing component check.
 | P1: collision and physical objects | Logs reject shaped phantoms and model constraints. | Source overlap/contact, Havok joint/constraint and Godot physics owners. | Triggers fire on genuine enter/leave; objects retain constraints through contact and save. Phantom data never becomes fake solid floor. |
 | P2: vegetation, lighting, LOD and effects | Logs repeatedly reject present SpeedTree geometry, missing cactus/agave resources, light flags, shaders, world material for LOD, morph inputs, BSValueNode behavior, impacts and sever effects. Scenery in the edit is incomplete. | Resource readers and rendering/LOD/material/light/effect owners; fix resolution failures before decoding failures. | Traverse the same cells across lighting/LOD transitions and inspect both eyes, including distant draws, vegetation, shadows and impacts. Retail pixel parity requires matched retail evidence. |
 | P2: audio and shutdown | Radio scheduler is unbound; prior NPC fixtures had playback shutdown warnings; this session ends with an OpenXR RID leak. Source recording contains audio, but this review does not certify mix/sync. | Audio voice/scheduler ownership, session retirement and XR resource disposal. | Correct event-bound voices/music/radio, complete finite voice termination and repeated clean shutdown with no dangling runtime resources. |
-| P2: frame pacing and loading | Startup includes black/white intervals around 03:20-06:20. Desktop recording cadence is not headset performance. | Source loading, actor/animation ticks, renderer and telemetry owners. | Measure settled headset CPU/GPU times and missed frames with recording/bots/builds off; inspect hitches separately during streaming. Set a measured refresh-rate budget before claiming performance. |
+| P0: frame pacing and loading | The user requests immediate loading/combat measurement and repair. Fresh optimized flat runs retain roughly 26-31 ms rolling p95 draw intervals and a streaming upload above 200 ms. The firing-sequence window also contains a detailed diagnostic snapshot, so its 181-200 ms peaks are not isolated weapon timings. Desktop cadence is not headset timing. | Source loading, actor/animation ticks, particles, native wrapper lifetime, renderer and telemetry owners. Use recording-free traces to select each repair; preserve source behavior and complete gameplay state. | Measure cold/warm loading, ordinary movement and genuine combat separately, then headset CPU/GPU times and missed frames. Set the refresh-rate budget before claiming performance. |
 
 ## Work order and reviewable blocks
 
 1. Preserve the failing save/profile privately and bind evidence to source commit,
    content winners, graphics driver and session. Inventory all observed failure
    classes; keep unobserved campaign coverage explicitly unknown.
-2. First implementation block: reproduce the hit-reaction-to-save failure on the
+2. Measure loading, first firing, genuine combat and streaming from copied saves
+   before and after repairs, with builds and recording off. Performance is a
+   requirement of each gameplay block, not a final polish phase. First save block:
+   reproduce the hit-reaction-to-save failure on the
    affected owned creature. Repair the general NIF/reaction continuation owner,
    then prove ordinary hit -> manual save -> cold Continue. This prevents combat
    investigation from leaving the player unable to preserve progress.

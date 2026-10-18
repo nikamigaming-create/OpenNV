@@ -10,6 +10,7 @@ internal partial class RuntimeNativePlayer
 {
     private FalloutWeaponHandling? _weaponHandling;
     private NativeOwnedAnimationSoundPlayer? _weaponSounds;
+    private Func<NativeOwnedAnimationSoundPlayer>? _weaponSoundOwner;
     private string? _weaponAction, _weaponActionError;
     private RuntimeNativeNifAnimation? _weaponActionClip;
     private FalloutWeaponAnimationTimeline? _weaponActionKeys;
@@ -226,10 +227,13 @@ internal partial class RuntimeNativePlayer
         _firstPerson?.SetAction(null, 0); _thirdPerson?.SetAction(null, 0);
     }
 
-    private void EnsureWeaponSounds()
+    internal void BindWeaponSoundOwner(Func<NativeOwnedAnimationSoundPlayer> owner)
     {
-        _weaponSounds ??= new(_presentationRecords!, RuntimeLiveContentSource.Current!, this, UnitsToMeters,
-            new FalloutSoundRandomState(BitConverter.ToUInt64(System.Security.Cryptography.RandomNumberGenerator.GetBytes(sizeof(ulong)))));
-        if (!_weaponSounds.IsInsideTree()) AddChild(_weaponSounds);
+        ArgumentNullException.ThrowIfNull(owner);
+        if (_weaponSounds is not null) throw new InvalidOperationException("Active weapon audio cannot change its campaign owner.");
+        _weaponSoundOwner = owner;
     }
+
+    private void EnsureWeaponSounds() => _weaponSounds ??= (_weaponSoundOwner ??
+        throw new NotSupportedException("Player weapon audio has no campaign sound-history owner."))();
 }

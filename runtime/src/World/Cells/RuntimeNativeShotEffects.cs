@@ -67,13 +67,13 @@ internal sealed partial class RuntimeNativeShotEffects : Node3D
     };
 
     internal RuntimeNativeShotEffects(FalloutPluginStack records, RuntimeLiveContentSource content, float units,
-        PhysicsBody3D? shooter, uint worldMask)
+        PhysicsBody3D? shooter, uint worldMask, NativeOwnedAnimationSoundPlayer? sounds = null)
     {
         Name = "SourceShotEffects"; TopLevel = true;
         _records = records; _content = content; _units = units; _shooter = shooter; _worldMask = worldMask;
-        _sounds = new(records, content, this, units, new FalloutSoundRandomState(
+        _sounds = sounds ?? new(records, content, this, units, new FalloutSoundRandomState(
             BitConverter.ToUInt64(System.Security.Cryptography.RandomNumberGenerator.GetBytes(sizeof(ulong)))));
-        AddChild(_sounds);
+        if (sounds is null) AddChild(_sounds);
     }
 
     internal void PrepareShell(FalloutWeaponPresentation weapon)
@@ -250,7 +250,7 @@ internal sealed partial class RuntimeNativeShotEffects : Node3D
             }
             if (effect.Remaining > 0 || effect.Playback is { Active: true } ||
                 effect.Root.FindChildren("*", "AudioStreamPlayer3D", true, false).OfType<AudioStreamPlayer3D>().Any(voice => voice.Playing) ||
-                effect.Completed is not null && !_sounds.CanRetireTransientEffect) continue;
+                effect.Completed is not null && !_sounds.CanRetireEmitter(effect.Root)) continue;
             _effects.RemoveAt(i);
             if (effect.Impact is not null)
             {

@@ -18,6 +18,11 @@ internal static class FiniteSoundRegistryContracts
             return generation;
         }
         var registry = new FalloutSoundVoices(records);
+        var playerReference = records.RuntimeFormKey(0x14);
+        using (registry.Register(sound, playerReference, "engine-player", () => true, () => { }, sourceReference: playerReference))
+            Require(registry.ActiveVoices == 1, "Engine player lost its source voice binding.");
+        Require(registry.ActiveVoices == 0, "Engine player voice survived its owner scope.");
+
         var authoredStops = 0; var cancellations = 0; var graphRetirements = 0;
         var finished = Begin();
         using (var voice = registry.Register(sound, caller, "synthetic-native-finished", () => true,

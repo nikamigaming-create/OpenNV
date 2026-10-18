@@ -9,6 +9,10 @@ internal static class NativeOwnedSoundVoice
     {
         for (Node? node = emitter; node is not null; node = node.GetParent())
         {
+            // The engine player has no placed ACHR record, but is still the
+            // authoritative source reference for its weapons and child effects.
+            if (node is OpenNV.Runtime.World.Cells.RuntimeNativePlayer)
+                return records.RuntimeFormKey(0x14);
             if (!node.HasMeta("opennv_reference_form_key")) continue;
             var text = node.GetMeta("opennv_reference_form_key").AsString();
             var colon = text.LastIndexOf(':');

@@ -22,6 +22,7 @@ internal sealed partial class FalloutNifFile
     private const uint GeometryVersion2Early = 14;
     private const uint GeometryVersion2Legacy = 21;
     private const uint GeometryVersion2MaterialTransition = 26;
+    private const uint AnimationVersion2Notes = 27;
     private const uint RefractionVersion2Minimum = 15;
     private const uint ParallaxVersion2Minimum = 25;
     private const uint WideAvFlagsVersion2Minimum = 27;
@@ -42,7 +43,7 @@ internal sealed partial class FalloutNifFile
     private const int HavokTransformMatrixValues = 16;
     private static readonly HashSet<uint> SupportedUserVersion2 =
         [GeometryVersion2Early, GeometryVersion2Legacy, GeometryVersion2MaterialTransition,
-            AnimationVersion2Legacy, AnimationVersion2Minimum, GeometryVersion2Minimum,
+            AnimationVersion2Notes, AnimationVersion2Legacy, AnimationVersion2Minimum, GeometryVersion2Minimum,
             AnimationVersion2Alternate, GeometryVersion2Current];
 
     private readonly ReadOnlyMemory<byte> _payload;
@@ -235,6 +236,7 @@ internal sealed partial class FalloutNifFile
             "NiSkinData" => ReadSkinData(block, ref cursor),
             "NiSkinPartition" => ReadSkinPartition(block, ref cursor),
             "NiControllerSequence" => ReadControllerSequence(block, ref cursor),
+            "BSAnimNotes" => ReadAnimationNotes(block, ref cursor),
             "NiTransformInterpolator" => ReadTransformInterpolator(block, ref cursor),
             "NiBSplineTransformInterpolator" or "NiBSplineCompTransformInterpolator" =>
                 ReadSplineTransformInterpolator(block, ref cursor),
@@ -805,6 +807,26 @@ internal sealed partial class FalloutNifFile
             unknownShort = unchecked((short)cursor.ReadUInt16("sequence unknown short"));
         return new FalloutNifControllerSequence(block, name, links, weight, textKeys,
             cycle, frequency, start, stop, manager, targetName, animNotes, unknownShort);
+    }
+
+    private FalloutNifAnimationNotes ReadAnimationNotes(FalloutNifBlock block, ref NifCursor cursor)
+    {
+        var count = cursor.ReadCount16("animation note count", ushort.MaxValue);
+        var notes = new int[count];
+        for (var index = 0; index < notes.Length; index++)
+            notes[index] = ReadReference(ref cursor, $"animation note {index}");
+        return new(block, notes);
+    }
+
+    internal void RequireNoActiveAnimationNotes(FalloutNifControllerSequence sequence)
+    {
+        if (sequence.UnknownShort is not (null or 0))
+            throw new NotSupportedException("Animation note arrays require their source playback owner.");
+        if (sequence.AnimationNotes < 0) return;
+        if (ReadObject(sequence.AnimationNotes) is not FalloutNifAnimationNotes notes)
+            throw new InvalidDataException("Sequence animation-notes link has the wrong source type.");
+        if (notes.Notes.Count != 0)
+            throw new NotSupportedException("Animation notes require their source playback owner.");
     }
 
     private FalloutNifTransformInterpolator ReadTransformInterpolator(
@@ -2006,6 +2028,8 @@ internal sealed record FalloutNifControllerLink(
     int Interpolator,
     int Controller,
     byte Priority);
+
+internal sealed record FalloutNifAnimationNotes(FalloutNifBlock Block, IReadOnlyList<int> Notes) : FalloutNifObject(Block);
 
 internal sealed record FalloutNifControllerSequence(
     FalloutNifBlock Block,

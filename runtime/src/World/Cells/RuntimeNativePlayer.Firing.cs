@@ -112,7 +112,8 @@ internal partial class RuntimeNativePlayer
                 _shot = FalloutWeaponShot.Read(_presentationRecords!, weapon.Form, ammunition, weapon.HasAmmunitionSource);
             _shot.RequireRuntimeAttackOwner();
             var definitionDone = System.Diagnostics.Stopwatch.GetTimestamp();
-            _shotEffects ??= new(_presentationRecords!, RuntimeLiveContentSource.Current!, UnitsToMeters, this, CollisionMask);
+            EnsureWeaponSounds();
+            _shotEffects ??= new(_presentationRecords!, RuntimeLiveContentSource.Current!, UnitsToMeters, this, CollisionMask, _weaponSounds);
             if (!_shotEffects.IsInsideTree()) AddChild(_shotEffects);
             TryShotEffect("casing-prepare", () => _shotEffects.PrepareShell(weapon));
             var casingDone = System.Diagnostics.Stopwatch.GetTimestamp();

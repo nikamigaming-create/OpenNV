@@ -1,5 +1,44 @@
 # Runtime performance and CPU scheduling
 
+## October 17 rejected-playtest repair baseline
+
+Fresh optimized package-g and save-repair exports continued separate copies of
+the same private FNV save on the RTX 4070 SUPER using Vulkan/Forward+, the safe
+renderer and four content workers. Both report JIT optimization enabled. Builds,
+bots and frame recording were off during these samples. Official content was
+selected; this does not independently establish pristine installation files.
+
+| Selected flat measurement | Package g | Save-repair candidate |
+| --- | ---: | ---: |
+| Continue button to observed ready, wall seconds | 42.86 | 37.10 |
+| Settled median of rolling draw-interval medians, ms | 15.82 | 15.65 |
+| Settled median of rolling p95 draw intervals, ms | 28.79 | 26.21 |
+| Firing-sequence median of rolling p95, ms | 30.54 | 28.06 |
+| F5 following firing | Failed: unowned active audio | Completed with finite audio receipts |
+
+Settled rows use the ten sampled windows after fifteen seconds from readiness.
+The windows overlap and are not independent whole-run percentiles. This single
+ordered pair does not isolate OS/driver caching or establish a speedup. The
+firing sequence followed a detailed state request; its 181-200 ms largest draw
+intervals cannot be attributed solely to weapon preparation. Shots were initially
+obstructed before the selected creature, so this is firing coverage, not an
+accepted encounter benchmark. A completed save adds actual snapshot/write work
+that the failed baseline did not perform.
+
+A subsequent ordinary-input bot approach was outside the timing comparison.
+During its genuine exterior transitions, streaming's own timers recorded a
+203.19 ms maximum upload and an 82.84 ms commit, including 33.86 ms of reference
+publication. A later ordinary shot damaged the resident coyote by 14.40 health;
+the following F5 retained its injury and active attack state. This shot hit the
+torso, not the version-27 qualifying limb-reaction path.
+
+A separate twenty-second managed sample identifies particle publication and
+collision work plus substantial native-wrapper finalization. Its all-thread
+sample includes sleeping workers; those percentages are not CPU utilization or
+GPU timings. Next repairs must measure individual publication/activation steps,
+reduce wrapper churn, and bound loading work without deleting source entities,
+events, particle behavior or saved state. Physical-headset timing remains open.
+
 ## Current engine and streaming boundary
 
 The selected engine is official Godot 4.8-dev7 Mono
