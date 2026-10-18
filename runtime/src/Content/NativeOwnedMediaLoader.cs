@@ -16,7 +16,7 @@ internal static class NativeOwnedMediaLoader
         string? preferredArchive = null)
     {
         var payload = Read(logicalPath, preferredArchive, out var source);
-        return NativeDdsTexture.Load(payload, source);
+        return NativeDdsTexture.LoadCached(RuntimeLiveContentSource.Current!, payload, source, logicalPath: logicalPath);
     }
 
     internal static AudioStream LoadAudio(

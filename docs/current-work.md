@@ -9,9 +9,10 @@ physical-headset acceptance; selected component passes cannot close it.
 
 ## Current owner
 
-Current owner: codex/pipboy-interaction-recovery, based on main/origin/main
-77f840f47d45bf6462c4a3e1479c283f799565c7. PR #226 is merged and all
-hosted checks pass. Manual save capture is sliced; validation and transactional
+Current owner: codex/streaming-activation-budget, based on main/origin/main
+dd42e5fccd1208fe696b1e6c43ca2ade2a2142a6. PRs #226 and #227 are merged
+with hosted checks passing. The user requires worst-frame reductions across
+loading, idle, movement and fighting. Manual save capture is sliced; validation and transactional
 write run on a managed worker. The official export passed repeated ordinary
 combat/save and cold continuation with the original checkpoint unchanged.
 
@@ -33,8 +34,8 @@ explicitly retires detached actor callbacks, and frees staged models before the
 world. Two repaired walk/quit sessions exit zero with the original checkpoint
 unchanged. The final-source full Godot gate passes, including the additional
 equipment-change cancellation drain. PR #226 is published and merged.
-The user's current priority is the complete Pip-Boy flow, while retaining
-performance work. Wrist scrolling, visible list navigation, explicit map zoom,
+The complete Pip-Boy flow remains in scope alongside performance.
+Wrist scrolling, visible list navigation, explicit map zoom,
 retained pan/zoom, declaration reuse and action-failure recovery are implemented.
 The full runtime gate and final owned-menu audit pass. Native input verifies
 long-list scrolling, explicit local/world zoom, retained world-map view, and
@@ -46,7 +47,26 @@ checkpoint hash is unchanged. Radio scheduling remains unimplemented: a source
 catalog is diagnostic inventory only, not playback proof.
 See [pipboy-completeness.md](pipboy-completeness.md)
 for the full required behavior; none of the unverified rows is a completion claim.
-The next measured owner is reference activation and synchronous creature
+Fresh load-step timing identified back-to-back scene publication (123 ms),
+script restoration/publication (329 ms), environment setup (237 ms), player/state
+setup (201 ms), and HUD setup (101 ms). Loading now yields rendered frames between
+these paused transaction stages, checking retirement before continuing. A paired
+exported Continue sample reduced its largest observed interval from 1,347 to
+394 ms, with wall time 23.3 versus 22.3 seconds. This is not 144 Hz acceptance.
+UI source declarations, font atlases and DDS art now reuse source-bound resources;
+the final full runtime gate and owned UI cache/navigation audit pass. The final
+export measured a 500 ms worst loading interval and 27.4 seconds total; the
+cache changes have not demonstrated an overall loading-speed improvement. Failed initial creature package
+selection uses the existing reevaluation window without consuming its saved
+continuation. Idle remains about 16.6 ms median at the desktop presentation cap;
+the final idle sample has a 22.0 ms p95 and 53.0 ms maximum. One ordinary
+shot completed its measured firing path in 4.92 ms and F5 completed, but the
+shot missed: this is neither hit-reaction coverage nor combat acceptance.
+The original checkpoint hash remains unchanged and normal quit completed.
+No idle/combat performance completion is claimed. Live summary capture and
+serialization cost about 9 ms on the main thread; its separately measured
+file write is already asynchronous and must not be added as a main-thread stall.
+The next measured owners also include reference activation and synchronous creature
 construction: a boundary commit measured 52-60 ms, and a creature upload exceeded
 38 ms. These are not terrain uploads and do not establish smooth/144 Hz play.
 Weapon roll/support and physical XR acceptance remain in the implementation plan.

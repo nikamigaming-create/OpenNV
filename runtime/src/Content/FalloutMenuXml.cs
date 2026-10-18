@@ -2,12 +2,15 @@ using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
+using System.Runtime.CompilerServices;
+using System.Security.Cryptography;
 
 namespace OpenNV.Runtime.Content;
 
 // Engine entity names remain tokens; XML never resolves external entities.
 internal static class FalloutMenuXml
 {
+    private static readonly ConditionalWeakTable<RuntimeLiveContentSource, Dictionary<string, (string Hash, XElement Root)>> Parsed = new();
     internal static XElement Read(string path)
     {
         var source = RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("Owned menu source is absent.");
@@ -17,7 +20,17 @@ internal static class FalloutMenuXml
     internal static XElement Read(RuntimeLiveContentSource source, string path)
     {
         if (!source.TryRead(path, null, out var bytes, out _)) throw new FileNotFoundException("Owned menu XML is missing.", path);
-        var document = Parse(bytes);
+        var cache = Parsed.GetValue(source, _ => new(StringComparer.OrdinalIgnoreCase));
+        var normalized = path.Replace('\\', '/');
+        var hash = Convert.ToHexString(SHA256.HashData(bytes));
+        XElement document;
+        lock (cache)
+        {
+            if (!cache.TryGetValue(normalized, out var parsed) || parsed.Hash != hash)
+                cache[normalized] = parsed = (hash, Parse(bytes));
+            // Every menu owns its mutable tiles; only the declaration is shared.
+            document = new XElement(parsed.Root);
+        }
         return path.Replace('\\', '/').Equals("menus/options/start_menu.xml", StringComparison.OrdinalIgnoreCase) ||
             path.Replace('\\', '/').Equals("menus/main/hud_main_menu.xml", StringComparison.OrdinalIgnoreCase) ||
             path.Replace('\\', '/').Equals("menus/main/inventory_menu.xml", StringComparison.OrdinalIgnoreCase)

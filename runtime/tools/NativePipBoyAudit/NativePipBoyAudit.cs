@@ -60,6 +60,18 @@ public partial class NativePipBoyAudit : Node
             if (args.Length != 2) throw new ArgumentException("Expected owned Data and a native campaign checkpoint.");
             RuntimeLiveContentSource.Configure(args[0], RuntimeLiveContentSource.FalloutNewVegasGame);
             var content = RuntimeLiveContentSource.Current!;
+            var originalMenu = FalloutMenuXml.Read(content, "menus/main/hud_main_menu.xml");
+            var expectedMenu = originalMenu.ToString();
+            originalMenu.RemoveNodes();
+            if (FalloutMenuXml.Read(content, "menus/main/hud_main_menu.xml").ToString() != expectedMenu)
+                throw new InvalidDataException("One menu mutated the retained source declaration.");
+            var firstArt = NativeOwnedMediaLoader.LoadTexture("textures/interface/icons/misc/glow_cursor.dds");
+            var secondArt = NativeOwnedMediaLoader.LoadTexture("textures/interface/icons/misc/glow_cursor.dds");
+            if (!ReferenceEquals(firstArt, secondArt))
+                throw new InvalidDataException("Repeated UI art rebuilt its native texture.");
+            var fontSettings = FalloutInstallationSettings.Read(content);
+            if (!ReferenceEquals(NativeBitmapFontAsset.Read(fontSettings, 2), NativeBitmapFontAsset.Read(fontSettings, 2)))
+                throw new InvalidDataException("Repeated UI font rebuilt its native atlas.");
             var childRoot = System.Xml.Linq.XElement.Parse("<menu name='Probe'><image name='divider'><alpha><copy src='child()' trait='alpha'/></alpha><rect name='meter'><alpha>123</alpha></rect></image></menu>");
             var childTree = new NativeOwnedMenuTree(childRoot);
             if (childTree.Number(childRoot.Element("image")!, "alpha") != 123)

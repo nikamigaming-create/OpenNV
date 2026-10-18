@@ -26,6 +26,8 @@ internal sealed partial class RuntimeNativeCreature
     private FalloutPackageEvents? _packageEvents;
     private bool _dialogueRequested;
     private bool _initialPackageSelected;
+    private bool _packageSelectionAttempted;
+    private long _packageSelectionAttempts;
     private bool _evaluateRequested = true;
     private double _packageClock;
     private long _aiQuestRevision = -1;
@@ -38,6 +40,7 @@ internal sealed partial class RuntimeNativeCreature
     {
         package = _aiPackage?.FormKey.ToString(),
         failedSelection = _failedPackage?.ToString(),
+        selectionAttempts = _packageSelectionAttempts,
         follow = _followPackage,
         accompanyPortal = new
         {
@@ -288,12 +291,17 @@ internal sealed partial class RuntimeNativeCreature
             _packageClock -= delta;
             var scheduleTime = _aiClock?.ScheduleTime();
             if (scheduleTime is { } moment) scheduleTime = moment with { Hour = MathF.Floor(moment.Hour) };
-            if (!_initialPackageSelected || !PackageEndIdlePending && !(_travelPackage?.MustReach == true && _travelProgress?.Complete == false) &&
+            if (!_packageSelectionAttempted || !PackageEndIdlePending && !(_travelPackage?.MustReach == true && _travelProgress?.Complete == false) &&
                 (_evaluateRequested || _packageClock <= 0 || scheduleTime != _aiScheduleTime || _aiQuestRevision != _aiQuests!.Revision))
             {
                 _evaluateRequested = false; _packageClock = 10;
                 _aiScheduleTime = scheduleTime;
                 _aiQuestRevision = _aiQuests!.Revision;
+                // A failed first selection still used this evaluation window.
+                // Keep cold continuation separate: it is consumed only after
+                // a successful selection. Explicit requests and changed inputs
+                // may retry immediately; an unchanged failure waits for polling.
+                _packageSelectionAttempted = true; ++_packageSelectionAttempts;
                 selecting = true;
                 SelectPackage();
                 selecting = false;
