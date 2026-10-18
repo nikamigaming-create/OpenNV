@@ -1,5 +1,55 @@
 # Runtime performance and CPU scheduling
 
+## October 18 source inflation hotspot
+
+Resolved managed stacks from the native appearance fixture place roughly 2.0
+seconds beneath strict DEFLATE extent validation while publishing two NPCs'
+materials. The validator decoded each Huffman symbol one bit at a time before
+framework inflation. This is source-read work on the scene thread, not measured
+GPU cost. Short-lived traces without resolved stacks were discarded as evidence.
+The optional `--appearance-profile` audit mode keeps the host alive for thirty
+seconds after the same audited work, allowing symbol rundown before normal exit.
+It neither records frames nor changes gameplay.
+
+The validator now resolves codes up to nine bits with a bounded prefix table and
+reads bit fields from byte windows. It advances only the actual symbol length.
+Long codes, incomplete prefixes and short tails retain the canonical reader;
+final bit/byte extents, reserved symbols, output/window bounds, zlib envelopes
+and the distinct record/archive checksum policies remain unchanged. Independent
+vectors cover code lengths through fifteen for literals and distances at all
+byte alignments, every truncation of the long-literal frames, fixed/stored/mixed
+blocks and generated streams across framework compression levels. Both original
+record and BSA readers decode those vectors, including their existing refusals.
+
+A private Release helper compares 23,200 deterministic generated, mutated and
+truncated cases with main 8448d81's validator. Admission and exact successful
+extents agree. It then reads the largest 32 compressed character DDS members
+below four MiB per member from each owned archive: 27,536,230 compressed bytes,
+38,452,616 decoded bytes in this installation. Actual old/new archive output is
+byte-for-byte equal; input files are opened read-only and no asset data is written.
+After warmup, five alternating validation-only passes have medians of 523.77 ms
+before and 194.05 ms after. These timings exclude archive IO, framework inflation
+and native upload and do not establish whole-game speedup.
+
+The same Debug/Vulkan profiled NPC fixture constructs both selected actors with
+exact prepared source vectors, cancellation and abandoned-node checks passing.
+The worst part step falls from 751.66 to 223.83 ms. Debug profiling changes cost;
+this is supporting hotspot evidence, not an optimized frame benchmark. Material
+source preparation and native part publication still need bounded scene work.
+
+Separate optimized Vulkan/Forward+ flat processes continue copies of the same
+checkpoint, with builds, bots, recording and detailed snapshots off. Continue
+wall time is 30.06 seconds before and 24.46 seconds after. The largest observed
+loading draw interval remains 2,457.12 versus 2,408.73 ms. Median sampled settled
+rolling p95 is 18.27 versus 17.24 ms; these overlap and are not whole-run or
+headset percentiles. Five ordinary shots in the starting view retain no weapon
+handling error; first-trigger preparation is 1.02 versus 1.61 ms, already warm.
+Later rolling firing windows still reach 134.33 versus 107.64 ms without a cause
+established by these samples. This ordered pair does not isolate OS/driver
+caching, certify a combat encounter or meet VR timing acceptance. The remaining
+loading freeze, explicit saves and physical headset CPU/GPU/missed-frame budgets
+remain open.
+
 ## October 17 rejected-playtest repair baseline
 
 Fresh optimized package-g and save-repair exports continued separate copies of

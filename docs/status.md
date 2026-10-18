@@ -1,6 +1,6 @@
 # Product status
 
-Updated 2026-10-17. Priority: **vanilla FNV -> vanilla FO3 -> mods -> TTW**.
+Updated 2026-10-18. Priority: **vanilla FNV -> vanilla FO3 -> mods -> TTW**.
 The user rejected package g's physical FNV VR playtest. It is not a playable or
 headset-ready handoff. See [implementation-plan.md](implementation-plan.md) for
 the evidence-backed repair inventory and work order.
@@ -9,10 +9,10 @@ the evidence-backed repair inventory and work order.
 | --- | --- |
 | FNV world | Exploration, interiors and some dialogue render in the user's recording. Missing vegetation/models/materials, physics and LOD behavior remain visible in diagnostics. No world/parity completion. |
 | Population | User rejects NPC behavior. Logs report missing travel, dialogue-location, patrol, AI condition and creature procedure owners. A few moving actors do not establish a functioning population. |
-| Combat | User rejects combat. Deathclaw attack variants, embedded emitters and faction assistance fail in the session log. Earlier gecko/Viper/coyote checks remain bounded only. |
+| Combat | User rejects combat. Unique compatible attack-group binding now passes source deathclaw/coyote hit, range-miss and cold-clock fixtures. Ordinary deathclaw terrain encounter, embedded emitters and faction assistance remain open. |
 | VR rig | Visible severe rifle hand/forearm deformation around source recording 32:10-32:48. Physical VR acceptance failed. |
 | Launch/render | Visible local launcher plus Vulkan Continue recovered world output after a white D3D12 session. Shader, view-count/texture-array and XR retirement errors still require reproduction and repair. |
-| Saves | Stream-27/empty-note layout and native reaction cold-resume checks pass. Persistent player weapon/effect audio and residency lifetime repairs allow ordinary F5 after firing; a damaged coyote's injury/health survives separate-process Continue and combat resumes. Ordinary F5 during the qualifying limb reaction remains open. |
+| Saves | Stream-27/empty-note layout and finite player/effect audio repairs pass. Ordinary F5 during a qualifying coyote limb reaction completes; separate-process Continue retains its exact saved phase, injury/health, completes the reaction and resumes combat. Older unsettled off-cell audio continuation and explicit save stalls remain open. Physical VR persistence acceptance is pending. |
 | Quest/scripts | Some wrist pages and dialogue render. AddReputation, conversation conditions, script control flow, activation/trigger lookup and actor-value/effect owners fail in the session log. Campaign progression is unaccepted. |
 | Audio/UI | Wrist page changes are visible; complete interaction/input release remains unaccepted. Radio broadcast scheduling is unbound. Audio mix/sync is not certified by this review. |
 | Traversal | Cross-cell NPC/creature route owners, authored floor destinations and the prior Cheyenne saloon portal remain open. |

@@ -149,6 +149,11 @@ internal static class FalloutDeflateExtent
 
     private sealed class Huffman
     {
+        private const int LookupBits = 9;
+        // Low four bits hold the consumed length; zero is an undeclared prefix
+        // or a longer code. Replicated suffixes allow one bounded peek for the
+        // common short codes without consuming any following symbol's bits.
+        private readonly int[] _lookup = new int[1 << LookupBits];
         private readonly int[] _counts = new int[16];
         private readonly int[] _firstCode = new int[16];
         private readonly int[] _firstSymbol = new int[16];
@@ -179,12 +184,34 @@ internal static class FalloutDeflateExtent
             for (var symbol = 0; symbol < lengths.Length; ++symbol)
             {
                 var length = lengths[symbol];
-                if (length != 0) _symbols[_firstSymbol[length] + written[length]++] = symbol;
+                if (length == 0) continue;
+                var ordinal = written[length]++;
+                _symbols[_firstSymbol[length] + ordinal] = symbol;
+                if (length > LookupBits) continue;
+                var canonical = _firstCode[length] + ordinal;
+                var prefix = 0;
+                for (var bit = 0; bit < length; ++bit)
+                    prefix = prefix * 2 + ((canonical >> bit) & 1);
+                for (var index = prefix; index < _lookup.Length; index += 1 << length)
+                    _lookup[index] = (symbol << 4) | length;
             }
         }
 
         internal int Read(ref Bits input)
         {
+            if (input.Remaining >= LookupBits)
+            {
+                var entry = _lookup[input.Peek(LookupBits)];
+                var length = entry & 15;
+                if (length != 0)
+                {
+                    input.Advance(length);
+                    return entry >> 4;
+                }
+            }
+            // Long codes, incomplete alphabets and short input tails retain
+            // the canonical bounded reader. Never pad a truncated tail to
+            // manufacture a symbol, nor consume nine bits for a shorter code.
             var code = 0;
             for (var length = 1; length <= _maximum; ++length)
             {
@@ -200,18 +227,30 @@ internal static class FalloutDeflateExtent
     {
         internal long Position { get; private set; }
         private readonly ReadOnlySpan<byte> _bytes = bytes;
+        internal readonly long Remaining => (long)_bytes.Length * 8 - Position;
 
         internal int Read(int count)
         {
-            if (count > (long)_bytes.Length * 8 - Position) throw Error("input ended before its final block completed");
-            var result = 0;
-            for (var index = 0; index < count; ++index)
-            {
-                result |= ((_bytes[(int)(Position / 8)] >> (int)(Position % 8)) & 1) << index;
-                Position++;
-            }
+            if (count > Remaining) throw Error("input ended before its final block completed");
+            if (count == 0) return 0;
+            var result = Peek(count);
+            Advance(count);
             return result;
         }
+
+        // Callers establish availability. The largest request is a stored
+        // block's 16-bit length; an unaligned read spans at most three bytes.
+        internal readonly int Peek(int count)
+        {
+            var index = (int)(Position >> 3);
+            var shift = (int)(Position & 7);
+            var value = (int)_bytes[index];
+            if (shift + count > 8) value |= _bytes[index + 1] << 8;
+            if (shift + count > 16) value |= _bytes[index + 2] << 16;
+            return (value >> shift) & ((1 << count) - 1);
+        }
+
+        internal void Advance(int count) => Position += count;
 
         internal void AlignByte() => Position = (Position + 7) & ~7L;
 
