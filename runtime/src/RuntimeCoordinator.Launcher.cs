@@ -19,7 +19,7 @@ public partial class RuntimeCoordinator
         DismissLoadingScreen();
     }
 
-    private void StartInProcessLaunch(
+    private async void StartInProcessLaunch(
         NativeGodotLauncher launcher,
         NativeGodotLauncherLaunchRequest request)
     {
@@ -42,6 +42,11 @@ public partial class RuntimeCoordinator
             if (request.Presentation == "openxr")
             {
                 _options["vr"] = "true";
+                // Input can request a launch while the previous mono frame is
+                // still queued. Change viewport/camera view counts together
+                // after that draw, as the direct startup route already does.
+                await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+                if (!IsInstanceValid(this) || !IsInstanceValid(launcher) || !IsInsideTree()) return;
                 EnableOpenXr();
             }
             if (request.AppearanceDataRoot is not null)

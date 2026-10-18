@@ -1,252 +1,144 @@
 # Current work
 
-Updated 2026-10-18. The user rejects package g after a physical FNV VR playtest:
-NPCs do not perform their behavior, combat is poor, and the game is broadly
-broken. Package g is not an accepted playable/headset candidate. Root alone owns
-repairs, builds, live input and Git. Priority remains FNV, standalone FO3, mods,
-then TTW. The active repair inventory and acceptance order are in
-[implementation-plan.md](implementation-plan.md).
+Updated 2026-10-18. Package g failed the user's physical FNV VR playtest and is
+not a playable/headset candidate. Root alone owns code, builds, input and Git.
+Priority remains vanilla FNV, standalone FO3, mods, then TTW. The full repair and
+acceptance inventory remains in [implementation-plan.md](implementation-plan.md).
+The active goal still requires runtime, persistence, final-eye temporal and
+physical-headset acceptance; selected component passes cannot close it.
 
-## Verified state and next owner
+## Current owner
 
-The user's private 46:25 recording has been surveyed across the timeline with
-denser samples of selected defects. It contains recognizable world exploration,
-changing wrist pages, interiors, some dialogue and Sunny movement. It also shows
-severely malformed rifle hand/forearm presentation. This sampled recording review
-is not continuous temporal/stereo acceptance. The requested private 90-second
-edit contains selected development moments, not proof of a working game.
+Branch codex/xr-session-retirement starts from verified main/origin/main
+2fca344b735aed1b087abd5c03f670ab5b5fc8b4, with no open task PR at branch creation.
+The navigation repair and owned rig diagnostic are integrated and passed their
+complete local and hosted checks. This block repairs source-proven XR viewport
+transitions; the full implementation is described in
+[xr-session-lifetime.md](xr-session-lifetime.md).
 
-The session log independently reports missing NPC travel/dialogue/patrol and
-creature procedure owners; deathclaw attack-variant binding failures; faction
-assistance ambiguity; embedded-weapon emitter selection; script/condition and
-AddReputation failures; missing models/materials and SpeedTree support; radio
-scheduling; and renderer/session errors. Log timing is not joined to video frames.
-Repeated messages do not count distinct actors or prove the visible cause.
+Two optimized baseline launcher sessions render the world, hands and weapon in
+both submitted eyes. Ordinary XR session-menu Create New Save completes after
+awaiting three finite source voices. Capture takes 117.054 ms and writing
+120.128 ms: saving still stalls. A separate XR process Continues from that new
+save with the exact saved player position and rendered world in both eyes.
+These are bounded simulator results, not complete state parity or physical
+acceptance. The original checkpoint remains unchanged.
 
-The active goal includes immediate loading/combat performance work and continued
-repairs toward a playable VR build. The first repair block admits the owned
-stream-27 animation layout with exact block extents and empty BSAnimNotes;
-nonempty notes and unknown layouts still fail closed. A fresh native dog test
-passes qualifying limb damage, animated pose, serialized cold reaction phase,
-completion and return to combat. Ordinary F5 and separate-process Continue now
-also pass for the selected qualifying coyote reaction, as detailed below.
+The baselines each report a startup view-count error and, at exit, another
+view-count error, a 2D/2DArray uniform mismatch and an interaction-profile RID
+leak. Both ordinary menu Quit actions drain readers and dispose source owners;
+those private launchers did not retain exit codes. The new retirement script
+retains real process handles and compares renderer errors before/after close.
+The old optimized executable is rejected in both direct and launcher entry:
+two new draw errors appear during exit despite zero exit code and drained readers.
+Launcher entry additionally retains the startup error.
 
-Player weapon/effect audio now uses the persistent engine-player sound history
-and finite completion owner. Future-cell preparation remains detached until
-residency commits; source loops retire when a model leaves residency, including
-warm construction-cache entries. An optimized package-g run reproduced an F5
-failure from unowned active audio. The optimized repair candidate completed the
-same firing/save sequence. A later genuine shot damaged the resident coyote by
-14.40 health; F5 saved it during combat and a separate cold process retained its
-15.599999 health and injury, then attacked the player again. Full runtime and
-selected owned layout/reaction gates pass. These are bounded flat/component
-results, not physical VR acceptance.
+The first-party candidate waits for FramePostDraw before the launcher's mono to
+stereo transition. Process exit retains the final stereo viewport/camera contract,
+releases raw hand queries while physics is alive, disables tracked input and
+leaves final driver teardown to Godot. The final Debug launcher component reaches
+the owned world, renders both submitted eyes and ordinarily quits with exit zero,
+readers drained, source owners disposed and no view-count or texture-array errors.
+One interaction-profile RID still leaks. The pinned engine's action-map loader
+fails to record created profile RIDs in its cleanup collection; that dependency
+failure remains visible and open. Do not suppress it or free engine memory through
+private access. The final full runtime gate passes. Optimized direct and launcher
+owned checks both exit zero with readers drained, the checkpoint unchanged,
+startup draw errors zero and exit draw errors zero. Both still report the profile
+leak and explicitly leave overall XR acceptance false. The old optimized build is
+a rejecting negative in both paths. The flat Vulkan Continue/main-menu/Continue/
+quit regression also passes with exit zero, drained readers and an unchanged
+checkpoint. Its readiness check now waits for loading feedback to clear and
+further drawn frames: the old player-exists check could send Escape during
+loading, where input is correctly refused. No physical or continuous final-eye
+acceptance is claimed.
 
-Merged performance PR #213 reuses incremental NPC preparation during loading,
-prepares terrain on bounded workers and yields native cell publication, prepares
-equipped weapon resources before input, and reduces particle matrix work and
-native-array churn.
-The native Vulkan particle-buffer check and two owned weapon checks pass; the
-latter retain ammunition, RNG and audio history with no shots, visible muzzle
-or particle births. Closing during active NPC preparation drains readers and
-exits normally without changing the original checkpoint. The optimized first
-trigger's preparation falls from 90.18 to 2.23 ms and publication from 36.10 to
-15.49 ms; a later 179.35 ms interval remains unexplained. Repeated Continue takes
-36.30 wall seconds, settled rolling p95 is 24.43 ms, and F5 completes but still
-stalls (109.03 ms capture, 121.05 ms writing). Loading retains a roughly one-second
-main-thread step. The complete runtime gate and selected owned/native checks
-pass, and all hosted checks passed before merge. These changes are not accepted
-as a playable VR build.
+Private active evidence: local/vr-rig-repair-20261018 contains the owned component
+reports, selected both-eye views, simulator-results.json, exit negative results
+and candidate exit metadata. Trial profiles/logs are under the active
+local/save-combat-repair-20261017 investigation. Recording is off. The selected
+still views are insufficient for continuous stereo or source-pose/frame joins.
 
-Merged PR #214 moves the full script scan off the scene thread. A fresh optimized
-loading trace attributes 8.31 seconds of scene-thread sampled time to the full
-embedded quest-script declaration scan. A recording-free Continue interval run
-captures an 11.86-second loading draw interval; readiness takes 39.22 wall
-seconds. The source count is seven embedded declarations, 496 initializations
-and default delay five. These values are not gameplay/parity coverage.
-The change warms the same complete source index on the indexing worker
-and cancels it during session retirement. Cancellation must never publish a
-partial count. The cancellation contract and owned index-window-close test pass;
-the latter drains readers, exits zero and preserves the checkpoint. Optimized
-Continue takes 36.35 wall seconds with a largest observed interval of 3.17
-seconds, versus 39.22 seconds and 11.86 seconds before. Initial indexing now
-includes the 7.83-second source scan; total-loading speedup is not established.
-Script initialization values are unchanged. A follow-up trace attributes roughly
-0.94 seconds to activation-parent indexing and 0.93 seconds to script restore,
-including roughly 0.89 seconds indexing source radio stations.
-The complete runtime gate and hosted checks pass. Per-part NPC stalls, remaining quest host
-publication/restore work and explicit saves remain open.
+## Verified repairs and limits
 
-Merged save/attack proof: an ordinary
-foreleg shot on 169b7a, reached through streamed terrain from the unchanged user
-checkpoint, selects the qualifying dog reaction. F5 completes and saves its
-0.088888889-second phase, part-7 injury and 15.599999 health. Separate-process
-Continue resumes that exact phase; the first observed cold phase is 0.177777778
-seconds. Injury/health persist, the reaction completes and combat resumes with
-no reaction error. These are flat ordinary-input results on the merged save
-code, not physical-headset acceptance. A prior attempt used an older investigation save
-that already retained four unsettled off-cell dust-devil loops before firing;
-that continuation problem remains visible and open. A later head shot completed
-F5 but did not qualify as reaction evidence.
+Combat saving: source stream-27 KF layout and empty BSAnimNotes now decode with
+exact extents; nonempty notes and unknown layouts fail closed. Persistent finite
+player/effect audio has an explicit completion owner. Future-cell preparation is
+detached until residency commits, and source loops retire with residency,
+including warm construction-cache entries. An ordinary part-7 shot on coyote
+169b7a completes F5 during its qualifying source reaction at phase 0.088888889.
+A new process resumes that exact phase; the first observed phase is 0.177777778.
+Health 15.599999 and injury 14.400001 persist, the reaction completes and combat
+resumes pursuit without a reaction error. The latest navigation export repeats
+this sequence successfully. This is flat ordinary-input persistence proof;
+physical VR and older unsettled off-cell dust-devil histories remain open.
 
-Deathclaw attack-variant failure is independently reproduced in the native
-component test. Merged PR #215 admits uniquely compatible base
-groups in suffixed files, retains exact variant-group priority and supplies the
-validated group to creature/player sequence binding. Wrong families, ambiguity
-and partial failed catalogs remain refused. Synthetic contracts, Debug build,
-owned deathclaw/coyote source hits, moved-out-of-range source misses, fresh-skin
-cold attack clocks/RNG/event prefixes and both player weapon-preparation checks
-pass. The complete runtime gate and hosted checks pass. Ordinary terrain
-deathclaw combat and physical VR acceptance remain open.
+Creature attacks: uniquely compatible base groups in suffixed KFs retain exact
+variant priority and validated binding. Owned deathclaw/coyote hit, moved-out-of-
+range miss and cold attack-clock/RNG/event-prefix fixtures pass. Ordinary terrain
+deathclaw combat remains unaccepted. An approach from the healthy checkpoint used
+two Stimpaks through Pip-Boy and ordinary shots killed a resident coyote. It then
+stopped roughly 390 metres short of deathclaw 0e745f: native capsule refinement
+exhausts its node bound near a 0.481-metre residual with slope/step/contact
+refusals. Diagnose planner/executor support before changing collision or claiming
+arrival; do not teleport or raise bounds to manufacture proof.
 
-Merged PR #218 addresses repeated navigation source work. Its baseline trace
-locates roughly 1,170 ms on the scene thread inside FalloutReferenceWorld.Restore,
-including 1,068 ms validating retained travel and 1,012 ms loading its owned
-navigation graph. These nested samples are not additive. Inspect immutable
-source-graph preparation/reuse and allocation-heavy shared-edge/adjacency
-validation while preserving saved routes, source hashes and portal/floor refusals.
-A private C# continuation fixture restores the original 5,965 reference snapshots
-without native contact or gameplay execution. Its real world's cached navigation
-region count is zero after temporary-world validation. Querying the two retained
-route regions rebuilds both graphs, with 6,131 and 14,203 NAVM record observations
-(not physical disk reads). Both source hashes match the retained routes. The
-temporary validation cache is not transferred by Restore. This is evidence of
-repeated source work, not native movement acceptance. The private helper and
-results are under source-index-audit in the active investigation directory.
-The repair now caches immutable graphs by source kind and
-CELL/WRLD scope, preserving per-cell legacy hashes and per-world gameplay state.
-Save reading prepares needed routes on the indexing worker before validation;
-source traversal, adjacency and hashing are cancellable with no partial cache.
-Boolean adjacency checks avoid temporary collections while retaining the old
-intersection/reciprocity/flag policy (27,625 synthetic cases agree). Scope,
-concurrent cold/cancelled/failed retry, lifetime, cold travel and portal checks
-pass. The final owned probe restores all 5,965 references and queries both
-retained regions with zero NAVM record observations after worker preparation;
-both hashes and all three saved travel continuations remain exact. Native
-window close during the first actual graph preparation exits zero, publishes
-no ready result, drains readers and preserves the original checkpoint.
-The same whole-world source graph was also rebuilt by the native combat route
-adapter. It now reuses an already-complete matching scope; an uncached scope
-retains the old loader and unavailable-mesh reporting. Native NPC legacy-cell
-and furniture queries also reuse their matching per-cell graphs. Dynamic doors,
-clearance and route execution remain separate live-world operations.
-Optimized Continue takes 32.08 versus 25.15 wall seconds, with the largest
-observed loading interval falling from 1,723.47 to 1,225.19 ms. This single pair
-is not a controlled total-speedup or headset claim. The final trace observes
-roughly 136 ms of scene-thread reference restoration, graph construction on the
-worker and matching-source reuse by combat. The earlier 684 ms direct combat
-graph rebuild is absent from that captured main-thread path. The final runtime
-gate passes. Five starting-view shots retain no handling error, with
-0.34-1.03 ms preparation; later rolling firing windows still reach 123.92 ms.
-This is not encounter acceptance. Player presentation, material preparation, explicit save/combat spikes,
-ordinary deathclaw terrain combat and physical VR remain open.
-A separate ordinary-input regression on this export hits the resident coyote's
-part-7 limb, completes F5 at reaction phase 0.088888889 and cold Continues in a
-new process. The exact phase resumes; 15.599999 health and 14.400001 limb damage
-persist, the reaction completes and combat returns to pursuit without reaction
-error. Both processes quit normally. This is flat persistence evidence, not
-physical-headset or full encounter acceptance.
+Loading/performance: immutable script, activation, radio and scoped navigation
+source indexes prepare on cancellable workers and are reused by fresh gameplay
+owners. Saved navigation hashes and all three selected travel continuations are
+exact; subsequent restore/queries perform no additional NAVM record observations.
+The combat route adapter also reuses a complete matching source graph while doors,
+clearance and movement remain live. The latest optimized ordered pair observes
+32.08 versus 25.15 seconds for Continue and 1,723.47 versus 1,225.19 ms largest
+loading intervals. This is not controlled total-speedup or headset timing proof.
+Scene-thread reference restoration samples roughly 136 ms instead of 1,170 ms;
+the direct combat graph rebuild is absent in the captured repaired path. Particle
+publication, incremental source preparation and weapon preloading reduce selected
+stalls, but later firing windows still reach 123.92 ms. Player presentation has a
+roughly 478 ms nested source/material sample, a second-scale loading interval
+remains, explicit saves stall and streaming has exceeded 200 ms. See
+[runtime-performance.md](runtime-performance.md) for methods, measurements and
+limits. No headset frame-budget acceptance exists.
 
-Next owner: codex/vr-rifle-rig, from verified main/origin/main
-56e05312b9525f268505e785dda5c1eaab9cd931 with no open task PR. PR #218 passed
-the complete local gate and every hosted check before merging. Inspect the
-recorded rifle hand/forearm deformation through source mesh, bind, animation,
-tracked arm solve and weapon/socket frames before applying any repair. The
-roughly 478 ms player-presentation loading sample, remaining second-scale
-loading interval and later firing spikes remain open alongside this visual
-playability failure. The new owned rig diagnostic uses the production source
-appearance/attachments and nine generated poses, comparing source segment lengths,
-muzzle aim, native skin palettes and a deliberately changed-length negative.
-The selected Vulkan rifle component passes these checks. A near-eye mono view
+Rig: the user's 46:25 recording was surveyed across its timeline and selected
+failures densely reviewed. Rifle hand/forearm presentation around 32:10-32:48
+remains adversely reported and physically unaccepted. The owned production-rig
+diagnostic checks nine generated poses, source segment lengths, muzzle aim,
+native skin palettes and a changed-length negative. Selected Vulkan rifle and
+headless pistol components pass their respective checks. A near-eye mono view
 reproduces the large projected hand while an external view shows a coherent arm;
-this does not establish the cause of the user's physical-session defect. The
-headless pistol component passes its selected non-GPU checks. No rig runtime
-repair or physical acceptance is claimed. Actual OpenXR pose/submitted-eye joins,
-moving stereo review and a user retest remain the next evidence. See
-[vr-rig-diagnostics.md](vr-rig-diagnostics.md). Source-derived reports and the
-selected component views remain private in the active rig investigation.
+head movement away from a fixed controller also reduces projected size in the
+simulator. These observations do not establish the cause of the recorded defect,
+source-pose/submitted-eye temporal joins, stereo comfort or complete weapon
+motion. See [vr-rig-diagnostics.md](vr-rig-diagnostics.md). No rig calibration or
+arm-solver repair is claimed.
 
-Merged PR #217 addresses the previous source-index freezes. A fresh optimized
-loading trace attributes roughly 779 ms to activation-parent source indexing and
-711 ms to source radio station indexing during script restore, inside roughly
-1,039 ms of quest-host creation. These sampled nested durations are not additive
-frame timings. The repair prepares immutable stack-owned indexes on the
-existing loading worker before save-validation consumers; fresh worlds reuse
-declarations while keeping activation cycles, radio discovery/reception and
-saved clocks independently owned. Worker cancellation/retry, concurrent cold
-publication, malformed retries, winning/deleted records, the five placed families,
-disposed sources and existing cold gameplay contracts pass. The selected owned
-audit matches the complete previous source algorithms: 90 parents, 108 links,
-29 stations, zero issues/errors; querying source issues creates no gameplay
-instances. Ordinary window close during each real first scan exits zero with
-readers drained, no completed index and the original checkpoint unchanged.
-Optimized Continue takes 26.12 versus 23.40 wall seconds, with the largest
-observed loading interval falling from 2,449.09 to 1,368.75 ms. This ordered pair
-is not a controlled total-speedup or headset claim. A separate trace locates
-both scans on the worker and roughly 254 ms of scene-thread quest-host creation.
-The complete runtime gate and all hosted checks pass. Material dependency preparation, native part
-publication, explicit saves and unexplained firing spikes remain open. Do not
-claim that the remaining second-scale loading freeze is fixed.
+## Remaining product failures
 
-Merged PR #216 adds a bounded post-audit hold so NPC construction profiling can collect rundown
-before host exit. Resolved stacks identify source BSA inflation during material
-publication, dominated by bit-at-a-time DEFLATE validation. The repair adds a
-bounded nine-bit Huffman lookup and byte-window reads, retaining the canonical
-long-code/tail path and strict extent policy. Selected independent vectors and
-23,200 private baseline differential cases agree. A controlled Release helper on
-32 owned character DDS members (27,536,230 compressed bytes) retains exact
-extents and byte-for-byte archive output; median validation time falls from
-523.77 to 194.05 ms across five alternating passes after warmup. This is a helper
-benchmark, not game/headset frame timing. Debug profiled NPC construction retains
-source vectors and cancellation checks; the worst selected part step falls from
-751.66 to 223.83 ms, still a stall. Optimized Continue takes 30.06 versus 24.46
-wall seconds, but the largest loading draw interval remains 2,457.12 versus
-2,408.73 ms. Five starting-view shots retain no handling error; later firing
-windows still exceed 100 ms. This ordered pair is not encounter/headset timing
-acceptance. The complete runtime gate and all hosted checks pass. Short-host traces without resolved
-stacks are unusable evidence. See runtime-performance.md for methods and limits.
+The user rejects NPC behavior and combat. Logs retain missing NPC travel,
+dialogue-location/patrol and creature procedure owners; armed/embedded emitters;
+faction assistance; script/condition/control-flow and AddReputation failures;
+actor-value/effect owners; radio scheduling; source model/material and SpeedTree
+support; constraints/phantoms; and renderer/session errors. Repeated messages do
+not count distinct actors. Cross-cell creature travel, Sunny's saloon return,
+post-travel population/persistence, progression and the full ordinary New Game ->
+Doc exit -> tutorial/wells -> Primm/ED-E route remain unaccepted. FO3, mods and TTW
+remain later work. Rendering, weather/lighting and final pixels are part of the
+parity denominator; no world or campaign completion is claimed.
 
-An optimized ordinary terrain run from the nearby healthy checkpoint has used
-two Stimpaks through Pip-Boy and killed a resident attacking coyote by mouse
-firing without a combat-owner error. Travel toward 0e745f then stops roughly
-390 metres away: capsule refinement exhausts its node bound on a source corridor
-near a 0.481-metre residual, with slope/step/contact rejection evidence retained.
-The session quit normally after retaining that failure. Diagnose native movement
-support and planner/executor agreement before changing collision or claiming arrival. The route overlapped
-diagnostic/build work and is not a controlled frame-performance benchmark.
+A visible local launcher plus Vulkan Continue recovered headset-world output
+after a white D3D12 session. That recovery does not prove the physical D3D12 path
+fixed. Official ESM selection does not establish a pristine installation: loose
+resource winners and a mod-like missing creature path still require provenance
+review. Original owned files, original saves and the user's recording stay private
+and read-only. Package g pins 92148ee84f3643f1b11b93f90fcd1942bdcb896f; do not alter
+its manifest to imply acceptance. The requested private 90-second edit contains
+selected development moments and is not an acceptance video.
 
-The selected approach recorded a 203.19 ms streaming upload and an
-82.84 ms commit, including 33.86 ms reference publication. Settled optimized flat
-rolling p95 remains roughly 26-29 ms. Managed samples identify particle work and
-substantial wrapper finalization; all-thread percentages include sleeping workers.
-The timing method and limits are in runtime-performance.md. Keep older off-cell
-audio continuation, attack variants, assistance, population behavior, the tracked
-rig and session lifecycle open. Performance now accompanies each gameplay block.
-
-The local Quest 3 launcher was made visible and changed to Vulkan after a white
-D3D12 session. Continue then displayed the world, hands and pistol in the headset
-mirror. This is a local recovery observation, not a D3D12 repair or full VR pass.
-Official ESM selection was logged; a missing creature path with a mod-like name
-requires tracing winning source provenance before calling the install pristine.
-Owned files and original saves remain read-only investigation inputs.
-
-Earlier quest-font, spatial-save, actor-residency, coyote/combat and shadow fixes
-passed their selected component/runtime checks. Those results do not cover this
-user session's rejected behavior. Cross-cell creature travel, Sunny's saloon
-return, post-travel persistence/population, complete scripts, ED-E/campaign,
-performance, FO3 VR, mods and TTW remain unaccepted.
-
-Package g pins source 92148ee84f3643f1b11b93f90fcd1942bdcb896f; its previous
-asset-free package/hash validation does not establish playability. Repair PRs
-#210, #212, #213, #214, #215, #216, #217 and #218 are integrated into main. Local main was verified equal to
-origin/main with no open task PR before starting the current feature branch.
-Do not change package g's manifest to imply acceptance.
-
-Recording is off for development and checks. Keep only requested deliverables
-and diagnostics still needed for the active investigation. Earlier cleanup of
-superseded packages/diagnostics was rejected by automatic approval review with
-"blocked by policy"; those artifacts remain. Do not bypass or retry that denial.
-
-Automatic approval review also rejected deletion of this video review's new
-temporary frames/clips as blocked by policy. They remain in private temporary
-storage; do not retry that deletion. The requested video is retained separately.
+Keep recording off except a specific visual check. Remove new temporary frames
+after inspection unless selected for an active investigation. Avoid duplicate
+caches/proof archives. Earlier cleanup of superseded packages/diagnostics was
+rejected by automatic approval review as "blocked by policy"; those artifacts
+remain and must not be retried. Automatic approval review separately rejected
+cleanup of the original video review's temporary frames/clips; do not retry that
+deletion either. The requested edit and original recording are preserved.

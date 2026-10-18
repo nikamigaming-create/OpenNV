@@ -376,7 +376,7 @@ public partial class RuntimeCoordinator
 
     private void QuitOpenXr(int exitCode)
     {
-        StopNativeOpenXr();
+        PrepareNativeOpenXrExit();
         GetTree().Quit(exitCode);
     }
 
