@@ -99,8 +99,7 @@ cold attack clocks/RNG/event prefixes and both player weapon-preparation checks
 pass. The complete runtime gate and hosted checks pass. Ordinary terrain
 deathclaw combat and physical VR acceptance remain open.
 
-Next owner: codex/navigation-loading-stalls, from verified main/origin/main
-6891b8d0ccdca82bca0aabb9b17aa20463c6448a with no open task PR. The final trace
+Merged PR #218 addresses repeated navigation source work. Its baseline trace
 locates roughly 1,170 ms on the scene thread inside FalloutReferenceWorld.Restore,
 including 1,068 ms validating retained travel and 1,012 ms loading its owned
 navigation graph. These nested samples are not additive. Inspect immutable
@@ -114,7 +113,7 @@ route regions rebuilds both graphs, with 6,131 and 14,203 NAVM record observatio
 temporary validation cache is not transferred by Restore. This is evidence of
 repeated source work, not native movement acceptance. The private helper and
 results are under source-index-audit in the active investigation directory.
-The navigation candidate now caches immutable graphs by source kind and
+The repair now caches immutable graphs by source kind and
 CELL/WRLD scope, preserving per-cell legacy hashes and per-world gameplay state.
 Save reading prepares needed routes on the indexing worker before validation;
 source traversal, adjacency and hashing are cancellable with no partial cache.
@@ -147,6 +146,25 @@ new process. The exact phase resumes; 15.599999 health and 14.400001 limb damage
 persist, the reaction completes and combat returns to pursuit without reaction
 error. Both processes quit normally. This is flat persistence evidence, not
 physical-headset or full encounter acceptance.
+
+Next owner: codex/vr-rifle-rig, from verified main/origin/main
+56e05312b9525f268505e785dda5c1eaab9cd931 with no open task PR. PR #218 passed
+the complete local gate and every hosted check before merging. Inspect the
+recorded rifle hand/forearm deformation through source mesh, bind, animation,
+tracked arm solve and weapon/socket frames before applying any repair. The
+roughly 478 ms player-presentation loading sample, remaining second-scale
+loading interval and later firing spikes remain open alongside this visual
+playability failure. The new owned rig diagnostic uses the production source
+appearance/attachments and nine generated poses, comparing source segment lengths,
+muzzle aim, native skin palettes and a deliberately changed-length negative.
+The selected Vulkan rifle component passes these checks. A near-eye mono view
+reproduces the large projected hand while an external view shows a coherent arm;
+this does not establish the cause of the user's physical-session defect. The
+headless pistol component passes its selected non-GPU checks. No rig runtime
+repair or physical acceptance is claimed. Actual OpenXR pose/submitted-eye joins,
+moving stereo review and a user retest remain the next evidence. See
+[vr-rig-diagnostics.md](vr-rig-diagnostics.md). Source-derived reports and the
+selected component views remain private in the active rig investigation.
 
 Merged PR #217 addresses the previous source-index freezes. A fresh optimized
 loading trace attributes roughly 779 ms to activation-parent source indexing and
@@ -220,7 +238,7 @@ performance, FO3 VR, mods and TTW remain unaccepted.
 
 Package g pins source 92148ee84f3643f1b11b93f90fcd1942bdcb896f; its previous
 asset-free package/hash validation does not establish playability. Repair PRs
-#210, #212, #213, #214, #215, #216 and #217 are integrated into main. Local main was verified equal to
+#210, #212, #213, #214, #215, #216, #217 and #218 are integrated into main. Local main was verified equal to
 origin/main with no open task PR before starting the current feature branch.
 Do not change package g's manifest to imply acceptance.
 
