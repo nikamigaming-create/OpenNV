@@ -1,98 +1,60 @@
 # Current work
 
-Updated 2026-10-17. The user's flat playtest rejected package f: missing quest
-text, passive enemies, missing creatures and shadow pop-in. It is not an accepted
-playtest or headset candidate. Root alone owns repairs, builds, live input and
-Git. Priority remains FNV, standalone FO3, mods, then TTW.
+Updated 2026-10-17. The user rejects package g after a physical FNV VR playtest:
+NPCs do not perform their behavior, combat is poor, and the game is broadly
+broken. Package g is not an accepted playable/headset candidate. Root alone owns
+repairs, builds, live input and Git. Priority remains FNV, standalone FO3, mods,
+then TTW. The active repair inventory and acceptance order are in
+[implementation-plan.md](implementation-plan.md).
 
-## Confirmed failures and repairs under validation
+## Verified state and next owner
 
-- The quest page inserted a checkmark absent from the owned bitmap font and
-  aborted drawing. Quest state survived. Completed objectives now use a supported
-  marker; the copied user save visibly renders the completed bottle objectives
-  and active Follow Sunny objective at tutorial stage 30.
-- Exterior saves retained the streaming anchor after the player crossed cells.
-  The user's latest save reproduced a rejected Continue. Capture now resolves the
-  player's source spatial cell; loading resolves older positions in their saved
-  world. The copied save loads without changing the original.
-- Actor residency used old placement rather than authoritative package/combat
-  motion. It now uses current source-space poses, including cold restoration,
-  while honoring pending MoveTo before its native node catches up. Synthetic
-  exterior/cold/scale/MoveTo checks pass. Sunny is present in rendered continuation,
-  walks to the well and completes her conversation: tutorial stages 25 -> 30 -> 35.
-  The packaged run also streams away/back, reaches stage 45, takes actual gecko
-  melee damage and kills both first-well geckos with ordinary rifle fire. Sunny's
-  post-fight conversation advances stage 50. A complete post-fight F5 slot cold-
-  loads with Sunny present, both actors dead and stage 50 retained.
-- A queued autosave could wait indefinitely for a quiet boundary among repeating
-  ambient sounds and reject every player save as concurrent. A fully admitted
-  player snapshot now fulfills that pending automatic snapshot after successful
-  writing. Actual near-Sunny F5 moved from queued-auto=true to a completed v52
-  slot and queued-auto=false after genuine finite audio completion. The slot
-  resolves spatial CELL 0e1ab6 and retains tutorial stage 35. The packaged export
-  cold-loads it with Sunny at the saved well position, renders the quest page
-  and commits another complete F5 slot.
-- Cazador skin partition 214 was rejected. Source body regions now cover index 14
-  and corresponding caps/sections. Template flags without an actual TPLT link now
-  retain local actor fields. Owned construction, independent instances and cold
-  animation continuation pass.
-- Model-free melee weapons incorrectly required a projectile muzzle. Only ranged
-  embedded weapons require that socket. Combat now owns its script-visible
-  procedure/package before hit-reaction conditions, independently of unsupported
-  ordinary packages. Owned armed and melee Viper component checks detect, pursue,
-  retaliate and apply actual damage.
-- AIDT aggro-radius warnings were absent. Warning target, count, clocks and idle
-  identity now persist, with explicit v51 admission into v52. Owned coyotes warn
-  in the outer radius, enter combat on source timers and cause damage. Friendly
-  exclusions and confidence remain authoritative. Warning dialogue/special idles
-  remain unbound and visible in telemetry.
-- Pursuit lost source arrival-region information and could discard unfinished
-  queries when a target moved. Region ownership now reaches native capsule
-  planning. Terminal portal seeds inside the target region retain attack range.
-  Sloped source-floor admission now projects vertically rather than shifting
-  sideways. Chase and hit resolution share 3D range, preventing endless missed
-  swings uphill. Blocked-target, prefix, floor and sloped fight checks accompany the repair.
-  The copied user's actual-terrain Vulkan replay detects the player, climbs the
-  slope and lands source melee hits, reducing health from 120 to zero.
-- Exterior sunlight used Godot's default 100m shadow cutoff and unblended
-  cascades. Shadow distance now covers the resident grid with cascade blending
-  and observable settings. Owned native landscape checks pass. Building/ground
-  shadows are visible during the rendered Sunny walk with 331.048m range and
-  blended cascades. LOD shadow/filtering or retail pixel parity is not claimed.
+The user's private 46:25 recording has been surveyed across the timeline with
+denser samples of selected defects. It contains recognizable world exploration,
+changing wrist pages, interiors, some dialogue and Sunny movement. It also shows
+severely malformed rifle hand/forearm presentation. This sampled recording review
+is not continuous temporal/stereo acceptance. The requested private 90-second
+edit contains selected development moments, not proof of a working game.
 
-## Verification and next owner
+The session log independently reports missing NPC travel/dialogue/patrol and
+creature procedure owners; deathclaw attack-variant binding failures; faction
+assistance ambiguity; embedded-weapon emitter selection; script/condition and
+AddReputation failures; missing models/materials and SpeedTree support; radio
+scheduling; and renderer/session errors. Log timing is not joined to video frames.
+Repeated messages do not count distinct actors or prove the visible cause.
 
-The user's owned quest/script snapshot retains all 447 instance clocks and
-failures across cold restoration. Its audit now compares continuation collections
-structurally instead of treating newly allocated equal arrays as changed state.
-Selected owned creature, coyote warning, armed/melee NPC and landscape checks pass
-their functional checks. The two NPC fixtures retain audio playback shutdown
-warnings; those are not a leak-free-runtime claim. The complete runtime gate is
-passed after the residency/save repair, including Release/Debug, format/analyzers,
-contracts, launcher and native Godot probes. Diff checks pass. Independent
-Release cold/save/UI and first-well combat acceptance pass. Sunny's subsequent
-editor-location return to the saloon reports its missing other-cell route owner;
-this remains visible and unaccepted. Post-fast-travel saving and population remain
-unverified.
+An actual manual-save failure follows an unsupported hit-reaction NIF user
+version 2 = 27. This supersedes the earlier bounded save acceptance as the next
+implementation priority: reproduce the affected creature's hit -> save -> cold
+Continue, repair the general layout/reaction continuation owner, and retain all
+actor state. Then repair attack variants, source attack timing and faction
+assistance, followed by population/package behavior and the tracked rig. The
+complete ordered backlog is in the implementation plan.
 
-Original owned files, recording and user saves remain untouched. Investigation
-copies/logs stay private in ignored local storage. Package g,
-`OpenNV-fnv-repair-20261017-g-windows-x64`, pins clean source
-`92148ee84f3643f1b11b93f90fcd1942bdcb896f`; all 207 file hashes and exported
-launcher identity validate, with no owned data. ZIP SHA256:
-`2df69df4aaefa394817cdbefd942d8e0d9bf495975d21fb0ac697526d0d82afe`.
-Existing New Vegas flat/VR test shortcuts point to g with the original profile;
-its save hash is unchanged. PR #210 carries the repair and its checked integration.
-Package f remains the historical failed candidate. Begin the next implementation
-block from current origin/main on a fresh feature branch.
+The local Quest 3 launcher was made visible and changed to Vulkan after a white
+D3D12 session. Continue then displayed the world, hands and pistol in the headset
+mirror. This is a local recovery observation, not a D3D12 repair or full VR pass.
+Official ESM selection was logged; a missing creature path with a mod-like name
+requires tracing winning source provenance before calling the install pristine.
+Owned files and original saves remain read-only investigation inputs.
 
-Cheyenne's saloon portal approach remains unaccepted. Missing SpeedTree decoding,
-unsupported packages/scripts, unloaded background simulation, campaign/ED-E,
-physical Quest 3, FO3 VR, mods and TTW remain open. Earlier bounded tutorial or
-simulator checks do not establish these capabilities. Loading is not instant.
+Earlier quest-font, spatial-save, actor-residency, coyote/combat and shadow fixes
+passed their selected component/runtime checks. Those results do not cover this
+user session's rejected behavior. Cross-cell creature travel, Sunny's saloon
+return, post-travel persistence/population, complete scripts, ED-E/campaign,
+performance, FO3 VR, mods and TTW remain unaccepted.
 
-Frame recording is off; only selected diagnostic stills are inspected.
-Automatic approval review blocked deletion of superseded packages, older
-diagnostics, and this investigation's temporary test sessions/frames. It returned
-only "blocked by policy" for the current cleanup. Those local artifacts remain;
-recording is off. Do not bypass the rejection.
+Package g pins source 92148ee84f3643f1b11b93f90fcd1942bdcb896f; its previous
+asset-free package/hash validation does not establish playability. Repair PR #210
+is integrated into main. Begin implementation from current origin/main on a fresh
+feature branch; do not change the package's manifest to suggest these defects
+are repaired.
+
+Recording is off for development and checks. Keep only requested deliverables
+and diagnostics still needed for the active investigation. Earlier cleanup of
+superseded packages/diagnostics was rejected by automatic approval review with
+"blocked by policy"; those artifacts remain. Do not bypass or retry that denial.
+
+Automatic approval review also rejected deletion of this video review's new
+temporary frames/clips as blocked by policy. They remain in private temporary
+storage; do not retry that deletion. The requested video is retained separately.
