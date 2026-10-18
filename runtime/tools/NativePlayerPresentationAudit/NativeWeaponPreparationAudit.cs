@@ -4,6 +4,7 @@ using OpenNV.Runtime;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.World.Cells;
+using OpenNV.Runtime.World.Actors;
 
 public partial class NativePlayerPresentationAudit
 {
@@ -30,6 +31,8 @@ public partial class NativePlayerPresentationAudit
                 var audio = JsonSerializer.Serialize(package.CaptureAudio());
                 var items = JsonSerializer.Serialize(inventory.Items);
                 for (var frame = 0; frame < 8; frame++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                await CheckAimPreparation(player, records);
+                CheckArmSpread(records, FalloutWeaponShot.Read(records, weapon.Form, weapon.Ammunition[0]));
                 var state = JsonSerializer.SerializeToElement(player.FiringState);
                 if (state.GetProperty("resourcePreparation").GetProperty("error").ValueKind != JsonValueKind.Null ||
                     state.GetProperty("shots").GetInt64() != 0 ||
@@ -45,5 +48,65 @@ public partial class NativePlayerPresentationAudit
             }
             finally { player.Free(); }
         }
+    }
+
+    private async Task CheckAimPreparation(RuntimeNativePlayer player, FalloutPluginStack records)
+    {
+        var shape = player.AutoAimShape(20, 3);
+        var identity = shape.GetRid();
+        var points = shape.Points;
+        for (var shot = 0; shot < 128; shot++)
+            if (player.AutoAimShape(20, 3).GetRid() != identity || !shape.Points.SequenceEqual(points))
+                throw new InvalidOperationException("Repeated aim queries rebuilt or changed their native hull.");
+        var changed = player.AutoAimShape(30, 4);
+        if (changed.GetRid() == identity || changed.Points.Skip(16).Any(point => point.Z != -30))
+            throw new InvalidOperationException("A changed aim declaration reused stale geometry.");
+        var invalid = false;
+        try { _ = player.AutoAimShape(20, float.NaN); }
+        catch (InvalidDataException) { invalid = true; }
+        if (!invalid || player.AutoAimShape(20, 3).GetRid() != identity)
+            throw new InvalidOperationException("Invalid aim settings changed retained geometry.");
+
+        player.SetProcess(false); player.SetPhysicsProcess(false);
+        var body = player.FindChildren("*", "", true, false).OfType<RuntimeNativePlayerActor>()
+            .Single(actor => actor.BodyContacts.Count != 0);
+        var original = body.GlobalTransform;
+        var target = player.CombatTargetPoint;
+        var offset = new Vector3(.35f, -.4f, .2f);
+        try
+        {
+            body.GlobalPosition += offset;
+            if (player.CombatTargetPoint.DistanceTo(target + offset) > .0001f)
+                throw new InvalidOperationException("Player targeting ignored the posed body displacement.");
+            var camera = player.Camera.GlobalTransform;
+            player.Camera.GlobalPosition += Vector3.Right * 2;
+            if (player.CombatTargetPoint.DistanceTo(target + offset) > .0001f)
+                throw new InvalidOperationException("View camera displaced the anatomical damage target.");
+            player.Camera.GlobalTransform = camera;
+            await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
+            await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
+            if (player.CombatHitPartFrom(player.CombatTargetPoint + Vector3.Forward * 3) is null)
+                throw new InvalidOperationException("A clear attack ray to the posed body missed its damage volumes.");
+        }
+        finally { body.GlobalTransform = original; }
+        GD.Print("OPENNV_SHARED_AIM_PREPARATION_PASS retainedHull=true changedSettings=true invalidAtomic=true displacedBodyTarget=true cameraIndependent=true anatomicalRayHit=true");
+    }
+
+    private static void CheckArmSpread(FalloutPluginStack records, FalloutWeaponShot source)
+    {
+        var owner = new FalloutWeaponSpread(records);
+        foreach (var (type, setting) in new[] { (3u, "fCrippledArms1HSpreadPenalty"), (5u, "fCrippledArms2HSpreadPenalty") })
+        {
+            var shot = source with { WeaponAnimationType = type, StrengthRequirement = 0, SkillRequirement = 0 };
+            float Spread(bool left, bool right) => owner.PlayerMedianDeviationDegrees(shot, 100, 10,
+                aiming: true, moving: false, running: false, sneaking: false, left, right, [], _ => 0);
+            var multiplier = 1 - FalloutGameSettingFloats.Read(records, "fWobbleToSkillConversion");
+            var expectedDifference = FalloutGameSettingFloats.Read(records, setting) * multiplier * 5.955f;
+            if (MathF.Abs(Spread(true, true) - Spread(false, false) - expectedDifference) > .0001f)
+                throw new InvalidOperationException("Both-arm spread stacked the single-arm penalty.");
+            if (type == 3 && Spread(true, false) != Spread(false, false))
+                throw new InvalidOperationException("The free left arm penalized a one-handed weapon.");
+        }
+        GD.Print("OPENNV_SHARED_ARM_SPREAD_PASS oneHanded=true twoHanded=true exclusiveInjuryStates=true");
     }
 }

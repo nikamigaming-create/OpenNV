@@ -72,7 +72,7 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
     internal Func<Vector3, bool>? CanOccupyPosition { get; set; }
     internal Func<bool>? IsDefeated { get; set; }
     internal float CombatRadius => _configuration.Player.CapsuleRadiusMeters;
-    internal Vector3 CombatTargetPoint => GlobalPosition + Vector3.Up * _configuration.Player.SpawnCenterHeightMeters;
+    internal Vector3 CombatTargetPoint => SourceCombatTargetPoint();
 
     internal void ConfigureLocomotion(FalloutPluginStack records, Func<GameplayVitals?> vitals)
     {

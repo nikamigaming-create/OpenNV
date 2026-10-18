@@ -10,6 +10,9 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <Deterministic>true</Deterministic>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <!-- Compile the Windows release export ahead of gameplay to reduce cold
+         action JIT work. Keep IL for runtime fallback; this is not NativeAOT. -->
+    <PublishReadyToRun Condition="'$(Configuration)' == 'ExportRelease' and '$(RuntimeIdentifier)' == 'win-x64'">true</PublishReadyToRun>
   </PropertyGroup>
   <ItemGroup>
     <Compile Remove="tools\OpenNV.ResourceProbe\**\*.cs" />

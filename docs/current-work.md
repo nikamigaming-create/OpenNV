@@ -9,19 +9,41 @@ physical-headset acceptance; selected component passes cannot close it.
 
 ## Current owner
 
-Current owner: codex/combat-resources-distance, from verified main/origin/main
-2f1896fefce36a9d08d476b5d072c78aabb4218c with no outstanding task PR. PR #222
-passed every hosted check and is merged. Active repairs: source-owned combat
-animation reuse and preparation, incremental distant-world publication,
-rotation-invariant perspective fog, and explicit X-button wrist focus with
-squeeze reserved for weapon support. Component terrain/object LOD comparisons
-preserve exact surface arrays and transforms; the Vulkan fog audit passes.
-The final full runtime gate passes. The safe-mode optimized Vulkan export
+Current owner: codex/shared-aiming-contacts, from verified main/origin/main
+e611e75dfe4d153b19b8d6fd6dc23b96beef09f9 with no outstanding task PR. PR #223
+is merged and every hosted check passes. Its source-owned combat preparation,
+incremental distant publication, radial perspective fog and explicit X-button
+wrist focus pass the complete local gate and selected owned checks.
+The safe-mode optimized Vulkan export
 restores the retained reaction, resumes attack and retires normally. The fresh
 shot/save trial misses and therefore does not prove hit-stall recovery. A
 separate-render-thread trial produced a texture-upload error and was rejected.
-Next: shared flat/XR shot direction, spread, per-shot physics allocation and
-enemy target/contact accuracy, followed by physical acceptance. Large
+Active changes: exclusive arm-injury spread penalties, reusable auto-aim hulls,
+source-posed player target points shared by enemy attacks in flat/XR, and
+ReadyToRun compilation for Windows release exports.
+The owned preparation check passes retained native hull identity, changed and
+invalid declarations, displaced body targets, anatomical ray hits and injury
+states. The complete official-editor runtime gate passes. An optimized flat
+Vulkan run from the existing nearby combat save lands two shots on the source
+creature, applies damage/death, completes both F5 saves and exits zero with the
+original checkpoint unchanged. Shot paths take 15.07 and 4.41 ms; these are not
+whole-frame timings or 144 Hz acceptance. A separate cold retained-reaction
+continuation also completes and exits zero. An earlier distant-target trial
+misses/hits scenery and its helper times out while save preparation is pending;
+it is not accepted combat or retirement evidence. The nearby repeat waits for
+save completion before quitting. No frame recording was enabled.
+The same nearby-shot scenario with a ReadyToRun export records 4.27 and 2.59 ms
+shot paths, completes both saves and exits zero. Cold retained-reaction
+continuation preserves its exact saved phase and returns to attack. Observed
+error categories match the ordinary export, including existing content and AI
+divergence. These bounded samples motivate precompilation; they do not establish
+controlled loading improvement, whole-frame performance or 144 Hz acceptance.
+The complete local gate passes again with the export-property change. The
+initial hosted run fails the existing recorded-input publication-loss check;
+its diagnostic writer exceeded the publication interval. Final hosted checks
+must pass before merge; the local pass does not waive this failure.
+Bottle aiming, NPC ranged accuracy, shared shot direction and physical
+acceptance remain open. Large
 individual surface uploads, player construction, combat spikes and physical
 arm/contact acceptance remain open; 144 Hz requires a 6.94 ms frame budget.
 Body, weapon, contacts and wrist input must switch together. The navigation,
