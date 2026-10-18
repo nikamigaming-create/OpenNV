@@ -280,6 +280,50 @@ if (expressionResult.Value is < 1 or > 3 ||
     throw new InvalidOperationException(
         "Classic INT source expression evaluation or RANDOM consumption drifted.");
 
+// Object cancellation removes every matching event without advancing time or
+// consuming sequence numbers. A failed script cannot cancel the caller's queue.
+var cancelTimers = ClassicIntTimerOwner.Schedule(timerState, 201, 10, 9);
+var cancelWorld = timerWorld with
+{
+    Timers = cancelTimers,
+    Objects = new Dictionary<int, ClassicIntWorldObject>
+    {
+        [200] = new(200, 1, 100, 0, true),
+        [201] = new(201, 2, 101, 0, true),
+    },
+};
+var cancelState = new ClassicIntProcedureState(new Dictionary<int, int>(), new Dictionary<int, int>(),
+    new Dictionary<int, int>(), new Dictionary<int, int>(), new Dictionary<int, int>(), [], null);
+ClassicIntProgram CancelProgram(ushort terminal)
+{
+    ClassicIntInstruction[] code = [new(0, 0x80bc, null), new(2, 0x80f1, null), new(4, terminal, null)];
+    var procedure = new ClassicIntProcedure("cancel", 0, null, code);
+    return new("synthetic-cancel", [procedure], new Dictionary<string, ClassicIntProcedure> { ["cancel"] = procedure },
+        code.ToDictionary(row => row.Offset), new Dictionary<int, string>(), new Dictionary<int, string>());
+}
+var cancelled = ClassicIntProcedureVm.Execute(CancelProgram(0x801c), "cancel", cancelState, gameContext, cancelWorld, null, 3);
+var remaining = cancelled.WorldObjects.Timers;
+if (remaining.CurrentTick != cancelTimers.CurrentTick || remaining.NextSequence != cancelTimers.NextSequence ||
+    !remaining.Pending.SequenceEqual(cancelTimers.Pending.Where(row => row.TargetHandle == 201)) ||
+    cancelled.State.ValueStack.Count != 0 || cancelWorld.Timers.Pending.Count != 3)
+    throw new InvalidOperationException("INT timer removal changed another target, clock, sequence, stack or source state.");
+var coldCancellation = ClassicIntWorldObjectState.Restore(JsonSerializer.SerializeToElement(cancelled.WorldObjects.Save()));
+var repeated = ClassicIntProcedureVm.Execute(CancelProgram(0x801c), "cancel", cancelState, gameContext, coldCancellation, null, 3);
+if (JsonSerializer.Serialize(repeated.WorldObjects.Timers) != JsonSerializer.Serialize(remaining))
+    throw new InvalidOperationException("Empty/cold timer removal was not idempotent.");
+foreach (var (target, terminal) in new[] { (0, (ushort)0x801c), (999, (ushort)0x801c), (200, (ushort)0xffff) })
+{
+    try
+    {
+        _ = ClassicIntProcedureVm.Execute(CancelProgram(terminal), "cancel", cancelState,
+            gameContext with { SelfObject = target }, cancelWorld, null, 3);
+        throw new Exception("Invalid timer cancellation script was accepted.");
+    }
+    catch (InvalidOperationException) { }
+    if (cancelWorld.Timers.Pending.Count != 3) throw new InvalidOperationException("Failed script cancelled live timers.");
+}
+Console.WriteLine("OPENNV_CLASSIC_TIMER_REMOVAL_PASS allTargetEvents=true unrelatedPreserved=true clockUnchanged=true cold=true atomic=true");
+
 var procedureProgram = ClassicIntProcedureVm.Parse(
     intDocument.RootElement.GetProperty("liveScriptSlots")[0]
         .GetProperty("program").GetProperty("inventory"),

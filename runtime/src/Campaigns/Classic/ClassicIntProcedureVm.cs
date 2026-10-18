@@ -506,6 +506,7 @@ internal static class ClassicIntProcedureVm
     private const ushort GameTime = 0x80EA;
     private const ushort GameTimeHour = 0x80F6;
     private const ushort AddTimerEvent = 0x80F0;
+    private const ushort RemoveTimerEvent = 0x80F1;
     private const ushort GameTicks = 0x80F2;
     private const ushort FixedParameter = 0x80F7;
     private const ushort DialogueSystemEnter = 0x80F9;
@@ -934,6 +935,14 @@ internal static class ClassicIntProcedureVm
                                 "missing-timer-target");
                         timers = ClassicIntTimerOwner.Schedule(
                             timers, target, delay, fixedParameter);
+                        break;
+                    }
+                case RemoveTimerEvent:
+                    {
+                        var target = Pop(stack, program, procedure, offset);
+                        if (!objects.ContainsKey(target))
+                            throw Failure(program, procedure, offset, "missing-timer-target");
+                        timers = ClassicIntTimerOwner.RemoveForObject(timers, target);
                         break;
                     }
                 case FixedParameter:
