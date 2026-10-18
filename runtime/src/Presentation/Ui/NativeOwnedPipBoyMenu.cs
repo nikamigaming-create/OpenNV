@@ -28,8 +28,13 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
     private Vector3 _player;
     private float _heading;
     private NativeOwnedMenuTree _tiles = null!;
-    private readonly List<(XElement Tile, NativeBitmapMenuButton Button)> _buttons = [];
+    private readonly List<(XElement Tile, BaseButton Button)> _buttons = [];
+    private readonly Dictionary<FalloutPipBoyPage, XElement> _declarations = [];
+    private (FalloutFormKey World, NativeOwnedWorldMap.View View)? _mapView;
+    internal string? ActionError { get; private set; }
     private readonly Dictionary<string, XElement> _templates = [];
+    private readonly Dictionary<string, XElement> _namedTiles = new(StringComparer.Ordinal);
+    private double _lastRefreshMilliseconds, _maximumRefreshMilliseconds;
     private NativeOwnedWorldMap? _map;
     private Control? _mapForeground;
     private int _offset;
@@ -52,6 +57,7 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
     internal event Action? PageChanged;
     internal void RefreshWorld(FalloutFormKey? world, Vector3 player, float heading)
     {
+        SaveMapView(); _map = null;
         _world = world; _player = player; _heading = heading;
         Select(_state.Page, _state.Selection);
     }
@@ -66,6 +72,10 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
         map = _map?.State,
         radio = _radio?.State,
         error = Error,
+        actionError = ActionError,
+        listOffset = _offset,
+        refreshMilliseconds = _lastRefreshMilliseconds,
+        maximumRefreshMilliseconds = _maximumRefreshMilliseconds,
         unbound = "limb-movement-and-effect-rules,skill-advancement,constant-ability-effect-list,complete-general-statistics,radio-broadcast-playback,fast-travel-time-and-followers,scripted-and-addictive-aid-effects,item-drop-and-repair"
     };
 
@@ -97,8 +107,13 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
         _tiles.BindText(Tile("IM_Headline_PlayerHPInfo"), "_Value", $"{vitals.HitPoints}/{vitals.MaximumHitPoints}");
         QueueRedraw();
     }
-    private XElement Tile(string name) => _tiles.Root.DescendantsAndSelf().SingleOrDefault(tile => (string?)tile.Attribute("name") == name)
-        ?? throw new InvalidDataException($"Pip-Boy source tile is absent: {name}.");
+    private XElement Tile(string name)
+    {
+        if (_namedTiles.TryGetValue(name, out var tile)) return tile;
+        tile = _tiles.Root.DescendantsAndSelf().SingleOrDefault(tile => (string?)tile.Attribute("name") == name)
+            ?? throw new InvalidDataException($"Pip-Boy source tile is absent: {name}.");
+        _namedTiles.Add(name, tile); return tile;
+    }
     private string Setting(string name) => FalloutGameSettingStrings.Read(_records, name);
     private void Bind(string name, string trait, float value) => _tiles.Bind(Tile(name), trait, value);
     private void Text(string name, string value) => _tiles.Text[Tile(name)] = value;
@@ -106,20 +121,25 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
     internal void Select(FalloutPipBoyPage page) => Select(page, _state.SelectionFor(page));
     internal void Select(FalloutPipBoyPage page, int index)
     {
+        ActionError = null; RemoveMeta("opennv_pipboy_action_error");
         _state.Select(page, index); _offset = 0; _textOffset = 0; _selectedItem = null; _travelTarget = null; Refresh(); PageChanged?.Invoke();
     }
     private void Refresh()
     {
+        var started = System.Diagnostics.Stopwatch.GetTimestamp();
+        SaveMapView();
         Error = null;
         RemoveMeta("opennv_pipboy_error");
         _displayedInventoryRevision = _inventory.Revision;
         SetMeta("opennv_page", (int)_state.Page);
         foreach (var child in GetChildren()) { RemoveChild(child); child.QueueFree(); }
-        _buttons.Clear(); _templates.Clear(); _map = null; _mapForeground = null;
+        _buttons.Clear(); _templates.Clear(); _namedTiles.Clear(); _map = null; _mapForeground = null;
         try
         {
             var path = _state.Page switch { FalloutPipBoyPage.Stats => "stats", FalloutPipBoyPage.Items => "inventory", _ => "map" };
-            var root = FalloutMenuXml.Expand(FalloutMenuXml.Read($"menus/main/{path}_menu.xml")).Elements("menu").Single();
+            if (!_declarations.TryGetValue(_state.Page, out var declaration))
+                _declarations.Add(_state.Page, declaration = FalloutMenuXml.Expand(FalloutMenuXml.Read($"menus/main/{path}_menu.xml")).Elements("menu").Single());
+            var root = new XElement(declaration);
             root.SetElementValue("systemcolor", "entity_pipboy");
             foreach (var template in root.Descendants("template").ToArray())
             {
@@ -132,6 +152,8 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
             Layout(); _tiles.ValidateDrawing();
         }
         catch (Exception error) { Fail(error); }
+        _lastRefreshMilliseconds = System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+        _maximumRefreshMilliseconds = Math.Max(_maximumRefreshMilliseconds, _lastRefreshMilliseconds);
         QueueRedraw();
     }
     private void Fail(Exception error)
@@ -143,7 +165,7 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
     {
         var font = _tiles.Font(tile.DescendantsAndSelf("text").FirstOrDefault() ?? tile);
         var button = new NativeBitmapMenuButton(font.Font, font.Atlas, _tiles.TileColor(tile)) { Text = label, DrawText = false };
-        button.Pressed += () => { try { action(); } catch (Exception error) { Fail(error); QueueRedraw(); } };
+        button.Pressed += () => RunAction(action);
         button.MouseEntered += () => { _tiles.Bind(tile, "mouseover", 1); QueueRedraw(); };
         button.MouseExited += () => { _tiles.Bind(tile, "mouseover", 0); QueueRedraw(); };
         AddChild(button); _buttons.Add((tile, button));
@@ -169,8 +191,7 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
     private IReadOnlyList<XElement> ListRows(XElement list, string template, IReadOnlyList<(string Label, Action Action, bool Equipped)> items)
     {
         var rows = new List<XElement>();
-        _tiles.Bind(list, "_scrollbar_vis", 0); _tiles.Bind(list, "_highlight_y", -100); _tiles.Bind(list, "_selected_height", 48);
-        foreach (var scrollbar in list.Descendants().Where(tile => (string?)tile.Attribute("name") == "lb_scrollbar")) _tiles.Bind(scrollbar, "visible", 0);
+        _tiles.Bind(list, "_highlight_y", -100); _tiles.Bind(list, "_selected_height", 48);
         _offset = Math.Clamp(_offset, 0, Math.Max(0, items.Count - 1));
         var y = 0f;
         var available = _tiles.Number(list, "height");
@@ -199,6 +220,7 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
             Target(tile, item.Label, item.Action);
             rows.Add(tile);
         }
+        BindListNavigation(list, items.Count, rows.Count);
         return rows;
     }
     private string NameOf(FalloutFormKey form)
@@ -491,7 +513,13 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
                     });
             }
             _map.Hovered += name => { Text("MM_Headline_LocationInfo", name.Length == 0 ? NameOf(sourceWorld) : name); QueueRedraw(); };
-            AddMapCanvas(_map); _map.CenterPlayer();
+            AddMapCanvas(_map);
+            if (_mapView is { } view && view.World == sourceWorld) _map.RestoreView(view.View);
+            else _map.CenterPlayer();
+            Bind("MM_ButtonX", "visible", 1); Text("MM_ButtonX", "Zoom out");
+            Target(Tile("MM_ButtonX"), "Zoom out", () => _map.ZoomAt(_map.Size / 2, -1));
+            Bind("MM_ButtonY", "visible", 1); Text("MM_ButtonY", "Zoom in");
+            Target(Tile("MM_ButtonY"), "Zoom in", () => _map.ZoomAt(_map.Size / 2, 1));
         }
         else if (_state.Selection == 0)
         {
@@ -501,6 +529,13 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
             map.Position = _tiles.Position(clip);
             map.Size = new(_tiles.Number(clip, "width"), _tiles.Number(clip, "height"));
             AddMapCanvas(map);
+            if (map is NativeOwnedLocalMap localMap)
+            {
+                Bind("MM_ButtonX", "visible", 1); Text("MM_ButtonX", "Zoom out");
+                Target(Tile("MM_ButtonX"), "Zoom out", () => localMap.Zoom(-1));
+                Bind("MM_ButtonY", "visible", 1); Text("MM_ButtonY", "Zoom in");
+                Target(Tile("MM_ButtonY"), "Zoom in", () => localMap.Zoom(1));
+            }
         }
         else if (_state.Selection == 2)
         {
@@ -589,6 +624,7 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
         {
             button.Visible = VisibleTile(tile); if (!button.Visible) continue;
             button.Position = _tiles.Position(tile); button.Size = new(_tiles.Number(tile, "width"), _tiles.Number(tile, "height"));
+            button.Visible = button.Size.X > 0 && button.Size.Y > 0;
         }
     }
     public override void _Input(InputEvent input)
@@ -598,6 +634,9 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
             Select((FalloutPipBoyPage)(key.PhysicalKeycode - Key.F1));
             GetViewport().SetInputAsHandled(); return;
         }
+        // A failed page can still switch tabs or close through its device.
+        // Do not interpret scrolling against a partially constructed tile tree.
+        if (_tiles is null || Error is not null) return;
         if (input is InputEventMouseButton { Pressed: true } mouse && mouse.ButtonIndex is MouseButton.WheelDown or MouseButton.WheelUp && _map is null && !(_state.Page == FalloutPipBoyPage.Data && _state.Selection == 0))
         {
             var step = mouse.ButtonIndex == MouseButton.WheelDown ? 1 : -1;

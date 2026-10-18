@@ -25,6 +25,7 @@ public partial class RuntimeCoordinator
             _nativePipBoyLayer = new CanvasLayer { Name = "NativePipBoyLayer", Layer = 100, ProcessMode = ProcessModeEnum.Always };
             AddChild(_nativePipBoyLayer); _nativePipBoyLayer.AddChild(_nativePipBoy);
             _nativeXr.PoseWristDevice = _nativePipBoy.PoseXrDevice;
+            _nativeXr.ScrollPipBoy = _nativePipBoy.ScrollFromXr;
             menu = null;
             FocusNativeXrPipBoy(focused);
         }
@@ -41,6 +42,7 @@ public partial class RuntimeCoordinator
     {
         _nativeXr!.PointAtPipBoy = null;
         _nativeXr.PoseWristDevice = null;
+        _nativeXr.ScrollPipBoy = null;
         var layer = _nativePipBoyLayer; var view = _nativePipBoy;
         _nativePipBoyLayer = null; _nativePipBoy = null;
         try { if (IsInstanceValid(view)) view!.RetireSourcePointerInput(); }

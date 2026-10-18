@@ -78,6 +78,13 @@ internal sealed partial class NativeOwnedLocalMap(World3D world, Vector3 player,
         _arrow.Position = Size / 2 + new Vector2(displacement.X, displacement.Z) * Size.Y / _span - _arrow.Size / 2;
     }
 
+    internal void Zoom(int direction)
+    {
+        if (direction == 0) return;
+        _span = Math.Clamp(_span * (direction > 0 ? 0.8f : 1.25f), 8, 300);
+        _camera.Size = _span; UpdateArrow();
+    }
+
     public override void _GuiInput(InputEvent input)
     {
         if (input is InputEventMouseButton mouse)
@@ -85,8 +92,7 @@ internal sealed partial class NativeOwnedLocalMap(World3D world, Vector3 player,
             if (mouse.ButtonIndex == MouseButton.Left) _drag = mouse.Pressed ? mouse.Position : null;
             else if (mouse.Pressed && mouse.ButtonIndex is MouseButton.WheelUp or MouseButton.WheelDown)
             {
-                _span = Math.Clamp(_span * (mouse.ButtonIndex == MouseButton.WheelUp ? 0.8f : 1.25f), 8, 300);
-                _camera.Size = _span; UpdateArrow();
+                Zoom(mouse.ButtonIndex == MouseButton.WheelUp ? 1 : -1);
             }
             AcceptEvent();
         }

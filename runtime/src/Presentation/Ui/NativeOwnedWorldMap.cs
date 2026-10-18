@@ -17,6 +17,20 @@ internal sealed partial class NativeOwnedWorldMap : Control
     private Vector2? _drag;
     private Vector2 _press;
     private float _dragDistance;
+    internal readonly record struct View(float Zoom, Vector2 Offset);
+    internal View CaptureView() => new(_zoom, _offset);
+    internal void RestoreView(View view)
+    {
+        if (!float.IsFinite(view.Zoom) || view.Zoom is < .25f or > 4 || !view.Offset.IsFinite())
+            throw new InvalidDataException("Map view is nonfinite or outside the zoom range.");
+        _zoom = view.Zoom; _offset = view.Offset; QueueRedraw();
+    }
+    internal void ZoomAt(Vector2 position, int direction)
+    {
+        var point = (position - _offset) / Extent;
+        _zoom = Math.Clamp(_zoom * (direction > 0 ? 1.2f : 1 / 1.2f), .25f, 4);
+        _offset = position - point * Extent; QueueRedraw();
+    }
     internal event Action<FalloutMapMarker>? Selected;
     internal event Action<string>? Hovered;
     internal object State => new
@@ -83,9 +97,7 @@ internal sealed partial class NativeOwnedWorldMap : Control
         {
             if (mouse.Pressed && mouse.ButtonIndex is MouseButton.WheelUp or MouseButton.WheelDown)
             {
-                var point = (mouse.Position - _offset) / Extent;
-                _zoom = Math.Clamp(_zoom * (mouse.ButtonIndex == MouseButton.WheelUp ? 1.2f : 1 / 1.2f), 0.25f, 4);
-                _offset = mouse.Position - point * Extent; QueueRedraw(); AcceptEvent();
+                ZoomAt(mouse.Position, mouse.ButtonIndex == MouseButton.WheelUp ? 1 : -1); AcceptEvent();
             }
             if (mouse.ButtonIndex == MouseButton.Left)
             {

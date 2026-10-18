@@ -9,7 +9,6 @@ internal sealed record FalloutWorldMap(FalloutFormKey World, string Texture, int
     short West, short North, short East, short South)
 {
     private static readonly ConditionalWeakTable<FalloutPluginStack, Dictionary<FalloutFormKey, FalloutWorldMap>> Maps = new();
-    private static readonly ConditionalWeakTable<FalloutPluginStack, FalloutWorldMapMarker[]> Markers = new();
 
     internal Vector2 Project(float x, float y) => new(
         (x / 4096 - West) / (East - West), (North - y / 4096) / (North - South));
@@ -68,16 +67,26 @@ internal sealed record FalloutWorldMap(FalloutFormKey World, string Texture, int
         return map.Project(x, y);
     }
 
-    internal static IReadOnlyList<FalloutWorldMapMarker> SourceMarkers(FalloutPluginStack records) => Markers.GetValue(records, stack =>
-        stack.EffectiveRecords("REFR").Where(record => record.ReadSubrecords().Any(field => field.Signature == "XMRK"))
-            .Select(record =>
-            {
-                var data = record.ReadSubrecords().Single(field => field.Signature == "DATA").Data.Span;
-                if (data.Length != 24) throw new InvalidDataException("Map marker requires a placed transform.");
-                var x = BinaryPrimitives.ReadSingleLittleEndian(data); var y = BinaryPrimitives.ReadSingleLittleEndian(data[4..]);
-                if (!float.IsFinite(x) || !float.IsFinite(y)) throw new InvalidDataException("Non-finite map marker position.");
-                return new FalloutWorldMapMarker(FalloutMapMarker.Read(record), FalloutCellSceneReader.ParentWorldspace(record), x, y);
-            }).ToArray());
+    internal static IReadOnlyList<FalloutWorldMapMarker> SourceMarkers(FalloutPluginStack records, CancellationToken cancellation = default)
+        => records.ReadSourceIndex<FalloutWorldMapMarkerIndex>(ReadMarkers, cancellation).Markers;
+
+    private static FalloutWorldMapMarkerIndex ReadMarkers(FalloutPluginStack records, CancellationToken cancellation)
+    {
+        var markers = new List<FalloutWorldMapMarker>();
+        foreach (var record in records.EffectiveRecords("REFR"))
+        {
+            cancellation.ThrowIfCancellationRequested();
+            var fields = record.ReadSubrecords().ToArray();
+            if (!fields.Any(field => field.Signature == "XMRK")) continue;
+            var data = fields.Single(field => field.Signature == "DATA").Data.Span;
+            if (data.Length != 24) throw new InvalidDataException("Map marker requires a placed transform.");
+            var x = BinaryPrimitives.ReadSingleLittleEndian(data); var y = BinaryPrimitives.ReadSingleLittleEndian(data[4..]);
+            if (!float.IsFinite(x) || !float.IsFinite(y)) throw new InvalidDataException("Non-finite map marker position.");
+            markers.Add(new(FalloutMapMarker.Read(record), FalloutCellSceneReader.ParentWorldspace(record), x, y));
+        }
+        return new(markers.AsReadOnly());
+    }
 }
 
 internal sealed record FalloutWorldMapMarker(FalloutMapMarker Marker, FalloutFormKey? World, float X, float Y);
+internal sealed record FalloutWorldMapMarkerIndex(IReadOnlyList<FalloutWorldMapMarker> Markers) : IFalloutSourceIndex;

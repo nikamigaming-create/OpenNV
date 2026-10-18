@@ -44,6 +44,7 @@ internal sealed partial class NativeXrRig : Node3D
         }
     }
     internal Action<Transform3D>? PoseWristDevice { get; set; }
+    internal Action<float, double>? ScrollPipBoy { get; set; }
     internal Action<bool>? SetPipBoyHeld { get; set; }
     internal Func<bool>? CanFocusPipBoy { get; set; }
     internal Action? MenuRequested { get; set; }
@@ -193,6 +194,7 @@ internal sealed partial class NativeXrRig : Node3D
         // surfaces; the wrist device runs without pausing the world or headset.
         _canvas.Present(modal && PointAtPipBoy is null, modal && PointAtPipBoy is null);
         _canvas.Scroll(right && PointAtPipBoy is null && modal && CombatWheelOpen?.Invoke() != true ? RightGrip.GetVector2(NativeXrActions.Turn).Y : 0, delta);
+        ScrollPipBoy?.Invoke(right && PointAtPipBoy is not null ? RightGrip.GetVector2(NativeXrActions.Turn).Y : 0, delta);
     }
     internal bool ConsumeJump() { var value = JumpRequested; JumpRequested = false; return value; }
     internal void PublishWristInput()

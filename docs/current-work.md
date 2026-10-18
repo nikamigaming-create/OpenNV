@@ -9,13 +9,13 @@ physical-headset acceptance; selected component passes cannot close it.
 
 ## Current owner
 
-Current owner: codex/terrain-visibility-streaming, based on main/origin/main
-3a3ef697ce332cf0dffb49926dcd884bd51af731. PR #225 is merged and all
+Current owner: codex/pipboy-interaction-recovery, based on main/origin/main
+77f840f47d45bf6462c4a3e1479c283f799565c7. PR #226 is merged and all
 hosted checks pass. Manual save capture is sliced; validation and transactional
 write run on a managed worker. The official export passed repeated ordinary
 combat/save and cold continuation with the original checkpoint unchanged.
 
-The current block replaces whole-cell LAND publication with worker-prepared
+The merged terrain block replaces whole-cell LAND publication with worker-prepared
 geometry/collision faces and resumable native steps. Terrain and LOD share a
 CPU admission allowance with alternating first admission. LOD demand no longer
 freezes while source reads/uploads are pending; obsolete preparation cancels and
@@ -32,7 +32,20 @@ exercise stream cancellation at quit. Retirement now drains cancelled reads,
 explicitly retires detached actor callbacks, and frees staged models before the
 world. Two repaired walk/quit sessions exit zero with the original checkpoint
 unchanged. The final-source full Godot gate passes, including the additional
-equipment-change cancellation drain. Publication is in progress.
+equipment-change cancellation drain. PR #226 is published and merged.
+The user's current priority is the complete Pip-Boy flow, while retaining
+performance work. Wrist scrolling, visible list navigation, explicit map zoom,
+retained pan/zoom, declaration reuse and action-failure recovery are implemented.
+The full runtime gate and final owned-menu audit pass. Native input verifies
+long-list scrolling, explicit local/world zoom, retained world-map view, and
+recovery from both a failed page and failed gameplay action. Immutable map-marker
+preparation now runs on the existing stack worker and is reused by UI/discovery.
+Selected General Stats refresh samples changed from 1,937 ms to 50 ms; this is
+not total loading improvement or headset frame-budget acceptance. The original
+checkpoint hash is unchanged. Radio scheduling remains unimplemented: a source
+catalog is diagnostic inventory only, not playback proof.
+See [pipboy-completeness.md](pipboy-completeness.md)
+for the full required behavior; none of the unverified rows is a completion claim.
 The next measured owner is reference activation and synchronous creature
 construction: a boundary commit measured 52-60 ms, and a creature upload exceeded
 38 ms. These are not terrain uploads and do not establish smooth/144 Hz play.

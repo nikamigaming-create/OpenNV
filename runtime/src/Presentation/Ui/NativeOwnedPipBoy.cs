@@ -36,7 +36,7 @@ internal sealed partial class NativeOwnedPipBoy : Control
     private ColorRect? _xrCursor;
     private NativeXrWristPresentation? _xrDevice;
     internal bool InputReady => !_sourcePointerRetired && _sourcePointerFailure is null &&
-        IsInsideTree() && IsNodeReady() && IsInstanceValid(_menu) && _menu.IsNodeReady() && _menu.Error is null;
+        IsInsideTree() && IsNodeReady() && IsInstanceValid(_menu) && _menu.IsNodeReady();
     internal object State => new
     {
         menu = _menu.State,
@@ -52,6 +52,7 @@ internal sealed partial class NativeOwnedPipBoy : Control
             focused = _xrFocused,
             device = _xrDevice?.State,
             pressed = _xrPressed,
+            scrollEvents = _scrollEvents,
             pointer = _lastPointer?.ToString(),
             hit = _surface.PickedGeometry?.GetMeta("opennv_nif_source_name", "").AsString(),
             targets = _buttons.Select(value => new
@@ -218,9 +219,10 @@ internal sealed partial class NativeOwnedPipBoy : Control
     }
     public override void _Input(InputEvent input)
     {
-        if (_worldSpace || _sourcePointerRetired || _sourcePointerFailure is not null) return;
+        if (_worldSpace || _sourcePointerRetired) return;
         if (input.IsActionPressed(_toggleAction) || input is InputEventKey { Pressed: true, Echo: false, PhysicalKeycode: Key.Escape })
         { RequestClose(); GetViewport().SetInputAsHandled(); return; }
+        if (_sourcePointerFailure is not null) return;
         if (_closing || _openSeconds < _player.PipBoyDuration) { GetViewport().SetInputAsHandled(); return; }
         if (input is InputEventMouse mouse)
         {
@@ -329,6 +331,7 @@ internal sealed partial class NativeOwnedPipBoy : Control
     }
     private void ReleaseXrPointer()
     {
+        ResetScroll();
         var captured = _xrPressed && !_xrButtonPressed;
         _xrPressed = false; _xrButtonPressed = false;
         if (_xrCursor is not null) _xrCursor.Visible = false;
