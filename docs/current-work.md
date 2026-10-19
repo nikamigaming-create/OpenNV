@@ -1,179 +1,125 @@
 # Current work
 
-Updated 2026-10-18. The user has redirected implementation to complete Fallout 1
-and make its 3D art faithful to the original game. FO1 is the immediate priority.
-Root alone owns code, builds, input and Git. Existing FNV work is preserved;
+Updated 2026-10-18. The user requires the entire Fallout 1 campaign in our 3D
+runtime, faithful original-game art, and three complete ordinary-input
+playthroughs without unresolved problems. Qualifying playthroughs: **0 of 3**.
+Root works alone and owns code, builds, input and Git. FNV/FO3 work is preserved;
 package g remains rejected for physical VR use.
 
 ## Current owner
 
-Current owner: root. Active block: exported-variable assignment on
-`codex/fo1-export-assignment`, a prerequisite for map/object lifecycle.
-The equipped-player repair merged as PR #237 after its full local gate, owned
-component audit, bounded ordinary-input/cold check and every CI check. Local
-main was clean and equal to origin/main at `fef7c11b` with no outstanding task
-PRs before this block. Private original-engine inspection confirms that map
-departure unloads script programs and exported variables; the retained door
-programs do not yet reproduce that lifecycle. It also confirms that assignment
-to an absent export is an error, not an implicit declaration. The active repair
-rejects absent names while preserving cross-module writes, ASCII name resolution
-and declaration ownership. Synthetic checks cover missing declarations, shared
-writes and rollback after a later source fault. Synthetic checks, all three
-owned FO1 starting profiles and FO2 startup/cold regression pass. The complete
-initializer-only corpus is identical to the retained final-build baseline:
-880 pass and 66 remain unbound. The full runtime gate and diff check pass.
-Starting inventory merged as PR #236 after
-the full local gate, owned audits, bounded ordinary-input/cold check and every
-CI check. Local main was clean and equal to origin/main at `e4b6d628` with no
-outstanding task PRs before this block. Comparison/elevation and module ownership
-prerequisites are also merged (PRs #234/#235).
-The merged inventory change connects FO1 Begin to source startup and its source-routed
-map-entry body. FO1 level-one skills, clock-sensitive Night Person inputs,
-tags/traits and instance-aware item transfers supply the opening's grants.
-Synthetic checks and actual Begin/restore fixtures pass for all three owned
-premades, including source variation and no duplicate grants after dropping.
-FO2 startup regression and the full runtime gate pass. Fresh ordinary-input
-New Game opens the source inventory at its source arrival. F5 and a separate
-process continuation retain the inventory and equipped pistol without duplicate
-grants. Equipping the pistol exposes an existing presentation blocker: unbound
-held-animation channels retire the 3D player, including after cold continuation.
-The merged repair supplies the selected model's source target names to the
-existing animation binder and removes recipe-specific inactive-name lists.
-Owned inspection shows the failing aim channels belong to other weapon models;
-declared targets without runtime owners still fail closed in the synthetic check.
-All 15 owned component combinations (five recipes across three premades) bind
-their source socket and advance locomotion, turn and return to idle; no dropped
-donor physics remains in the held subtree. The same formerly failing save now
-renders Max with his pistol in the world and inventory. Ordinary input walked
-ten source steps through different directions, unequipped/re-equipped, saved
-and cold-continued with identical position, facing, steps and inventory. Timed
-frames show motion and retained attachment; all temporary captures were deleted.
-The full runtime gate and diff check pass. This closes only the measured missing-player failure;
-likeness, complete animation and campaign acceptance remain open. Resume map/object lifecycle after
-this repair. These fixtures do not
-establish the original engine's complete character-load or campaign behavior.
-The user requires the entire FO1 game in our 3D presentation and three complete
-problem-free playthroughs before stopping. Completed qualifying playthroughs:
-**0 of 3**. Preserve separate run identities, starting character, source/build
-identity, ordinary-input progression, encountered issues, saves/cold continuations
-and ending evidence. A run with an unresolved problem does not qualify; fixes
-require renewed validation. Component tests and fixture placements never count
-as playthroughs. The full art/quest/enemy inventory remains required even when a
-particular route does not encounter it.
+Active branch: `codex/fo1-source-event-dispatch`, based on clean synchronized
+main `6465c516` after checked PR #238 merged. No task PR was open at branch
+creation. The prior equipped-player repair is merged as PR #237.
 
-A non-headless opening check used the existing first-party input harness with an
-isolated save. Ordinary pointer input selected Max Stone, entered the source
-Vault 13 entrance and opened inventory. The save was written, but inventory was
-empty: that build bypassed FO1 campaign initialization. The viewport also
-reported 39 missing 3D models; runtime logs retain unbound scripts/combat and
-three unresolved world entries. This is a failed opening acceptance check, not
-a qualifying run. Temporary screenshots were inspected and deleted, continuous
-recording stayed off, and only the process launched for this check was stopped.
-The repaired opening now shows the six source stacks, including 72 loose rounds;
-the flare has no 3D model. The cave still reports 39 missing models, rising to 40
-when the equipped player's presentation fails. Both bounded captures were
-inspected and deleted. This remains failed opening acceptance, not a full run.
-The existing harness works for classic pointer input, but its FNV-oriented
-gameplay state summary does not yet expose classic authoritative progression.
+The active dispatcher implements privately verified event contracts. FO1 runs
+fresh startup with the triggering action; FO2 runs startup at action zero and
+then explicitly calls the requested event. Names fold ASCII, the first source
+match wins, and missing/index-zero handlers use source procedure index one.
+FO1 examination resolves `desc_p_proc`; FO2 resolves `description_p_proc`.
+Campaign initialization, door use/examination, nested use and timed callbacks
+now use this shared dispatcher. Door initialization requests action one and
+finishes its startup pass before any map-entry handler. FO1 event HHMM comes
+from the authoritative timer tick rather than an absent or fixed hour.
 
-The opening MAP joins to `scripts/v13cave.int`. The merged runtime executes its
-source module initializer, including exports between global-value pushes, and
-retains owning-module metadata in transactions and v6 saves. Synthetic checks
-and the selected owned opening check pass. The full scripts.lst initializer-only
-audit passes 880 entries and leaves 66 visible failures (62 absent resources,
-one unsupported module with zero-body declarations and three modules requiring
-typed reference globals). Source `Start` spelling is admitted without
-changing source procedure indexes. FO2 startup/grants/cold continuation pass for
-all three premade characters; 18 FO1 timer fixtures and 72-map door admission
-retain their previous results. The full runtime gate and `git diff --check`
-pass. One earlier scenery-audit launch exited without its result; both isolated
-checks and the complete gate rerun pass, but its initial exit is unexplained.
-The final reference-literal guard passes synthetic and selected owned checks;
-the full corpus correctly leaves those three typed-reference modules unbound.
-Its complete gate rerun passes.
+Synthetic dispatch checks pass, including campaign-specific first load, source
+fallback, name resolution, shared instruction budget and rollback. All three
+owned FO1 starts and FO2 startup/cold regressions pass. Eighteen owned timed-door
+fixtures pass. An owned MAP with synthetic scripts confirms that an early entry
+handler sees an export declared by a later startup; its 19 scripted doors pass.
+These are component fixtures, not ordinary campaign progression.
 
-Next complete FO1 map/object lifecycle execution. The opening has no random
-calls and now reaches its actual first-entry grants. New Game passes action 15
-to source startup, which routes map entry itself; it is not dispatched twice.
-Item transfer preserves source stack matching, incoming representative identity,
-partial ammunition and removal from world placement. Created item flags use the
-source's selective prototype mapping. Unowned retirement/active-device effects
-remain explicit failures. FO1 level-one skill rules use two-stat averaging,
-cap 200 and source trait adjustments; the existing FO2 contract is preserved.
-Night Person inputs change at 06:00/18:00. Live skill/stat progression is not
-established by this startup binding. Map first-run flags, unload, exported-variable
-lifetime and revisit/cold-load semantics still need verification before completing
-the general lifecycle owner. Old FO1 preview saves without initialization identity
-remain unchanged; new source-initialized saves reconstruct and verify their
-baseline before applying saved inventory changes.
-The undeclared-external repair does not establish complete module lifetimes.
-General scenery interaction, floating messages and audio
-also remain needed for the entrance terminal.
+The all-map door audit admits 72 maps/392 doors and reports eight unbound cases:
+seven missing exported-variable owners and one script-local layout failure.
+Before the HHMM binding, both the retained pre-change Debug runtime and the new
+runtime reported the same ten cases; the two missing-hour cases now execute.
+The temporary baseline comparison copies were removed. The FO2 sweep reads
+155 maps/1,171 doors, with two empty elevations and 212 unbound initializers.
+Its selected door regression passes bounded clock/collision checks and still
+exposes unsupported item-door use. The full gate and diff check pass after
+correcting an indentation failure. Campaign/visual acceptance remains open.
 
-PR #233 merged FO1 script time, callbacks, nested source use and v5 persistence
-after the full local gate and all CI checks. Main was clean and synchronized.
-Eighteen eligible Vault 13 metal-door fixtures now schedule,
-cold-restore, close through the source timed callback and drain their subsequent
-event. Queue/map binding, transition cancellation and retained callback faults
-also pass fixture checks. Synthetic late-clock, nested-frame, budget and rollback
-checks pass. The full local gate and final-build owned checks pass, including
-18/18 timer candidates, repeated use and frame cadence. FO1 source admission
-remains 72 maps/392 doors/four unbound initializers; FO2 ordinary-door regression
-passes. Ordinary-input scripted-door and campaign acceptance
-are still unproven. See [classic-script-events.md](classic-script-events.md).
-The Windows Computer Use helper currently fails before initialization with
-`failed to write kernel assets: ... path specified (os error 3)`, including after
-one reset/retry. No app input was sent. This prevents that helper's ordinary-input
-check; it does not prevent further implementation or owned-data audits.
+## Verified state and remaining failures
 
-The preceding authored-scenery repair is merged as PR #231.
-The first measured divergence is authored scenery fitting: projecting mesh
-bounding boxes includes empty corners, shrinking and shifting irregular models
-relative to their source FRMs. Static scenery now projects referenced mesh
-vertices for fitting, art anchoring and paint alignment. Skin bounds retain
-their existing behavior; donor stack fitting is a separate remaining owner.
+FO1 Begin executes its actual opening module initializer and source-routed entry.
+Source skills, trait/tag rules, Night Person clock inputs and instance-aware item
+transfers supply the premade starting inventory. Fresh ordinary-input Max starts
+at the source arrival with six stacks, including 72 loose rounds. F5 and a
+separate-process continuation preserve inventory and equipped pistol without
+duplicate grants. Older preview saves without initialization identity remain
+unchanged; initialized saves reconstruct and verify their source baseline.
 
-The native synthetic check covers transformed indexed geometry, unused vertices
-and hidden meshes. The owned check exercises 23 furniture bindings in all six
-directions. At 32 pixels/metre the old fitting lost up to 31.64% of the intended
-limiting extent; repaired extent error is below 0.000001 and center error below
-0.001 source pixels. The audit now reads the production world scale from the
-recipe. The production-scale audit passes all 138 fits, with maximum relative
-extent error 0.000000358 and center error 0.000240 pixels. The full runtime gate
-passes, including Release/Debug builds, formatting/analyzers, contract probes,
-launcher checks and native Godot checks. `git diff --check` passes.
-These are geometry-fit checks, not silhouette, material or final-pixel acceptance.
+Equipping the pistol no longer retires the 3D player. The selected model's real
+source targets distinguish absent alternative-model channels from declared
+channels without runtime owners; the latter still fail closed. Fifteen owned
+body/held-item component combinations bind and advance movement. A bounded
+ordinary-input check walked ten source steps in different directions, toggled
+equipment, saved and cold-continued with matching position, facing, steps and
+inventory. This closes the missing-player defect, not complete animation or art.
 
-A separate source-only Vault 13 world audit stops at its obsolete
-`SourceJoinedWallBlockout` lookup after constructing elevation 0. That audit does
-not supply donor libraries and is not a full current-world visual check. Repair
-its scene-owner assumptions before using it for world acceptance; do not treat
-its missing-shell failure as a passing whole-map check.
+Opening acceptance still fails. The cave reports 39 missing 3D models, the flare
+has no 3D model, donor clothing/likeness is not source-faithful, and combat,
+non-door actors, general interactions and campaign progression remain unbound.
+No complete playthrough has been verified or counted as successful. The input
+harness works for classic pointer input, but its FNV-oriented state summary does
+not yet expose complete classic authoritative progression. Continuous recording
+stayed off; inspected temporary screenshots were deleted and owned test processes
+were stopped. The Windows Computer Use helper previously failed initialization;
+the existing first-party harness remains usable for bounded input checks.
+
+Export declarations retain owning modules. Assignment requires an existing name
+and permits another module to write without taking ownership. FO1 and FO2
+original wrappers corroborate that rule. The isolated FO1 initializer audit is
+880 passing/66 unbound: 62 absent resources, one unsupported zero-body declaration
+module and three modules requiring typed reference globals. This is not full
+script execution. Nested use and scheduled callbacks share transactional state;
+queue order, late ticks, replacement/removal, retained faults and cold continuation
+have bounded proof. Timer, door and program persistence still do not establish
+native map unloading or complete campaign saves.
+
+Source-bound furniture fitting uses referenced mesh vertices. All 138 owned
+production-scale fits pass the geometry check; silhouette, materials and final
+pixels remain unaccepted. Blender 5.2.2 is installed and verified, but the
+previously documented furniture authoring helper is absent. Recover reproducible
+first-party authoring and complete asset coverage; existing GLBs and donor paths
+do not establish a 1:1 original-game appearance. The older source-only Vault 13
+world audit still assumes an obsolete scene owner and must not be used as a
+passing current-world check.
 
 ## Next owners and acceptance
 
-- Compare original FO1 art with the actual native 3D presentation, starting with
-  Vault 13 furniture and cave props. Fix source-facing geometry, dimensions,
-  projection, materials and animation; donor identity alone is not fidelity.
-- Recover reproducible first-party furniture authoring. The GLBs exist, but the
-  documented local Blender helper is absent from this checkout. Blender 5.2.2
-  is verified in the Steam installation; tool availability is not the gap.
-- Extend source-bound art coverage across all locations, keeping missing models
-  visible. Original UI/portraits remain intentional 2D.
-- Complete starting grants, combat, script events, dialogue, quests, world travel,
-  timers, companions, endings and persistent world changes through ordinary play.
-- Finish shared first-person/OpenXR views and physical acceptance. No campaign,
-  1:1 art or headset completion is established.
+1. Complete the shared map/controller/object script owner. Private source traces
+   establish startup, entry and update ordering; campaign-specific initial load;
+   source-index event fallback; first-run flags; and separate variable lifetimes.
+   Departure saves dispatch map exit, save map-local arrays and the first-run bit,
+   then unload programs and exports. Ordinary saves set the bit without unloading.
+   Current retained door programs do not implement that lifecycle. Implement
+   fixed-parameter persistence, map-update events, general object ownership,
+   unload/revisit and cold-load semantics with one authoritative global/export
+   store. Preserve visible failures for unsupported reached effects.
+2. Resolve the remaining source-local layout and missing map export owners.
+   Private owned/native inspection now identifies the local-layout failure as
+   a valid offset-minus-one, positive-count block allocated and zeroed on first
+   access; the current reader incorrectly rejects it. Implement that lifetime;
+   connect source scenery interaction, floating messages and sound. Extend the
+   same runtime to actor behavior, dialogue, quest state, inventory transactions,
+   combat/AP/AI, world travel/encounters, companions, endings and persistent world
+   changes. Do not replace script execution with named-location success paths.
+3. Complete faithful 3D art across all maps, objects and actors, including source
+   placement, dimensions, facing, materials and animation. Keep intentional
+   original 2D UI/portrait art; donor identity is not visual acceptance.
+4. Finish shared flat/first-person/OpenXR input and physical acceptance. Then run
+   three complete ordinary-input campaigns, retaining each run's character,
+   build/source identity, progression, defects, saves/cold continuations and
+   ending evidence. An unresolved problem disqualifies a run; fixes require
+   renewed validation. A successful route does not excuse missing assets,
+   quests or enemies outside that route.
 
 See [classic-fallout-plan.md](classic-fallout-plan.md),
 [classic-world-realization.md](classic-world-realization.md),
-[classic-inventory.md](classic-inventory.md) and
-[classic-interactions.md](classic-interactions.md). Older classic overview rows
-are superseded by the more specific inventory/interaction evidence.
-
-FNV's preserved failures and requirements remain in [status.md](status.md),
-[implementation-plan.md](implementation-plan.md), [runtime-performance.md](runtime-performance.md)
-and [vr-rig-diagnostics.md](vr-rig-diagnostics.md). Original owned files, saves
-and recordings remain private and unchanged. Recording stays off except for
-specific visual checks; remove new temporary frames after inspection. Do not
-retry cleanup actions previously rejected by automatic approval review.
+[classic-inventory.md](classic-inventory.md), [classic-interactions.md](classic-interactions.md)
+and [classic-script-events.md](classic-script-events.md). Preserved FNV failures
+remain in [status.md](status.md), [implementation-plan.md](implementation-plan.md),
+[runtime-performance.md](runtime-performance.md) and [vr-rig-diagnostics.md](vr-rig-diagnostics.md).
+Owned files, saves and recordings remain private and unchanged. Recording stays
+off except specific visual checks; remove temporary frames after inspection.

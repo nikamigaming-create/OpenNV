@@ -42,6 +42,7 @@ internal static class ClassicInteractionProbe
             foreach (var path in maps.Length == 0 ? [campaign == "fallout-1" ? "maps/v13ent.map" : "maps/arcaves.map"] : maps)
             {
                 var level = catalog.Load(path);
+                if (!all) ClassicEventPassProbe.Run(catalog, choice, level);
                 foreach (var elevation in level.Map.Elevations.Keys)
                 {
                     var navigation = new ClassicMapNavigation(level.Map, level.Objects, elevation);
@@ -57,7 +58,11 @@ internal static class ClassicInteractionProbe
                     catch (Exception error) when (all) { errors.Add(path + ":" + elevation + " " + error.Message); continue; }
                     admitted += inspection.Doors.Serials.Count;
                     scriptFailures += inspection.Doors.Failures.Count;
-                    if (all) continue;
+                    if (all)
+                    {
+                        foreach (var failure in inspection.Doors.Failures) Console.WriteLine("UNBOUND " + failure);
+                        continue;
+                    }
                     foreach (var serial in inspection.Doors.Serials)
                     {
                         var definition = inspection.Doors.Definition(serial);

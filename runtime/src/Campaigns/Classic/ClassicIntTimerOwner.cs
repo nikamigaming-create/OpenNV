@@ -57,6 +57,14 @@ internal sealed record ClassicIntTimerDelivery(
 
 internal static class ClassicIntTimerOwner
 {
+    internal static int GameTimeHour(ClassicIntTimerContract contract, int currentTick)
+    {
+        if (contract.TicksPerSecond <= 0 || currentTick < 0)
+            throw new InvalidOperationException("Classic INT clock input is invalid.");
+        var minutes = currentTick / ((long)contract.TicksPerSecond * 60);
+        return (int)(minutes / 60 % 24 * 100 + minutes % 60);
+    }
+
     internal static ClassicIntTimerState RemoveForObject(ClassicIntTimerState source, int targetHandle)
     {
         source.Validate();
