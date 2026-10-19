@@ -5,6 +5,7 @@ using OpenNV.Runtime.Formats.Gamebryo;
 
 if (args is ["classic-fo1-start", var fo1StartInstall]) return ClassicFo1StartProbe.Run(fo1StartInstall);
 if (args.Length >= 3 && args[0] == "classic-interactions") return ClassicInteractionProbe.Run(args[1], args[2], args[3..]);
+if (args.Length >= 3 && args[0] == "classic-audio") return ClassicAudioProbe.Run(args[1], args[2], args[3..]);
 if (args.Length >= 3 && args[0] == "classic-modules") return ClassicModuleProbe.Run(args[1], args[2], args[3..]);
 if (args is ["cell-review", var reviewSource, var reviewSnapshot]) return CellReview.Run(reviewSource, reviewSnapshot);
 if (args.Length >= 5 && args[0] == "weapon-loadout") return WeaponLoadout.Run(args[1], args[2], args[3], args[4..]);
@@ -30,6 +31,7 @@ if (args.Length < 2 || args.Length < 3 && args[0] != "classic-movement" || args[
         "classic-inventory <Fallout 1/2 installation> <fallout-1|fallout-2>\n" +
         "classic-item-systems <Fallout 1/2 installation> <fallout-1|fallout-2>\n" +
         "classic-interactions <Fallout 1/2 installation> <fallout-1|fallout-2> [MAP paths | --all]\n" +
+        "classic-audio <Fallout 1/2 installation> <fallout-1|fallout-2> [ACM paths; defaults to all owned audio]\n" +
         "classic-modules <Fallout 1/2 installation> <fallout-1|fallout-2> [INT paths; defaults to scripts.lst]\n" +
         "classic-items <Fallout 1/2 installation> <fallout-1|fallout-2>\n" +
         "classic-scenery <Fallout 1 installation> <authored-scenery recipe.json>\n" +
