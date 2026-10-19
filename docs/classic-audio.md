@@ -29,9 +29,23 @@ unchanged source bytes and zero-extension counts. It writes no decoded assets.
 Private native-oracle comparisons are additional evidence; their binaries,
 addresses, input bytes and PCM are not repository inputs.
 
-Gameplay integration remains required: general scenery/actor script ownership,
-source sound-name resolution, voice admission, volume and spatial semantics,
-presentation and retirement. The opening computer also requests floating text
-and persistent local changes. None may be dropped to make an interaction appear
-successful. No in-game audio, music, speech or campaign acceptance is claimed by
-the component decoder.
+ClassicScriptSounds now resolves source script effect names against owned SFX,
+prepares PCM before event commit and owns a four-voice admission limit. Disabled
+or saturated requests do not load resources. The owned configuration supplies
+enablement and master/effect volumes; the original integer/logarithmic volume
+curve is retained. FO1 script effects supply no spatial object and play as mono
+16-bit PCM at the source system rate of 22050 Hz, independently of ACM metadata.
+Godot consumes memory through ClassicScriptSoundPlayback and acknowledges finite
+completion or shutdown once. Current door events use this owner; unverified FO2
+voice semantics remain rejected. No persistent decoded assets are written.
+
+The mixer audit covers real stream start, four-voice capacity, completion and
+shutdown, with synthetic or selected owned input. Mixer stop retirement is
+asynchronous; its audit waits for the audio thread before checking process exit.
+It does not prove audible device output, retail mixing/resampling/timing, or
+ordinary gameplay. Live voice save continuation also remains unverified.
+
+General scenery/actor script ownership and floating text remain required for the
+opening computer, together with persistent local changes and ordinary input.
+Those effects may not be dropped to make an interaction appear successful. No
+terminal, music, speech, campaign or complete audio acceptance is claimed here.

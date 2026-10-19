@@ -32,6 +32,8 @@ internal sealed partial class ClassicPlayerController : Node3D
         string savePath, string? appearanceRoot)
     {
         Name = "ClassicPlayerController"; _world = world; Player = player; _savePath = savePath;
+        var sounds = new ClassicScriptSoundPlayback(); sounds.Configure(player.Sounds); AddChild(sounds);
+        sounds.Failed += message => { world.ReportPresentationFailure(message); Hud.Message(message); };
         _art = new(path => source.Read(path, out _)); _animation = new(path => source.Read(path, out _), player.Choice.Character.Female, player.Choice.Campaign, player.Inventory);
         _position = new Node3D { Name = "ClassicPlayerPosition" }; AddChild(_position);
         _sprite = new Sprite3D
