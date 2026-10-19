@@ -102,6 +102,24 @@ FO2 startup, starting grants and cold continuation still pass for all three
 premade characters. The 18 FO1 timer fixtures and 72-map door admission checks
 also pass their existing boundaries, with four unbound door initializers.
 
+## Map-entry prerequisites
+
+The integer VM implements signed less-than-or-equal with left/right stack order
+and integer zero/one results. It does not infer float or string comparison
+support. The elevation opcode reads the authoritative world-object elevation;
+the source null-handle result is zero, and an unknown non-null handle fails
+closed. Synthetic checks cover signed extremes, equality, operand order, null
+and missing objects.
+
+The owned opening's first-delivery fixture with first-run=false executes its
+startup dispatch and map-entry body (151 instructions), returning an arrival
+override and light level. First-run=true still fails at single-item inventory
+transfer. These are source-script fixtures, not live map-entry or campaign
+acceptance. An ordinary-input opening check selects a character and writes a
+save, but its empty starting inventory confirms that FO1 Begin still bypasses
+source campaign initialization. Complete map lifecycle and item ownership are
+the next runtime owners.
+
 ## Acceptance
 
 The complete product target is all FO1 content working in our 3D runtime, followed

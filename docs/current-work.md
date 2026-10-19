@@ -7,9 +7,12 @@ package g remains rejected for physical VR use.
 
 ## Current owner
 
-Current owner: root. Verified block: native module initialization and exported
-variable ownership. Next owner: FO1 map-entry lifecycle on a fresh `codex/`
-feature branch after checked publication of this block.
+Current owner: root. Verified block: FO1 map-entry comparison/elevation
+prerequisites on `codex/fo1-map-entry`; full local gate and selected owned-script
+fixture pass their stated boundaries. Next owner: source-created inventory
+transfer and map lifecycle, after checked publication. Native module initialization and exported-variable
+ownership merged as PR #234 after the full local gate and all CI checks. Local
+main was clean and equal to origin/main at `032b9be9` before this block.
 The user requires the entire FO1 game in our 3D presentation and three complete
 problem-free playthroughs before stopping. Completed qualifying playthroughs:
 **0 of 3**. Preserve separate run identities, starting character, source/build
@@ -19,7 +22,18 @@ require renewed validation. Component tests and fixture placements never count
 as playthroughs. The full art/quest/enemy inventory remains required even when a
 particular route does not encounter it.
 
-The opening MAP joins to `scripts/v13cave.int`. The current change executes its
+A non-headless opening check used the existing first-party input harness with an
+isolated save. Ordinary pointer input selected Max Stone, entered the source
+Vault 13 entrance and opened inventory. The save was written, but inventory was
+empty: FO1 Begin still bypasses campaign initialization. The viewport also
+reported 39 missing 3D models; runtime logs retain unbound scripts/combat and
+three unresolved world entries. This is a failed opening acceptance check, not
+a qualifying run. Temporary screenshots were inspected and deleted, continuous
+recording stayed off, and only the process launched for this check was stopped.
+The existing harness works for classic pointer input, but its FNV-oriented
+gameplay state summary does not yet expose classic authoritative progression.
+
+The opening MAP joins to `scripts/v13cave.int`. The merged runtime executes its
 source module initializer, including exports between global-value pushes, and
 retains owning-module metadata in transactions and v6 saves. Synthetic checks
 and the selected owned opening check pass. The full scripts.lst initializer-only
@@ -37,9 +51,18 @@ Next connect FO1 map/object lifecycle execution. The owned opening map-entry
 body has no random calls, so that work can proceed independently of the remaining
 source-specific random contract. Do not mistake initializer-only admission for opening gameplay.
 Its first-entry path reaches `base_inventory`; the next concrete unsupported
-operations are source single-item inventory transfer (0x80d8) and signed integer
-less-than-or-equal (0x8035). Preserve the map's
+operation is source single-item inventory transfer (0x80d8). Signed integer
+less-than-or-equal (0x8035) and authoritative object elevation (0x80ec) now pass
+synthetic boundary/null/unknown-handle checks. The private owned opening fixture
+with first-run=false executes 151 instructions and returns the source arrival
+override and light level with no created items. This fixture does not establish
+the live map lifecycle; first-run=true still fails at single-item transfer.
+Preserve the map's
 first-run flag across saves/revisits, and use the actual source-created grants.
+Item transfer must preserve source stack matching, incoming representative
+identity, ammunition quantities and removal from world placement. Reconcile
+created object flags with the source's selective prototype-flag mapping; copying
+the whole prototype word is not sufficient.
 The legacy store-to-undeclared-external path still needs removal alongside the
 complete module owner. General scenery interaction, floating messages and audio
 also remain needed for the entrance terminal.
