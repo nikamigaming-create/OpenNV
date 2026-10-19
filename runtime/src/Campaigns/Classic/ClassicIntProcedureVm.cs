@@ -459,6 +459,7 @@ internal static class ClassicIntProcedureVm
     private const ushort FetchLocal = 0x8032;
     private const ushort Equal = 0x8033;
     private const ushort NotEqual = 0x8034;
+    private const ushort LessThanOrEqual = 0x8035;
     private const ushort GreaterThanOrEqual = 0x8036;
     private const ushort LessThan = 0x8037;
     private const ushort GreaterThan = 0x8038;
@@ -506,6 +507,7 @@ internal static class ClassicIntProcedureVm
     private const ushort HasTrait = 0x80F3;
     private const ushort SetLightLevel = 0x80E9;
     private const ushort GameTime = 0x80EA;
+    private const ushort ObjectElevation = 0x80EC;
     private const ushort GameTimeHour = 0x80F6;
     private const ushort AddTimerEvent = 0x80F0;
     private const ushort RemoveTimerEvent = 0x80F1;
@@ -868,6 +870,7 @@ internal static class ClassicIntProcedureVm
                     break;
                 case Equal: Binary(stack, (left, right) => Bool(left == right), program, procedure, offset); break;
                 case NotEqual: Binary(stack, (left, right) => Bool(left != right), program, procedure, offset); break;
+                case LessThanOrEqual: Binary(stack, (left, right) => Bool(left <= right), program, procedure, offset); break;
                 case GreaterThanOrEqual: Binary(stack, (left, right) => Bool(left >= right), program, procedure, offset); break;
                 case LessThan: Binary(stack, (left, right) => Bool(left < right), program, procedure, offset); break;
                 case GreaterThan: Binary(stack, (left, right) => Bool(left > right), program, procedure, offset); break;
@@ -1007,6 +1010,12 @@ internal static class ClassicIntProcedureVm
                     stack.Add(game.GameTime ?? throw Failure(
                         program, procedure, offset, "missing-game-time"));
                     break;
+                case ObjectElevation:
+                    {
+                        var handle = Pop(stack, program, procedure, offset);
+                        stack.Add(handle == 0 ? 0 : WorldObject(handle).Elevation);
+                        break;
+                    }
                 case GameTimeHour:
                     stack.Add(game.GameTimeHour ?? throw Failure(
                         program, procedure, offset, "missing-game-time-hour"));
