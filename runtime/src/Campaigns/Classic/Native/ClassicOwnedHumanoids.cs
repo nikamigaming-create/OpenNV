@@ -7,7 +7,7 @@ namespace OpenNV.Runtime.Campaigns.Classic.Native;
 internal sealed record ClassicHumanBinding(string[] ArtBases, bool Female, string Outfit, uint FaceDonor, string Remaining, string? HairColor = null,
     float ShoulderWidth = 1, float WaistWidth = 1, ClassicPropPalette[]? Palette = null);
 internal sealed record ClassicPremadeFace(string Campaign, string Id, uint FaceDonor);
-internal sealed record ClassicHeldItem(int Pid, int WeaponAnimation, string Model, string Pose, string Socket, string[]? InactiveObjects = null, string? Grip = null);
+internal sealed record ClassicHeldItem(int Pid, int WeaponAnimation, string Model, string Pose, string Socket, string? Grip = null);
 internal sealed record ClassicHumanRecipe(string Schema, ClassicHumanBinding[] Bindings, ClassicPremadeFace[] Premades, ClassicHeldItem[]? HeldItems = null);
 
 /// <summary>Appearance donors only. No donor NPC inventory, stats, AI or reference enters the classic world.</summary>

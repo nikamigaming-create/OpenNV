@@ -155,9 +155,16 @@ equipment and changed-source rejection. An in-memory source variation changes
 the grant through the same owner. These are fixtures, not completed playthroughs.
 An ordinary-input Max opening now displays the actual source inventory; F5 and
 separate-process continuation retain his equipped pistol without duplicate
-grants. The equipped 3D humanoid fails on unbound held-animation channels, and
-the flare model is missing. Inventory state passes this bounded check; complete
-presentation and opening gameplay do not.
+grants. Its equipped 3D humanoid initially failed on alternative-model animation
+channels. The active repair supplies the selected weapon's source target names
+to the shared animation binder, replacing per-recipe inactive-name lists.
+Absent alternatives retain explicit null-target disposition; declared targets
+without runtime owners still fail closed. Five held recipes across all three
+FO1 premades pass owned component socket and motion checks. A bounded live
+check now renders Max holding the pistol, walks and turns through ten source
+steps, re-equips and cold-continues with identical position, facing and inventory.
+Temporary motion frames were inspected and deleted. The flare model is still missing;
+complete likeness, presentation and opening gameplay remain unaccepted.
 
 Field-order notes were checked against owned bytes and the
 [sfall SDK declarations](https://github.com/sfall-team/sfall/blob/master/sfall/FalloutEngine/Structs.h).

@@ -12,6 +12,10 @@ public partial class NativeNifInstanceAudit : Node
     {
         try
         {
+            if (OS.GetCmdlineUserArgs() is ["--external-animation-targets"])
+            {
+                ExerciseExternalAnimationTargets(); GetTree().Quit(); return;
+            }
             if (OS.GetCmdlineUserArgs() is ["--particle-shapes-colors"])
             {
                 ExerciseParticleShapesColors(); GetTree().Quit(); return;
@@ -179,6 +183,7 @@ public partial class NativeNifInstanceAudit : Node
             ExerciseRepeatedManagedSequences();
             Exercise(Synthetic(), 0.02f, "synthetic");
             ExercisePlaced(Synthetic(false), 0.02f);
+            ExerciseExternalAnimationTargets();
             ExercisePlacedLights();
             ExerciseMorphBasis();
             ExerciseManagedMorph();

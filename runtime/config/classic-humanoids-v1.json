@@ -155,32 +155,14 @@
       "WeaponAnimation": 1,
       "Model": "meshes/weapons/1handmelee/combatknife.nif",
       "Pose": "meshes/characters/_male/1hmaim.kf",
-      "Socket": "Weapon",
-      "InactiveObjects": [
-        "##straightrazor",
-        "##RazorBlade",
-        "##BatonHandle",
-        "##BatonShaft",
-        "##Latch",
-        "##l_SwitchBlade",
-        "##l_Blade"
-      ]
+      "Socket": "Weapon"
     },
     {
       "Pid": 45,
       "WeaponAnimation": 1,
       "Model": "meshes/weapons/1handgrenadethrow/throwingknife.nif",
       "Pose": "meshes/characters/_male/1hmaim.kf",
-      "Socket": "Weapon",
-      "InactiveObjects": [
-        "##straightrazor",
-        "##RazorBlade",
-        "##BatonHandle",
-        "##BatonShaft",
-        "##Latch",
-        "##l_SwitchBlade",
-        "##l_Blade"
-      ]
+      "Socket": "Weapon"
     },
     {
       "Pid": 8,
@@ -196,29 +178,14 @@
       "Model": "meshes/weapons/1handgrenadethrow/spear.nif",
       "Pose": "meshes/characters/_male/1gtaim.kf",
       "Grip": "meshes/characters/_male/1gthandgrip1.kf",
-      "Socket": "Weapon",
-      "InactiveObjects": [
-        "##Lighter",
-        "##Cap",
-        "##LighterSwitch",
-        "##Throwingkinfe"
-      ]
+      "Socket": "Weapon"
     },
     {
       "Pid": 236,
       "WeaponAnimation": 1,
       "Model": "meshes/weapons/1handmelee/combatknife.nif",
       "Pose": "meshes/characters/_male/1hmaim.kf",
-      "Socket": "Weapon",
-      "InactiveObjects": [
-        "##straightrazor",
-        "##RazorBlade",
-        "##BatonHandle",
-        "##BatonShaft",
-        "##Latch",
-        "##l_SwitchBlade",
-        "##l_Blade"
-      ]
+      "Socket": "Weapon"
     }
   ]
 }
