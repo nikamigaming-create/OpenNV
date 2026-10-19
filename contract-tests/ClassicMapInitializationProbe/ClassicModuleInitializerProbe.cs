@@ -34,6 +34,27 @@ internal static class ClassicModuleInitializerProbe
         });
         if (redeclared.ExternalVariables.Count != 2 || redeclared.ExternalVariables["sHaReD"] != 9 || redeclared.ExternalVariables["InitializerOnly"] != 0)
             throw new InvalidOperationException("Same-module export redeclaration or ASCII name comparison changed.");
+        var assignment = ClassicNativeIntReader.Read(Source(declareShared: false), "synthetic-writer");
+        var shared = context with
+        {
+            ExternalVariables = new Dictionary<string, int> { ["sHaReD"] = 77 },
+            ExternalOwners = new Dictionary<string, string> { ["sHaReD"] = "other-module" }
+        };
+        var sharedBefore = JsonSerializer.Serialize(new { shared.ExternalVariables, shared.ExternalOwners });
+        var written = Run(assignment, shared);
+        if (written.ExternalVariables["sHaReD"] != 9 || written.ExternalOwners["sHaReD"] != "other-module" ||
+            written.State.ProgramVariables[1] != 9)
+            throw new InvalidOperationException("Cross-module assignment changed export ownership or name resolution.");
+        try { _ = Run(assignment, context); throw new Exception("Assignment created an undeclared export."); }
+        catch (InvalidOperationException error) when (error.Message.Contains("undeclared-external-variable", StringComparison.Ordinal)) { }
+        // A subsequent source fault must also roll back a successful shared write.
+        var brokenAssignment = Source(declareShared: false);
+        var assignmentEnd = assignment.ModuleInitializer!.Instructions.Single(row => row.Opcode == 0x8003);
+        BinaryPrimitives.WriteUInt16BigEndian(brokenAssignment.AsSpan(assignmentEnd.Offset), 0xffff);
+        try { _ = Run(ClassicNativeIntReader.Read(brokenAssignment, assignment.Identity), shared); throw new Exception("Fault after shared assignment was skipped."); }
+        catch (InvalidOperationException error) when (error.Message.Contains("unsupported-opcode-ffff", StringComparison.Ordinal)) { }
+        if (JsonSerializer.Serialize(new { shared.ExternalVariables, shared.ExternalOwners }) != sharedBefore)
+            throw new InvalidOperationException("Shared assignment mutated its caller's inputs.");
         var save = new ClassicDoorWorldSave([], result.ExternalVariables, new Dictionary<int, int>(),
             new Dictionary<string, Dictionary<int, int>>()) { ExternalOwners = result.ExternalOwners };
         var cold = JsonSerializer.Deserialize<ClassicDoorWorldSave>(JsonSerializer.Serialize(save))!;
@@ -73,7 +94,7 @@ internal static class ClassicModuleInitializerProbe
         Console.WriteLine("OPENNV_CLASSIC_MODULE_INITIALIZER_PASS sourceInstructions=true globalFrame=true exports=true ownership=true rollback=true budget=true");
     }
 
-    private static byte[] Source()
+    private static byte[] Source(bool declareShared = true)
     {
         // Synthetic INT, including an export used only by the initializer and
         // non-contiguous globals. No owned script bytes enter this fixture.
@@ -92,7 +113,7 @@ internal static class ClassicModuleInitializerProbe
         var names = Encoding.ASCII.GetBytes("start\0Shared\0shared\0InitializerOnly\0");
         Word(names.Length); stream.Write(names); Word(-1); Word(-1);
         Op(0x802c); Op(0xc001, 5);
-        Op(0x9001, 10); Op(0x8016);
+        if (declareShared) { Op(0x9001, 10); Op(0x8016); }
         Op(0xc001, 9); Op(0x9001, 17); Op(0x8015);
         Op(0x9001, 24); Op(0x8016);
         Op(0xc001, 0); Op(0x8012); Op(0xc001, 7); Op(0x8039); Op(0xc001, 0); Op(0x8013);

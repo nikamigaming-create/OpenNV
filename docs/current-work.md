@@ -7,8 +7,22 @@ package g remains rejected for physical VR use.
 
 ## Current owner
 
-Current owner: root. Active block: equipped humanoid animation targets on
-`codex/fo1-held-animation-targets`. Starting inventory merged as PR #236 after
+Current owner: root. Active block: exported-variable assignment on
+`codex/fo1-export-assignment`, a prerequisite for map/object lifecycle.
+The equipped-player repair merged as PR #237 after its full local gate, owned
+component audit, bounded ordinary-input/cold check and every CI check. Local
+main was clean and equal to origin/main at `fef7c11b` with no outstanding task
+PRs before this block. Private original-engine inspection confirms that map
+departure unloads script programs and exported variables; the retained door
+programs do not yet reproduce that lifecycle. It also confirms that assignment
+to an absent export is an error, not an implicit declaration. The active repair
+rejects absent names while preserving cross-module writes, ASCII name resolution
+and declaration ownership. Synthetic checks cover missing declarations, shared
+writes and rollback after a later source fault. Synthetic checks, all three
+owned FO1 starting profiles and FO2 startup/cold regression pass. The complete
+initializer-only corpus is identical to the retained final-build baseline:
+880 pass and 66 remain unbound. The full runtime gate and diff check pass.
+Starting inventory merged as PR #236 after
 the full local gate, owned audits, bounded ordinary-input/cold check and every
 CI check. Local main was clean and equal to origin/main at `e4b6d628` with no
 outstanding task PRs before this block. Comparison/elevation and module ownership
@@ -23,7 +37,7 @@ New Game opens the source inventory at its source arrival. F5 and a separate
 process continuation retain the inventory and equipped pistol without duplicate
 grants. Equipping the pistol exposes an existing presentation blocker: unbound
 held-animation channels retire the 3D player, including after cold continuation.
-The active repair supplies the selected model's source target names to the
+The merged repair supplies the selected model's source target names to the
 existing animation binder and removes recipe-specific inactive-name lists.
 Owned inspection shows the failing aim channels belong to other weapon models;
 declared targets without runtime owners still fail closed in the synthetic check.
@@ -66,15 +80,17 @@ The opening MAP joins to `scripts/v13cave.int`. The merged runtime executes its
 source module initializer, including exports between global-value pushes, and
 retains owning-module metadata in transactions and v6 saves. Synthetic checks
 and the selected owned opening check pass. The full scripts.lst initializer-only
-audit passes 883 entries and leaves 63 visible failures (62 absent resources,
-one unsupported module with zero-body declarations). Source `Start` spelling is admitted without
+audit passes 880 entries and leaves 66 visible failures (62 absent resources,
+one unsupported module with zero-body declarations and three modules requiring
+typed reference globals). Source `Start` spelling is admitted without
 changing source procedure indexes. FO2 startup/grants/cold continuation pass for
 all three premade characters; 18 FO1 timer fixtures and 72-map door admission
 retain their previous results. The full runtime gate and `git diff --check`
 pass. One earlier scenery-audit launch exited without its result; both isolated
 checks and the complete gate rerun pass, but its initial exit is unexplained.
-The final reference-literal guard passes synthetic and owned checks without
-changing corpus results, and its complete gate rerun passes.
+The final reference-literal guard passes synthetic and selected owned checks;
+the full corpus correctly leaves those three typed-reference modules unbound.
+Its complete gate rerun passes.
 
 Next complete FO1 map/object lifecycle execution. The opening has no random
 calls and now reaches its actual first-entry grants. New Game passes action 15
@@ -90,8 +106,8 @@ lifetime and revisit/cold-load semantics still need verification before completi
 the general lifecycle owner. Old FO1 preview saves without initialization identity
 remain unchanged; new source-initialized saves reconstruct and verify their
 baseline before applying saved inventory changes.
-The legacy store-to-undeclared-external path still needs removal alongside the
-complete module owner. General scenery interaction, floating messages and audio
+The undeclared-external repair does not establish complete module lifetimes.
+General scenery interaction, floating messages and audio
 also remain needed for the entrance terminal.
 
 PR #233 merged FO1 script time, callbacks, nested source use and v5 persistence
