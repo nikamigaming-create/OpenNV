@@ -28,8 +28,7 @@ The first full runtime gate and hosted PR #242 checks pass, along with the
 selected owned interaction regression and 18 timed-door fixtures. Review then
 found that retiring an old map controller could clear new-map sound requests.
 The adapter now belongs to the session; the owned mixer lifetime regression
-passes with map-controller retirement and clean shutdown. The full gate is
-running again for this correction before updating PR #242. This is component
+passes with map-controller retirement and clean shutdown. The corrected full runtime gate and diff check pass; PR #242 is awaiting hosted checks. This is component
 playback evidence, not ordinary terminal interaction or audio timing acceptance.
 
 General scripted scenery/actor ownership, floating text, ordinary terminal use,
