@@ -8,20 +8,33 @@ package g remains rejected for physical VR use.
 
 ## Current owner
 
-Active branch: `codex/classic-acm-audio`, based on clean synchronized main
-`c2e8b2e1` after checked PR #240 merged. No task PR was open at branch creation.
-The shared dispatcher and lazy-local repair are merged with passing CI.
+Active branch: `codex/classic-script-audio`, based on clean synchronized main
+`e9ce032e` after checked PR #241 merged. No task PR was open at branch creation.
+Owned ACM decoding is merged: all 2,529 owned FO1 audio
+resources match every original decoder PCM sample. All 2,472 FO2 audio resources
+pass decode/streaming regression. The full local and hosted gates passed.
 
-The active work adds in-memory C# ACM decoding for owned classic audio. Private
-source inspection supplies the bitstream/codebook/synthesis contracts; a private
-isolated x86 execution of the unchanged original decoder supplies a PCM oracle.
-The opening terminal sound and initial complete music files match every native
-sample, including final zero extension where an independent decoder differs.
-Synthetic codebook, history, chunked-read, invalid-input and retained-fault checks
-pass. All 2,529 owned FO1 resources decode with stable PCM across read sizes
-and unchanged source bytes. Full native-oracle comparison, FO2 regression and
-the runtime gate remain pending. No
-audio playback or terminal interaction is claimed from this decoder work.
+The active work binds script sound effects to a C# admission/lifetime owner and
+Godot PCM playback. Source settings control enablement and master/effect volume;
+FO1 script effects use four non-spatial mono 22050 Hz voices. Preparation validates
+owned resources before event state is committed. Disabled/saturated requests do
+not allocate; completion and shutdown retire each voice once. Source volume
+conversion matches private original execution across all 32,769 bounded inputs.
+Synthetic admission, rollback, disabled, volume and retirement checks pass.
+The owned opening effect reaches the actual Godot mixer, finishes and releases
+its resources. The shutdown probe allows the mixer thread to retire its stop
+buffer; immediate process exit had reported a retained playback reference.
+The first full runtime gate and hosted PR #242 checks pass, along with the
+selected owned interaction regression and 18 timed-door fixtures. Review then
+found that retiring an old map controller could clear new-map sound requests.
+The adapter now belongs to the session; the owned mixer lifetime regression
+passes with map-controller retirement and clean shutdown. The corrected full runtime gate and diff check pass; PR #242 is awaiting hosted checks. This is component
+playback evidence, not ordinary terminal interaction or audio timing acceptance.
+
+General scripted scenery/actor ownership, floating text, ordinary terminal use,
+all campaign progression and faithful 3D art remain required. The next owner is
+the shared source event world, preserving the existing door mechanics and saves.
+No full run qualifies. See [classic-audio.md](classic-audio.md).
 
 The merged repair admits source offset-minus-one local blocks without reading
 neighboring MAP variables. The existing per-instance VM storage supplies zero

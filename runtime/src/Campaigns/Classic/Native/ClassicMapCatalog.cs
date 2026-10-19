@@ -20,6 +20,9 @@ internal sealed class ClassicMapCatalog : IFalloutClassicOwnedSource
     private readonly Dictionary<int, string> _messages = [];
     internal string Campaign { get; }
     public string ProfileId => _source.ProfileId;
+    internal ClassicSoundSettings SoundSettings => _source is Fallout1OwnedContentSource source
+        ? ClassicSoundSettings.Read(File.ReadAllText(Path.Combine(source.InstallRoot, "fallout.cfg")))
+        : throw new NotSupportedException("Classic sound configuration has no owned installation owner.");
     internal IReadOnlyList<string> Maps { get; }
     internal string StartingMap => Campaign == "fallout-1" ? "maps/v13ent.map" : "maps/artemple.map";
 

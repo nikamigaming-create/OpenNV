@@ -12,6 +12,7 @@ internal sealed partial class ClassicWorldBrowser : Node
     private ClassicRetailRandomContract? _initializationContract;
     private IReadOnlyList<string> _maps = [];
     private ClassicWorldPreview? _world;
+    private ClassicScriptSoundPlayback? _sounds;
     private OptionButton _map = null!, _elevation = null!;
     private Label _error = null!;
     private string _selectedMap = "";
@@ -102,6 +103,7 @@ internal sealed partial class ClassicWorldBrowser : Node
         {
             PlayerController!.Player.Save(_savePath);
             _world!.RemoveChild(PlayerController); PlayerController.Free(); PlayerController = null;
+            if (_sounds is not null) { RemoveChild(_sounds); _sounds.Free(); _sounds = null; }
             _menuOpen = false;
             Select(_selectedMap, _elevation.GetSelectedId()); RefreshActions();
         });
@@ -139,7 +141,7 @@ internal sealed partial class ClassicWorldBrowser : Node
         var controller = new ClassicPlayerController(); _world!.AddChild(controller);
         try { controller.Configure(_source, _world, player, _savePath, _appearanceRoot); }
         catch { _world.RemoveChild(controller); controller.Free(); throw; }
-        PlayerController = controller; _menuOpen = false; RefreshActions();
+        PlayerController = controller; BindSounds(player.Sounds); _menuOpen = false; RefreshActions();
         controller.ExitRequested += exit => Callable.From(() => Try(() => Transition(exit))).CallDeferred();
         controller.MenuRequested += () => SetMenuOpen(true);
         GD.Print($"OPENNV_CLASSIC_PLAYER_ENTER name={player.Choice.Character.Name} map={player.MapPath} tile={player.Tile} " +
@@ -158,7 +160,19 @@ internal sealed partial class ClassicWorldBrowser : Node
     {
         _menuOpen = open;
         if (_world is not null) _world.ProcessMode = open ? ProcessModeEnum.Disabled : ProcessModeEnum.Inherit;
+        if (_sounds is not null) _sounds.ProcessMode = open ? ProcessModeEnum.Disabled : ProcessModeEnum.Inherit;
         RefreshActions();
+    }
+
+    // Non-spatial voices belong to the session, not a replaceable map/controller.
+    internal void BindSounds(ClassicScriptSounds owner)
+    {
+        if (_sounds is not null) throw new InvalidOperationException("A classic sound session is already active.");
+        _sounds = new ClassicScriptSoundPlayback(); _sounds.Configure(owner); AddChild(_sounds);
+        _sounds.Failed += message =>
+        {
+            GD.PushError(message); _world?.ReportPresentationFailure(message); PlayerController?.Hud.Message(message);
+        };
     }
 
     public override void _UnhandledInput(InputEvent input)
