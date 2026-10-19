@@ -802,6 +802,8 @@ internal static class ClassicIntProcedureVm
                     {
                         var reference = Pop(stack, program, procedure, offset);
                         var name = ExternalName(Read(program.IdentifierReferences, reference, program, procedure, offset, "identifier-reference"));
+                        if (!externalVariables.ContainsKey(name))
+                            throw Failure(program, procedure, offset, "undeclared-external-variable");
                         externalVariables[name] = Pop(stack, program, procedure, offset);
                         break;
                     }

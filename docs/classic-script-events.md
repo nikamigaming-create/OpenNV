@@ -102,17 +102,21 @@ integer zero, resetting an existing declaration from the same module, and
 rejecting a different owner. Names and owning module identities fold ASCII
 letters only. Export ownership follows nested event transactions and native v6
 saves. Older saves retain their values as unowned; declarations cannot silently
-claim those values. The pre-existing store-to-undeclared-value path is still a
-divergence, pending complete map/object module lifecycle ownership. The FO1 map
-script is not yet connected merely because its initializer can execute.
+claim those values. Assignment requires an existing exported name and reports
+an undeclared-variable failure otherwise. Another module may write an existing
+export without changing its declaring owner; assignment is not declaration.
+The source opening map is connected through campaign initialization, but full
+map/object module lifetimes, unload and revisit dispatch remain unbound.
 
 Synthetic source bytes cover interleaved globals, computed values, initializer-only
 references, source `Start` spelling, export reset/conflict, cold owner metadata,
-nested ownership, late instruction-budget failure and rollback. The owned
+nested ownership, undeclared assignment, cross-module writes, late
+instruction-budget failure and rollback. The owned
 opening-cave initializer produces six globals and six zero-valued exports.
 The complete FO1 scripts.lst audit isolates initializers by replacing the startup
-body with a diagnostic return: 883 pass, 62 entries have no owned resource and one
-has an unsupported procedure identity/body. Those 63 remain visible audit
+body with a diagnostic return: 880 pass, 62 entries have no owned resource, one
+has an unsupported procedure identity/body and three require typed reference
+globals. Those 66 remain visible audit
 failures; this is neither full script execution nor campaign support.
 FO2 startup, starting grants and cold continuation still pass for all three
 premade characters. The 18 FO1 timer fixtures and 72-map door admission checks
