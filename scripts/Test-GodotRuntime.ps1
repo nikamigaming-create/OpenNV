@@ -156,7 +156,7 @@ $classicSoundText = $classicSoundOutput | Out-String
 if ($LASTEXITCODE -ne 0 -or $classicSoundText -match $godotFailurePattern -or $classicSoundText -notmatch "OPENNV_CLASSIC_SCRIPT_SOUND_MIXER_PASS") {
     throw "Classic script sound playback failed:`n$classicSoundText"
 }
-Write-Output "OPENNV_CLASSIC_SCRIPT_SOUND_MIXER_PASS capacity=true finite=true shutdown=true fixture=true gameplay=false"
+Write-Output "OPENNV_CLASSIC_SCRIPT_SOUND_MIXER_PASS capacity=true finite=true mapLifetime=true shutdown=true fixture=true gameplay=false"
 
 $menuProjectionOutput = & $Godot --headless --verbose --path $runtime res://tools/NativeMenuGeometryProjectionAudit/NativeMenuGeometryProjectionAudit.tscn 2>&1
 $menuProjectionText = $menuProjectionOutput | Out-String

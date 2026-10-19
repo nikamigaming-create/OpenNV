@@ -36,7 +36,9 @@ enablement and master/effect volumes; the original integer/logarithmic volume
 curve is retained. FO1 script effects supply no spatial object and play as mono
 16-bit PCM at the source system rate of 22050 Hz, independently of ACM metadata.
 Godot consumes memory through ClassicScriptSoundPlayback and acknowledges finite
-completion or shutdown once. Current door events use this owner; unverified FO2
+completion or shutdown once. Its adapter belongs to the player session rather
+than replaceable map controllers, preserving pending/active voices during a map
+presentation handoff. Current door events use this owner; unverified FO2
 voice semantics remain rejected. No persistent decoded assets are written.
 
 The mixer audit covers real stream start, four-voice capacity, completion and

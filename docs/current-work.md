@@ -24,8 +24,12 @@ Synthetic admission, rollback, disabled, volume and retirement checks pass.
 The owned opening effect reaches the actual Godot mixer, finishes and releases
 its resources. The shutdown probe allows the mixer thread to retire its stop
 buffer; immediate process exit had reported a retained playback reference.
-The full runtime gate and selected owned interaction regression pass, including
-18 timed-door fixtures. Publication is pending. This is component
+The first full runtime gate and hosted PR #242 checks pass, along with the
+selected owned interaction regression and 18 timed-door fixtures. Review then
+found that retiring an old map controller could clear new-map sound requests.
+The adapter now belongs to the session; the owned mixer lifetime regression
+passes with map-controller retirement and clean shutdown. The full gate is
+running again for this correction before updating PR #242. This is component
 playback evidence, not ordinary terminal interaction or audio timing acceptance.
 
 General scripted scenery/actor ownership, floating text, ordinary terminal use,
