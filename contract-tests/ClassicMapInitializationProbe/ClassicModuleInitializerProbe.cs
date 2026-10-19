@@ -56,6 +56,11 @@ internal static class ClassicModuleInitializerProbe
             catch (InvalidOperationException) { }
         }
         var broken = (byte[])bytes.Clone();
+        var referenceGlobal = (byte[])bytes.Clone();
+        var firstGlobal = program.ModuleInitializer!.Instructions[1];
+        BinaryPrimitives.WriteUInt16BigEndian(referenceGlobal.AsSpan(firstGlobal.Offset), 0x9001);
+        try { _ = Run(ClassicNativeIntReader.Read(referenceGlobal, program.Identity), context); throw new Exception("Reference global lost its source type."); }
+        catch (InvalidOperationException error) when (error.Message.Contains("module-reference-value-owner", StringComparison.Ordinal)) { }
         var fault = program.ModuleInitializer!.Instructions.Single(row => row.Opcode == 0x8003);
         BinaryPrimitives.WriteUInt16BigEndian(broken.AsSpan(fault.Offset), 0xffff);
         var unsupported = ClassicNativeIntReader.Read(broken, program.Identity);

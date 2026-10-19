@@ -30,6 +30,8 @@ all three premade characters; 18 FO1 timer fixtures and 72-map door admission
 retain their previous results. The full runtime gate and `git diff --check`
 pass. One earlier scenery-audit launch exited without its result; both isolated
 checks and the complete gate rerun pass, but its initial exit is unexplained.
+The final reference-literal guard passes synthetic and owned checks without
+changing corpus results, and its complete gate rerun passes.
 
 Next connect FO1 map/object lifecycle execution. The owned opening map-entry
 body has no random calls, so that work can proceed independently of the remaining

@@ -77,6 +77,9 @@ global stack frame becomes persistent program variables at startup transfer.
 Unknown instructions, invalid frames and instruction-budget exhaustion fail
 without publishing state. Nested object use during module initialization still
 requires a suspended-global-frame owner and remains closed.
+Initializer reference literals are currently admitted only as immediately
+consumed export names. Other reference-literal uses require typed
+value ownership and is rejected rather than becoming integer global state.
 
 Static original-binary inspection identifies export declaration as creating an
 integer zero, resetting an existing declaration from the same module, and

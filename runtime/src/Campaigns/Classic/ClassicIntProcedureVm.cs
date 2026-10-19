@@ -700,6 +700,12 @@ internal static class ClassicIntProcedureVm
                         program, procedure, offset, "missing-integer-operand"));
                     break;
                 case PushReference:
+                    // The initializer frame currently owns integer globals.
+                    // Export names are consumed immediately; admitting other
+                    // reference values would erase their source type.
+                    if (initializing && (!program.Instructions.TryGetValue(next, out var consumer) ||
+                        consumer.Opcode is not (FetchExternal or StoreExternal or 0x8016)))
+                        throw Failure(program, procedure, offset, "module-reference-value-owner");
                     stack.Add(instruction.Operand ?? throw Failure(
                         program, procedure, offset, "missing-reference-operand"));
                     break;
