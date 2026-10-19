@@ -84,6 +84,23 @@ The Vault entrance terminal remains unbound.
 
 ## Source module initialization
 
+Classic event dispatch now uses the source procedure table rather than exact
+hard-coded handler checks. Names fold ASCII and the first matching declaration
+wins; absent/index-zero handlers fall back to source index one. FO1 action 3
+resolves `desc_p_proc`; FO2 resolves `description_p_proc`. Their first loads also
+differ: FO1 runs fresh startup with the triggering action, whereas FO2 runs
+startup at action zero followed by the requested event. Both calls share the
+instruction budget and unpublished state. Campaign initialization, door use,
+examination, nested use and scheduled callbacks use this dispatcher.
+
+Door initialization requests action one and completes the startup pass before
+dispatching any available map-entry handlers. A synthetic-script variation of
+an owned MAP verifies that an early entry can read a later startup's export.
+FO1 event contexts derive HHMM from their authoritative timer tick, with minute
+truncation and day rollover. These changes do not supply the missing general map
+controller/object owner, map-update pass, fixed-parameter persistence or correct
+unload/revisit behavior. Those remain required before campaign acceptance.
+
 The native reader retains initializer instructions and their identifier/string
 references, separately from the source procedure index table. Native startup
 executes the initializer before its source startup jump. Integer globals may be
@@ -120,7 +137,8 @@ globals. Those 66 remain visible audit
 failures; this is neither full script execution nor campaign support.
 FO2 startup, starting grants and cold continuation still pass for all three
 premade characters. The 18 FO1 timer fixtures and 72-map door admission checks
-also pass their existing boundaries, with four unbound door initializers.
+also pass their existing boundaries, with eight unbound door initializers after
+strict export assignment and authoritative HHMM binding.
 
 ## Map-entry prerequisites
 

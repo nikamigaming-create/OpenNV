@@ -73,27 +73,22 @@ internal sealed record ClassicCampaignInitialization(string Identity, string Map
                 Traits = Enumerable.Range(0, 16).ToDictionary(trait => (2, dude, trait), trait => choice.Character.Traits.Contains(trait) ? 1 : 0),
             };
         }
-        var executed = 0;
-        foreach (var procedure in firstGame ? new[] { program.StartupProcedure! } : new[] { program.StartupProcedure!, "map_enter_p_proc" })
-        {
-            if (!program.Procedures.ContainsKey(procedure)) continue;
-            var result = ClassicIntProcedureVm.Execute(program, procedure, state, context, world, randomContract, 100000,
-                initializeModule: procedure == program.StartupProcedure);
-            // No partially applied event: reached effects without an owner keep
-            // the campaign entry closed, including messages, timers and actors.
-            if (result.MessageEffects.Count != 0 || result.SoundEffects.Count != 0 || result.WorldObjects.Doors.Count != 0 ||
-                result.WorldObjects.Movements.Count != 0 || result.WorldObjects.TraitAssignments.Count != 0 ||
-                result.WorldObjects.AttackRequests.Count != 0 || result.WorldObjects.Timers.Pending.Count != 0 ||
-                result.WorldObjects.DialogueSystemEntered || result.WorldObjects.DialogueStart is not null ||
-                result.WorldObjects.ScriptOverrides || result.State.ValueStack.Count != 0 ||
-                result.WorldObjects.Objects[dude] != world.Objects[dude])
-                throw new NotSupportedException($"Campaign entry reached unbound world effects: {path}:{procedure}.");
-            state = result.State; world = result.WorldObjects;
-            // Preserve existing source/result save identities: module opcodes
-            // were previously decoded without inclusion in event counts.
-            executed += result.ExecutedInstructions - result.ModuleInitializationInstructions;
-            context = context with { ExternalVariables = result.ExternalVariables, ExternalOwners = result.ExternalOwners };
-        }
+        var result = ClassicIntEvents.Execute(program, catalog.Campaign, 15, state, context, world, randomContract, 100000,
+            initializeModule: true);
+        // No partially applied event: reached effects without an owner keep
+        // the campaign entry closed, including messages, timers and actors.
+        if (result.MessageEffects.Count != 0 || result.SoundEffects.Count != 0 || result.WorldObjects.Doors.Count != 0 ||
+            result.WorldObjects.Movements.Count != 0 || result.WorldObjects.TraitAssignments.Count != 0 ||
+            result.WorldObjects.AttackRequests.Count != 0 || result.WorldObjects.Timers.Pending.Count != 0 ||
+            result.WorldObjects.DialogueSystemEntered || result.WorldObjects.DialogueStart is not null ||
+            result.WorldObjects.ScriptOverrides || result.State.ValueStack.Count != 0 ||
+            result.WorldObjects.Objects[dude] != world.Objects[dude])
+            throw new NotSupportedException($"Campaign entry reached unbound world effects: {path}:map entry.");
+        state = result.State; world = result.WorldObjects;
+        // Preserve existing source/result save identities: module opcodes
+        // were previously decoded without inclusion in event counts.
+        var executed = result.ExecutedInstructions - result.ModuleInitializationInstructions;
+        context = context with { ExternalVariables = result.ExternalVariables, ExternalOwners = result.ExternalOwners };
         if (world.Inventory.Any(row => row.OwnerHandle != dude) ||
             (!firstGame && world.CreatedObjects.Count != world.Inventory.Count) ||
             (firstGame && world.Objects.Keys.Any(handle => handle != dude && handle != mapController && world.Inventory.All(row => row.ObjectHandle != handle))) ||

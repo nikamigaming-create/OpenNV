@@ -14,9 +14,10 @@ and finished 3D counterparts; they are not cinematic-quality acceptance.
 
 Native INT module startup and door map-entry procedures execute through the
 existing C# interpreter. MAP script IDs join their actual object IDs and
-scripts.lst entries. All doors are registered before entry dispatch. Script
+scripts.lst entries. All doors are registered before startup, and the startup
+pass finishes before any map-entry handler. Script
 locals, program variables, global/map variables, exported values, door locks
-and animation phase persist in v4 saves. Campaign-header globals feed this
+and animation phase persist in native saves (currently v6). Campaign-header globals feed this
 owner before door initialization. Reached unsupported effects reject the event
 without publishing a partial result.
 
@@ -29,10 +30,11 @@ Source `message_str` requests resolve the one-based script-list entry to its
 owned `text/english/dialog/*.msg` file on demand. Literal INT display strings
 also work. Message identities use stable private C# handles, so a saved program
 variable still resolves after a cold load. Missing entries fail explicitly.
-Startup and entry messages publish together only after the whole event succeeds.
+Each event publishes messages only after its complete transaction succeeds.
 Player SPECIAL/gender queries use the live accepted character's stats.
 
-Shift-clicking a door examines it through `description_p_proc` and the original
+Shift-clicking a door examines it through FO1's `desc_p_proc` or FO2's
+`description_p_proc`, with source-index fallback, and the original
 PRO description when the script permits the default. Ordinary door use sends
 its source display text to the same HUD. Its six-line original panel keeps
 wrapped history; the mouse wheel over that panel scrolls earlier lines. The
@@ -43,8 +45,10 @@ Floating text, dialogue, voice and retail message timing remain separate owners.
 
 The owned loading check covered 72 FO1 maps / 392 door placements and 155 FO2
 maps / 1,171 door placements, with no map-load failures from this owner. FO2
-has two empty elevations without doors. Four FO1 and 195 FO2 door initializers
-still reach unbound behavior. These are loading results, not campaign or script
+has two empty elevations without doors. The current FO1 check has eight unbound
+initializers: seven missing exports and one script-local layout. The current
+FO2 sweep reports 212 unbound initializers, including missing gameplay inputs
+and object/effect owners. These are loading results, not campaign or script
 completion. Source fixtures exercise open/close, passage changes, mid-animation
 and terminal cold restore, and changed-source rejection in both games.
 

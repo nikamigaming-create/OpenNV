@@ -74,25 +74,24 @@ internal sealed partial class ClassicDoorWorld(ClassicPlayerSession player)
         }
         // All source handles and door states exist before the first script can
         // refer to another door later in the MAP object section.
-        foreach (var key in pending)
-        {
-            var entry = _entries[key]; var definition = entry.Definition; var door = definition.Object;
-            if (definition.Program is null) continue;
-            try
+        // Complete the startup pass before any map-entry handler. Later source
+        // modules may declare exports that earlier objects read during entry.
+        foreach (var action in new[] { 1, 15 })
+            foreach (var key in pending)
             {
-                var state = InitialState(definition);
-                var result = Execute(entry with { State = state }, definition.Program.StartupProcedure!, 0, initializeModule: true);
-                Validate(result.Result, level.Path);
-                // Validate startup and entry together before publishing either.
-                var startup = entry with { State = result.Result.State };
-                var entered = definition.Program.Procedures.ContainsKey("map_enter_p_proc")
-                    ? Execute(startup, "map_enter_p_proc", 15, result) : result;
-                Validate(entered.Result, level.Path);
-                Commit(entry, entered);
+                var entry = _entries[key]; var definition = entry.Definition; var door = definition.Object;
+                if (definition.Program is null || entry.Failure is not null ||
+                    action == 15 && !ClassicIntEvents.HasHandler(definition.Program, player.Choice.Campaign, action)) continue;
+                try
+                {
+                    var state = entry.State ?? InitialState(definition);
+                    var result = Execute(entry with { State = state }, action, initializeModule: action == 1);
+                    Validate(result.Result, level.Path);
+                    Commit(entry, result);
+                }
+                catch (Exception error) when (error is InvalidOperationException or InvalidDataException or NotSupportedException or FileNotFoundException)
+                { _entries[key] = entry with { Failure = $"{level.Path}:{door.Serial} {definition.Script}: {error.Message}" }; }
             }
-            catch (Exception error) when (error is InvalidOperationException or InvalidDataException or NotSupportedException or FileNotFoundException)
-            { _entries[key] = entry with { Failure = $"{level.Path}:{door.Serial} {definition.Script}: {error.Message}" }; }
-        }
     }
 
     private ClassicDoorDefinition ReadDefinition(ClassicMapLevel level, Fallout1NativeMapObject row)
@@ -139,7 +138,7 @@ internal sealed partial class ClassicDoorWorld(ClassicPlayerSession player)
         return new(new Dictionary<int, int>(), new Dictionary<int, int>(), locals, variables, _globals, [], null);
     }
 
-    private Execution Execute(Entry entry, string procedure, int action, Execution? prior = null,
+    private Execution Execute(Entry entry, int action,
         ClassicIntTimerState? timerState = null, int? fixedParameter = null, int budget = 100000, bool initializeModule = false)
     {
         var level = entry.Definition.Level;
@@ -149,27 +148,21 @@ internal sealed partial class ClassicDoorWorld(ClassicPlayerSession player)
         objects.Add(dude, new(dude, 0x01000000, player.Tile, player.Elevation, true));
         var doors = _entries.Values.Where(row => row.Definition.Level.Path == level.Path).ToDictionary(row => row.Definition.Object.Serial + 1,
             row => new ClassicIntDoorObjectState(row.Pose.Open, row.Pose.Locked));
-        var world = prior?.Result.WorldObjects ?? ClassicIntWorldObjectState.Empty with { Objects = objects, Doors = doors, Timers = timerState ?? _timers };
+        var world = ClassicIntWorldObjectState.Empty with { Objects = objects, Doors = doors, Timers = timerState ?? _timers };
         var state = entry.State! with
         {
-            GlobalVariables = prior?.Result.State.GlobalVariables ?? _globals,
-            MapVariables = prior?.Result.State.MapVariables ?? _mapVariables[level.Path]
+            GlobalVariables = _globals,
+            MapVariables = _mapVariables[level.Path]
         };
-        var transaction = new UseTransaction(this, level.Path, prior?.States);
-        var result = Invoke(entry with { State = state }, procedure, action, world,
-            prior?.Result.ExternalVariables ?? _externals, transaction, fixedParameter, action == 22 ? 0 : dude, budget,
-            prior?.Result.ExternalOwners ?? _externalOwners, initializeModule);
-        if (prior is not null) result = result with
-        {
-            MessageEffects = prior.Result.MessageEffects.Concat(result.MessageEffects).ToArray(),
-            SoundEffects = prior.Result.SoundEffects.Concat(result.SoundEffects).ToArray()
-        };
+        var transaction = new UseTransaction(this, level.Path);
+        var result = Invoke(entry with { State = state }, action, world,
+            _externals, transaction, fixedParameter, action == 22 ? 0 : dude, budget, _externalOwners, initializeModule);
         if (!result.WorldObjects.Objects.OrderBy(row => row.Key).SequenceEqual(world.Objects.OrderBy(row => row.Key)))
             throw new NotSupportedException("Door event changes a world object's placement or visibility without its runtime owner.");
         return new(result, transaction.States);
     }
 
-    private ClassicIntProcedureResult Invoke(Entry entry, string procedure, int action, ClassicIntWorldObjectState world,
+    private ClassicIntProcedureResult Invoke(Entry entry, int action, ClassicIntWorldObjectState world,
         IReadOnlyDictionary<string, int> externals, UseTransaction transaction, int? fixedParameter, int sourceObject, int budget,
         IReadOnlyDictionary<string, string> externalOwners, bool initializeModule = false)
     {
@@ -181,11 +174,12 @@ internal sealed partial class ClassicDoorWorld(ClassicPlayerSession player)
         var game = new ClassicIntExpressionContext(state.ProgramVariables, state.LocalVariables, state.ScriptLocalVariables,
             state.MapVariables, state.GlobalVariables, dude, entry.Definition.Object.Serial + 1, null, null,
             stats, new Dictionary<(int, int), int>(), new Dictionary<int, int>(),
-            new Dictionary<(int, int), int>(), externals, TimerContract is null ? null : world.Timers.CurrentTick, null, null,
+            new Dictionary<(int, int), int>(), externals, TimerContract is null ? null : world.Timers.CurrentTick,
+            TimerContract is { } clock ? ClassicIntTimerOwner.GameTimeHour(clock, world.Timers.CurrentTick) : null, null,
             new ClassicIntObjectHandleTable(new Dictionary<ClassicIntObjectCreation, int>()), SourceObject: sourceObject,
             TimerContract: TimerContract, FixedParameter: fixedParameter,
             CurrentMapIndex: level.Map.MapIndex, ScriptAction: action, MessageSource: _messages, ObjectUse: transaction, ExternalOwners: externalOwners);
-        var result = ClassicIntProcedureVm.Execute(entry.Definition.Program!, procedure, state, game, world, null, budget, initializeModule);
+        var result = ClassicIntEvents.Execute(entry.Definition.Program!, player.Choice.Campaign, action, state, game, world, null, budget, initializeModule);
         transaction.States[Key(level.Path, entry.Definition.Object.Serial)] = result.State;
         return result;
     }
@@ -237,9 +231,9 @@ internal sealed partial class ClassicDoorWorld(ClassicPlayerSession player)
             throw new InvalidOperationException("Move next to the door first.");
         if (entry.Failure is not null) throw new NotSupportedException(entry.Failure);
         if (entry.Pose.Direction != 0) throw new InvalidOperationException("The door is moving.");
-        if (entry.Definition.Program is { } program && program.Procedures.ContainsKey("use_p_proc"))
+        if (entry.Definition.Program is not null)
         {
-            var result = Execute(entry, "use_p_proc", 6); Validate(result.Result, player.MapPath); Commit(entry, result);
+            var result = Execute(entry, 6); Validate(result.Result, player.MapPath); Commit(entry, result);
             if (result.Result.WorldObjects.ScriptOverrides) return;
             entry = Get(serial);
         }
@@ -256,9 +250,9 @@ internal sealed partial class ClassicDoorWorld(ClassicPlayerSession player)
         if (source.Elevation != player.Elevation || (source.Flags & 1) != 0)
             throw new InvalidOperationException("That door is not visible on this level.");
         if (entry.Failure is not null) throw new NotSupportedException(entry.Failure);
-        if (entry.Definition.Program is { } program && program.Procedures.ContainsKey("description_p_proc"))
+        if (entry.Definition.Program is not null)
         {
-            var result = Execute(entry, "description_p_proc", 3); Validate(result.Result, player.MapPath); Commit(entry, result);
+            var result = Execute(entry, 3); Validate(result.Result, player.MapPath); Commit(entry, result);
             if (result.Result.WorldObjects.ScriptOverrides) return;
         }
         var pro = player.Catalog.Read(source.Prototype.LogicalPath!, out _);

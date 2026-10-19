@@ -57,10 +57,9 @@ internal sealed partial class ClassicDoorWorld
                 var delivery = ClassicIntTimerOwner.TakeNextDue(_timers, through);
                 var entry = _entries[Key(player.MapPath, delivery.Event.TargetHandle - 1)];
                 if (entry.Failure is not null) throw new NotSupportedException(entry.Failure);
-                if (entry.State is null || entry.Definition.Program is null ||
-                    !entry.Definition.Program.Procedures.ContainsKey("timed_event_p_proc"))
+                if (entry.State is null || entry.Definition.Program is null)
                     throw new NotSupportedException("Scheduled source object has no admitted timed-event procedure.");
-                var execution = Execute(entry, "timed_event_p_proc", 22, timerState: delivery.State,
+                var execution = Execute(entry, 22, timerState: delivery.State,
                     fixedParameter: delivery.Event.FixedParameter, budget: budget);
                 Validate(execution.Result, player.MapPath);
                 budget -= Math.Max(1, execution.Result.ExecutedInstructions);
@@ -77,10 +76,9 @@ internal sealed partial class ClassicDoorWorld
         }
     }
 
-    private sealed class UseTransaction(ClassicDoorWorld owner, string map,
-        IReadOnlyDictionary<string, ClassicIntProcedureState>? prior) : IClassicIntObjectUseDispatcher
+    private sealed class UseTransaction(ClassicDoorWorld owner, string map) : IClassicIntObjectUseDispatcher
     {
-        internal Dictionary<string, ClassicIntProcedureState> States { get; } = prior is null ? [] : new(prior);
+        internal Dictionary<string, ClassicIntProcedureState> States { get; } = [];
         private int _depth;
 
         public ClassicIntProcedureResult Use(int sourceObject, int targetObject,
@@ -111,8 +109,8 @@ internal sealed partial class ClassicDoorWorld
             _depth++;
             try
             {
-                if (target.Definition.Program?.Procedures.ContainsKey("use_p_proc") == true)
-                    result = owner.Invoke(target with { State = state }, "use_p_proc", 6, world,
+                if (target.Definition.Program is not null)
+                    result = owner.Invoke(target with { State = state }, 6, world,
                         current.ExternalVariables, this, null, sourceObject, remainingInstructionBudget, current.ExternalOwners);
                 if (!result.WorldObjects.ScriptOverrides)
                 {
