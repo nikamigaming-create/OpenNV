@@ -42,7 +42,8 @@ internal sealed record ClassicIntExpressionContext(
     ClassicIntInventoryContract? InventoryContract = null,
     int? ScriptAction = null,
     IClassicIntMessageSource? MessageSource = null,
-    IClassicIntObjectUseDispatcher? ObjectUse = null);
+    IClassicIntObjectUseDispatcher? ObjectUse = null,
+    IReadOnlyDictionary<string, string>? ExternalOwners = null);
 
 /// <summary>Dispatches nested source use in the caller's unpublished transaction.</summary>
 internal interface IClassicIntObjectUseDispatcher

@@ -7,7 +7,9 @@ package g remains rejected for physical VR use.
 
 ## Current owner
 
-Current owner: codex/fo1-native-script-timers, based on origin/main b17861f9.
+Current owner: root. Verified block: native module initialization and exported
+variable ownership. Next owner: FO1 map-entry lifecycle on a fresh `codex/`
+feature branch after checked publication of this block.
 The user requires the entire FO1 game in our 3D presentation and three complete
 problem-free playthroughs before stopping. Completed qualifying playthroughs:
 **0 of 3**. Preserve separate run identities, starting character, source/build
@@ -17,19 +19,41 @@ require renewed validation. Component tests and fixture placements never count
 as playthroughs. The full art/quest/enemy inventory remains required even when a
 particular route does not encounter it.
 
-Vault entrance terminal activation remains a separate owner. The source-only
-baseline admitted 72 maps and 392 doors with four unbound initializers; these
-counts are not gameplay completion. Timer cancellation is merged in PR #232 after the
-full local gate, owned audits and all CI checks. Main was clean and synchronized.
-The current block connects FO1 script time, callbacks, nested source use and v5
-cold persistence. Eighteen eligible Vault 13 metal-door fixtures now schedule,
+The opening MAP joins to `scripts/v13cave.int`. The current change executes its
+source module initializer, including exports between global-value pushes, and
+retains owning-module metadata in transactions and v6 saves. Synthetic checks
+and the selected owned opening check pass. The full scripts.lst initializer-only
+audit passes 883 entries and leaves 63 visible failures (62 absent resources,
+one unsupported module with zero-body declarations). Source `Start` spelling is admitted without
+changing source procedure indexes. FO2 startup/grants/cold continuation pass for
+all three premade characters; 18 FO1 timer fixtures and 72-map door admission
+retain their previous results. The full runtime gate and `git diff --check`
+pass. One earlier scenery-audit launch exited without its result; both isolated
+checks and the complete gate rerun pass, but its initial exit is unexplained.
+The final reference-literal guard passes synthetic and owned checks without
+changing corpus results, and its complete gate rerun passes.
+
+Next connect FO1 map/object lifecycle execution. The owned opening map-entry
+body has no random calls, so that work can proceed independently of the remaining
+source-specific random contract. Do not mistake initializer-only admission for opening gameplay.
+Its first-entry path reaches `base_inventory`; the next concrete unsupported
+operations are source single-item inventory transfer (0x80d8) and signed integer
+less-than-or-equal (0x8035). Preserve the map's
+first-run flag across saves/revisits, and use the actual source-created grants.
+The legacy store-to-undeclared-external path still needs removal alongside the
+complete module owner. General scenery interaction, floating messages and audio
+also remain needed for the entrance terminal.
+
+PR #233 merged FO1 script time, callbacks, nested source use and v5 persistence
+after the full local gate and all CI checks. Main was clean and synchronized.
+Eighteen eligible Vault 13 metal-door fixtures now schedule,
 cold-restore, close through the source timed callback and drain their subsequent
 event. Queue/map binding, transition cancellation and retained callback faults
 also pass fixture checks. Synthetic late-clock, nested-frame, budget and rollback
 checks pass. The full local gate and final-build owned checks pass, including
 18/18 timer candidates, repeated use and frame cadence. FO1 source admission
 remains 72 maps/392 doors/four unbound initializers; FO2 ordinary-door regression
-passes. Checked PR publication is next. Ordinary-input scripted-door and campaign acceptance
+passes. Ordinary-input scripted-door and campaign acceptance
 are still unproven. See [classic-script-events.md](classic-script-events.md).
 The Windows Computer Use helper currently fails before initialization with
 `failed to write kernel assets: ... path specified (os error 3)`, including after

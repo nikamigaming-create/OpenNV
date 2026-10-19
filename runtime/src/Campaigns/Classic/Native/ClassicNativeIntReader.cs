@@ -75,35 +75,40 @@ internal static class ClassicNativeIntReader
                 if (reference >= 4 && reference < end - table) result.Add(reference, Text(table + reference, end));
             return result;
         }
-        var identifiers = References(identifierBase, identifierEnd);
         if (Word(identifierEnd) != -1) throw new InvalidDataException("INT identifier terminator is absent.");
         var stringBase = checked(identifierEnd + 4);
         var stringLength = Word(stringBase);
         var stringEnd = checked(stringBase + 4 + (stringLength == -1 ? 0 : stringLength));
         if (stringLength < -1 || stringEnd > boundaries[0]) throw new InvalidDataException("INT strings overlap executable bodies.");
-        var strings = stringLength == -1 ? new Dictionary<int, string>() : References(stringBase, stringEnd);
         var cursor = stringEnd;
         if (cursor + 4 <= boundaries[0] && Word(cursor) == -1) cursor += 4;
-        ushort Opcode()
+        var initializerCode = new List<ClassicIntInstruction>();
+        while (cursor < boundaries[0])
         {
             if (cursor + 2 > boundaries[0]) throw new InvalidDataException("INT module initialization is truncated.");
-            var value = BinaryPrimitives.ReadUInt16BigEndian(bytes.AsSpan(cursor)); cursor += 2; return value;
+            var start = cursor;
+            var opcode = BinaryPrimitives.ReadUInt16BigEndian(bytes.AsSpan(cursor)); cursor += 2;
+            int? operand = null;
+            if (opcode is 0xc001 or 0x9001 or 0xa001)
+            {
+                if (cursor + 4 > boundaries[0]) throw new InvalidDataException("INT module operand is truncated.");
+                operand = Word(cursor); cursor += 4;
+            }
+            var instruction = new ClassicIntInstruction(start, opcode, operand);
+            initializerCode.Add(instruction); instructions.Add(start, instruction);
         }
-        if (Opcode() != 0x802c) throw new NotSupportedException("INT module requires a different global-frame initializer.");
-        var initialVariables = new Dictionary<int, int>();
-        ushort initializer;
-        while ((initializer = Opcode()) == 0xc001)
-        {
-            var value = Word(cursor); cursor += 4;
-            if (cursor > boundaries[0]) throw new InvalidDataException("INT module initializer exceeds its source region.");
-            initialVariables.Add(initialVariables.Count, value);
-        }
-        if (initializer != 0x8003 || Opcode() != 0xc001) throw new NotSupportedException("INT module initializer has unsupported instructions.");
-        var startup = Word(cursor); cursor += 4;
-        if (Opcode() != 0x8004 || cursor != boundaries[0]) throw new InvalidDataException("INT module startup jump is invalid.");
-        var startupProcedure = procedures.Values.SingleOrDefault(row => row.BodyOffset == startup && row.Name == "start") ??
+        if (initializerCode.Count < 4 || initializerCode[0].Opcode != 0x802c ||
+            initializerCode[^2].Opcode != 0xc001 || initializerCode[^1].Opcode != 0x8004)
+            throw new NotSupportedException("INT module global frame/startup transfer is unsupported.");
+        var startup = initializerCode[^2].Operand;
+        var startupProcedure = procedures.Values.SingleOrDefault(row => row.BodyOffset == startup && ClassicIntExportNames.Equal(row.Name, "start")) ??
             throw new NotSupportedException("INT module startup does not resolve to its source start procedure.");
+        var identifiers = References(identifierBase, identifierEnd);
+        var strings = stringLength == -1 ? new Dictionary<int, string>() : References(stringBase, stringEnd);
         return new(identity, procedures.Values.ToArray(), procedures, instructions, identifiers, strings)
-        { InitialVariables = initialVariables, StartupProcedure = startupProcedure.Name };
+        {
+            StartupProcedure = startupProcedure.Name,
+            ModuleInitializer = new("<module-initializer>", initializerCode[0].Offset, null, initializerCode)
+        };
     }
 }

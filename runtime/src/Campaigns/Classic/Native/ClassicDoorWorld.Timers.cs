@@ -107,13 +107,13 @@ internal sealed partial class ClassicDoorWorld
                 LocalVariables = new Dictionary<int, int>()
             };
             var world = current.WorldObjects with { ScriptOverrides = false };
-            var result = new ClassicIntProcedureResult(state, 0, 0, [], [], world) { ExternalVariables = current.ExternalVariables };
+            var result = new ClassicIntProcedureResult(state, 0, 0, [], [], world) { ExternalVariables = current.ExternalVariables, ExternalOwners = current.ExternalOwners };
             _depth++;
             try
             {
                 if (target.Definition.Program?.Procedures.ContainsKey("use_p_proc") == true)
                     result = owner.Invoke(target with { State = state }, "use_p_proc", 6, world,
-                        current.ExternalVariables, this, null, sourceObject, remainingInstructionBudget);
+                        current.ExternalVariables, this, null, sourceObject, remainingInstructionBudget, current.ExternalOwners);
                 if (!result.WorldObjects.ScriptOverrides)
                 {
                     var door = result.WorldObjects.Doors[targetObject];
@@ -144,6 +144,7 @@ internal sealed partial class ClassicDoorWorld
                     ExecutedInstructions = checked(current.ExecutedInstructions + result.ExecutedInstructions),
                     WorldObjects = result.WorldObjects with { ScriptOverrides = current.WorldObjects.ScriptOverrides },
                     ExternalVariables = result.ExternalVariables,
+                    ExternalOwners = result.ExternalOwners,
                     MessageEffects = current.MessageEffects.Concat(result.MessageEffects).ToArray(),
                     SoundEffects = current.SoundEffects.Concat(result.SoundEffects).ToArray()
                 };

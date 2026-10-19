@@ -24,8 +24,8 @@ queue parity can be claimed.
 The synthetic ClassicMapInitializationProbe covers repeated target events,
 unrelated events, clocks/sequences, no return-stack residue, cold restoration,
 idempotent empty cancellation, invalid handles and failed-script rollback.
-Cancellation was merged through checked PR #232. The subsequent native timer
-block is under validation; it is not yet campaign or matched-retail acceptance.
+Cancellation and native timer work were merged through checked PRs #232/#233.
+They are not yet campaign or matched-retail acceptance.
 
 ## Native FO1 timers and nested use
 
@@ -65,6 +65,42 @@ clock data, misbound maps/targets, same-map versus map-departure cleanup, and a
 retained synthetic callback-owner fault across cold reload. These are fixture
 checks, not ordinary input, a campaign run or matched retail visual/timing proof.
 The Vault entrance terminal remains unbound.
+
+## Source module initialization
+
+The native reader retains initializer instructions and their identifier/string
+references, separately from the source procedure index table. Native startup
+executes the initializer before its source startup jump. Integer globals may be
+interleaved with export declarations, stores and other supported operations;
+they are no longer inferred from a contiguous prefix of constant pushes. The
+global stack frame becomes persistent program variables at startup transfer.
+Unknown instructions, invalid frames and instruction-budget exhaustion fail
+without publishing state. Nested object use during module initialization still
+requires a suspended-global-frame owner and remains closed.
+Initializer reference literals are currently admitted only as immediately
+consumed export names. Other reference-literal uses require typed
+value ownership and is rejected rather than becoming integer global state.
+
+Static original-binary inspection identifies export declaration as creating an
+integer zero, resetting an existing declaration from the same module, and
+rejecting a different owner. Names and owning module identities fold ASCII
+letters only. Export ownership follows nested event transactions and native v6
+saves. Older saves retain their values as unowned; declarations cannot silently
+claim those values. The pre-existing store-to-undeclared-value path is still a
+divergence, pending complete map/object module lifecycle ownership. The FO1 map
+script is not yet connected merely because its initializer can execute.
+
+Synthetic source bytes cover interleaved globals, computed values, initializer-only
+references, source `Start` spelling, export reset/conflict, cold owner metadata,
+nested ownership, late instruction-budget failure and rollback. The owned
+opening-cave initializer produces six globals and six zero-valued exports.
+The complete FO1 scripts.lst audit isolates initializers by replacing the startup
+body with a diagnostic return: 883 pass, 62 entries have no owned resource and one
+has an unsupported procedure identity/body. Those 63 remain visible audit
+failures; this is neither full script execution nor campaign support.
+FO2 startup, starting grants and cold continuation still pass for all three
+premade characters. The 18 FO1 timer fixtures and 72-map door admission checks
+also pass their existing boundaries, with four unbound door initializers.
 
 ## Acceptance
 

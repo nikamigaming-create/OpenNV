@@ -22,8 +22,8 @@ internal sealed record ClassicIntProgram(
     IReadOnlyDictionary<int, string> IdentifierReferences,
     IReadOnlyDictionary<int, string> StringReferences)
 {
-    internal IReadOnlyDictionary<int, int> InitialVariables { get; init; } = new Dictionary<int, int>();
     internal string? StartupProcedure { get; init; }
+    internal ClassicIntProcedure? ModuleInitializer { get; init; }
 }
 
 internal sealed record ClassicIntDoorObjectState(bool Open, bool Locked);
@@ -424,6 +424,8 @@ internal sealed record ClassicIntProcedureResult(
     ClassicIntWorldObjectState WorldObjects)
 {
     internal IReadOnlyDictionary<string, int> ExternalVariables { get; init; } = new Dictionary<string, int>();
+    internal IReadOnlyDictionary<string, string> ExternalOwners { get; init; } = new Dictionary<string, string>();
+    internal int ModuleInitializationInstructions { get; init; }
 }
 
 internal sealed record ClassicIntMessageEffect(
@@ -600,7 +602,8 @@ internal static class ClassicIntProcedureVm
         ClassicIntExpressionContext game,
         IClassicIntWorldObjectState sourceWorldObjects,
         ClassicRetailRandomContract? randomContract,
-        int instructionBudget)
+        int instructionBudget,
+        bool initializeModule = false)
     {
         if (!program.Procedures.TryGetValue(procedure, out var entry) || entry.ArgumentCount != 0 ||
             instructionBudget <= 0)
@@ -612,6 +615,7 @@ internal static class ClassicIntProcedureVm
         var mapVariables = new Dictionary<int, int>(source.MapVariables);
         var globals = new Dictionary<int, int>(source.GlobalVariables);
         var externalVariables = new Dictionary<string, int>(game.ExternalVariables, StringComparer.Ordinal);
+        var externalOwners = new Dictionary<string, string>(game.ExternalOwners ?? new Dictionary<string, string>(), StringComparer.Ordinal);
         var stack = source.ValueStack.ToList();
         var addressStack = new Stack<int>();
         var bases = new Stack<int>();
@@ -641,9 +645,14 @@ internal static class ClassicIntProcedureVm
         var dialogueOptions = sourceWorldObjects.DialogueOptions.ToList();
         var dialogueReady = sourceWorldObjects.DialogueReady;
         var returnValue = 0;
-        var current = entry;
-        var offset = entry.BodyOffset;
+        var initializing = initializeModule && program.ModuleInitializer is not null;
+        if (initializeModule && (procedure != program.StartupProcedure || source.ValueStack.Count != 0))
+            throw new InvalidOperationException("Module initialization requires its startup procedure and an empty value stack.");
+        var current = initializing ? program.ModuleInitializer! : entry;
+        var offset = current.BodyOffset;
+        int? globalBase = null;
         var executed = 0;
+        var initializerInstructions = 0;
         while (true)
         {
             if (current.CanonicalEpilogueOffset == offset)
@@ -676,11 +685,27 @@ internal static class ClassicIntProcedureVm
             var next = NextOffset(current, instruction.Offset);
             switch (instruction.Opcode)
             {
+                case 0x802c:
+                    if (!initializing || globalBase is not null)
+                        throw Failure(program, procedure, offset, "global-frame-lifecycle");
+                    globalBase = stack.Count;
+                    break;
+                case 0x8003:
+                    // Execution is synchronous and unpublished until the entire
+                    // event succeeds. Ending critical execution does not exit it.
+                    if (!initializing) throw Failure(program, procedure, offset, "critical-section-owner");
+                    break;
                 case PushInteger:
                     stack.Add(instruction.Operand ?? throw Failure(
                         program, procedure, offset, "missing-integer-operand"));
                     break;
                 case PushReference:
+                    // The initializer frame currently owns integer globals.
+                    // Export names are consumed immediately; admitting other
+                    // reference values would erase their source type.
+                    if (initializing && (!program.Instructions.TryGetValue(next, out var consumer) ||
+                        consumer.Opcode is not (FetchExternal or StoreExternal or 0x8016)))
+                        throw Failure(program, procedure, offset, "module-reference-value-owner");
                     stack.Add(instruction.Operand ?? throw Failure(
                         program, procedure, offset, "missing-reference-operand"));
                     break;
@@ -700,19 +725,43 @@ internal static class ClassicIntProcedureVm
                     stack.Add(addressValue);
                     break;
                 case FetchProgram:
-                    stack.Add(ReadOrInitialize(
+                    if (initializing)
+                    {
+                        var index = Pop(stack, program, procedure, offset);
+                        stack.Add(stack[GlobalIndex(index)]);
+                    }
+                    else stack.Add(ReadOrInitialize(
                         programVariables,
                         Pop(stack, program, procedure, offset),
                         program, procedure, offset, "program-variable"));
                     break;
                 case StoreProgram:
-                    Store(programVariables, stack, program, procedure, offset, true);
+                    if (initializing)
+                    {
+                        var index = Pop(stack, program, procedure, offset);
+                        var value = Pop(stack, program, procedure, offset);
+                        stack[GlobalIndex(index)] = value;
+                    }
+                    else Store(programVariables, stack, program, procedure, offset, true);
                     break;
+                case 0x8016:
+                    {
+                        var reference = Pop(stack, program, procedure, offset);
+                        var name = Read(program.IdentifierReferences, reference, program, procedure, offset, "identifier-reference");
+                        var existing = externalVariables.Keys.SingleOrDefault(key => ClassicIntExportNames.Equal(key, name));
+                        if (existing is not null && (!externalOwners.TryGetValue(existing, out var owner) ||
+                            !ClassicIntExportNames.Equal(owner, program.Identity)))
+                            throw Failure(program, procedure, offset, "external-variable-owner-conflict");
+                        var key = existing ?? name;
+                        externalVariables[key] = 0;
+                        externalOwners[key] = program.Identity;
+                        break;
+                    }
                 case FetchExternal:
                     {
                         var reference = Pop(stack, program, procedure, offset);
-                        var name = Read(program.IdentifierReferences, reference,
-                            program, procedure, offset, "identifier-reference");
+                        var name = ExternalName(Read(program.IdentifierReferences, reference,
+                            program, procedure, offset, "identifier-reference"));
                         stack.Add(Read(externalVariables, name,
                             program, procedure, offset, "external-variable"));
                         break;
@@ -720,7 +769,7 @@ internal static class ClassicIntProcedureVm
                 case StoreExternal:
                     {
                         var reference = Pop(stack, program, procedure, offset);
-                        var name = Read(program.IdentifierReferences, reference, program, procedure, offset, "identifier-reference");
+                        var name = ExternalName(Read(program.IdentifierReferences, reference, program, procedure, offset, "identifier-reference"));
                         externalVariables[name] = Pop(stack, program, procedure, offset);
                         break;
                     }
@@ -904,6 +953,7 @@ internal static class ClassicIntProcedureVm
                     break;
                 case UseObject:
                     {
+                        if (initializing) throw Failure(program, procedure, offset, "module-nested-use-owner");
                         var target = Pop(stack, program, procedure, offset);
                         _ = WorldObject(target);
                         var dispatcher = game.ObjectUse ?? throw Failure(
@@ -921,6 +971,7 @@ internal static class ClassicIntProcedureVm
                         globals = new(used.State.GlobalVariables);
                         random = used.State.RandomState;
                         externalVariables = new(used.ExternalVariables, StringComparer.Ordinal);
+                        externalOwners = new(used.ExternalOwners, StringComparer.Ordinal);
                         messageEffects = used.MessageEffects.ToList();
                         soundEffects = used.SoundEffects.ToList();
                         var changed = used.WorldObjects;
@@ -1247,6 +1298,16 @@ internal static class ClassicIntProcedureVm
                     }
                 case Jump:
                     next = Pop(stack, program, procedure, offset);
+                    if (initializing && current == program.ModuleInitializer && next == entry.BodyOffset)
+                    {
+                        if (globalBase is not 0 || calls.Count != 0 || bases.Count != 0 || addressStack.Count != 0)
+                            throw Failure(program, procedure, offset, "module-startup-frame");
+                        programVariables = stack.Select((value, index) => (value, index)).ToDictionary(row => row.index, row => row.value);
+                        stack.Clear();
+                        initializerInstructions = executed;
+                        initializing = false;
+                        current = entry;
+                    }
                     break;
                 case Branch:
                     {
@@ -1278,7 +1339,10 @@ internal static class ClassicIntProcedureVm
                 case Return:
                     {
                         if (calls.Count == 0)
+                        {
+                            if (initializing) throw Failure(program, procedure, offset, "module-exited-before-startup");
                             return Result();
+                        }
                         var returned = calls.Pop();
                         next = returned.Offset;
                         current = returned.Procedure;
@@ -1315,7 +1379,16 @@ internal static class ClassicIntProcedureVm
                 DialogueOptions = dialogueOptions,
                 DialogueReady = dialogueReady,
             })
-        { ExternalVariables = externalVariables };
+        { ExternalVariables = externalVariables, ExternalOwners = externalOwners, ModuleInitializationInstructions = initializerInstructions };
+
+        int GlobalIndex(int index)
+        {
+            if (globalBase is not { } start || index < 0 || index >= stack.Count - start)
+                throw Failure(program, procedure, offset, "module-global-index");
+            return start + index;
+        }
+
+        string ExternalName(string name) => externalVariables.Keys.SingleOrDefault(key => ClassicIntExportNames.Equal(key, name)) ?? name;
 
         ClassicIntDoorObjectState Door(int objectHandle) =>
             doors.TryGetValue(objectHandle, out var door)

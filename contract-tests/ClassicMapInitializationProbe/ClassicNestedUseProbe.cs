@@ -15,14 +15,16 @@ internal static class ClassicNestedUseProbe
             new Dictionary<int, int>(), new Dictionary<int, int>(), [], null);
         var child = Program((0x80bc, null), (0x8131, null), (0xc001, 11), (0xc001, 0), (0x8013, null),
             (0xc001, 0), (0xc001, 12), (0x80c2, null), (0xc001, 99), (0xc001, 0), (0x8031, null),
-            (0x80b9, null), (0x801c, null));
+            (0x9001, 4), (0x8016, null), (0x80b9, null), (0x801c, null)) with
+        { IdentifierReferences = new Dictionary<int, string> { [4] = "nested-export" } };
         var parent = Program((0xc001, 77), (0x80bc, null), (0x80db, null), (0x80bc, null), (0x8130, null),
             (0xc001, 0), (0x8032, null), (0xc001, 0), (0x8012, null), (0xc001, 0), (0x80c1, null), (0x801c, null));
         var dispatcher = new Dispatcher(child, context);
         var before = JsonSerializer.Serialize(new { state, world });
         var result = ClassicIntProcedureVm.Execute(parent, "probe", state, context with { ObjectUse = dispatcher }, world, null, 100);
         if (!result.State.ValueStack.SequenceEqual(new[] { 77, 1, 7, 11, 12 }) || result.WorldObjects.ScriptOverrides ||
-            !result.WorldObjects.Doors[200].Open || result.ExecutedInstructions != parent.Instructions.Count + child.Instructions.Count)
+            !result.WorldObjects.Doors[200].Open || result.ExternalOwners["nested-export"] != child.Identity ||
+            result.ExecutedInstructions != parent.Instructions.Count + child.Instructions.Count)
             throw new InvalidOperationException("Nested use lost synchronous effects, caller frame, shared variables or instruction accounting.");
         var invalidParent = Program((0x80bc, null), (0x80db, null), (0xffff, null));
         foreach (var (program, owner, budget) in new (ClassicIntProgram, IClassicIntObjectUseDispatcher?, int)[]

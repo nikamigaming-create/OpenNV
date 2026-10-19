@@ -19,7 +19,10 @@ internal sealed record ClassicDoorSave(string Map, string MapSha256, int Serial,
     ClassicDoorPose Pose, ClassicIntProcedureState? ScriptState, string? Failure);
 internal sealed record ClassicDoorWorldSave(ClassicDoorSave[] Doors, IReadOnlyDictionary<string, int> Externals,
     IReadOnlyDictionary<int, int> Globals, IReadOnlyDictionary<string, Dictionary<int, int>> MapVariables,
-    ClassicDoorClockSave? Clock = null);
+    ClassicDoorClockSave? Clock = null)
+{
+    public IReadOnlyDictionary<string, string>? ExternalOwners { get; init; }
+}
 
 /// <summary>Live source doors, their INT events and FRM clock. No donor collision or animation owns passage.</summary>
 internal sealed partial class ClassicDoorWorld(ClassicPlayerSession player)
@@ -29,7 +32,8 @@ internal sealed partial class ClassicDoorWorld(ClassicPlayerSession player)
     private readonly Dictionary<string, Entry> _entries = [];
     private readonly ClassicNativeScriptMessages _messages = new(path => player.Catalog.Read(path, out _));
     private readonly Queue<string> _pendingMessages = [];
-    private Dictionary<string, int> _externals = new(StringComparer.Ordinal);
+    private Dictionary<string, int> _externals = new(player.Initialization?.ExternalVariables ?? new Dictionary<string, int>(), StringComparer.Ordinal);
+    private Dictionary<string, string> _externalOwners = new(player.Initialization?.ExternalOwners ?? new Dictionary<string, string>(), StringComparer.Ordinal);
     private Dictionary<int, int> _globals = new(player.Initialization?.ScriptState?.GlobalVariables ??
         ClassicCampaignInitialization.Variables(player.Catalog.Read("data/vault13.gam", out _), "GAME_GLOBAL_VARS"));
     private Dictionary<string, Dictionary<int, int>> _mapVariables = player.Initialization?.ScriptState is { } initial
@@ -77,7 +81,7 @@ internal sealed partial class ClassicDoorWorld(ClassicPlayerSession player)
             try
             {
                 var state = InitialState(definition);
-                var result = Execute(entry with { State = state }, definition.Program.StartupProcedure!, 0);
+                var result = Execute(entry with { State = state }, definition.Program.StartupProcedure!, 0, initializeModule: true);
                 Validate(result.Result, level.Path);
                 // Validate startup and entry together before publishing either.
                 var startup = entry with { State = result.Result.State };
@@ -132,11 +136,11 @@ internal sealed partial class ClassicDoorWorld(ClassicPlayerSession player)
         if (count < 0 || localOffset < -1 || count > 0 && (localOffset < 0 || localOffset > total - count)) throw new InvalidDataException("Door script locals exceed MAP variables.");
         for (var index = 0; index < count; index++)
             locals[index] = BinaryPrimitives.ReadInt32BigEndian(bytes.AsSpan(0xec + (variables.Count + localOffset + index) * 4));
-        return new(definition.Program!.InitialVariables, new Dictionary<int, int>(), locals, variables, _globals, [], null);
+        return new(new Dictionary<int, int>(), new Dictionary<int, int>(), locals, variables, _globals, [], null);
     }
 
     private Execution Execute(Entry entry, string procedure, int action, Execution? prior = null,
-        ClassicIntTimerState? timerState = null, int? fixedParameter = null, int budget = 100000)
+        ClassicIntTimerState? timerState = null, int? fixedParameter = null, int budget = 100000, bool initializeModule = false)
     {
         var level = entry.Definition.Level;
         var objects = level.Objects.TopLevelObjects.ToDictionary(row => row.Serial + 1,
@@ -153,7 +157,8 @@ internal sealed partial class ClassicDoorWorld(ClassicPlayerSession player)
         };
         var transaction = new UseTransaction(this, level.Path, prior?.States);
         var result = Invoke(entry with { State = state }, procedure, action, world,
-            prior?.Result.ExternalVariables ?? _externals, transaction, fixedParameter, action == 22 ? 0 : dude, budget);
+            prior?.Result.ExternalVariables ?? _externals, transaction, fixedParameter, action == 22 ? 0 : dude, budget,
+            prior?.Result.ExternalOwners ?? _externalOwners, initializeModule);
         if (prior is not null) result = result with
         {
             MessageEffects = prior.Result.MessageEffects.Concat(result.MessageEffects).ToArray(),
@@ -165,7 +170,8 @@ internal sealed partial class ClassicDoorWorld(ClassicPlayerSession player)
     }
 
     private ClassicIntProcedureResult Invoke(Entry entry, string procedure, int action, ClassicIntWorldObjectState world,
-        IReadOnlyDictionary<string, int> externals, UseTransaction transaction, int? fixedParameter, int sourceObject, int budget)
+        IReadOnlyDictionary<string, int> externals, UseTransaction transaction, int? fixedParameter, int sourceObject, int budget,
+        IReadOnlyDictionary<string, string> externalOwners, bool initializeModule = false)
     {
         const int dude = int.MaxValue;
         var state = entry.State!;
@@ -178,8 +184,8 @@ internal sealed partial class ClassicDoorWorld(ClassicPlayerSession player)
             new Dictionary<(int, int), int>(), externals, TimerContract is null ? null : world.Timers.CurrentTick, null, null,
             new ClassicIntObjectHandleTable(new Dictionary<ClassicIntObjectCreation, int>()), SourceObject: sourceObject,
             TimerContract: TimerContract, FixedParameter: fixedParameter,
-            CurrentMapIndex: level.Map.MapIndex, ScriptAction: action, MessageSource: _messages, ObjectUse: transaction);
-        var result = ClassicIntProcedureVm.Execute(entry.Definition.Program!, procedure, state, game, world, null, budget);
+            CurrentMapIndex: level.Map.MapIndex, ScriptAction: action, MessageSource: _messages, ObjectUse: transaction, ExternalOwners: externalOwners);
+        var result = ClassicIntProcedureVm.Execute(entry.Definition.Program!, procedure, state, game, world, null, budget, initializeModule);
         transaction.States[Key(level.Path, entry.Definition.Object.Serial)] = result.State;
         return result;
     }
@@ -218,6 +224,7 @@ internal sealed partial class ClassicDoorWorld(ClassicPlayerSession player)
         _timers = result.WorldObjects.Timers;
         _globals = new(result.State.GlobalVariables); _mapVariables[entry.Definition.Level.Path] = new(result.State.MapVariables);
         _externals = new(result.ExternalVariables, StringComparer.Ordinal);
+        _externalOwners = new(result.ExternalOwners, StringComparer.Ordinal);
         foreach (var message in result.MessageEffects) _pendingMessages.Enqueue(message.Text!);
         PassageChanged?.Invoke();
     }
@@ -291,10 +298,15 @@ internal sealed partial class ClassicDoorWorld(ClassicPlayerSession player)
 
     internal ClassicDoorWorldSave Save() => new(_entries.Values.Select(row => new ClassicDoorSave(row.Definition.Level.Path,
         row.Definition.Level.Sha256, row.Definition.Object.Serial, row.Definition.Object.Pid, row.Definition.Identity, row.Pose, row.State, row.Failure)).ToArray(),
-        _externals, _globals, _mapVariables, SaveClock());
+        _externals, _globals, _mapVariables, SaveClock())
+    { ExternalOwners = _externalOwners };
 
     internal void Restore(ClassicDoorWorldSave save)
     {
+        var owners = save.ExternalOwners ?? new Dictionary<string, string>();
+        if (owners.Any(row => !save.Externals.ContainsKey(row.Key) || string.IsNullOrWhiteSpace(row.Value)) ||
+            save.Externals.Keys.Any(name => save.Externals.Keys.Count(other => ClassicIntExportNames.Equal(name, other)) != 1))
+            throw new InvalidDataException("Saved exported-variable ownership is invalid.");
         var restored = new Dictionary<string, Entry>();
         foreach (var row in save.Doors)
         {
@@ -313,6 +325,7 @@ internal sealed partial class ClassicDoorWorld(ClassicPlayerSession player)
         }
         _entries.Clear(); foreach (var (key, entry) in restored) _entries.Add(key, entry);
         _externals = new(save.Externals, StringComparer.Ordinal); _globals = new(save.Globals);
+        _externalOwners = new(owners, StringComparer.Ordinal);
         _mapVariables = save.MapVariables.ToDictionary(row => row.Key, row => new Dictionary<int, int>(row.Value), StringComparer.Ordinal);
         RestoreClock(save.Clock);
         Enter(); PassageChanged?.Invoke();
