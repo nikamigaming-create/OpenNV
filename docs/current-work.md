@@ -8,11 +8,22 @@ package g remains rejected for physical VR use.
 
 ## Current owner
 
-Active branch: `codex/fo1-lazy-script-locals`, based on clean synchronized
-main `a1b2b97a` after checked PR #239 merged. No task PR was open at branch
-creation. The shared event dispatcher is merged; its CI runtime gate passed.
+Active branch: `codex/classic-acm-audio`, based on clean synchronized main
+`c2e8b2e1` after checked PR #240 merged. No task PR was open at branch creation.
+The shared dispatcher and lazy-local repair are merged with passing CI.
 
-The active repair admits source offset-minus-one local blocks without reading
+The active work adds in-memory C# ACM decoding for owned classic audio. Private
+source inspection supplies the bitstream/codebook/synthesis contracts; a private
+isolated x86 execution of the unchanged original decoder supplies a PCM oracle.
+The opening terminal sound and initial complete music files match every native
+sample, including final zero extension where an independent decoder differs.
+Synthetic codebook, history, chunked-read, invalid-input and retained-fault checks
+pass. All 2,529 owned FO1 resources decode with stable PCM across read sizes
+and unchanged source bytes. Full native-oracle comparison, FO2 regression and
+the runtime gate remain pending. No
+audio playback or terminal interaction is claimed from this decoder work.
+
+The merged repair admits source offset-minus-one local blocks without reading
 neighboring MAP variables. The existing per-instance VM storage supplies zero
 on first access and retains writes; allocated blocks still read their exact
 source ranges. Invalid offsets, counts and truncated arrays remain rejected.
@@ -27,7 +38,7 @@ corroborates lazy zero allocation. The full runtime gate and diff check pass.
 The selected FO2 interaction regression also passes its bounded checks while
 continuing to expose unsupported skill/stat queries in scripted use.
 
-The active dispatcher implements privately verified event contracts. FO1 runs
+The shared dispatcher implements privately verified event contracts. FO1 runs
 fresh startup with the triggering action; FO2 runs startup at action zero and
 then explicitly calls the requested event. Names fold ASCII, the first source
 match wins, and missing/index-zero handlers use source procedure index one.
