@@ -7,12 +7,13 @@ package g remains rejected for physical VR use.
 
 ## Current owner
 
-Current owner: root. Active block: source-created starting inventory on
-`codex/fo1-starting-inventory`. Comparison/elevation prerequisites merged as
-PR #235 after the full local gate, selected owned fixture and every CI check.
-Local main was clean and equal to origin/main at `c677db41` before this block.
-Module initialization/export ownership is also merged (PR #234).
-The active change connects FO1 Begin to source startup and its source-routed
+Current owner: root. Active block: equipped humanoid animation targets on
+`codex/fo1-held-animation-targets`. Starting inventory merged as PR #236 after
+the full local gate, owned audits, bounded ordinary-input/cold check and every
+CI check. Local main was clean and equal to origin/main at `e4b6d628` with no
+outstanding task PRs before this block. Comparison/elevation and module ownership
+prerequisites are also merged (PRs #234/#235).
+The merged inventory change connects FO1 Begin to source startup and its source-routed
 map-entry body. FO1 level-one skills, clock-sensitive Night Person inputs,
 tags/traits and instance-aware item transfers supply the opening's grants.
 Synthetic checks and actual Begin/restore fixtures pass for all three owned
@@ -22,7 +23,20 @@ New Game opens the source inventory at its source arrival. F5 and a separate
 process continuation retain the inventory and equipped pistol without duplicate
 grants. Equipping the pistol exposes an existing presentation blocker: unbound
 held-animation channels retire the 3D player, including after cold continuation.
-That is the next measured repair, before resuming map/object lifecycle. These fixtures do not
+The active repair supplies the selected model's source target names to the
+existing animation binder and removes recipe-specific inactive-name lists.
+Owned inspection shows the failing aim channels belong to other weapon models;
+declared targets without runtime owners still fail closed in the synthetic check.
+All 15 owned component combinations (five recipes across three premades) bind
+their source socket and advance locomotion, turn and return to idle; no dropped
+donor physics remains in the held subtree. The same formerly failing save now
+renders Max with his pistol in the world and inventory. Ordinary input walked
+ten source steps through different directions, unequipped/re-equipped, saved
+and cold-continued with identical position, facing, steps and inventory. Timed
+frames show motion and retained attachment; all temporary captures were deleted.
+The full runtime gate and diff check pass. This closes only the measured missing-player failure;
+likeness, complete animation and campaign acceptance remain open. Resume map/object lifecycle after
+this repair. These fixtures do not
 establish the original engine's complete character-load or campaign behavior.
 The user requires the entire FO1 game in our 3D presentation and three complete
 problem-free playthroughs before stopping. Completed qualifying playthroughs:

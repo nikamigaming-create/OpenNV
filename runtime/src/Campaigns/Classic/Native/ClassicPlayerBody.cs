@@ -93,6 +93,11 @@ internal sealed partial class ClassicPlayerBody : Node3D
         else RuntimeNativeNifAnimation.ApplyLayers((animation, seconds), (_heldPose, _heldPose.Sequence.StopTime), (_heldGrip, _heldGrip.Sequence.StopTime));
         _shape?.Apply();
         if (facing.LengthSquared() > 0) _actor.Basis = Basis.LookingAt(facing.Normalized(), Vector3.Up).Scaled(_actor.Scale);
+        SetMeta("classic_pose_moving", moving);
+        SetMeta("classic_pose_phase", phase);
+        SetMeta("classic_pose_facing", facing);
+        SetMeta("classic_pose_clip", animation.Sequence.Name);
+        SetMeta("classic_pose_seconds", seconds);
     }
 
     internal void BindHeldItem(RuntimeLiveContentSource source, ClassicHeldItem item)
@@ -101,35 +106,38 @@ internal sealed partial class ClassicPlayerBody : Node3D
         _ = _actor.Skeleton.BoneIndex(item.Socket);
         var file = FalloutNifFile.Read(Read(item.Pose));
         var sequence = file.Roots.Select(file.ReadControllerSequence).Single();
-        // The shared throwing stance also carries channels for grenade/knife
-        // subassemblies. This selected spear has none of those objects. Consume
-        // only the recipe's explicit inactive-object lanes; unknown names fail.
-        Action<float>? InactiveObject(FalloutNifControllerLink link)
-        {
-            if (item.InactiveObjects?.Contains(link.NodeName, StringComparer.Ordinal) != true ||
-                link.ControllerType != "NiTransformController" || link.PropertyType.Length != 0) return null;
-            var sampler = new FalloutNifAnimationSampler(file, link.Interpolator);
-            return time => { _ = sampler.Sample(time); };
-        }
-        var pose = new RuntimeNativeNifAnimation(file, sequence, _actor.Skeleton, InactiveObject);
-        if (pose.UnboundChannels.Count != 0) throw new NotSupportedException("Held-item pose has unbound skeleton channels: " +
-            string.Join("; ", pose.UnboundChannels.Select(row => row.Source.NodeName + ": " + row.Reason)));
         var model = RuntimeNativeNifMeshBuilder.Build(FalloutNifFile.Read(Read(item.Model)),
             RuntimeConfiguration.Load().World.GameUnitsToMeters, contentSource: source).Root;
-        ClassicDonorPresentation.Prepare(model);
-        var socket = new BoneAttachment3D { Name = "ClassicHeldItemSocket", BoneIdx = _actor.Skeleton.BoneIndex(item.Socket) };
-        _actor.Skeleton.Node.AddChild(socket); socket.AddChild(model); _heldPose = pose;
-        if (item.Grip is { } gripPath)
+        var committed = false;
+        try
         {
-            var gripFile = FalloutNifFile.Read(Read(gripPath));
-            _heldGrip = new RuntimeNativeNifAnimation(gripFile, gripFile.Roots.Select(gripFile.ReadControllerSequence).Single(), _actor.Skeleton);
-            if (_heldGrip.UnboundChannels.Count != 0) throw new NotSupportedException("Held item grip has unbound source channels.");
-            SetMeta("held_grip", gripPath);
+            ClassicDonorPresentation.Prepare(model);
+            // Shared weapon groups include targets for other models. Supply
+            // the selected model's source names, just as the native actor path
+            // does. Present targets without a channel owner still fail closed.
+            var targets = model.FindChildren("*", "", true, false).OfType<Node3D>().Prepend(model)
+                .Where(node => node.HasMeta("opennv_nif_source_name"))
+                .Select(node => node.GetMeta("opennv_nif_source_name").AsString()).ToHashSet(StringComparer.Ordinal);
+            var pose = new RuntimeNativeNifAnimation(file, sequence, _actor.Skeleton, externalObjectTargets: targets);
+            if (pose.UnboundChannels.Count != 0) throw new NotSupportedException("Held-item pose has unbound skeleton channels: " +
+                string.Join("; ", pose.UnboundChannels.Select(row => row.Source.NodeName + ": " + row.Reason)));
+            RuntimeNativeNifAnimation? grip = null;
+            if (item.Grip is { } gripPath)
+            {
+                var gripFile = FalloutNifFile.Read(Read(gripPath));
+                grip = new RuntimeNativeNifAnimation(gripFile, gripFile.Roots.Select(gripFile.ReadControllerSequence).Single(),
+                    _actor.Skeleton, externalObjectTargets: targets);
+                if (grip.UnboundChannels.Count != 0) throw new NotSupportedException("Held item grip has unbound source channels.");
+            }
+            var socket = new BoneAttachment3D { Name = "ClassicHeldItemSocket", BoneIdx = _actor.Skeleton.BoneIndex(item.Socket) };
+            _actor.Skeleton.Node.AddChild(socket); socket.AddChild(model); committed = true;
+            _heldPose = pose; _heldGrip = grip;
+            SetMeta("held_source_targets", targets.Order(StringComparer.Ordinal).ToArray());
+            SetMeta("held_absent_source_targets", pose.AbsentSourceTargets.Select(row => row.NodeName).Distinct().ToArray());
+            SetMeta("classic_held_item", item.Pid); SetMeta("held_model", item.Model); SetMeta("held_pose", item.Pose);
+            if (item.Grip is { } selectedGrip) SetMeta("held_grip", selectedGrip);
         }
-        if ((item.InactiveObjects ?? []).Any(name => model.FindChildren("*", "", true, false).Any(node => node.Name.ToString() == name)))
-            throw new InvalidDataException("An inactive weapon channel names an object present in the selected weapon.");
-        SetMeta("classic_held_item", item.Pid); SetMeta("held_model", item.Model); SetMeta("held_pose", item.Pose);
-        SetMeta("inactive_weapon_objects", item.InactiveObjects ?? []);
+        finally { if (!committed) model.Free(); }
     }
 
     public override void _ExitTree() { _records?.Dispose(); _ownedSource?.Dispose(); }
