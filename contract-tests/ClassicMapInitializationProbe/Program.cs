@@ -247,6 +247,24 @@ if (firstTimer.Event.FixedParameter != 7 ||
         ClassicIntTimerOwner.GameTicks(timerContract, 2))
     throw new InvalidOperationException(
         "Classic INT timer ordering or save state drifted.");
+var lateTimer = ClassicIntTimerOwner.TakeNextDue(restoredTimerWorld.Timers, 35);
+var rescheduled = ClassicIntTimerOwner.Schedule(lateTimer.State, 200, 10, 10);
+var lateCold = ClassicIntWorldObjectState.Restore(JsonSerializer.SerializeToElement(
+    (timerWorld with { Timers = rescheduled }).Save()));
+var lateSecond = ClassicIntTimerOwner.TakeNextDue(lateCold.Timers, 35);
+if (lateTimer.State.CurrentTick != 35 || lateTimer.Event.DueTick != 20 ||
+    lateSecond.Event.FixedParameter != 8 || lateSecond.State.CurrentTick != 35 ||
+    lateSecond.State.Pending is not [{ DueTick: 45, FixedParameter: 10 }] ||
+    ClassicIntTimerOwner.GameTicks(timerContract, -1) != 0 ||
+    ClassicIntTimerOwner.GameTicks(timerContract, int.MinValue) != 0)
+    throw new InvalidOperationException("Late timers lost dispatch time, source ordering or cold continuation.");
+try
+{
+    _ = ClassicIntTimerOwner.AdvanceIdle(lateCold.Timers, 35);
+    throw new Exception("Idle clock skipped an overdue timer.");
+}
+catch (InvalidOperationException) { }
+Console.WriteLine("OPENNV_CLASSIC_TIMER_DISPATCH_CLOCK_PASS late=true rescheduleFromNow=true overdueCold=true noSkip=true");
 var messageHandles = Enumerable.Range(100, 24).ToDictionary(
     messageId => (MessageList: 344, MessageId: messageId),
     messageId => 9000 + messageId);
@@ -323,6 +341,7 @@ foreach (var (target, terminal) in new[] { (0, (ushort)0x801c), (999, (ushort)0x
     if (cancelWorld.Timers.Pending.Count != 3) throw new InvalidOperationException("Failed script cancelled live timers.");
 }
 Console.WriteLine("OPENNV_CLASSIC_TIMER_REMOVAL_PASS allTargetEvents=true unrelatedPreserved=true clockUnchanged=true cold=true atomic=true");
+ClassicNestedUseProbe.Run(gameContext);
 
 var procedureProgram = ClassicIntProcedureVm.Parse(
     intDocument.RootElement.GetProperty("liveScriptSlots")[0]

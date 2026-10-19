@@ -41,7 +41,15 @@ internal sealed record ClassicIntExpressionContext(
     IReadOnlyDictionary<(int TraitType, int Object, int Trait), int>? Traits = null,
     ClassicIntInventoryContract? InventoryContract = null,
     int? ScriptAction = null,
-    IClassicIntMessageSource? MessageSource = null);
+    IClassicIntMessageSource? MessageSource = null,
+    IClassicIntObjectUseDispatcher? ObjectUse = null);
+
+/// <summary>Dispatches nested source use in the caller's unpublished transaction.</summary>
+internal interface IClassicIntObjectUseDispatcher
+{
+    ClassicIntProcedureResult Use(int sourceObject, int targetObject,
+        ClassicIntProcedureResult current, int remainingInstructionBudget);
+}
 
 internal interface IClassicIntMessageSource
 {
