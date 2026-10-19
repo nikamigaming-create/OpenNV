@@ -34,8 +34,17 @@ Created items use original PRO defaults and the same inventory ledger as MAP
 items. Cold restoration recomputes the source baseline, verifies its identity
 and applies saved changes; dropping the initial spear cannot grant another.
 Older native exploration saves retain their position and MAP loot while their
-missing initial source inventory is introduced once. FO1 engine starting grants,
-object-script initialization and ongoing script events are still unbound.
+missing initial source inventory is introduced once.
+
+FO1 New Game also executes the owned startup program, with map-entry action
+available to its source dispatcher. Source instructions choose the arrival,
+light and skill/trait-dependent grants. Single/multiple item transfers retain
+instance payloads, source stack matching, partial ammo and the incoming stack
+representative. Created flags follow selective prototype mapping. FO1 restoration
+verifies and rebuilds the source baseline before applying saved changes; it does
+not grant dropped items again. Older FO1 previews without initialization identity
+remain unchanged. Full map/object lifecycle, ongoing skills/perks, script-owned
+retirement effects and active-device visibility remain incomplete.
 
 ## Native controls and graphics
 
@@ -131,7 +140,7 @@ laser rifle, consumables, sniper rifle, lit dynamite, GECK, plants, hide and Boz
 were inspected there. Their source/donor silhouettes differ; those images are
 renderer checks, not final art acceptance.
 
-FO1 starting grants, object/world script interactions, drug use/timers,
+FO1 object/world script interactions, drug use/timers,
 keys/locks, theft/barter, full corpse interactions, armor perks/damage effects,
 combat, quests and dialogue remain required. Most item/actor analogs remain
 missing. Narg's existing native save now carries the actual source starting
@@ -139,6 +148,16 @@ spear, equipped through INVBOX and visible in his 3D hand. Its new-game arrival
 is source hex 17488; migrating an existing exploration save keeps its position.
 The world clock, modded calendar overrides and complete map-event interleaving
 are not implemented by this startup connection.
+
+`classic-fo1-start <FO1 install>` now exercises all three owned premades through
+Begin and verifies source-dependent grants, arrival, restoration, drop/pickup,
+equipment and changed-source rejection. An in-memory source variation changes
+the grant through the same owner. These are fixtures, not completed playthroughs.
+An ordinary-input Max opening now displays the actual source inventory; F5 and
+separate-process continuation retain his equipped pistol without duplicate
+grants. The equipped 3D humanoid fails on unbound held-animation channels, and
+the flare model is missing. Inventory state passes this bounded check; complete
+presentation and opening gameplay do not.
 
 Field-order notes were checked against owned bytes and the
 [sfall SDK declarations](https://github.com/sfall-team/sfall/blob/master/sfall/FalloutEngine/Structs.h).

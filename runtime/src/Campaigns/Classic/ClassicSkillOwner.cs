@@ -15,7 +15,10 @@ internal sealed record ClassicSkillRule(
     int SpecialMultiplier,
     IReadOnlyList<int> SpecialIndices,
     int SourceBonusMultiplier,
-    bool DifficultyAdjusted);
+    bool DifficultyAdjusted)
+{
+    internal int SpecialDivisor { get; init; } = 1;
+}
 
 internal sealed record ClassicSkillContract(
     string Schema,
@@ -54,7 +57,8 @@ internal sealed record ClassicSkillContract(
                     row.GetProperty("specialIndices").EnumerateArray()
                         .Select(value => value.GetInt32()).ToArray(),
                     row.GetProperty("sourceBonusMultiplier").GetInt32(),
-                    row.GetProperty("difficultyAdjusted").GetBoolean())).ToArray());
+                    row.GetProperty("difficultyAdjusted").GetBoolean())
+                { SpecialDivisor = row.TryGetProperty("specialDivisor", out var divisor) ? divisor.GetInt32() : 1 }).ToArray());
         result.Validate();
         return result;
     }
@@ -68,7 +72,7 @@ internal sealed record ClassicSkillContract(
                 Skills.Count ||
             Skills.Any(rule =>
                 string.IsNullOrWhiteSpace(rule.Id) || rule.BaseValue < 0 ||
-                rule.SpecialMultiplier < 0 || rule.SourceBonusMultiplier <= 0 ||
+                rule.SpecialMultiplier < 0 || rule.SpecialDivisor <= 0 || rule.SourceBonusMultiplier <= 0 ||
                 rule.SpecialIndices.Count == 0 ||
                 rule.SpecialIndices.Any(index => index < 0 || index >= SpecialCount)))
             throw new InvalidOperationException("Classic skill contract is invalid.");
@@ -119,7 +123,7 @@ internal static class ClassicSkillOwner
             throw new InvalidOperationException($"Classic skill is unsupported: {skillId}");
         var sourceBonus = rule.SourceBonusMultiplier * inputs.SourceBonus;
         var value = rule.BaseValue +
-            rule.SpecialMultiplier * rule.SpecialIndices.Sum(index => inputs.Special[index]) +
+            rule.SpecialMultiplier * rule.SpecialIndices.Sum(index => inputs.Special[index]) / rule.SpecialDivisor +
             sourceBonus +
             (inputs.Tagged ? sourceBonus + contract.TaggedFlatBonus : 0) +
             inputs.TraitAdjustment.Value +

@@ -139,6 +139,7 @@ internal sealed class ClassicIntActorHandleTable
 internal interface IClassicIntObjectFactory
 {
     int Create(ClassicIntObjectCreationRequest request);
+    ClassicIntItemInstance? DescribeItem(int handle) => null;
 }
 
 internal sealed record ClassicIntObjectHandleTable(
@@ -168,6 +169,7 @@ internal interface IClassicIntWorldObjectState
     int? LightLevel { get; }
     IReadOnlyDictionary<int, ClassicIntCreatedObject> CreatedObjects { get; }
     IReadOnlyList<ClassicIntInventoryEntry> Inventory { get; }
+    IReadOnlyDictionary<int, ClassicIntItemInstance> ItemInstances { get; }
     ClassicIntMapStartOverride? MapStartOverride { get; }
     IReadOnlyList<ClassicIntAttackRequest> AttackRequests { get; }
     IReadOnlyDictionary<int, ClassicIntWorldObject> Objects { get; }
@@ -192,6 +194,9 @@ internal sealed record ClassicIntWorldObjectState(
 
     public IReadOnlyList<ClassicIntInventoryEntry> Inventory
     { get; init; } = [];
+
+    public IReadOnlyDictionary<int, ClassicIntItemInstance> ItemInstances
+    { get; init; } = new Dictionary<int, ClassicIntItemInstance>();
 
     public ClassicIntMapStartOverride? MapStartOverride { get; init; }
 
@@ -225,38 +230,49 @@ internal sealed record ClassicIntWorldObjectState(
     internal static ClassicIntWorldObjectState Empty { get; } = new(
         false, new Dictionary<int, ClassicIntDoorObjectState>());
 
-    internal object Save() => new
+    internal object Save()
     {
-        ScriptOverrides,
-        Doors = Doors.OrderBy(row => row.Key).Select(row => new
+        var baseline = new
         {
-            ObjectHandle = row.Key,
-            row.Value.Open,
-            row.Value.Locked,
-        }).ToArray(),
-        LightLevel,
-        CreatedObjects = CreatedObjects.OrderBy(row => row.Key).Select(row => new
-        {
-            row.Value.ObjectHandle,
-            row.Value.Source.Pid,
-            row.Value.Source.Tile,
-            row.Value.Source.Elevation,
-            row.Value.Source.ScriptId,
-        }).ToArray(),
-        Inventory = Inventory.OrderBy(row => row.OwnerHandle)
+            ScriptOverrides,
+            Doors = Doors.OrderBy(row => row.Key).Select(row => new
+            {
+                ObjectHandle = row.Key,
+                row.Value.Open,
+                row.Value.Locked,
+            }).ToArray(),
+            LightLevel,
+            CreatedObjects = CreatedObjects.OrderBy(row => row.Key).Select(row => new
+            {
+                row.Value.ObjectHandle,
+                row.Value.Source.Pid,
+                row.Value.Source.Tile,
+                row.Value.Source.Elevation,
+                row.Value.Source.ScriptId,
+            }).ToArray(),
+            Inventory = Inventory.OrderBy(row => row.OwnerHandle)
             .ThenBy(row => row.ObjectHandle).ToArray(),
-        MapStartOverride,
-        AttackRequests,
-        Objects = Objects.OrderBy(row => row.Key).Select(row => row.Value).ToArray(),
-        Movements,
-        TraitAssignments,
-        Timers,
-        DialogueSystemEntered,
-        DialogueStart,
-        DialogueReplies,
-        DialogueOptions,
-        DialogueReady,
-    };
+            MapStartOverride,
+            AttackRequests,
+            Objects = Objects.OrderBy(row => row.Key).Select(row => row.Value).ToArray(),
+            Movements,
+            TraitAssignments,
+            Timers,
+            DialogueSystemEntered,
+            DialogueStart,
+            DialogueReplies,
+            DialogueOptions,
+            DialogueReady,
+        };
+        // Keep existing campaign initialization identities byte-compatible
+        // when no item-instance owner was bound in that source execution.
+        if (ItemInstances.Count == 0) return baseline;
+        var expanded = JsonSerializer.SerializeToNode(baseline)!.AsObject();
+        expanded["Inventory"] = JsonSerializer.SerializeToNode(Inventory);
+        expanded.Add("ItemInstances", JsonSerializer.SerializeToNode(ItemInstances.OrderBy(row => row.Key)
+            .Select(row => new { Handle = row.Key, Instance = row.Value }).ToArray()));
+        return expanded;
+    }
 
     internal static ClassicIntWorldObjectState Restore(JsonElement source)
     {
@@ -285,6 +301,10 @@ internal sealed record ClassicIntWorldObjectState(
                 : null);
         var restored = result with
         {
+            ItemInstances = source.TryGetProperty("ItemInstances", out var instances)
+                ? instances.EnumerateArray().ToDictionary(row => row.GetProperty("Handle").GetInt32(),
+                    row => row.GetProperty("Instance").Deserialize<ClassicIntItemInstance>() ?? throw new InvalidOperationException("Missing saved item instance."))
+                : new Dictionary<int, ClassicIntItemInstance>(),
             CreatedObjects = source.TryGetProperty("CreatedObjects", out var objects)
                 ? objects.EnumerateArray().ToDictionary(
                     row => row.GetProperty("ObjectHandle").GetInt32(),
@@ -355,6 +375,13 @@ internal sealed record ClassicIntWorldObjectState(
                 "DialogueReady", out var dialogueReady) && dialogueReady.GetBoolean(),
         };
         restored.Timers.Validate();
+        foreach (var (handle, instance) in restored.ItemInstances)
+        {
+            instance.Validate();
+            if (!restored.Objects.TryGetValue(handle, out var owner) || owner.Pid != instance.Pid ||
+                restored.Inventory.Count(row => row.OwnerHandle == handle) != instance.Data[0])
+                throw new InvalidOperationException("Saved item-instance ownership is invalid.");
+        }
         if (restored.Objects.Any(row => row.Key == 0 || row.Key != row.Value.Handle) ||
             restored.Movements.Any(row =>
                 !restored.Objects.ContainsKey(row.ObjectHandle)) ||
@@ -478,6 +505,7 @@ internal static class ClassicIntProcedureVm
     private const ushort MoveTo = 0x80B6;
     private const ushort CreateObject = 0x80B7;
     private const ushort OverrideMapStart = 0x80A9;
+    private const ushort HasSkill = 0x80AA;
     private const ushort DisplayMessage = 0x80B8;
     private const ushort ScriptOverrides = 0x80B9;
     private const ushort TileContainsObjectPid = 0x80BB;
@@ -501,6 +529,7 @@ internal static class ClassicIntProcedureVm
     private const ushort Metarule = 0x810B;
     private const ushort MessageString = 0x8105;
     private const ushort AddMultipleToInventory = 0x8116;
+    private const ushort AddToInventory = 0x80D8;
     private const ushort GetMonth = 0x8118;
     private const ushort FloatMessage = 0x810A;
     private const ushort PlaySound = 0x80A3;
@@ -632,6 +661,7 @@ internal static class ClassicIntProcedureVm
         var createdObjects = new Dictionary<int, ClassicIntCreatedObject>(
             sourceWorldObjects.CreatedObjects);
         var inventory = sourceWorldObjects.Inventory.ToList();
+        var itemInstances = new Dictionary<int, ClassicIntItemInstance>(sourceWorldObjects.ItemInstances);
         var mapStartOverride = sourceWorldObjects.MapStartOverride;
         var attackRequests = sourceWorldObjects.AttackRequests.ToList();
         var objects = new Dictionary<int, ClassicIntWorldObject>(
@@ -917,6 +947,12 @@ internal static class ClassicIntProcedureVm
                             new ClassicIntCreatedObject(handle, creation));
                         objects.Add(handle, new ClassicIntWorldObject(
                             handle, pid, tile, elevation, true));
+                        if (game.ObjectFactory.DescribeItem(handle) is { } instance)
+                        {
+                            instance.Validate();
+                            if (instance.Pid != pid) throw Failure(program, procedure, offset, "created-item-pid-mismatch");
+                            itemInstances.Add(handle, instance with { Data = (int[])instance.Data.Clone() });
+                        }
                         stack.Add(handle);
                         break;
                     }
@@ -982,6 +1018,7 @@ internal static class ClassicIntProcedureVm
                         lightLevel = changed.LightLevel;
                         createdObjects = new(changed.CreatedObjects);
                         inventory = changed.Inventory.ToList();
+                        itemInstances = new(changed.ItemInstances);
                         mapStartOverride = changed.MapStartOverride;
                         attackRequests = changed.AttackRequests.ToList();
                         objects = new(changed.Objects);
@@ -1014,6 +1051,19 @@ internal static class ClassicIntProcedureVm
                     {
                         var handle = Pop(stack, program, procedure, offset);
                         stack.Add(handle == 0 ? 0 : WorldObject(handle).Elevation);
+                        break;
+                    }
+                case HasSkill:
+                    {
+                        var skill = Pop(stack, program, procedure, offset);
+                        var handle = Pop(stack, program, procedure, offset);
+                        if (handle == 0) { stack.Add(0); break; }
+                        var pid = WorldObject(handle).Pid ?? throw Failure(program, procedure, offset, "missing-object-pid");
+                        if ((uint)pid >> 24 != 1) { stack.Add(0); break; }
+                        if (skill is < 0 or >= 18) { stack.Add(-5); break; }
+                        if (game.Skills is null || !game.Skills.TryGetValue((handle, skill), out var value))
+                            throw Failure(program, procedure, offset, "missing-effective-skill-owner");
+                        stack.Add(value);
                         break;
                     }
                 case GameTimeHour:
@@ -1260,11 +1310,23 @@ internal static class ClassicIntProcedureVm
                             handle, objectHandle, color));
                         break;
                     }
+                case AddToInventory:
+                    {
+                        var item = Pop(stack, program, procedure, offset);
+                        var owner = Pop(stack, program, procedure, offset);
+                        TransferItem(owner, item, 1);
+                        break;
+                    }
                 case AddMultipleToInventory:
                     {
                         var quantity = Pop(stack, program, procedure, offset);
                         var objectHandle = Pop(stack, program, procedure, offset);
                         var ownerHandle = Pop(stack, program, procedure, offset);
+                        if (itemInstances.Count != 0)
+                        {
+                            TransferItem(ownerHandle, objectHandle, quantity, single: false);
+                            break;
+                        }
                         if (quantity <= 0 || !objects.ContainsKey(ownerHandle) ||
                             !createdObjects.ContainsKey(objectHandle) ||
                             inventory.Any(row => row.ObjectHandle == objectHandle))
@@ -1376,6 +1438,7 @@ internal static class ClassicIntProcedureVm
             {
                 CreatedObjects = createdObjects,
                 Inventory = inventory,
+                ItemInstances = itemInstances,
                 MapStartOverride = mapStartOverride,
                 AttackRequests = attackRequests,
                 Objects = objects,
@@ -1389,6 +1452,17 @@ internal static class ClassicIntProcedureVm
                 DialogueReady = dialogueReady,
             })
         { ExternalVariables = externalVariables, ExternalOwners = externalOwners, ModuleInitializationInstructions = initializerInstructions };
+
+        void TransferItem(int owner, int item, int quantity, bool single = true)
+        {
+            var transferred = ClassicIntItemTransfer.Add(owner, item, quantity, inventory, objects, itemInstances, single);
+            var retired = objects.Keys.Except(transferred.Objects.Keys).ToHashSet();
+            if (movements.Any(row => retired.Contains(row.ObjectHandle)) ||
+                traitAssignments.Values.Any(row => retired.Contains(row.ObjectHandle)) ||
+                timers.Pending.Any(row => retired.Contains(row.TargetHandle)))
+                throw Failure(program, procedure, offset, "inventory-retirement-effects-owner");
+            inventory = transferred.Inventory.ToList(); objects = new(transferred.Objects); itemInstances = new(transferred.Items);
+        }
 
         int GlobalIndex(int index)
         {

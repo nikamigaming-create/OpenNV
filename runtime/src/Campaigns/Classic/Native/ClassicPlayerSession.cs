@@ -91,7 +91,8 @@ internal sealed class ClassicPlayerSession
 
     internal static ClassicPlayerSession Begin(ClassicMapCatalog catalog, ClassicCharacterDraft choice, ClassicRetailRandomContract? initializationContract = null)
     {
-        var initialization = initializationContract is null ? null : ClassicCampaignInitialization.Execute(catalog, choice, initializationContract);
+        var initialization = initializationContract is null && catalog.Campaign != "fallout-1"
+            ? null : ClassicCampaignInitialization.Execute(catalog, choice, initializationContract);
         var arrival = initialization?.Arrival;
         var player = new ClassicPlayerSession(catalog, catalog.StartingMap, choice, arrival?.Elevation,
             arrival is null ? null : checked(arrival.TileY * 200 + arrival.TileX), arrival?.Rotation, initialization: initialization);
@@ -209,7 +210,7 @@ internal sealed class ClassicPlayerSession
         ClassicCampaignInitialization? initialization = null;
         if (save.InitializationHash is not null || initializationContract is not null)
         {
-            if (initializationContract is null) throw new NotSupportedException("This save requires its campaign initialization contract.");
+            if (initializationContract is null && campaign != "fallout-1") throw new NotSupportedException("This save requires its campaign initialization contract.");
             initialization = ClassicCampaignInitialization.Execute(sourceCatalog, save.Choice, initializationContract);
             if (save.InitializationHash is not null && save.InitializationHash != initialization.Identity)
                 throw new InvalidDataException("Campaign initialization source or results changed.");

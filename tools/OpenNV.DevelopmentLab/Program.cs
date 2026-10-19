@@ -3,6 +3,7 @@ using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Campaigns.Classic.Native;
 using OpenNV.Runtime.Formats.Gamebryo;
 
+if (args is ["classic-fo1-start", var fo1StartInstall]) return ClassicFo1StartProbe.Run(fo1StartInstall);
 if (args.Length >= 3 && args[0] == "classic-interactions") return ClassicInteractionProbe.Run(args[1], args[2], args[3..]);
 if (args.Length >= 3 && args[0] == "classic-modules") return ClassicModuleProbe.Run(args[1], args[2], args[3..]);
 if (args is ["cell-review", var reviewSource, var reviewSnapshot]) return CellReview.Run(reviewSource, reviewSnapshot);
@@ -25,6 +26,7 @@ if (args.Length < 2 || args.Length < 3 && args[0] != "classic-movement" || args[
         "classic-resource <Fallout 1/2 installation> <logical resource path> [...]\n" +
         "classic-script <Fallout 1/2 installation> <logical INT path> [procedure]\n" +
         "classic-campaign-start <Fallout 2 installation> <random contract.json>\n" +
+        "classic-fo1-start <Fallout 1 installation>\n" +
         "classic-inventory <Fallout 1/2 installation> <fallout-1|fallout-2>\n" +
         "classic-item-systems <Fallout 1/2 installation> <fallout-1|fallout-2>\n" +
         "classic-interactions <Fallout 1/2 installation> <fallout-1|fallout-2> [MAP paths | --all]\n" +

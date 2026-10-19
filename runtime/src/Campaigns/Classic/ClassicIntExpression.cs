@@ -43,7 +43,8 @@ internal sealed record ClassicIntExpressionContext(
     int? ScriptAction = null,
     IClassicIntMessageSource? MessageSource = null,
     IClassicIntObjectUseDispatcher? ObjectUse = null,
-    IReadOnlyDictionary<string, string>? ExternalOwners = null);
+    IReadOnlyDictionary<string, string>? ExternalOwners = null,
+    IReadOnlyDictionary<(int Object, int Skill), int>? Skills = null);
 
 /// <summary>Dispatches nested source use in the caller's unpublished transaction.</summary>
 internal interface IClassicIntObjectUseDispatcher
