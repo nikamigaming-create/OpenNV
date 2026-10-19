@@ -126,15 +126,11 @@ internal sealed partial class ClassicDoorWorld(ClassicPlayerSession player)
     {
         if (!_mapVariables.TryGetValue(definition.Level.Path, out var variables))
             _mapVariables.Add(definition.Level.Path, variables = ClassicCampaignInitialization.MapVariables(player.Catalog.Read(definition.Level.Path, out _)));
-        var locals = new Dictionary<int, int>();
         var slot = definition.Level.Map.LiveScripts.Single(row => row.ScriptId == definition.Object.ScriptId);
         var bytes = player.Catalog.Read(definition.Level.Path, out _);
         var localOffset = BinaryPrimitives.ReadInt32BigEndian(bytes.AsSpan(slot.SourceOffset + 24));
         var count = BinaryPrimitives.ReadInt32BigEndian(bytes.AsSpan(slot.SourceOffset + 28));
-        var total = BinaryPrimitives.ReadInt32BigEndian(bytes.AsSpan(32));
-        if (count < 0 || localOffset < -1 || count > 0 && (localOffset < 0 || localOffset > total - count)) throw new InvalidDataException("Door script locals exceed MAP variables.");
-        for (var index = 0; index < count; index++)
-            locals[index] = BinaryPrimitives.ReadInt32BigEndian(bytes.AsSpan(0xec + (variables.Count + localOffset + index) * 4));
+        var locals = ClassicMapScriptLocals.Read(bytes, localOffset, count);
         return new(new Dictionary<int, int>(), new Dictionary<int, int>(), locals, variables, _globals, [], null);
     }
 

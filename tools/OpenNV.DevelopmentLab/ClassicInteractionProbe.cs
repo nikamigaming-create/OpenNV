@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.Text.Json;
 using OpenNV.Runtime.Campaigns.Classic;
 using OpenNV.Runtime.Campaigns.Classic.Native;
@@ -113,6 +114,7 @@ internal static class ClassicInteractionProbe
                                         throw new InvalidOperationException("Rejected door script published partial state or messages.");
                                 Console.WriteLine($"UNBOUND USE {definition.Script}:{serial}: {error.Message}");
                             }
+                            if (used) CheckLazyLocals(player, serial, temporary, catalog);
                             if (used && timerCandidate && player.Doors.Pose(serial).Open)
                             { CheckMetalDoorTimer(player, serial, temporary, catalog); timed++; }
                             continue;
@@ -158,6 +160,26 @@ internal static class ClassicInteractionProbe
             return 0;
         }
         finally { if (File.Exists(temporary)) File.Delete(temporary); }
+    }
+
+    private static void CheckLazyLocals(ClassicPlayerSession player, int serial, string temporary, ClassicMapCatalog catalog)
+    {
+        var definition = player.Doors.Definition(serial);
+        var slot = player.Level.Map.LiveScripts.Single(row => row.ScriptId == definition.Object.ScriptId);
+        var bytes = catalog.Read(player.MapPath, out _);
+        var offset = BinaryPrimitives.ReadInt32BigEndian(bytes.AsSpan(slot.SourceOffset + 24));
+        var count = BinaryPrimitives.ReadInt32BigEndian(bytes.AsSpan(slot.SourceOffset + 28));
+        if (offset != -1 || count <= 0) return;
+        var before = player.Doors.Save().Doors.Single(row => row.Map == player.MapPath && row.Serial == serial);
+        if (before.Failure is not null || before.ScriptState is null)
+            throw new Exception("Owned lazy-local script did not complete its source event.");
+        player.Save(temporary);
+        var cold = ClassicPlayerSession.Restore(catalog, temporary);
+        var after = cold.Doors.Save().Doors.Single(row => row.Map == player.MapPath && row.Serial == serial);
+        if (after.Failure is not null || after.ScriptState is null || after.Pose != before.Pose ||
+            !after.ScriptState.ScriptLocalVariables.OrderBy(row => row.Key).SequenceEqual(before.ScriptState.ScriptLocalVariables.OrderBy(row => row.Key)))
+            throw new Exception("Owned lazy-local values or door pose changed across cold continuation.");
+        Console.WriteLine($"PASS owned lazy locals map={player.MapPath} serial={serial} declared={count} accessed={before.ScriptState.ScriptLocalVariables.Count} cold=true fixture=true gameplay=false");
     }
 
     private static void CheckMetalDoorTimer(ClassicPlayerSession player, int serial, string temporary, ClassicMapCatalog catalog)
