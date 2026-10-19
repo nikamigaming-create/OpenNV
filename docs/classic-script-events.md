@@ -137,8 +137,17 @@ globals. Those 66 remain visible audit
 failures; this is neither full script execution nor campaign support.
 FO2 startup, starting grants and cold continuation still pass for all three
 premade characters. The 18 FO1 timer fixtures and 72-map door admission checks
-also pass their existing boundaries, with eight unbound door initializers after
-strict export assignment and authoritative HHMM binding.
+also pass their existing boundaries, with seven unbound door initializers after
+strict export assignment, authoritative HHMM binding and lazy-local admission.
+
+Object script-local offset -1 represents an unallocated block, including when
+the MAP declares a positive count. OpenNV projects that block into empty sparse
+instance storage; the VM reads absent locals as zero and retains subsequent
+writes in its transaction/save. Allocated blocks read their own source values
+after the MAP variable array. Negative counts, other negative offsets, allocated
+ranges outside the declared array and truncated array bytes fail closed. This
+does not reproduce native shared-array allocation offsets or system-script local
+semantics, and it does not complete map unloading or revisits.
 
 ## Map-entry prerequisites
 
@@ -149,14 +158,13 @@ the source null-handle result is zero, and an unknown non-null handle fails
 closed. Synthetic checks cover signed extremes, equality, operand order, null
 and missing objects.
 
-The owned opening's first-delivery fixture with first-run=false executes its
-startup dispatch and map-entry body (151 instructions), returning an arrival
-override and light level. First-run=true still fails at single-item inventory
-transfer. These are source-script fixtures, not live map-entry or campaign
-acceptance. An ordinary-input opening check selects a character and writes a
-save, but its empty starting inventory confirms that FO1 Begin still bypasses
-source campaign initialization. Complete map lifecycle and item ownership are
-the next runtime owners.
+Owned first-run initialization now supplies the source arrival, light and
+starting inventory through the campaign initialization owner described above.
+Ordinary input has reached the opening vault door, received its source terminal
+instruction, saved and cold-continued at the same tile/facing with the equipped
+player visible. Terminal interaction, general actor events and the complete map
+lifecycle remain unbound. Neither that bounded check nor component fixtures
+establish campaign or visual acceptance.
 
 ## Acceptance
 

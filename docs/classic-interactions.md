@@ -45,12 +45,20 @@ Floating text, dialogue, voice and retail message timing remain separate owners.
 
 The owned loading check covered 72 FO1 maps / 392 door placements and 155 FO2
 maps / 1,171 door placements, with no map-load failures from this owner. FO2
-has two empty elevations without doors. The current FO1 check has eight unbound
-initializers: seven missing exports and one script-local layout. The current
-FO2 sweep reports 212 unbound initializers, including missing gameplay inputs
+has two empty elevations without doors. The current FO1 check has seven unbound
+initializers, all missing exports. Valid unallocated local blocks no longer fail
+source admission. The current
+FO2 sweep reports 210 unbound initializers, including missing gameplay inputs
 and object/effect owners. These are loading results, not campaign or script
 completion. Source fixtures exercise open/close, passage changes, mid-animation
 and terminal cold restore, and changed-source rejection in both games.
+
+An owned wooden door whose MAP declares three locals at offset -1 now executes
+initialization, examination and use, then cold-restores its opening pose and
+local state. Those source events leave the local block unaccessed; synthetic VM
+checks separately prove zero reads, retained writes, isolation and rollback.
+The sparse per-script representation does not implement native shared-array
+allocation offsets or the missing map unload/revisit lifecycle.
 
 ## Archive correction and save recovery
 

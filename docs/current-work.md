@@ -8,9 +8,24 @@ package g remains rejected for physical VR use.
 
 ## Current owner
 
-Active branch: `codex/fo1-source-event-dispatch`, based on clean synchronized
-main `6465c516` after checked PR #238 merged. No task PR was open at branch
-creation. The prior equipped-player repair is merged as PR #237.
+Active branch: `codex/fo1-lazy-script-locals`, based on clean synchronized
+main `a1b2b97a` after checked PR #239 merged. No task PR was open at branch
+creation. The shared event dispatcher is merged; its CI runtime gate passed.
+
+The active repair admits source offset-minus-one local blocks without reading
+neighboring MAP variables. The existing per-instance VM storage supplies zero
+on first access and retains writes; allocated blocks still read their exact
+source ranges. Invalid offsets, counts and truncated arrays remain rejected.
+Synthetic checks cover access, writes, instance isolation, cold state and failed
+execution rollback. The owned wooden door now initializes, examines and opens;
+its declared three-local block remains untouched by those source events and
+survives cold continuation. The selected two-map interaction audit passes,
+including 18 timed doors. The FO1 all-map audit now reports seven missing-export
+failures and no local-layout failure. FO2's sweep removes two identical local
+failures and now reports 210 unbound initializers. Its original binary separately
+corroborates lazy zero allocation. The full runtime gate and diff check pass.
+The selected FO2 interaction regression also passes its bounded checks while
+continuing to expose unsupported skill/stat queries in scripted use.
 
 The active dispatcher implements privately verified event contracts. FO1 runs
 fresh startup with the triggering action; FO2 runs startup at action zero and
@@ -27,17 +42,19 @@ fallback, name resolution, shared instruction budget and rollback. All three
 owned FO1 starts and FO2 startup/cold regressions pass. Eighteen owned timed-door
 fixtures pass. An owned MAP with synthetic scripts confirms that an early entry
 handler sees an export declared by a later startup; its 19 scripted doors pass.
-These are component fixtures, not ordinary campaign progression.
+These are component fixtures, not ordinary campaign progression. A separate
+ordinary-input session walked eleven more steps to the opening vault door,
+received its source instruction to use the entry terminal, saved and restarted
+at the same tile and facing with the equipped body/pistol visible. No successful
+terminal interaction was established. Test processes were stopped and all
+temporary captures deleted; continuous recording stayed off.
 
-The all-map door audit admits 72 maps/392 doors and reports eight unbound cases:
-seven missing exported-variable owners and one script-local layout failure.
-Before the HHMM binding, both the retained pre-change Debug runtime and the new
-runtime reported the same ten cases; the two missing-hour cases now execute.
-The temporary baseline comparison copies were removed. The FO2 sweep reads
-155 maps/1,171 doors, with two empty elevations and 212 unbound initializers.
+The all-map door audit admits 72 maps/392 doors and reports seven unbound cases,
+all missing exported-variable owners. The source-local layout failure is repaired.
+The two previously missing-hour cases now execute. The FO2 sweep reads
+155 maps/1,171 doors, with two empty elevations and 210 unbound initializers.
 Its selected door regression passes bounded clock/collision checks and still
-exposes unsupported item-door use. The full gate and diff check pass after
-correcting an indentation failure. Campaign/visual acceptance remains open.
+exposes unsupported item-door use. Campaign/visual acceptance remains open.
 
 ## Verified state and remaining failures
 
@@ -97,11 +114,9 @@ passing current-world check.
    fixed-parameter persistence, map-update events, general object ownership,
    unload/revisit and cold-load semantics with one authoritative global/export
    store. Preserve visible failures for unsupported reached effects.
-2. Resolve the remaining source-local layout and missing map export owners.
-   Private owned/native inspection now identifies the local-layout failure as
-   a valid offset-minus-one, positive-count block allocated and zeroed on first
-   access; the current reader incorrectly rejects it. Implement that lifetime;
-   connect source scenery interaction, floating messages and sound. Extend the
+2. Connect missing map export owners, source scenery interaction, floating
+   messages and sound. Native shared-array local allocation and map unload/revisit
+   remain unimplemented beyond the sparse local-value projection. Extend the
    same runtime to actor behavior, dialogue, quest state, inventory transactions,
    combat/AP/AI, world travel/encounters, companions, endings and persistent world
    changes. Do not replace script execution with named-location success paths.
