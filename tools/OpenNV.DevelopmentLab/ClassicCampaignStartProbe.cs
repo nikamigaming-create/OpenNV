@@ -51,7 +51,8 @@ internal static class ClassicCampaignStartProbe
             if (migrated.Tile != exploration.Tile || migrated.Inventory.Carried is not [{ Object.Pid: 7 }]) throw new InvalidOperationException("Native exploration migration lost position or starting equipment.");
             var sourceProgram = catalog.Read("scripts/artemple.int", out _);
             var decoded = ClassicNativeIntReader.Read(sourceProgram, "scripts/artemple.int");
-            if (decoded.InitialVariables[1] != 1 || decoded.StartupProcedure != "start") throw new InvalidOperationException("INT nonzero module initializers were lost.");
+            if (decoded.ModuleInitializer is null || migrated.Initialization!.ScriptState!.ProgramVariables[1] != 1 || decoded.StartupProcedure != "start")
+                throw new InvalidOperationException("INT nonzero module initializers were lost.");
             // A synthetic loose-resource variation exercises the same complete
             // entry program; no donor identity or maintained grant list selects items.
             var variation = (byte[])sourceProgram.Clone();

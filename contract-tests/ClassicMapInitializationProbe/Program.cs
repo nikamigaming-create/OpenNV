@@ -342,6 +342,7 @@ foreach (var (target, terminal) in new[] { (0, (ushort)0x801c), (999, (ushort)0x
 }
 Console.WriteLine("OPENNV_CLASSIC_TIMER_REMOVAL_PASS allTargetEvents=true unrelatedPreserved=true clockUnchanged=true cold=true atomic=true");
 ClassicNestedUseProbe.Run(gameContext);
+ClassicModuleInitializerProbe.Run(gameContext);
 
 var procedureProgram = ClassicIntProcedureVm.Parse(
     intDocument.RootElement.GetProperty("liveScriptSlots")[0]

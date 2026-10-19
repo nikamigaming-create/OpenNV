@@ -181,9 +181,18 @@ internal static class ClassicInteractionProbe
         if (cold.Doors.Save().Clock is not { Failure: null, Timers.Pending.Count: 0 } || cold.Doors.Pose(serial).Open)
             throw new InvalidOperationException("Closed source door left a timer or callback failure behind.");
 
+        var legacy = saved with { Schema = "opennv-classic-player/v5", Doors = saved.Doors! with { ExternalOwners = null } };
+        File.WriteAllBytes(temporary, JsonSerializer.SerializeToUtf8Bytes(legacy));
+        var upgraded = ClassicPlayerSession.Restore(catalog, temporary).Doors.Save();
+        if (JsonSerializer.Serialize(upgraded.Clock) != JsonSerializer.Serialize(saved.Doors!.Clock) ||
+            JsonSerializer.Serialize(upgraded.Externals) != JsonSerializer.Serialize(saved.Doors.Externals) || upgraded.ExternalOwners!.Count != 0)
+            throw new InvalidOperationException("Legacy v5 upgrade changed pending time/values or invented export ownership.");
+
         foreach (var invalid in new[]
         {
             saved with { Doors = saved.Doors! with { Clock = null } },
+            saved with { Doors = saved.Doors! with { ExternalOwners = null } },
+            saved with { Doors = saved.Doors! with { ExternalOwners = new Dictionary<string, string> { ["orphan"] = "unknown-module" } } },
             saved with { Doors = saved.Doors! with { Clock = saved.Doors.Clock! with { Map = "maps/changed.map" } } },
             saved with { Doors = saved.Doors! with { Clock = saved.Doors.Clock! with
                 { Timers = saved.Doors.Clock.Timers with { Pending = [pending with { TargetHandle = int.MaxValue }] } } } }

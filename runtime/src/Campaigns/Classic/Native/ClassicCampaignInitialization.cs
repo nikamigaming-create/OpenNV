@@ -11,6 +11,8 @@ internal sealed record ClassicInitialItem(ClassicItemOrigin Origin, Fallout1Nati
 internal sealed record ClassicCampaignInitialization(string Identity, string Map, string? Program, int? Light,
     ClassicIntMapStartOverride? Arrival, IReadOnlyList<ClassicInitialItem> Items, ClassicIntProcedureState? ScriptState)
 {
+    internal IReadOnlyDictionary<string, int> ExternalVariables { get; init; } = new Dictionary<string, int>();
+    internal IReadOnlyDictionary<string, string> ExternalOwners { get; init; } = new Dictionary<string, string>();
     /// <summary>Runs the actual campaign entry program, with no prepared program or item list.</summary>
     internal static ClassicCampaignInitialization Execute(ClassicMapCatalog catalog, ClassicCharacterDraft choice, ClassicRetailRandomContract randomContract)
     {
@@ -29,7 +31,7 @@ internal sealed record ClassicCampaignInitialization(string Identity, string Map
         var mapBytes = catalog.Read(level.Path, out _);
         var mapVariables = MapVariables(mapBytes);
         var random = ClassicRetailRandomLifecycle.ResetForNewGame(ClassicRetailRandomLifecycle.Initialize(0, randomContract), randomContract);
-        var state = new ClassicIntProcedureState(program.InitialVariables, new Dictionary<int, int>(), new Dictionary<int, int>(), mapVariables, globals, [], random);
+        var state = new ClassicIntProcedureState(new Dictionary<int, int>(), new Dictionary<int, int>(), new Dictionary<int, int>(), mapVariables, globals, [], random);
         var factory = new ItemFactory(catalog, level);
         const int dude = int.MaxValue;
         var world = ClassicIntWorldObjectState.Empty with
@@ -49,7 +51,8 @@ internal sealed record ClassicCampaignInitialization(string Identity, string Map
         foreach (var procedure in new[] { program.StartupProcedure!, "map_enter_p_proc" })
         {
             if (!program.Procedures.ContainsKey(procedure)) continue;
-            var result = ClassicIntProcedureVm.Execute(program, procedure, state, context, world, randomContract, 100000);
+            var result = ClassicIntProcedureVm.Execute(program, procedure, state, context, world, randomContract, 100000,
+                initializeModule: procedure == program.StartupProcedure);
             // No partially applied event: reached effects without an owner keep
             // the campaign entry closed, including messages, timers and actors.
             if (result.MessageEffects.Count != 0 || result.SoundEffects.Count != 0 || result.WorldObjects.Doors.Count != 0 ||
@@ -59,7 +62,11 @@ internal sealed record ClassicCampaignInitialization(string Identity, string Map
                 result.WorldObjects.ScriptOverrides || result.State.ValueStack.Count != 0 ||
                 result.WorldObjects.Objects[dude] != world.Objects[dude])
                 throw new NotSupportedException($"Campaign entry reached unbound world effects: {path}:{procedure}.");
-            state = result.State; world = result.WorldObjects; executed += result.ExecutedInstructions;
+            state = result.State; world = result.WorldObjects;
+            // Preserve existing source/result save identities: module opcodes
+            // were previously decoded without inclusion in event counts.
+            executed += result.ExecutedInstructions - result.ModuleInitializationInstructions;
+            context = context with { ExternalVariables = result.ExternalVariables, ExternalOwners = result.ExternalOwners };
         }
         if (world.Inventory.Any(row => row.OwnerHandle != dude) || world.CreatedObjects.Count != world.Inventory.Count ||
             world.Inventory.Select(row => row.ObjectHandle).Distinct().Count() != world.Inventory.Count)
@@ -77,7 +84,8 @@ internal sealed record ClassicCampaignInitialization(string Identity, string Map
             executed,
             creations = factory.Requests,
         }));
-        return new(identity, level.Path, path, world.LightLevel, world.MapStartOverride, items, state);
+        return new(identity, level.Path, path, world.LightLevel, world.MapStartOverride, items, state)
+        { ExternalVariables = context.ExternalVariables, ExternalOwners = context.ExternalOwners! };
     }
 
     internal static Dictionary<int, int> Variables(byte[] bytes, string section)
