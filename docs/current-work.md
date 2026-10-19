@@ -7,12 +7,23 @@ package g remains rejected for physical VR use.
 
 ## Current owner
 
-Current owner: root. Verified block: FO1 map-entry comparison/elevation
-prerequisites on `codex/fo1-map-entry`; full local gate and selected owned-script
-fixture pass their stated boundaries. Next owner: source-created inventory
-transfer and map lifecycle, after checked publication. Native module initialization and exported-variable
-ownership merged as PR #234 after the full local gate and all CI checks. Local
-main was clean and equal to origin/main at `032b9be9` before this block.
+Current owner: root. Active block: source-created starting inventory on
+`codex/fo1-starting-inventory`. Comparison/elevation prerequisites merged as
+PR #235 after the full local gate, selected owned fixture and every CI check.
+Local main was clean and equal to origin/main at `c677db41` before this block.
+Module initialization/export ownership is also merged (PR #234).
+The active change connects FO1 Begin to source startup and its source-routed
+map-entry body. FO1 level-one skills, clock-sensitive Night Person inputs,
+tags/traits and instance-aware item transfers supply the opening's grants.
+Synthetic checks and actual Begin/restore fixtures pass for all three owned
+premades, including source variation and no duplicate grants after dropping.
+FO2 startup regression and the full runtime gate pass. Fresh ordinary-input
+New Game opens the source inventory at its source arrival. F5 and a separate
+process continuation retain the inventory and equipped pistol without duplicate
+grants. Equipping the pistol exposes an existing presentation blocker: unbound
+held-animation channels retire the 3D player, including after cold continuation.
+That is the next measured repair, before resuming map/object lifecycle. These fixtures do not
+establish the original engine's complete character-load or campaign behavior.
 The user requires the entire FO1 game in our 3D presentation and three complete
 problem-free playthroughs before stopping. Completed qualifying playthroughs:
 **0 of 3**. Preserve separate run identities, starting character, source/build
@@ -25,11 +36,15 @@ particular route does not encounter it.
 A non-headless opening check used the existing first-party input harness with an
 isolated save. Ordinary pointer input selected Max Stone, entered the source
 Vault 13 entrance and opened inventory. The save was written, but inventory was
-empty: FO1 Begin still bypasses campaign initialization. The viewport also
+empty: that build bypassed FO1 campaign initialization. The viewport also
 reported 39 missing 3D models; runtime logs retain unbound scripts/combat and
 three unresolved world entries. This is a failed opening acceptance check, not
 a qualifying run. Temporary screenshots were inspected and deleted, continuous
 recording stayed off, and only the process launched for this check was stopped.
+The repaired opening now shows the six source stacks, including 72 loose rounds;
+the flare has no 3D model. The cave still reports 39 missing models, rising to 40
+when the equipped player's presentation fails. Both bounded captures were
+inspected and deleted. This remains failed opening acceptance, not a full run.
 The existing harness works for classic pointer input, but its FNV-oriented
 gameplay state summary does not yet expose classic authoritative progression.
 
@@ -47,22 +62,20 @@ checks and the complete gate rerun pass, but its initial exit is unexplained.
 The final reference-literal guard passes synthetic and owned checks without
 changing corpus results, and its complete gate rerun passes.
 
-Next connect FO1 map/object lifecycle execution. The owned opening map-entry
-body has no random calls, so that work can proceed independently of the remaining
-source-specific random contract. Do not mistake initializer-only admission for opening gameplay.
-Its first-entry path reaches `base_inventory`; the next concrete unsupported
-operation is source single-item inventory transfer (0x80d8). Signed integer
-less-than-or-equal (0x8035) and authoritative object elevation (0x80ec) now pass
-synthetic boundary/null/unknown-handle checks. The private owned opening fixture
-with first-run=false executes 151 instructions and returns the source arrival
-override and light level with no created items. This fixture does not establish
-the live map lifecycle; first-run=true still fails at single-item transfer.
-Preserve the map's
-first-run flag across saves/revisits, and use the actual source-created grants.
-Item transfer must preserve source stack matching, incoming representative
-identity, ammunition quantities and removal from world placement. Reconcile
-created object flags with the source's selective prototype-flag mapping; copying
-the whole prototype word is not sufficient.
+Next complete FO1 map/object lifecycle execution. The opening has no random
+calls and now reaches its actual first-entry grants. New Game passes action 15
+to source startup, which routes map entry itself; it is not dispatched twice.
+Item transfer preserves source stack matching, incoming representative identity,
+partial ammunition and removal from world placement. Created item flags use the
+source's selective prototype mapping. Unowned retirement/active-device effects
+remain explicit failures. FO1 level-one skill rules use two-stat averaging,
+cap 200 and source trait adjustments; the existing FO2 contract is preserved.
+Night Person inputs change at 06:00/18:00. Live skill/stat progression is not
+established by this startup binding. Map first-run flags, unload, exported-variable
+lifetime and revisit/cold-load semantics still need verification before completing
+the general lifecycle owner. Old FO1 preview saves without initialization identity
+remain unchanged; new source-initialized saves reconstruct and verify their
+baseline before applying saved inventory changes.
 The legacy store-to-undeclared-external path still needs removal alongside the
 complete module owner. General scenery interaction, floating messages and audio
 also remain needed for the entrance terminal.
@@ -113,7 +126,8 @@ its missing-shell failure as a passing whole-map check.
   Vault 13 furniture and cave props. Fix source-facing geometry, dimensions,
   projection, materials and animation; donor identity alone is not fidelity.
 - Recover reproducible first-party furniture authoring. The GLBs exist, but the
-  documented local Blender helper is absent from this checkout.
+  documented local Blender helper is absent from this checkout. Blender 5.2.2
+  is verified in the Steam installation; tool availability is not the gap.
 - Extend source-bound art coverage across all locations, keeping missing models
   visible. Original UI/portraits remain intentional 2D.
 - Complete starting grants, combat, script events, dialogue, quests, world travel,

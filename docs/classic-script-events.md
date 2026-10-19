@@ -5,6 +5,22 @@ shared INT interpreter and event owners must connect to authoritative gameplay,
 3D presentation and persistent state; decoding an instruction is not execution
 of its complete gameplay effect.
 
+## FO1 campaign initialization
+
+New Game executes owned startup with map-entry action 15; the source program
+routes its own map-enter procedure. Level-one FO1 skill and trait queries and
+instance-aware inventory transfers now let the opening's actual grants execute.
+The owned three-premade Begin fixtures cover arrival, distinct inventory,
+save/restore, drop/pickup/equipment, duplicate prevention and in-memory source
+variation. Synthetic checks cover partial ammo, first-match stack order, cold
+payloads and failed-script rollback. They are not full-game acceptance.
+
+FO2 startup and save identity retain their existing path and pass regression.
+FO1 new-game initialization does not complete map first-run persistence,
+unload/export lifetimes, live skill/perk progression or general actor events.
+Active item effects and retirement side effects without runtime owners fail
+closed. Old FO1 preview saves lacking initialization identity remain unchanged.
+
 ## Object event cancellation
 
 Original FO1 binary registration and diagnostic strings identify opcode 0x80f1

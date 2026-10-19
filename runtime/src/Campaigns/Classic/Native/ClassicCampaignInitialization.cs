@@ -14,9 +14,11 @@ internal sealed record ClassicCampaignInitialization(string Identity, string Map
     internal IReadOnlyDictionary<string, int> ExternalVariables { get; init; } = new Dictionary<string, int>();
     internal IReadOnlyDictionary<string, string> ExternalOwners { get; init; } = new Dictionary<string, string>();
     /// <summary>Runs the actual campaign entry program, with no prepared program or item list.</summary>
-    internal static ClassicCampaignInitialization Execute(ClassicMapCatalog catalog, ClassicCharacterDraft choice, ClassicRetailRandomContract randomContract)
+    internal static ClassicCampaignInitialization Execute(ClassicMapCatalog catalog, ClassicCharacterDraft choice, ClassicRetailRandomContract? randomContract)
     {
-        if (catalog.Campaign != "fallout-2") throw new NotSupportedException("This campaign still requires its own source initialization contract.");
+        var firstGame = catalog.Campaign == "fallout-1";
+        if (!firstGame && catalog.Campaign != "fallout-2") throw new NotSupportedException("This campaign still requires its own source initialization contract.");
+        if (!firstGame && randomContract is null) throw new NotSupportedException("FO2 initialization requires its source random owner.");
         var level = catalog.Load(catalog.StartingMap);
         if (level.Map.MapScriptIndex == 0)
             return new(ClassicPremadeReader.Hash(Encoding.UTF8.GetBytes(level.Sha256)), level.Path, null, null, null, [], null);
@@ -30,25 +32,49 @@ internal sealed record ClassicCampaignInitialization(string Identity, string Map
         var globals = Variables(globalsBytes, "GAME_GLOBAL_VARS");
         var mapBytes = catalog.Read(level.Path, out _);
         var mapVariables = MapVariables(mapBytes);
-        var random = ClassicRetailRandomLifecycle.ResetForNewGame(ClassicRetailRandomLifecycle.Initialize(0, randomContract), randomContract);
+        var random = firstGame ? null : ClassicRetailRandomLifecycle.ResetForNewGame(ClassicRetailRandomLifecycle.Initialize(0, randomContract!), randomContract!);
         var state = new ClassicIntProcedureState(new Dictionary<int, int>(), new Dictionary<int, int>(), new Dictionary<int, int>(), mapVariables, globals, [], random);
-        var factory = new ItemFactory(catalog, level);
+        var factory = new ItemFactory(catalog, level, firstGame);
         const int dude = int.MaxValue;
+        const int mapController = int.MaxValue - 1;
         var world = ClassicIntWorldObjectState.Empty with
         {
             Objects = new Dictionary<int, ClassicIntWorldObject> { [dude] = new(dude, 0x01000000, level.Map.EnteringTile, level.Map.EnteringElevation, true) },
         };
+        if (firstGame) world = world with
+        {
+            Objects = new Dictionary<int, ClassicIntWorldObject>(world.Objects)
+            { [mapController] = new(mapController, -1, 1, 0, false) },
+        };
         // Stock FO2 starts with 302400 decisecond ticks (08:24), in July.
         // A running game clock and modded start-date overrides remain separate owners.
         var stats = ClassicStartingStats.From(choice.Character);
-        var critterStats = Enumerable.Range(0, 7).ToDictionary(stat => (dude, stat), stat => stats.Special[stat]);
+        var special = firstGame ? ClassicFo1StartingSkills.Special(choice.Character, 721) : stats.Special;
+        var critterStats = Enumerable.Range(0, 7).ToDictionary(stat => (dude, stat), stat => special[stat]);
         critterStats[(dude, 34)] = choice.Character.Female ? 1 : 0;
         var context = new ClassicIntExpressionContext(state.ProgramVariables, state.LocalVariables, state.ScriptLocalVariables,
             state.MapVariables, state.GlobalVariables, dude, 0, null, null, critterStats,
             new Dictionary<(int, int), int> { [(14, 0)] = 1 }, new Dictionary<int, int>(), new Dictionary<(int, int), int>(),
             new Dictionary<string, int>(), 302400, 824, 7, factory, CurrentMapIndex: level.Map.MapIndex);
+        if (firstGame)
+        {
+            var firstRun = (BinaryPrimitives.ReadInt32BigEndian(mapBytes.AsSpan(40)) & 1) == 0 ? 1 : 0;
+            var skills = ClassicFo1StartingSkills.Resolve(choice.Character, 721, ClassicSkillDifficulty.Normal);
+            context = context with
+            {
+                SelfObject = mapController,
+                ScriptAction = 15,
+                FixedParameter = firstRun,
+                GameTime = 264600,
+                GameTimeHour = 721,
+                Month = 12,
+                MetaruleValues = new Dictionary<(int, int), int> { [(14, 0)] = firstRun },
+                Skills = Enumerable.Range(0, 18).ToDictionary(skill => (dude, skill), skill => skills[skill]),
+                Traits = Enumerable.Range(0, 16).ToDictionary(trait => (2, dude, trait), trait => choice.Character.Traits.Contains(trait) ? 1 : 0),
+            };
+        }
         var executed = 0;
-        foreach (var procedure in new[] { program.StartupProcedure!, "map_enter_p_proc" })
+        foreach (var procedure in firstGame ? new[] { program.StartupProcedure! } : new[] { program.StartupProcedure!, "map_enter_p_proc" })
         {
             if (!program.Procedures.ContainsKey(procedure)) continue;
             var result = ClassicIntProcedureVm.Execute(program, procedure, state, context, world, randomContract, 100000,
@@ -68,10 +94,13 @@ internal sealed record ClassicCampaignInitialization(string Identity, string Map
             executed += result.ExecutedInstructions - result.ModuleInitializationInstructions;
             context = context with { ExternalVariables = result.ExternalVariables, ExternalOwners = result.ExternalOwners };
         }
-        if (world.Inventory.Any(row => row.OwnerHandle != dude) || world.CreatedObjects.Count != world.Inventory.Count ||
+        if (world.Inventory.Any(row => row.OwnerHandle != dude) ||
+            (!firstGame && world.CreatedObjects.Count != world.Inventory.Count) ||
+            (firstGame && world.Objects.Keys.Any(handle => handle != dude && handle != mapController && world.Inventory.All(row => row.ObjectHandle != handle))) ||
             world.Inventory.Select(row => row.ObjectHandle).Distinct().Count() != world.Inventory.Count)
             throw new NotSupportedException("Campaign entry created world objects or non-player inventories requiring their runtime owner.");
-        var items = world.Inventory.Select(entry => factory.Item(entry.ObjectHandle, entry.Quantity)).ToArray();
+        var items = world.Inventory.Select(entry => factory.Item(entry.ObjectHandle, entry.Quantity,
+            firstGame ? world.ItemInstances[entry.ObjectHandle] : null)).ToArray();
         var identity = ClassicPremadeReader.Hash(JsonSerializer.SerializeToUtf8Bytes(new
         {
             level.Path,
@@ -112,7 +141,7 @@ internal sealed record ClassicCampaignInitialization(string Identity, string Map
         return Enumerable.Range(0, count).ToDictionary(index => index, index => BinaryPrimitives.ReadInt32BigEndian(bytes.AsSpan(0xec + index * 4)));
     }
 
-    private sealed class ItemFactory(ClassicMapCatalog catalog, ClassicMapLevel level) : IClassicIntObjectFactory
+    private sealed class ItemFactory(ClassicMapCatalog catalog, ClassicMapLevel level, bool bindInstances) : IClassicIntObjectFactory
     {
         private readonly Dictionary<int, ClassicIntObjectCreationRequest> _requests = [];
         private readonly ClassicItemDefinitions _definitions = new(catalog);
@@ -123,7 +152,19 @@ internal sealed record ClassicCampaignInitialization(string Identity, string Map
             if (request.Source.ScriptId != -1 || definition.Script != -1) throw new NotSupportedException("Created item requires its own script lifecycle.");
             var handle = checked(_requests.Count + 1); _requests.Add(handle, request); return handle;
         }
-        internal ClassicInitialItem Item(int handle, int quantity)
+        public ClassicIntItemInstance? DescribeItem(int handle)
+        {
+            if (!bindInstances) return null;
+            var item = Item(handle, 1).Object;
+            var definition = _definitions.Read(item.Pid);
+            var data = new int[8];
+            for (var index = 0; index < item.InstanceValues.Count; index++) data[4 + index] = item.InstanceValues[index];
+            var flags = item.Flags & 0xb0001818;
+            foreach (var flag in new uint[] { 0x8000, 0x10000, 0x20000, 0x40000, 0x80000, 0x4000 })
+                if ((item.Flags & flag) != 0) { flags |= flag; break; }
+            return new(item.Pid, -1, flags, definition.Subtype, data, definition.Ammo?.PackSize ?? 0);
+        }
+        internal ClassicInitialItem Item(int handle, int quantity, ClassicIntItemInstance? instance = null)
         {
             if (quantity <= 0) throw new InvalidDataException("Created source item has invalid quantity.");
             var request = _requests[handle]; var creation = request.Source;
@@ -138,12 +179,14 @@ internal sealed record ClassicCampaignInitialization(string Identity, string Map
                 6 => [definition.KeyCode!.Value],
                 _ => [],
             };
+            if (instance is not null)
+                values = values.Select((_, index) => instance.Data[4 + index]).ToArray();
             var serial = -handle; var origin = new ClassicItemOrigin(level.Path, level.Sha256, serial, creation.Pid);
-            var instance = new Fallout1NativeMapObject(serial, request.InstructionOffset, "source-INT-created", -handle,
-                creation.Tile, 0, 0, 0, 0, prototype.Fid!.Value, BinaryPrimitives.ReadUInt32BigEndian(bytes.AsSpan(20)),
+            var placed = new Fallout1NativeMapObject(serial, request.InstructionOffset, "source-INT-created", -handle,
+                instance is null ? creation.Tile : -1, 0, 0, 0, 0, prototype.Fid!.Value, instance?.Flags ?? BinaryPrimitives.ReadUInt32BigEndian(bytes.AsSpan(20)),
                 creation.Elevation, creation.Pid, uint.MaxValue, 0, 0, values, 0, prototype, [], quantity,
                 BinaryPrimitives.ReadInt32BigEndian(bytes.AsSpan(12)), BinaryPrimitives.ReadInt32BigEndian(bytes.AsSpan(16)));
-            return new(origin, instance, ClassicItemLocation.Player);
+            return new(origin, placed, ClassicItemLocation.Player);
         }
     }
 }

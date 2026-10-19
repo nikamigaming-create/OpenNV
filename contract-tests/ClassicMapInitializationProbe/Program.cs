@@ -344,6 +344,8 @@ Console.WriteLine("OPENNV_CLASSIC_TIMER_REMOVAL_PASS allTargetEvents=true unrela
 ClassicNestedUseProbe.Run(gameContext);
 ClassicModuleInitializerProbe.Run(gameContext);
 ClassicComparisonProbe.Run(gameContext);
+ClassicFo1StartingSkillsProbe.Run(gameContext);
+ClassicItemTransferProbe.Run(gameContext);
 
 var procedureProgram = ClassicIntProcedureVm.Parse(
     intDocument.RootElement.GetProperty("liveScriptSlots")[0]
