@@ -10,7 +10,7 @@ internal partial class RuntimeNativeNpc
         _idleForm is not null && _animation is not null && _baseAnimation is not null &&
         _idlePlayback is { Complete: false } && _idleData is not null &&
         _idleRevision is > 0 and < long.MaxValue && _idleAnimationResource is not null && _idleAnimationSha256 is not null &&
-        _animationObjects.Count == 0 && Combat?.AnimationWeapon is null &&
+        CanCaptureIdleObjects() && Combat?.AnimationWeapon is null &&
         (_animationSounds?.CanCaptureSilent != false || allowFiniteSoundWait && _animationSounds?.CanAwaitFiniteCompletion == true);
 
     private FalloutActorStoppedIdleAnimation CaptureStoppedIndependentIdle(bool allowFiniteSoundWait = false)
@@ -19,7 +19,7 @@ internal partial class RuntimeNativeNpc
             throw new NotSupportedException("Stopped source IDLE still has an unowned response, object, attachment or sound.");
         var animation = new FalloutActorPackageIdleAnimation(_idleForm!.Value,
             FalloutActorFurnitureContinuation.RecordHash(_aiStack!.GetEffective(_idleForm.Value)),
-            _idleAnimationResource!, _idleAnimationSha256!, _idlePlayback!.Capture(), _idleRevision, CaptureFurnitureResidualPose());
+            _idleAnimationResource!, _idleAnimationSha256!, _idlePlayback!.Capture(), _idleRevision, CaptureFurnitureResidualPose(), CaptureIdleObjects());
         var saved = new FalloutActorStoppedIdleAnimation(_idleOwner!, animation);
         saved.Validate(_aiStack);
         return saved;

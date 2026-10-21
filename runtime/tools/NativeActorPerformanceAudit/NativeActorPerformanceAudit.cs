@@ -10,6 +10,11 @@ public partial class NativeActorPerformanceAudit : Node
         try
         {
             var args = OS.GetCmdlineUserArgs();
+            if (args is ["--owned-idle-objects", var objectData, var objectActor, var objectIdle])
+            {
+                await OwnedIdleObjects(objectData, objectActor, objectIdle);
+                GetTree().Quit(); return;
+            }
             if (args is ["--saved-equipped-corpse-loot", var lootGame, var lootMod, var lootRoot,
                 var lootSave, var lootActor, .. var lootDependencies])
             {

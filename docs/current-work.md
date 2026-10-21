@@ -1,8 +1,9 @@
 # Current work
 
 Updated 2026-10-21. User priority is **fully playable flat Fallout: New Vegas**.
-Root works alone and owns code, builds, input and Git. Work is active on
-`codex/fnv-linked-door-access`, based on `origin/main` at `1e8663f7`.
+Root works alone and owns code, builds, input and Git. The current implementation
+owner is source-driven Sandbox work; attachment continuation is repaired in
+PR #250. Autonomous activity selection and execution remain unimplemented.
 
 ## Current owner
 
@@ -38,7 +39,7 @@ linked-door error, then recovered Open on the saloon front door, entered with E,
 recovered Sunny's Talk prompt and played her genuine greeting. Selecting her
 training topic changed the source quest and sent Sunny through the actual exit
 portal. This starts the tutorial; shooting, creatures and cooking remain open.
-Linked-door lock lookup is repaired on the current branch as described below.
+Linked-door lock lookup is repaired by merged PR #249 as described below.
 
 PR #247 merged actor initialization, dialogue wait and cell retirement. Sunny's
 source editor wait now uses native approach and activation-distance waiting.
@@ -88,7 +89,7 @@ with native query slices below 1 ms; this is not a whole-frame performance claim
 The local and hosted full gates pass. Nearby visual and matched retail
 timing/framing remain unverified; no complete Victor/population parity is claimed.
 
-Current repair: the missing Open action on a source-linked door. The access
+PR #249 repaired the missing Open action on a source-linked door. The access
 owner formerly refused a lock declared on the opposite side. The implementation
 now resolves the local lock first, then the linked side without creating a remote
 instance during queries. Mutations retain the actual owner. Synthetic source/key,
@@ -97,11 +98,12 @@ source-pair check. Ordinary Continue and walking reach the actual door with visi
 E Open / Door / Locked. E reaches the source lock refusal and F5 commits. A separate
 process continues that save, reacquires the door by ordinary aiming, displays the
 same Open/Locked text, respects the lock and commits F5 again. The full local gate
-passes. Publication and hosted checks are next. The source door is genuinely
+passes, and hosted checks pass. The PR is merged and local main was verified
+equal to origin/main before starting this block. The source door is genuinely
 locked; lockpicking itself remains unimplemented, and no locked traversal or
 retail parity is claimed.
 
-Next repair: source Sandbox execution for sweeping/farming and ambient work.
+Current repair: source Sandbox execution for sweeping/farming and ambient work.
 Goodsprings settlers reach procedure 12 with an editor-position radius and a
 source schedule, but no native Sandbox owner exists. Private static research of
 the matching owned retail build identifies the settings-to-duration formula and
@@ -109,6 +111,22 @@ per-category tables. Its input state, target scoring, probability transitions,
 occupancy and activity continuation are still being traced. No new Sandbox
 gameplay or parity claim is established. Implement the shared source procedure,
 authored idle/furniture use and save continuation; verify through ordinary play.
+The owned source graph places DefaultRakingMarker 448.99 game units from one
+settler's editor position. It selects LooseRaking and its actual aoRaking ANIO
+model. The source animation has loop and sound keys; the attached rake has no
+internal animation controllers. Static source ANIO attachments now retain their
+winning record/model hashes alongside the selected idle clock. Native owned
+raking checks reconstruct the actual rake, compare every actor bone and object
+transform after cold restoration, then compare the continuing phase and sound
+history. Changed models and independent controllers remain refused. Synthetic
+source drift, attachment-set and v53 admission checks pass; v54 owns the new
+bindings. The native fixture deliberately retains the actual unsupported Sandbox
+package error: it verifies attachment persistence, not ordinary autonomous work.
+Ordinary Continue from a copied v53 save loads the existing exterior, and F5
+commits v54 through the normal save owner. The original slot is unchanged.
+The required local runtime gate and diff check pass.
+No native Sandbox work is fixed yet. Selection, movement, occupancy, interruption
+and activity continuation remain the next implementation owner.
 The broken-SMG script has an extra source and compiled `endif`; the interpreter
 rejects it. Physical prop persistence and tutorial/campaign progression remain
 open.

@@ -25,6 +25,7 @@ internal partial class RuntimeNativeNpc : CharacterBody3D
     private readonly FalloutIdleReplayState _idleReplays = new();
     private readonly List<object> _idleTextKeyEvents = [];
     private readonly List<Node3D> _animationObjects = [];
+    private IReadOnlyList<FalloutActorIdleObjectBinding>? _idleObjectBindings = [];
     private NativeOwnedAnimationSoundPlayer? _animationSounds;
     internal event Action? PosePublished;
     internal float BaseSourceSeconds => _baseAnimationSeconds;
@@ -105,6 +106,7 @@ internal partial class RuntimeNativeNpc : CharacterBody3D
         RestoreAuthoredHeadPose();
         var record = stack.GetEffective(form);
         var idle = FalloutActorIdleSource.Resolve(stack, record);
+        if (saved is not null) FalloutActorIdleObjectBinding.ValidateSources(stack, idle, saved.Objects);
         var timing = FalloutIdleAnimationData.Read(record);
         var path = idle.AnimationPath;
         var content = RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("Owned source is absent.");
@@ -122,6 +124,8 @@ internal partial class RuntimeNativeNpc : CharacterBody3D
             sequences[0].StopTime <= sequences[0].StartTime)
             throw new InvalidDataException($"IDLE {idle.Form} has an invalid source clock.");
         var created = new List<Node3D>();
+        var objectBindings = new List<FalloutActorIdleObjectBinding>();
+        var staticObjects = true;
         var controlledNodes = sequences[0].ControlledBlocks
             .Where(link => link.ControllerType is "NiTransformController" or "NiVisController" && link.PropertyType.Length == 0 &&
                 link.Variable1.Length == 0 && link.Variable2.Length == 0)
@@ -132,7 +136,13 @@ internal partial class RuntimeNativeNpc : CharacterBody3D
             {
                 if (!content.TryRead(item.ModelPath, null, out var model, out _))
                     throw new FileNotFoundException($"Source ANIO model is absent: {item.ModelPath}");
-                var part = NativeNifMeshBuilder.AddActorPart(model, Skeleton, externalTransformTargets: controlledNodes);
+                var objectSource = FalloutNifFile.Read(model);
+                var binding = new FalloutActorIdleObjectBinding(item.Form,
+                    FalloutActorFurnitureContinuation.RecordHash(stack.GetEffective(item.Form)), item.ModelPath, objectSource.Sha256);
+                staticObjects &= FalloutActorIdleObjectBinding.IsStatic(objectSource);
+                if (saved is not null) saved.Objects![objectBindings.Count].ValidateModel(objectSource);
+                objectBindings.Add(binding);
+                var part = NativeNifMeshBuilder.AddActorPart(objectSource, Skeleton, externalTransformTargets: controlledNodes);
                 part.Root.Visible = false;
                 part.Root.SetMeta("opennv_source_model", item.ModelPath);
                 part.Root.SetMeta("opennv_source_form", item.Form.ToString());
@@ -184,6 +194,7 @@ internal partial class RuntimeNativeNpc : CharacterBody3D
             foreach (var old in _animationObjects) old.Free();
             _animationObjects.Clear();
             _animationObjects.AddRange(created);
+            _idleObjectBindings = staticObjects ? objectBindings.ToArray() : null;
             foreach (var item in created) item.Visible = true;
             _animation = selected;
             _idleData = timing;
@@ -292,6 +303,7 @@ internal partial class RuntimeNativeNpc : CharacterBody3D
         _idleAnimationResource = null; _idleAnimationSha256 = null;
         foreach (var item in _animationObjects) item.Free();
         _animationObjects.Clear();
+        _idleObjectBindings = [];
         if (owner == "package-idle") _packageIdles!.Finish();
         // Finished one-shots release their bone and ANIO ownership. The base
         // procedure continues on its existing clock on the next publication.
@@ -309,6 +321,7 @@ internal partial class RuntimeNativeNpc : CharacterBody3D
         _idleAnimationResource = null; _idleAnimationSha256 = null;
         foreach (var item in _animationObjects) item.Free();
         _animationObjects.Clear();
+        _idleObjectBindings = [];
     }
 
     private void PublishIdleTextKeys(RuntimeNativeNifAnimation animation, FalloutIdleAnimationInterval interval)

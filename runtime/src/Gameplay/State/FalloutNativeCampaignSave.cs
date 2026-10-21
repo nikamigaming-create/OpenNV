@@ -66,7 +66,8 @@ internal sealed record FalloutNativeCampaignRestore(
 
 internal static class FalloutNativeCampaignSave
 {
-    internal const string ExpectedSchema = "opennv-native-fnv-campaign-save/v53";
+    internal const string ExpectedSchema = "opennv-native-fnv-campaign-save/v54";
+    internal const string BeforeIdleObjectsSchema = "opennv-native-fnv-campaign-save/v53";
     internal const string BeforeGrabEventsSchema = "opennv-native-fnv-campaign-save/v52";
     internal const string BeforeAggroWarningsSchema = "opennv-native-fnv-campaign-save/v51";
     internal const string BeforeTransientExplosionsSchema = "opennv-native-fnv-campaign-save/v50";
@@ -480,8 +481,20 @@ internal static class FalloutNativeCampaignSave
             state.PlayerControls[SneakingControlIndex]);
     }
 
+    private static void ValidateIdleObjectSchema(FalloutNativeCampaignState state)
+    {
+        if (state.Schema != ExpectedSchema && state.References?.Any(reference =>
+                reference.FurnitureContinuation?.IdleState?.ActiveAnimation?.Objects is not null ||
+                reference.DialogueContinuation?.IdleState?.ActiveAnimation?.Objects is not null ||
+                reference.PackageBindingFailure?.IdleState?.ActiveAnimation?.Objects is not null ||
+                reference.PackageBindingFailure?.IndependentIdle?.Animation.Objects is not null) == true)
+            throw new InvalidDataException("Earlier campaign schemas cannot own idle animation object bindings.");
+    }
+
     internal static FalloutNativeCampaignState AdmitPreviousOwnerSchema(FalloutNativeCampaignState state)
     {
+        ValidateIdleObjectSchema(state);
+        if (state.Schema == BeforeIdleObjectsSchema) state = state with { Schema = ExpectedSchema };
         if (state.Schema != ExpectedSchema && state.References?.Any(reference => reference.GrabEvents is not null) == true)
             throw new InvalidDataException("Earlier campaign schemas cannot own grab/release event marks.");
         if (state.Schema == BeforeGrabEventsSchema) state = state with { Schema = ExpectedSchema };
@@ -502,6 +515,7 @@ internal static class FalloutNativeCampaignSave
         string expectedSaveCompatibilityId,
         FalloutPlayerAbilitySaveAdmission? originalAbilityAdmission)
     {
+        ValidateIdleObjectSchema(state);
         if (state.Schema != ExpectedSchema && state.References?.Any(reference => reference.GrabEvents is not null) == true)
             throw new InvalidDataException("Earlier campaign schemas cannot own grab/release event marks.");
         if (state.Schema != ExpectedSchema && state.References?.Any(reference => reference.AggroWarning is not null) == true)
