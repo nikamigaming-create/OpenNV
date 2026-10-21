@@ -177,6 +177,9 @@ internal partial class RuntimeNativePlayer
     private void StartFurniturePhase(int phase)
     {
         _furniturePhase = phase; _furnitureSeconds = 0; _furniturePhaseSeconds = 0;
+        // Furniture publishes a new authored camera basis. The downward look
+        // used to activate its surface is not an offset in that new basis.
+        if (phase == 2) _pitchRadians = 0;
         _furnitureClip = _furnitureClips[phase == 3 ? 1 : phase];
         _furnitureMotion = phase == 2 ? NativeFurnitureRootMotion.Enter(_occupied, _furnitureSeat!.HeadingDelta, _furnitureClip.End) :
             phase == 4 ? NativeFurnitureRootMotion.Exit(_occupied, _furnitureSeat!.HeadingDelta, _furnitureClip.Start) : null;

@@ -2,7 +2,7 @@
 
 Updated 2026-10-20. User priority is **fully playable flat Fallout: New Vegas**.
 Root works alone and owns code, builds, input and Git. Work is active on
-`codex/fnv-flat-gameplay`, based on `origin/main` at `e9ce032e`.
+`codex/fnv-dialogue-camera`, based on `origin/main` at `1a803001`.
 
 ## Current owner
 
@@ -12,26 +12,25 @@ shooting and creature encounters, gathering and campfire cooking, then campaign
 progression through Primm/ED-E and the Strip. These are gameplay requirements;
 existing component passes do not close the user's reported failures.
 
-The current change restores the missing flat Grab input to the playable player.
-It applies bounded forces to the actual owned NIF dynamic body, retains collision
-and uses the winning walking/running weight limits. An owned-skull fixture passes
-movement, release/gravity, solid-obstacle, modal/teleport release, weight/frozen
-refusal and source-body retirement checks. The source OnGrab/OnRelease events now
-use persistent reference-owned marks. Owned script delivery and synthetic event
-effects, ordering and save-owner contracts pass, as do the full runtime gate and
-final owned-skull check. PR #243 carries this repair. Ordinary room placement and
-physics save/cold continuation remain unverified.
+PR #243 is merged with local and hosted runtime checks passing. Flat Grab uses
+the actual owned NIF dynamic body, collision and winning weight limits. Normal
+Continue from v52 acquired the skull with Z, lifted it from the shelf and dropped
+it onto the floor, delivering two source grab/release cycles. F5 saved in v53.
+A fresh Continue restored the player and consumed event marks, but reset the
+skull to its original shelf. Physical prop persistence is a confirmed open defect.
 
-A fresh ordinary-input New Game reaches Doc's free-movement/Vigor stage 55 and
-successfully saves; a separate-process Continue completes Vigor, reaches stage 80,
-saves before the couch, then enters the original seated questionnaire by normal
-movement and activation. Its camera retains the downward activation pitch and
-does not focus on the speaker. The next repair is the shared flat dialogue camera
-owner using the real animated head and source furniture camera position.
-The initial stage 0-to-90 jump belongs to the source intro,
-not an engine defect. The broken-SMG script has an extra source and compiled
-`endif`; the interpreter rejects it. Doc's seated questionnaire/head positioning,
-physical interactions and tutorial/campaign progression remain open.
+Normal New Game and cold Continue complete Vigor, the seated questionnaire,
+tag skills and traits, reach stage 110, exit the couch with E and save with F5.
+The shared flat dialogue camera now follows the actual animated speaker while
+retaining the source camera position; furniture entry clears the old activation
+pitch. Owned camera ownership/target/release checks, a fresh-process
+questionnaire visual check and the full runtime gate pass. Dialogue
+zoom, turn timing and matched retail framing remain open.
+
+The broken-SMG script has an extra source and compiled `endif`; the interpreter
+rejects it. Physical prop persistence and tutorial/campaign progression remain
+open. After publishing this camera repair, the next owner is persistent
+source-bound dynamic-body state.
 Recording is off during development. Use specific temporary captures only when
 needed to inspect a visual defect, and remove them after inspection.
 
