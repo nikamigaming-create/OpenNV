@@ -64,11 +64,12 @@ internal static class CorpseEquipmentContracts
             Require(JsonSerializer.Serialize(world.Capture()) == JsonSerializer.Serialize(complete),
                 "Consuming the actual source hit admission changed corpse history or replayed an effect.");
             state.CanCaptureCorpseEquipment = _ => false;
-            state.CorpseEquipmentCaptureBlocker = "Unowned source drop/continuation layout.";
+            Func<FalloutActorCorpseEquipment?> equipmentOwner = () => state.CorpseEquipment.Copy();
+            state.CaptureCorpseEquipment = equipmentOwner;
+            state.SetCorpseEquipmentCaptureBlocker(equipmentOwner, "Unowned source drop/continuation layout.");
             Reject(() => state.Capture(), "Unowned source drop/continuation layout");
             state.CanCaptureCorpseEquipment = _ => true;
-            state.CaptureCorpseEquipment = () => state.CorpseEquipment.Copy();
-            state.CorpseEquipmentCaptureBlocker = null;
+            state.SetCorpseEquipmentCaptureBlocker(equipmentOwner, null);
             Require(JsonSerializer.Serialize(world.Capture()) == JsonSerializer.Serialize(complete),
                 "Independent native capture binding changed the retained receipt.");
             state.CanCaptureCorpseEquipment = null; state.CaptureCorpseEquipment = null;

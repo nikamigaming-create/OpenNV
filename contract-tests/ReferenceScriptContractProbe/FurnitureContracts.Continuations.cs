@@ -1,6 +1,7 @@
 using System.Buffers.Binary;
 using System.Text.Json;
 using OpenNV.Runtime.Content;
+using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.World.Cells;
 
 internal static partial class FurnitureContracts
@@ -16,12 +17,16 @@ internal static partial class FurnitureContracts
             var dialogueData = new byte[12]; dialogueData[4] = 15;
             var declaration = new byte[24]; BinaryPrimitives.WriteSingleLittleEndian(declaration, 100);
             var idleTiming = new byte[8]; BinaryPrimitives.WriteUInt16LittleEndian(idleTiming.AsSpan(4), 4);
+            var editorWait = new byte[12]; BinaryPrimitives.WriteInt32LittleEndian(editorWait, 3);
             File.WriteAllBytes(Path.Combine(directory, "Procedures.esm"), Join(Header(),
                 Record("NPC_", 0x700, Field("ACBS", new byte[24]), Field("PKID", BitConverter.GetBytes(0x710u))),
                 Record("NPC_", 0x701, Field("ACBS", new byte[24])), Record("CELL", 0x800, Field("DATA", [1])),
                 Record("IDLE", 0x720, Field("DATA", idleTiming)),
                 Record("PACK", 0x710, Field("EDID", Text("SyntheticFailedPredicate")), Field("PKDT", selectionData), Field("CTDA", condition)),
                 Record("PACK", 0x711, Field("EDID", Text("SyntheticDialogueWait")), Field("PKDT", dialogueData), Field("PKDD", declaration),
+                    Field("PTDT", Join(BitConverter.GetBytes(0), BitConverter.GetBytes(0x14u), BitConverter.GetBytes(260), new byte[4]))),
+                Record("PACK", 0x712, Field("EDID", Text("SyntheticEditorWait")), Field("PKDT", dialogueData), Field("PKDD", declaration),
+                    Field("PLDT", editorWait),
                     Field("PTDT", Join(BitConverter.GetBytes(0), BitConverter.GetBytes(0x14u), BitConverter.GetBytes(260), new byte[4]))),
                 ReferencesForContinuation()));
             using var records = FalloutPluginStack.Load(directory, ["Procedures.esm"]);
@@ -96,6 +101,26 @@ internal static partial class FurnitureContracts
             RejectSave(ChangedDialogue(dialogue with { IdleState = idles with { Collection = new(1, 1, 0, false) } }));
             RejectSave(ChangedDialogue(dialogue with { IdleState = idles with { Cooldowns = [cooldown, cooldown] } }));
             RejectSave(ChangedDialogue(dialogue with { IdleState = idles with { Cooldowns = [cooldown with { Remaining = 5 }] } }));
+            var editorPackage = records.GetEffective(Key(0x712));
+            var editorAssignment = new FalloutActorPackageAssignment(editorPackage.FormKey,
+                FalloutActorFurnitureContinuation.RecordHash(editorPackage), false);
+            var approach = dialogue with
+            {
+                Assignment = editorAssignment, LastPackage = editorPackage.FormKey,
+                LastPackageSha256 = editorAssignment.Sha256, WaitReached = false,
+                IdleState = idles with { Package = editorPackage.FormKey, Sha256 = editorAssignment.Sha256 }
+            };
+            owner.PackageAssignment = editorAssignment; owner.DialogueContinuation = approach;
+            owner.PackageMotion = new(editorPackage.FormKey, editorAssignment.Sha256, "meshes/fixture-walk.kf", hash,
+                .625, false, [3, 2, 1], [0, 0, 0, 1]);
+            var approaching = world.Capture();
+            using (var cold = new FalloutReferenceWorld(records))
+            {
+                cold.Restore(JsonSerializer.Deserialize<FalloutReferenceSnapshot[]>(JsonSerializer.Serialize(approaching))!);
+                Require(JsonSerializer.Serialize(cold.Capture()) == JsonSerializer.Serialize(approaching),
+                    "Cold editor wait approach changed its pose, animation clock or pending arrival.");
+            }
+            RejectSave(approaching.Select(snapshot => snapshot.Reference == actor ? snapshot with { PackageMotion = null } : snapshot).ToArray());
             var replay = new FalloutIdleReplayState(); replay.Restore(new Dictionary<FalloutFormKey, float> { [cooldown.Idle] = cooldown.Remaining });
             replay.Advance(.5f);
             Require(replay.Remaining[cooldown.Idle] == .75f, "Cold actor replay delay did not retain its consumed fraction.");

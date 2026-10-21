@@ -303,7 +303,14 @@ internal sealed class FalloutReferenceInstance
     internal Func<bool, bool>? CanCaptureCorpseEquipment { get; set; }
     internal Func<FalloutActorCorpseEquipment?>? CaptureCorpseEquipment { get; set; }
     internal Func<FalloutOpeningInventoryGrant, FalloutOpeningInventoryGrant, FalloutInventoryChangeLease?>? PrepareNativeInventoryRemoval { get; set; }
-    internal string? CorpseEquipmentCaptureBlocker { get; set; }
+    internal string? CorpseEquipmentCaptureBlocker { get; private set; }
+    internal void SetCorpseEquipmentCaptureBlocker(Func<FalloutActorCorpseEquipment?> owner, string? blocker)
+    {
+        ArgumentNullException.ThrowIfNull(owner);
+        // Prepared or replaced presentations may inspect their own readiness,
+        // but only the bound native owner can change reference save admission.
+        if (CaptureCorpseEquipment == owner) CorpseEquipmentCaptureBlocker = blocker;
+    }
     internal bool CorpseEquipmentCaptureReady => CanCaptureCorpseEquipment?.Invoke(false) ?? CorpseEquipmentCaptureBlocker is null;
     internal IReadOnlyList<FalloutObjectAnimationSnapshot>? ObjectAnimations { get; set; }
     private readonly List<Func<IReadOnlyList<FalloutObjectAnimationSnapshot>>> _objectAnimationCaptures = [];
@@ -758,9 +765,9 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
                         FalloutEditorTravelPackage.Read(package).Validate(validated, snapshot.Reference, editorTravel);
                     if (motion.DialogueCompleted)
                     {
-                        var dialogue = FalloutDialoguePackage.Read(package);
+                        _ = FalloutDialoguePackage.Read(package);
                         var declaration = FalloutScriptPackage.Read(package);
-                        if (dialogue.Type != 1 || declaration.LocationType is not (null or 2) || declaration.LocationRadius != 0)
+                        if (declaration.LocationType is not (null or 2 or 3) || declaration.LocationRadius != 0)
                             throw new InvalidDataException("Saved dialogue completion has no supported source procedure.");
                     }
                 }

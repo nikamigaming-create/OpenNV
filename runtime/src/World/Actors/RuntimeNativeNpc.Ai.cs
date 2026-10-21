@@ -202,6 +202,7 @@ internal partial class RuntimeNativeNpc
         _bindingInitialBase = true;
         if (world is not null)
         {
+            world.InitializeSourceCorpse(Appearance.Reference!.Value);
             _aiReferenceState = world.Get(Appearance.Reference!.Value);
             world.BindActorAlert(Appearance.Reference!.Value, Activity);
             _baseClock = _aiReferenceState.Animation;
@@ -359,6 +360,7 @@ internal partial class RuntimeNativeNpc
     private void AdvanceAi(bool initializing = false, double delta = 0)
     {
         if (_aiStack is null || _questState is null) return;
+        if (Combat?.Dead == true || _aiWorld?.IsDead(Appearance.Reference!.Value) == true) return;
         if (NpcDialogueActive?.Invoke() == true) return;
         _aiPollRemaining -= delta;
         var scheduleTime = _aiClock?.ScheduleTime();
@@ -447,7 +449,7 @@ internal partial class RuntimeNativeNpc
                 FalloutPlacedReference? wait = null;
                 if (_packageIdleSource.LocationType is not null)
                 {
-                    if (_packageIdleSource.LocationType is not (0 or 2) || _packageIdleSource.LocationRadius != 0)
+                    if (_packageIdleSource.LocationType is not (0 or 2 or 3) || _packageIdleSource.LocationRadius != 0)
                         throw new NotSupportedException($"PACK {selected.FormKey} requires its dialogue location owner.");
                     if (_packageIdleSource.LocationType == 0)
                         wait = _aiCell!.References.SingleOrDefault(value => value.FormKey == _packageIdleSource.LocationReference) ??

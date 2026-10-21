@@ -46,6 +46,20 @@ internal sealed partial class FalloutReferenceWorld
 
     internal bool IsDead(FalloutFormKey reference) => Actor(reference).Injury?.Dead == true;
 
+    internal int PendingCorpseEquipmentCaptureCount => _instances.Values.Count(actor =>
+        actor.Injury?.Dead == true && !actor.CorpseEquipmentCaptureReady);
+
+    internal object PendingCorpseEquipmentCaptures => _instances.Values
+        .Where(actor => actor.Injury?.Dead == true && actor.CorpseEquipmentCaptureBlocker is not null)
+        .Select(actor => new
+        {
+            reference = actor.Reference.ToString(),
+            blocker = actor.CorpseEquipmentCaptureBlocker,
+            nativeEquipmentOwner = actor.CaptureCorpseEquipment is not null,
+            nativeBodyOwner = actor.CaptureRagdoll is not null,
+            retainedBody = actor.Ragdoll is not null
+        }).ToArray();
+
     internal int GetDeadCount(FalloutFormKey actorBase)
     {
         if (records.GetEffective(actorBase).Signature is not ("NPC_" or "CREA"))

@@ -101,8 +101,15 @@ public partial class NativeActorPerformanceAudit
             for (var frame = 0; frame < 90; frame++) await Frame();
             if (requests != 0 || Done() || (actor.GlobalPosition - origin).Dot(directionToGoal) > .75f)
                 throw new InvalidDataException("Dialogue crossed its wall or invented a location/range completion.");
-            try { world.Get(caller).Capture(); throw new InvalidDataException("Pending dialogue continuation was saveable."); }
-            catch (NotSupportedException) { }
+            var blocked = world.Get(caller).Capture();
+            if (blocked.DialogueContinuation is null || blocked.PackageMotion?.Package != package.FormKey)
+                throw new InvalidDataException("Blocked dialogue lost its source motion or procedure continuation.");
+            using (var cold = new FalloutReferenceWorld(records))
+            {
+                cold.Restore(JsonSerializer.Deserialize<FalloutReferenceSnapshot[]>(JsonSerializer.Serialize(new[] { blocked }))!);
+                if (JsonSerializer.Serialize(cold.Capture().Single()) != JsonSerializer.Serialize(blocked))
+                    throw new InvalidDataException("Cold blocked dialogue changed its pose, source clock or lifecycle.");
+            }
             wall.Free();
             for (var frame = 0; frame < 900 && requests == 0; frame++) await Frame();
             var voice = JsonSerializer.SerializeToElement(speech.State);
@@ -134,7 +141,7 @@ public partial class NativeActorPerformanceAudit
                 throw new InvalidDataException("Dialogue audit modified its owned package.");
             GD.Print($"OPENNV_NATIVE_DIALOGUE_PACKAGE_PASS actor={caller} package={package.FormKey} optionalLocation=true ownedNavm=true ownedKf=true " +
                 "nativeCapsule=true blockedWall=true targetRange=true ownedAudio=true ownedLip=true completionAfterAudio=true eventOnce=true replacementGuard=true " +
-                "pendingSaveRefused=true scriptEvent=false recording=false fixture=synthetic-floor-wall-player campaign=unverified parity=unverified");
+                "pendingSaveCold=true scriptEvent=false recording=false fixture=synthetic-floor-wall-player campaign=unverified parity=unverified");
         }
         finally { fixture.Free(); RuntimeLiveContentSource.Clear(); }
     }

@@ -9,7 +9,8 @@ internal partial class RuntimeNativeNpc
     private Func<bool>? _dialogueCaptureReady;
     private Func<FalloutActorDialogueContinuation?>? _dialogueCapture;
     private bool CanCaptureDialogueContinuation() => _dialoguePackage is not null && !_dialoguePackageRequested &&
-        _dialogueWaitReached && !_dialogueWaitPositionPending && !_bindingInitialBase && !_travelActive &&
+        (_dialogueWaitReached || _dialogueNativeMovement && _packageIdleSource?.LocationType == 3 &&
+            Combat?.PackageMotion?.Package == _dialoguePackage.Form) && !_dialogueWaitPositionPending && !_bindingInitialBase && !_travelActive &&
         _travelProgress?.ArrivalPending != true && _requestedSelection is null && _pendingPackage is null &&
         _aiError is null && AnimationError is null && _packageEvents is { Active: not null, Done: false, Error: null } &&
         _aiPackage?.FormKey == _selectedSourcePackage && _aiPackage?.FormKey == _dialoguePackage.Form &&
@@ -17,7 +18,8 @@ internal partial class RuntimeNativeNpc
         _findFurniture is null && !_furnitureApproaching && _escortPackage is null && _editorTravel is null &&
         _guardPackage is null && _patrol is null && _nativeMarkerTravel is null &&
         _animation is null && !_responseIdleActive && _conversationTarget is null && NpcDialogueActive?.Invoke() != true &&
-        Combat?.OwnsPose != true && Combat?.PackageOwnsPose != true && Combat?.PackageMoving != true &&
+        Combat?.OwnsPose != true && (Combat?.PackageOwnsPose != true || _dialogueNativeMovement &&
+            Combat.PackageMotion?.Package == _dialoguePackage.Form) &&
         _baseClock.Resource.Length != 0 && _aiReferenceState?.ProcedureCaptureBlocker == FalloutActorDialogueContinuation.CaptureBlocker;
 
     private void BindDialogueCapture()

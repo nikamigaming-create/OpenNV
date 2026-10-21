@@ -29,6 +29,7 @@ internal partial class RuntimeNativeOpeningStageDriver
         _barterMenu is not null ? "barter-menu" :
         TerminalSaveBlocker is { } terminal ? terminal :
         _scripts.References?.PendingProcedureCaptureCount > 0 ? "actor-procedure-initialization" :
+        _scripts.References?.PendingCorpseEquipmentCaptureCount > 0 ? "actor-corpse-continuation" :
         _scripts.References?.TransientExplosions.SaveBlocker ?? StageResultsSaveBlocker;
     internal object SaveRequestState => new
     {
@@ -36,7 +37,7 @@ internal partial class RuntimeNativeOpeningStageDriver
         transientExplosions = _scripts.References?.TransientExplosions.State,
         sourceManual = _scripts.ScriptManualSaves.Receipt,
         sourceManualDeferredBy = _scripts.ScriptManualSaves.DeferredBy,
-        deferredBy = _scripts.References!.PlayerMoves.Pending ? "player-move" : SaveContinuationBlocker ?? SourceAnimationSoundSaveBlocker,
+        deferredBy = !_saveRequested ? null : _scripts.References!.PlayerMoves.Pending ? "player-move" : SaveContinuationBlocker ?? SourceAnimationSoundSaveBlocker,
         activeContinuationSaving = "source-radio-pcm;other-continuations-unbound"
     };
 

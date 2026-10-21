@@ -15,13 +15,16 @@ internal static class DialoguePackageContracts
             var currentLocation = new byte[12]; BinaryPrimitives.WriteInt32LittleEndian(currentLocation, 2);
             var editorTrigger = new byte[12]; BinaryPrimitives.WriteInt32LittleEndian(editorTrigger, 3);
             BinaryPrimitives.WriteInt32LittleEndian(editorTrigger.AsSpan(8), 140);
+            var editorWait = new byte[12]; BinaryPrimitives.WriteInt32LittleEndian(editorWait, 3);
+            var radiusWait = (byte[])currentLocation.Clone(); BinaryPrimitives.WriteInt32LittleEndian(radiusWait.AsSpan(8), 100);
             File.WriteAllBytes(Path.Combine(directory, "Dialogue.esm"), Join(Record("TES4", 0, Field("HEDR", header)),
                 Package(1), Package(2, type: 0, topic: 0, location: waitLocation), Package(3, distance: 0),
                 Package(4, type: 2), Package(5, topic: 0), Package(6, location: new byte[11]),
                 Package(7, duplicateLocation: true), Package(8, fov: float.NaN), Package(9, targetType: 1),
                 Package(10, type: 0, topic: 0, location: currentLocation, trigger: editorTrigger, duplicateTrigger: true),
                 Package(11, trigger: new byte[11]), Package(12, trigger: editorTrigger, conflictingTrigger: true),
-                Package(13, flags: 1), Package(14, flags: 0x100), Package(15, flags: 0x101)));
+                Package(13, flags: 1), Package(14, flags: 0x100), Package(15, flags: 0x101),
+                Package(16, location: editorWait, trigger: editorTrigger), Package(17, location: radiusWait, trigger: editorTrigger)));
             using var records = FalloutPluginStack.Load(directory, ["Dialogue.esm"]);
             FalloutPluginRecord Source(uint id) => records.GetEffective(new("Dialogue.esm", id));
             var speech = FalloutDialoguePackage.Read(Source(1));
@@ -36,6 +39,12 @@ internal static class DialoguePackageContracts
             var trigger = FalloutDialoguePackage.Read(Source(10)).TriggerLocation;
             if (trigger is not { Type: 3, Radius: 140, Reference: null } || FalloutScriptPackage.Read(Source(10)).LocationType != 2)
                 throw new InvalidDataException("Dialogue lost the current wait location or repeated source editor trigger.");
+            foreach (var id in new uint[] { 10, 16 })
+                if (!FalloutDialoguePackage.Read(Source(id)).WaitsForTarget(FalloutScriptPackage.Read(Source(id))))
+                    throw new InvalidDataException("Zero-radius current/editor wait required trigger-region entry instead of activation distance.");
+            foreach (var id in new uint[] { 1, 2, 17 })
+                if (FalloutDialoguePackage.Read(Source(id)).WaitsForTarget(FalloutScriptPackage.Read(Source(id))))
+                    throw new InvalidDataException("Dialogue without a trigger or with a positive wait radius stopped target pursuit.");
             Reject(() => FalloutDialoguePackage.Read(Source(11))); Reject(() => FalloutDialoguePackage.Read(Source(12)));
             if (!FalloutDialoguePackage.Read(Source(13)).ControlsTargetMovement ||
                 FalloutDialoguePackage.Read(Source(14)).ControlsTargetMovement ||

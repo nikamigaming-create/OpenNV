@@ -53,12 +53,12 @@ internal sealed partial class RuntimeNativeActorCombat
             foreach (var sounds in new[] { _enemySounds, _hitReactionSounds, _packageSounds })
                 if (sounds?.CanCaptureSilent == false && !(allowFiniteSoundWait && sounds.CanAwaitFiniteCompletion))
                     throw new NotSupportedException("Corpse equipment retains an unfinished or unowned source sound continuation.");
-            _state.CorpseEquipmentCaptureBlocker = null;
+            _state.SetCorpseEquipmentCaptureBlocker(CaptureCorpseEquipment, null);
             return true;
         }
         catch (Exception error) when (error is InvalidDataException or NotSupportedException or InvalidOperationException)
         {
-            _state.CorpseEquipmentCaptureBlocker = error.Message;
+            _state.SetCorpseEquipmentCaptureBlocker(CaptureCorpseEquipment, error.Message);
             return false;
         }
     }
@@ -67,7 +67,9 @@ internal sealed partial class RuntimeNativeActorCombat
     {
         if (!Dead) return null;
         if (!_deathPresentationAttempted || !_corpseEquipmentRestored || _ragdoll?.CaptureReady != true)
-            throw new NotSupportedException("Corpse equipment awaits its actual native physical and attachment owners.");
+            throw new NotSupportedException("Corpse equipment awaits its actual native physical and attachment owners: " +
+                $"deathAttempted={_deathPresentationAttempted}, equipmentRestored={_corpseEquipmentRestored}, " +
+                $"bodyReady={_ragdoll?.CaptureReady == true}, attached={IsInsideTree()}.");
         if (_routeSearch is not null || _routeDoor is not null || PackageOwnsPose || PackageMoving ||
             _state.HitReaction is not null || _pendingHitscanImpacts != 0)
             throw new NotSupportedException("Corpse equipment has a pending route, hit or independent motion continuation.");

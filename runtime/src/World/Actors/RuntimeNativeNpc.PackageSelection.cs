@@ -26,6 +26,7 @@ internal partial class RuntimeNativeNpc
     {
         if (_aiStack is null || _questState is null)
             throw new NotSupportedException("Actor package commands require the live AI owner.");
+        if (Combat?.Dead == true || _aiWorld?.IsDead(Appearance.Reference!.Value) == true) return;
         if (_packageEvents?.Error is { } eventError) throw new NotSupportedException(eventError);
         // EVP evaluates source conditions now. Procedure binding/movement is
         // performed by the ordinary actor frame, as it is for creatures. A
