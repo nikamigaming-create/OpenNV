@@ -74,6 +74,9 @@ public partial class NativePlayerFurnitureAudit : Node3D
             player = new RuntimeNativePlayer();
             AddChild(player);
             player.Configure(configuration, placement);
+            var viewRotation = placement.Basis.Orthonormalized().GetRotationQuaternion();
+            player.RestoreTransform([placement.Origin.X, placement.Origin.Y, placement.Origin.Z],
+                [viewRotation.X, viewRotation.Y, viewRotation.Z, viewRotation.W], -.5f);
             player.SetPhysicsProcess(false); player.SetProcessUnhandledInput(false);
             player.CreateFurnitureBody = () =>
             {
@@ -113,6 +116,8 @@ public partial class NativePlayerFurnitureAudit : Node3D
                 var state = JsonSerializer.SerializeToElement(player.FurnitureState);
                 if (state.GetProperty("error").ValueKind != JsonValueKind.Null) throw new InvalidOperationException(state.ToString());
                 var phase = state.GetProperty("phase").GetString()!;
+                if (phase is "entering" or "occupied" && player.ViewPitchRadians != 0)
+                    throw new InvalidOperationException("Furniture retained the activation pitch in its authored camera basis.");
                 var expectedSitting = phase switch { "none" or "approaching" => 0, "entering" => 2, "occupied" => 3, "exiting" => 4, _ => -1 };
                 var playerKey = records.RuntimeFormKey(0x14);
                 if (world.GetSitting(playerKey, _ => player.SittingState) != expectedSitting)
@@ -131,6 +136,7 @@ public partial class NativePlayerFurnitureAudit : Node3D
                         throw new InvalidOperationException("Furniture lost its actual player state/body.");
                     occupied = true;
                     occupiedIndex = state.GetProperty("marker").GetInt32();
+                    VerifyDialogueView(player);
                     if (!player.RequestFurnitureExit()) throw new InvalidOperationException("Occupied furniture did not accept exit.");
                 }
                 if (phase == "none" && occupied) break;
@@ -139,7 +145,7 @@ public partial class NativePlayerFurnitureAudit : Node3D
                 throw new InvalidOperationException("Furniture phase or reference lifetime is incomplete.");
             if (occupiedIndex is not { } releasedIndex || !world.ReserveFurnitureSeat(reference.FormKey, releasedIndex, records.RuntimeFormKey(0x14)))
                 throw new InvalidOperationException("Completed player furniture did not release its source reservation.");
-            GD.Print($"OPENNV_NATIVE_PLAYER_FURNITURE_AUDIT_PASS reference={reference.FormKey} entry=true body=true loop=true exit=true sittingQuery=true sourceCollision={args.Length >= 4} recording=off ordinary-input-and-pixels=unverified");
+            GD.Print($"OPENNV_NATIVE_PLAYER_FURNITURE_AUDIT_PASS reference={reference.FormKey} entry=true body=true loop=true exit=true sittingQuery=true activationPitchReset=true dialogueFocus=true viewRelease=true invalidTargetRefused=true sourceCollision={args.Length >= 4} recording=off ordinary-input-and-pixels=unverified");
             GetTree().Quit();
         }
         catch (Exception error) { GD.PushError(error.ToString()); GetTree().Quit(1); }
@@ -147,6 +153,42 @@ public partial class NativePlayerFurnitureAudit : Node3D
         {
             player?.Free(); furnitureNode?.Free(); room?.Free(); prototype?.Scene.Root.Free();
             foreach (var item in roomPrototypes) item.Scene.Root.Free();
+        }
+    }
+
+    private static void VerifyDialogueView(RuntimeNativePlayer player)
+    {
+        var camera = player.Camera;
+        var authored = camera.Transform;
+        var origin = camera.GlobalPosition;
+        var target = origin + new Vector3(1, .2f, -2);
+        var release = player.AcquireDialogueView(() => target);
+        try
+        {
+            var competingRefused = false;
+            try { _ = player.AcquireDialogueView(() => target); }
+            catch (InvalidOperationException) { competingRefused = true; }
+            if (!competingRefused) throw new InvalidOperationException("Competing dialogue replaced the current camera owner.");
+            player.ApplySourceCamera(authored);
+            CheckAim();
+            target += Vector3.Left * 2;
+            player.PublishDialogueView();
+            CheckAim();
+        }
+        finally { release(); release(); }
+        if (!camera.Transform.IsEqualApprox(authored)) throw new InvalidOperationException("Dialogue did not return the authored furniture view.");
+        var invalidRefused = false;
+        try { _ = player.AcquireDialogueView(() => new(float.NaN, 0, 0)); }
+        catch (NotSupportedException) { invalidRefused = true; }
+        if (!invalidRefused || !camera.Transform.IsEqualApprox(authored))
+            throw new InvalidOperationException("Invalid dialogue target changed the source camera.");
+        player.AcquireDialogueView(() => target)();
+
+        void CheckAim()
+        {
+            if (camera.GlobalPosition.DistanceTo(origin) > .00001f ||
+                (-camera.GlobalBasis.Z).Normalized().Dot((target - origin).Normalized()) < .99999f)
+                throw new InvalidOperationException("Dialogue lost its moving target or displaced the source camera origin.");
         }
     }
 }

@@ -132,6 +132,16 @@ internal sealed partial class RuntimeNativeActorCombat
         return _skeleton.BoneIndex((parts.SingleOrDefault(part => part.Type == 1) ?? parts.Single(part => part.Type == 0)).Node);
     }
 
+    internal Vector3 DialogueTargetPoint
+    {
+        get
+        {
+            var bone = SightBone();
+            if (bone < 0) throw new NotSupportedException("Dialogue actor has no source sight bone.");
+            return (_skeleton.Node.GlobalTransform * _skeleton.Node.GetBoneGlobalPose(bone)).Origin;
+        }
+    }
+
     private bool CanSeePoint(Vector3 target, RuntimeNativeActorCombat? actor)
     {
         var head = SightBone();

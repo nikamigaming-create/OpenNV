@@ -1,6 +1,7 @@
 using Godot;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Presentation.Ui;
+using OpenNV.Runtime.SceneGraph;
 using OpenNV.Runtime.World.Cells;
 
 namespace OpenNV.Runtime.World.Actors;
@@ -20,6 +21,7 @@ internal partial class RuntimeNativeConversation : Node
     private FalloutFormKey _dialogueSubject;
     private FalloutDialogueSpeaker _identity = null!;
     private Node3D? _facingSpeaker;
+    private Action? _releaseView;
     private string _speakerName = "";
     private FalloutDialogueConditions? _conditions;
     private Func<FalloutCondition, float> _runtimeConditions = null!;
@@ -55,6 +57,7 @@ internal partial class RuntimeNativeConversation : Node
         dialogueSubject = _dialogueSubject.ToString(),
         voiceType = _identity?.VoiceType.ToString(),
         choices = _conversation.Choices,
+        camera = _player.DialogueViewState,
         pending = _pending.Count,
         error = Error ?? _conversation.Error
     };
@@ -77,6 +80,8 @@ internal partial class RuntimeNativeConversation : Node
         Func<FalloutFormKey, int>? deadCount = null, Func<FalloutFormKey, bool>? isDead = null)
     {
         _records = records; _quests = quests; _player = player; _speech = speech; _runtimeConditions = evaluate;
+        // Publish focus after the ordinary player camera and animated actors.
+        ProcessPriority = 100;
         _resolveRunOnCell = resolveRunOnCell;
         _healthPercentage = healthPercentage;
         _actorValue = actorValue;
@@ -111,6 +116,7 @@ internal partial class RuntimeNativeConversation : Node
         try
         {
             if (_speech.Error is { } error && (_conversation.Phase != "closed" || _pending.Count != 0)) throw new InvalidOperationException(error);
+            if (_releaseView is not null) _player.PublishDialogueView();
             if (_pending.Count == 0 || _speech.IsDialogueBusy(_pending.Peek().Speaker)) return;
             var request = _pending.Dequeue(); _speaker = request.Speaker; _completed = request.Completed;
             var actor = _records.GetEffective(_speaker);
@@ -138,6 +144,7 @@ internal partial class RuntimeNativeConversation : Node
                 facingNpc.BeginConversationFacing(() => _player.Camera.GlobalPosition, turnSpeed);
             else if (_facingSpeaker is RuntimeNativeCreature facingCreature)
                 facingCreature.BeginConversationFacing(() => _player.Camera.GlobalPosition, turnSpeed);
+            _releaseView = _player.AcquireDialogueView(SpeakerFocusPoint);
             Present();
         }
         catch (Exception error) { Fail(error); }
@@ -162,6 +169,7 @@ internal partial class RuntimeNativeConversation : Node
     private void Guard(Action action) { try { action(); } catch (Exception error) { Fail(error); } }
     private void ReleaseFacing()
     {
+        var releaseView = _releaseView; _releaseView = null; releaseView?.Invoke();
         _speech.EndPlayerDialogue(_speaker);
         if (IsInstanceValid(_facingSpeaker))
         {
@@ -169,6 +177,25 @@ internal partial class RuntimeNativeConversation : Node
             else if (_facingSpeaker is RuntimeNativeCreature creature) creature.EndConversationFacing();
         }
         _facingSpeaker = null;
+    }
+
+    private Vector3 SpeakerFocusPoint()
+    {
+        if (!IsInstanceValid(_facingSpeaker) || !_facingSpeaker!.IsInsideTree() || _facingSpeaker.IsQueuedForDeletion())
+            throw new NotSupportedException("Dialogue speaker lost its resident camera target.");
+        if (_facingSpeaker is RuntimeNativeNpc npc)
+            return npc.HeadTargetPoint ?? throw new NotSupportedException("Dialogue NPC has no source head target.");
+        if (_facingSpeaker is RuntimeNativeCreature creature)
+            return creature.Combat?.DialogueTargetPoint ?? throw new NotSupportedException("Dialogue creature has no source body-part target.");
+        // Talking activators have no humanoid head. Focus their actual visible
+        // source geometry, without inventing an actor or an offset anchor.
+        Aabb? bounds = null;
+        foreach (var mesh in NodeTraversal.SelfAndDescendants<MeshInstance3D>(_facingSpeaker).Where(mesh => mesh.IsVisibleInTree()))
+        {
+            var world = mesh.GlobalTransform * mesh.GetAabb();
+            bounds = bounds is { } previous ? previous.Merge(world) : world;
+        }
+        return bounds?.GetCenter() ?? throw new NotSupportedException("Talking activator has no visible source geometry target.");
     }
     public override void _ExitTree() => ReleaseFacing();
     private void Fail(Exception error)

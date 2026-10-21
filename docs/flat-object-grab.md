@@ -33,5 +33,8 @@ Run the owned fixture with:
 & $Godot --headless --path runtime res://tools/NativePlayerPresentationAudit/NativePlayerPresentationAudit.tscn -- --owned-grab $DataRoot
 ```
 
-Ordinary room placement, all prop families, theft/crime consequences, physical
-state save/cold continuation and retail interaction parity remain open.
+Normal Continue additionally acquires this skull from its actual shelf, lifts it
+into the room and drops it onto the floor, delivering the original event blocks.
+F5 succeeds, but a fresh Continue resets the skull to the shelf while restoring
+the player. Physical prop persistence is a confirmed defect. Other prop families,
+theft/crime consequences and retail interaction parity remain open.

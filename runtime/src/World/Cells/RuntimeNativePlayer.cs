@@ -102,6 +102,7 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
         PublishSelfCameraVisibility();
         if (_xr is not null) return;
         _camera.Transform = transformFromFeet * new Transform3D(new Basis(Vector3.Right, _pitchRadians), Vector3.Zero);
+        PublishDialogueView();
     }
 
     internal void ApplyCameraPath(FalloutNifAnimatedNodePath animation, float sourceTime, float yaw = 0)
