@@ -15,6 +15,8 @@ internal partial class RuntimeNativeLandscapeTransport : Node3D
 {
     internal required FalloutLandscapeTransport Source { get; init; }
     internal required MeshInstance3D Geometry { get; init; }
+    internal required FalloutLandscapeImpactMaterial ImpactMaterials { get; init; }
+    internal required float GameUnitsToMeters { get; init; }
     internal required IReadOnlyDictionary<FalloutFormKey, RuntimeLandscapeTextureResources> Textures
     {
         get;
@@ -45,7 +47,7 @@ internal static class RuntimeNativeLandscapeTransportBuilder
             return arrays;
         }
     }
-    internal sealed record Prepared(Quadrant[] Quadrants, Vector3[] Faces, int[] FaceMaterials);
+    internal sealed record Prepared(Quadrant[] Quadrants, Vector3[] Faces, int[] FaceMaterials, FalloutLandscapeImpactMaterial ImpactMaterials);
     private static readonly ConditionalWeakTable<FalloutLandscapeTransport, ConcurrentDictionary<float, Prepared>> PreparedMeshes = new();
 
     // No native objects or rendering calls: this path runs on content workers.
@@ -74,7 +76,7 @@ internal static class RuntimeNativeLandscapeTransportBuilder
                 var materials = new[] { basis }.Concat(layers).Select(layer => (int?)source.Textures[layer.Texture].Physics?.Material ?? -1).ToArray();
                 faceMaterials.AddRange(FalloutLandscapeMaterialInputs.CollisionMaterials(FalloutLandscapeMaterialInputs.Weights(layers), materials, quadrant.Indices));
             }
-            return new(quadrants, faces, faceMaterials.ToArray());
+            return new(quadrants, faces, faceMaterials.ToArray(), new(source));
         });
     }
 
@@ -156,6 +158,8 @@ internal static class RuntimeNativeLandscapeTransportBuilder
             Name = $"NativeLAND_{source.Landscape}",
             Source = source,
             Geometry = geometry,
+            ImpactMaterials = prepared.ImpactMaterials,
+            GameUnitsToMeters = gameUnitsToMeters,
             Textures = textures,
         };
         var transferred = false;
@@ -170,7 +174,7 @@ internal static class RuntimeNativeLandscapeTransportBuilder
             var collision = new StaticBody3D { Name = "LandscapeCollision" };
             var collisionShape = new CollisionShape3D { Shape = collisionResource };
             collisionShape.SetMeta("opennv_havok_face_materials", prepared.FaceMaterials);
-            geometry.SetMeta("opennv_land_impact_unbound_triangles", prepared.FaceMaterials.Count(material => material < 0));
+            geometry.SetMeta("opennv_land_impact_material_owner", "source-point-nearest-vertex-texture-weight");
             collision.AddChild(collisionShape);
             root.AddChild(collision);
             NativeExteriorDetailBlend.Bind(root, terrain: true);

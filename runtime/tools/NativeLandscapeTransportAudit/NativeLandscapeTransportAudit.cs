@@ -92,6 +92,7 @@ public partial class NativeLandscapeTransportAudit : Node3D
                 throw new InvalidDataException("Exterior sunlight discarded the resident-world shadow range or cascade blending.");
             await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
             var materialRays = 0;
+            var blendedRays = 0;
             foreach (var land in terrain)
             {
                 var source = land.Source;
@@ -104,19 +105,35 @@ public partial class NativeLandscapeTransportAudit : Node3D
                 var materials = shape.GetMeta("opennv_havok_face_materials").AsInt32Array();
                 var faces = ((ConcavePolygonShape3D)shape.Shape).Data;
                 if (materials.Length * 3 != faces.Length) throw new InvalidDataException("LAND physics/material face order disagrees.");
+                var sourceMaterials = source.Textures.Values.Where(texture => texture.Physics.HasValue)
+                    .Select(texture => (uint)texture.Physics!.Value.Material).ToHashSet();
                 foreach (var material in materials.Where(value => value >= 0).Distinct())
                 {
                     var face = Array.IndexOf(materials, material) * 3;
                     var center = shape.ToGlobal((faces[face] + faces[face + 1] + faces[face + 2]) / 3);
                     using var query = PhysicsRayQueryParameters3D.Create(center + Vector3.Up, center + Vector3.Down, 1);
                     var materialHit = GetWorld3D().DirectSpaceState.IntersectRay(query);
-                    if (materialHit.Count == 0 || NativeNifCollisionBuilder.HitMaterial(materialHit) != material)
-                        throw new InvalidDataException("LAND ray lost its source texture's Havok material.");
+                    // A uniform painted face is not an impact-material oracle:
+                    // the runtime selector has its own source slot bound.
+                    if (materialHit.Count == 0 || !sourceMaterials.Contains(NativeNifCollisionBuilder.HitMaterial(materialHit)))
+                        throw new InvalidDataException("LAND ray did not select an owned LTEX material.");
                     materialRays++;
+                }
+                var blendedFaces = Enumerable.Range(0, materials.Length).Where(index => materials[index] < 0).Take(12);
+                foreach (var face in blendedFaces)
+                {
+                    var offset = face * 3;
+                    var center = shape.ToGlobal((faces[offset] + faces[offset + 1] + faces[offset + 2]) / 3);
+                    using var query = PhysicsRayQueryParameters3D.Create(center + Vector3.Up, center + Vector3.Down, 1);
+                    var materialHit = GetWorld3D().DirectSpaceState.IntersectRay(query);
+                    if (materialHit.Count == 0 || !sourceMaterials.Contains(NativeNifCollisionBuilder.HitMaterial(materialHit)))
+                        throw new InvalidDataException("Blended LAND hit did not resolve an owned source material.");
+                    blendedRays++;
                 }
             }
             if (materialRays == 0) throw new InvalidOperationException("No owned LAND material query was exercised.");
-            GD.Print($"OPENNV_LAND_IMPACT_MATERIAL_PASS rays={materialRays} mixedMaterialSelection=unbound");
+            if (blendedRays == 0) throw new InvalidOperationException("No blended owned LAND impact was exercised.");
+            GD.Print($"OPENNV_LAND_IMPACT_MATERIAL_PASS rays={materialRays} blendedRays={blendedRays} pointSelection=true retailParity=unverified");
             CheckLateEffects(content, environment, terrain[0].Geometry, units);
             GD.Print($"OPENNV_NATIVE_EXTERIOR_GRID_PASS active={grid.Scene.Cell.FormKey} cells={grid.Cells.Count} references={grid.Scene.References.Count} " +
                 $"landCollision={terrain.Count} sharedTextures={textureCache.Count} weather={sky.ActiveWeather.Form} coldSky=true ordinaryDoor=unverified pixels=unverified");
