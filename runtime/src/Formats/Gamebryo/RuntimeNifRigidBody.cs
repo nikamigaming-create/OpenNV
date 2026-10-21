@@ -67,6 +67,7 @@ internal partial class RuntimeNifRigidBody : RigidBody3D
         var world = GlobalTransform;
         TopLevel = true;
         GlobalTransform = world;
+        if (_pendingPhysics is { } saved) { _pendingPhysics = null; RestorePhysics(saved); }
     }
 
     public override void _IntegrateForces(PhysicsDirectBodyState3D state)

@@ -66,7 +66,8 @@ internal sealed record FalloutNativeCampaignRestore(
 
 internal static class FalloutNativeCampaignSave
 {
-    internal const string ExpectedSchema = "opennv-native-fnv-campaign-save/v54";
+    internal const string ExpectedSchema = "opennv-native-fnv-campaign-save/v55";
+    internal const string BeforeObjectPhysicsSchema = "opennv-native-fnv-campaign-save/v54";
     internal const string BeforeIdleObjectsSchema = "opennv-native-fnv-campaign-save/v53";
     internal const string BeforeGrabEventsSchema = "opennv-native-fnv-campaign-save/v52";
     internal const string BeforeAggroWarningsSchema = "opennv-native-fnv-campaign-save/v51";
@@ -481,6 +482,12 @@ internal static class FalloutNativeCampaignSave
             state.PlayerControls[SneakingControlIndex]);
     }
 
+    private static void ValidateObjectPhysicsSchema(FalloutNativeCampaignState state)
+    {
+        if (state.Schema != ExpectedSchema && state.References?.Any(reference => reference.ObjectPhysics is not null) == true)
+            throw new InvalidDataException("Earlier campaign schemas cannot own dynamic object physics.");
+    }
+
     private static void ValidateIdleObjectSchema(FalloutNativeCampaignState state)
     {
         if (state.Schema != ExpectedSchema && state.References?.Any(reference =>
@@ -493,6 +500,8 @@ internal static class FalloutNativeCampaignSave
 
     internal static FalloutNativeCampaignState AdmitPreviousOwnerSchema(FalloutNativeCampaignState state)
     {
+        ValidateObjectPhysicsSchema(state);
+        if (state.Schema == BeforeObjectPhysicsSchema) state = state with { Schema = ExpectedSchema };
         ValidateIdleObjectSchema(state);
         if (state.Schema == BeforeIdleObjectsSchema) state = state with { Schema = ExpectedSchema };
         if (state.Schema != ExpectedSchema && state.References?.Any(reference => reference.GrabEvents is not null) == true)
@@ -515,6 +524,7 @@ internal static class FalloutNativeCampaignSave
         string expectedSaveCompatibilityId,
         FalloutPlayerAbilitySaveAdmission? originalAbilityAdmission)
     {
+        ValidateObjectPhysicsSchema(state);
         ValidateIdleObjectSchema(state);
         if (state.Schema != ExpectedSchema && state.References?.Any(reference => reference.GrabEvents is not null) == true)
             throw new InvalidDataException("Earlier campaign schemas cannot own grab/release event marks.");

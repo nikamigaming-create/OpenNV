@@ -72,6 +72,7 @@ internal static partial class NativeNifCollisionBuilder
             result.Transform = BodyTransform(body, unitsToMetres);
             result.SetMeta("opennv_nif_collision_object", attachment.Block.Index);
             result.SetMeta("opennv_nif_collision_body", body.Block.Index);
+            result.SetMeta("opennv_nif_source_sha256", source.Sha256);
             result.SetMeta("opennv_collision_havok_layer", body.Filter.Layer);
             result.SetMeta("opennv_collision_havok_filter", (uint)body.Filter.Layer | ((uint)body.Filter.Flags << 8) | ((uint)body.Filter.Group << 16));
             result.SetMeta("opennv_collision_havok_info_filter", (uint)body.InfoFilter.Layer | ((uint)body.InfoFilter.Flags << 8) | ((uint)body.InfoFilter.Group << 16));

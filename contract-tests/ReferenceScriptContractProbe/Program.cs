@@ -12,6 +12,7 @@ if (args is ["--audit-linked-door-source-lock", var lockData, var firstDoor, var
 
 if (args is ["--grab-event-contracts"])
 {
+    ObjectPhysicsContracts.Run();
     GrabEventContracts.Run();
     return;
 }
@@ -1022,6 +1023,7 @@ EscortContracts.Run();
 PackageDataContracts.Run();
 EditorTravelContracts.Run();
 TravelContracts.Run();
+ObjectPhysicsContracts.Run();
 GrabEventContracts.Run();
 FurnitureContracts.Run();
 AuthoredRagdollContracts.Run();

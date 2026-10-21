@@ -36,7 +36,8 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
     FalloutActorCorpseEquipment? CorpseEquipment = null,
     FalloutActorDeferredPackageContinuation? DeferredPackageContinuation = null,
     FalloutAggroRadiusWarning? AggroWarning = null,
-    FalloutReferenceGrabEvents? GrabEvents = null)
+    FalloutReferenceGrabEvents? GrabEvents = null,
+    IReadOnlyList<FalloutObjectPhysicsSnapshot>? ObjectPhysics = null)
 {
     internal static void Validate(IReadOnlyList<FalloutReferenceSnapshot> snapshots)
     {
@@ -58,6 +59,7 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
                     throw new InvalidDataException("Saved actor value is invalid.");
             if (snapshot.Animation is { } animation) FalloutActorAnimationState.Validate(animation);
             snapshot.GrabEvents?.Validate(snapshot.Reference);
+            if (snapshot.ObjectPhysics is { } physics) FalloutObjectPhysicsSnapshot.ValidateSet(physics);
             if (snapshot.ObjectAnimations is { } objectAnimations)
             {
                 var controllers = new HashSet<(string, int)>();
@@ -144,7 +146,7 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
     }
 }
 
-internal sealed class FalloutReferenceInstance
+internal sealed partial class FalloutReferenceInstance
 {
     internal FalloutFormKey Reference { get; }
     internal FalloutFormKey Cell { get; }
@@ -417,7 +419,8 @@ internal sealed class FalloutReferenceInstance
                 ? capturePending() : PendingPackageSelection?.Copy() : null,
             AnimationSoundEvents: soundEvents, HitReactionFaults: hitReactionFaults, ActivationRelay: ActivationRelay?.Copy(),
             CorpseEquipment: CaptureCorpseEquipment is { } captureEquipment ? captureEquipment() : CorpseEquipment?.Copy(),
-            DeferredPackageContinuation: DeferredPackageContinuation, AggroWarning: AggroWarning, GrabEvents: GrabEvents);
+            DeferredPackageContinuation: DeferredPackageContinuation, AggroWarning: AggroWarning, GrabEvents: GrabEvents,
+            ObjectPhysics: CaptureObjectPhysics?.Invoke() ?? ObjectPhysics?.Select(body => body.Copy()).ToArray());
     }
 }
 
@@ -649,6 +652,8 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
             if (snapshot is null || validated._instances.ContainsKey(snapshot.Reference))
                 throw new InvalidDataException("Saved reference is absent or duplicated.");
             var instance = validated.Get(snapshot.Reference);
+            if (snapshot.ObjectPhysics is not null && records.GetEffective(snapshot.Reference).Signature != "REFR")
+                throw new InvalidDataException("Object physics cannot replace an actor or projectile continuation owner.");
             if (snapshot.Templates is { } templates)
             {
                 instance.Templates = new(templates);
@@ -844,6 +849,7 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
             }
             FalloutActorStoppedPose.ValidateTarget(records, snapshot);
             instance.ObjectAnimations = snapshot.ObjectAnimations?.ToArray();
+            instance.ObjectPhysics = snapshot.ObjectPhysics?.Select(body => body.Copy()).ToArray();
             if (snapshot.HitReaction is { } reaction)
             {
                 var idle = records.GetEffective(reaction.Idle);

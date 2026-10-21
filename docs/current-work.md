@@ -1,11 +1,33 @@
 # Current work
 
 Updated 2026-10-21. User priority is **fully playable flat Fallout: New Vegas**.
-Root works alone and owns code, builds, input and Git. The current implementation
-owner is source-driven Sandbox work; attachment continuation is repaired in
-PR #250. Autonomous activity selection and execution remain unimplemented.
+Root works alone and owns code, builds, input and Git. The active branch is
+`codex/fnv-physical-prop-persistence`: repair the confirmed moved-object reset
+on cold Continue. Sandbox attachment continuation is repaired in PR #250;
+autonomous activity selection and execution remain unimplemented.
+The user explicitly treats development as greenfield: preserving old development
+saves is not a priority. Favor working ordinary gameplay over compatibility work
+or expanding diagnostic frameworks. Retail inputs remain read-only.
 
 ## Current owner
+
+The change binds each resident non-actor dynamic NIF body to its reference
+save owner, using model hash and body block identity. Schema v55 retains world
+transform, linear/angular velocity, sleep and wind randomness; v54 and prior
+admitted saves keep their original state without invented historical motion.
+The owned skull test passes JSON roundtrip, detached cell reconstruction,
+continued gravity/motion, sleeping restore, source-drift rejection and retention
+on unload. Detached preparation cannot replace the live physical save callback.
+Ordinary Continue, walking and aiming reached the skull; Z lifted it from its
+shelf and released it onto the floor. F5 committed v55. A separate process used
+normal Continue and restored the exact saved position; a visual check showed the
+skull on the floor, and another F5 completed. Temporary screenshots were removed
+and both sessions exited. Synthetic checks, the final owned check, the complete
+local runtime gate and diff check pass. Review and publication are pending. Saving
+while actively holding a body currently refuses rather than dropping its grab
+continuation silently. Full held-input continuation and retail physics parity
+remain open. After publication, continue ordinary tutorial progression; Sandbox
+selection remains a population failure, not a prerequisite for that route.
 
 Repair the ordinary New Game route: Doc Mitchell's player/head positioning and
 questionnaire, physical object handling including the tutorial skull, Sunny's
@@ -18,7 +40,8 @@ the actual owned NIF dynamic body, collision and winning weight limits. Normal
 Continue from v52 acquired the skull with Z, lifted it from the shelf and dropped
 it onto the floor, delivering two source grab/release cycles. F5 saved in v53.
 A fresh Continue restored the player and consumed event marks, but reset the
-skull to its original shelf. Physical prop persistence is a confirmed open defect.
+skull to its original shelf. The active branch repairs this confirmed defect as
+described above; publication remains pending.
 
 PR #244 is merged with local and hosted runtime checks passing. Normal New Game
 and cold Continue complete Vigor, the seated questionnaire, tag skills and traits,
@@ -103,7 +126,7 @@ equal to origin/main before starting this block. The source door is genuinely
 locked; lockpicking itself remains unimplemented, and no locked traversal or
 retail parity is claimed.
 
-Current repair: source Sandbox execution for sweeping/farming and ambient work.
+Next population repair: source Sandbox execution for sweeping/farming and ambient work.
 Goodsprings settlers reach procedure 12 with an editor-position radius and a
 source schedule, but no native Sandbox owner exists. Private static research of
 the matching owned retail build identifies the settings-to-duration formula and
@@ -126,10 +149,10 @@ Ordinary Continue from a copied v53 save loads the existing exterior, and F5
 commits v54 through the normal save owner. The original slot is unchanged.
 The required local runtime gate and diff check pass.
 No native Sandbox work is fixed yet. Selection, movement, occupancy, interruption
-and activity continuation remain the next implementation owner.
+and activity continuation remain unfinished population work.
 The broken-SMG script has an extra source and compiled `endif`; the interpreter
-rejects it. Physical prop persistence and tutorial/campaign progression remain
-open.
+rejects it. Held-object save continuation and tutorial/campaign progression
+remain open.
 Recording is off during development. Use specific temporary captures only when
 needed to inspect a visual defect, and remove them after inspection.
 
