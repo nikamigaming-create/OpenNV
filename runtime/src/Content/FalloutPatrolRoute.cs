@@ -11,6 +11,12 @@ internal sealed record FalloutPatrolPoint(FalloutFormKey Reference, float[] Posi
 internal sealed record FalloutPatrolRoute(FalloutFormKey Package, string SourceSha256,
     IReadOnlyList<FalloutPatrolPoint> Points, bool Circular, bool Repeatable, int Radius, bool Running, bool WeaponDrawn)
 {
+    internal static bool RequiresLinkedStart(FalloutPluginRecord package)
+    {
+        if (FalloutPackageData.Read(package).Procedure != 13) return false;
+        return BinaryPrimitives.ReadInt32LittleEndian(Required(package.ReadSubrecords().ToArray(), "PLDT", 12).Span) == 6;
+    }
+
     internal static FalloutPatrolRoute Read(FalloutPluginStack records, FalloutPluginRecord package, FalloutFormKey actor)
     {
         if (package.Signature != "PACK") throw new InvalidDataException("Patrol source is not PACK.");
@@ -18,7 +24,8 @@ internal sealed record FalloutPatrolRoute(FalloutFormKey Package, string SourceS
         var data = FalloutPackageData.Read(package);
         if (data.Procedure != 13) throw new InvalidDataException("Package procedure is not Patrol.");
         var flags = data.Flags;
-        const uint supported = 0x00800000 | 0x00001000 | 0x00002000 | 0x01000000;
+        const uint supported = 0x00800000 | 0x00001000 | 0x00002000 | 0x01000000 |
+            FalloutScriptPackage.WeaponsUnequippedFlag;
         if ((flags & ~supported) != 0 || (flags & 0x1000) == 0 && data.BehaviorFlags != 0 ||
             data.SpecificFlags is not (null or 0) || fields.Any(field => field.Signature is "PLD2" or "PTDT" or "PTD2"))
             throw new NotSupportedException("Patrol package flags or alternate targets need their procedure owner.");

@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Gameplay.State;
+using OpenNV.Runtime.World.Cells;
 
 internal static class PatrolContracts
 {
@@ -16,11 +17,22 @@ internal static class PatrolContracts
             File.WriteAllBytes(Path.Combine(directory, "Patrol.esm"), Join(Record("TES4", 0, Field("HEDR", header)),
                 Record("STAT", 0x3b), Package(1, 10), Package(2, 20), Package(3, 20, false), Package(4, 10, false),
                 Package(5, 10, flags: 0x1000, behavior: 0x40), Package(6, 10, flags: 0, behavior: 0x40),
+                Package(7, 10, flags: FalloutScriptPackage.WeaponsUnequippedFlag),
+                Package(8, 0, linked: true), Point(98, 10, 0), Point(99, null, 0),
                 Point(10, 11, 0), Point(11, 12, 10), Point(12, null, 20),
                 Point(20, 21, 0), Point(21, 22, 10), Point(22, 20, 20)));
             using var records = FalloutPluginStack.Load(directory, ["Patrol.esm"]);
             FalloutPatrolRoute Route(uint id) => FalloutPatrolRoute.Read(records, records.GetEffective(new("Patrol.esm", id)), new("Patrol.esm", 99));
             var linear = Route(1); var circular = Route(2);
+            using var world = new FalloutReferenceWorld(records);
+            var linkedPackage = records.GetEffective(new("Patrol.esm", 8));
+            Require(!world.PackageEligible(new("Patrol.esm", 99), linkedPackage, null, null, false) &&
+                world.PackageEligible(new("Patrol.esm", 98), linkedPackage, null, null, false) &&
+                world.PackageEligible(new("Patrol.esm", 99), records.GetEffective(new("Patrol.esm", 1)), null, null, false),
+                "Patrol eligibility did not distinguish absent linked starts from explicit locations.");
+            Require(Route(7).Points.Count == linear.Points.Count &&
+                !FalloutScriptPackage.Read(records.GetEffective(new("Patrol.esm", 7))).WeaponsVisible,
+                "Casual patrol lost its route or shared weapons-unequipped policy.");
             Require(Route(5).Points.Count == linear.Points.Count, "Skip Fallout Behavior rejected its disabled behavior lane.");
             try { Route(6); throw new InvalidOperationException("Unowned patrol behavior was admitted."); }
             catch (NotSupportedException) { }
@@ -65,12 +77,14 @@ internal static class PatrolContracts
         try { action(); } catch (InvalidDataException) { return; }
         throw new InvalidOperationException("Malformed patrol state accepted.");
     }
-    private static byte[] Package(uint id, uint first, bool repeat = true, uint flags = 0x800000, ushort behavior = 0)
+    private static byte[] Package(uint id, uint first, bool repeat = true, uint flags = 0x800000, ushort behavior = 0, bool linked = false)
     {
         var data = new byte[12]; data[4] = 13; BinaryPrimitives.WriteUInt32LittleEndian(data, flags);
         BinaryPrimitives.WriteUInt16LittleEndian(data.AsSpan(6), behavior);
         var location = new byte[12]; BinaryPrimitives.WriteUInt32LittleEndian(location.AsSpan(4), first);
-        return Record("PACK", id, Field("PKDT", data), Field("PLDT", location), Field("PKPT", [repeat ? (byte)1 : (byte)0, 0]));
+        if (linked) BinaryPrimitives.WriteInt32LittleEndian(location, 6);
+        return Record("PACK", id, Field("EDID", Encoding.ASCII.GetBytes("Patrol\0")),
+            Field("PKDT", data), Field("PLDT", location), Field("PKPT", [repeat ? (byte)1 : (byte)0, 0]));
     }
     private static byte[] Point(uint id, uint? next, float x)
     {

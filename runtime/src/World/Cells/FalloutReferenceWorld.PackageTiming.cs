@@ -9,6 +9,9 @@ internal sealed partial class FalloutReferenceWorld
     internal bool PackageEligible(FalloutFormKey actor, FalloutPluginRecord package, FalloutGameTime? clock,
         FalloutFormKey? current, bool done)
     {
+        // GECK Patrol: a linked-ref location without an actor link is invalid;
+        // selection continues down the stack rather than starting a failed route.
+        if (FalloutPatrolRoute.RequiresLinkedStart(package) && GetLinkedRef(actor) is null) return false;
         if (!OncePerDay(package)) return true;
         if (current == package.FormKey && !done) return true;
         var previous = Get(actor).PackageStarts.SingleOrDefault(value => value.Package == package.FormKey);
