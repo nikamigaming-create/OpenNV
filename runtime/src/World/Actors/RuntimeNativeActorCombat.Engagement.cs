@@ -130,7 +130,7 @@ internal sealed partial class RuntimeNativeActorCombat
     private bool TryAssist(FalloutReferenceInstance victim, Vector3 origin, FalloutFormKey attacker,
         RuntimeNativePlayer? player, RuntimeNativeActorCombat? opponent, bool attacked, bool factionAssistance)
     {
-        if (attacker == _state.Reference || Dead || !_state.Enabled || _state.Unconscious || _state.Restrained || _state.Engagement is not null ||
+        if (attacker == _state.Reference || Dead || !EffectiveEnabled || _state.Unconscious || _state.Restrained || _state.Engagement is not null ||
             _engagementError is not null || !_context!.Resident(_actor.GlobalPosition)) return false;
         var passiveCombat = PackageAllowsUnprovokedCombat();
         if (!PackageAllowsUnprovokedCombat(attacked ? victim.Reference : null)) return false;
@@ -160,7 +160,7 @@ internal sealed partial class RuntimeNativeActorCombat
         using var frameWork = OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Measure(OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Owner.Combat);
         _enemyMuzzle?.Advance(delta);
         if (Dead) { RestoreDeath(); return; }
-        if (_context is null || !_state.Enabled || _state.Unconscious) return;
+        if (_context is null || !EffectiveEnabled || _state.Unconscious) return;
         var player = _context.Player();
         if (!_context.Resident(_actor.GlobalPosition)) return;
         if (ReactingToHit && !_engagementPrepared && _state.Engagement is not null)

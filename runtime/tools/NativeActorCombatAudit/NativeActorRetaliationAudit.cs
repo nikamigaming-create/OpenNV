@@ -194,7 +194,16 @@ public partial class NativeActorCombatAudit
             var cell = FalloutCellSceneReader.Read(records, FalloutCellSceneReader.ParentCell(records.GetEffective(reference))!.Value);
             if (loadedCells.Add((owner, cell.Cell.FormKey))) owner.LoadCell(cell);
             owner.InitializeActorTemplates(reference, 1, globals);
-            var state = owner.Get(reference); state.Enabled = true;
+            var state = owner.Get(reference);
+            _ = owner.IsEnabled(reference); // Validate the source chain before walking it.
+            var enableRoot = state; var desiredEnable = true;
+            while (enableRoot.EnableParent is { } parent)
+            {
+                desiredEnable ^= parent.Opposite;
+                enableRoot = owner.Get(parent.Reference);
+            }
+            // Enable the source owner without rewriting a child's local flag.
+            enableRoot.Enabled = desiredEnable;
             if (unarmed && reference == key)
             {
                 var inventory = owner.Inventory(reference, 1, globals).Contents;
@@ -231,6 +240,10 @@ public partial class NativeActorCombatAudit
             AddChild(actor); actor.SetProcess(false); actor.SetPhysicsProcess(false);
             RuntimeNativeActorContacts.Configure(actor, skeleton, 2);
             var combat = RuntimeNativeActorCombat.Attach(actor, skeleton, skeletonPath, owner, state, records, content, 2, 3, context);
+            if (!combat.CanReceiveExplosionDamage) throw new InvalidOperationException("Effective enabled actor rejected explosion eligibility.");
+            enableRoot.Enabled = !desiredEnable;
+            if (combat.CanReceiveExplosionDamage) throw new InvalidOperationException("Effective disabled actor admitted explosion eligibility.");
+            enableRoot.Enabled = desiredEnable;
             if (actor is RuntimeNativeNpc humanoid) humanoid.Combat = combat;
             else ((RuntimeNativeCreature)actor).Combat = combat;
             combat.SetPhysicsProcess(false);

@@ -76,16 +76,17 @@ public partial class RuntimeCoordinator
                     if (node is not (RuntimeNativeNpc or RuntimeNativeCreature) || !GodotObject.IsInstanceValid(node) ||
                         node.IsQueuedForDeletion() || !node.IsInsideTree()) continue;
                     var state = world!.Get(key);
+                    var enabled = world.IsEnabled(key);
                     var targetsPlayer = !state.Unconscious && !state.Restrained &&
                         world.HasSelectedCombatTarget(key, playerKey);
                     if (!targetsPlayer && !_botCombatObservedThreats.Contains(key)) continue;
                     if (targetsPlayer) _botCombatObservedThreats.Add(key);
-                    var resident = node.IsVisibleInTree() && state.Enabled && NativeCollisionResident(node.GlobalPosition);
+                    var resident = node.IsVisibleInTree() && enabled && NativeCollisionResident(node.GlobalPosition);
                     var sourceFault = state.ScriptError ?? state.SelectionFailure?.Error ?? state.PackageBindingFailure?.Error;
                     if (RuntimeNativeActorCombat.Find(node) is not { } owner)
                     {
                         targets.Add(new(key.ToString(), Vector3ToNumeric(node.GlobalPosition), null, null, resident,
-                            state.Enabled, targetsPlayer, state.Injury?.Dead == true, null, null, null, null,
+                            enabled, targetsPlayer, state.Injury?.Dead == true, null, null, null, null,
                             "Resident source threat has no native combat owner.", sourceFault));
                         continue;
                     }
@@ -113,7 +114,7 @@ public partial class RuntimeCoordinator
                         if (muzzleReference != key.ToString()) obstruction = muzzleRay.Collider ?? obstruction;
                     }
                     targets.Add(new(key.ToString(), Vector3ToNumeric(node.GlobalPosition), point,
-                        BotCombatTelemetry.Text(body, "owner"), resident, state.Enabled, targetsPlayer, dead, health,
+                        BotCombatTelemetry.Text(body, "owner"), resident, enabled, targetsPlayer, dead, health,
                         bodyReference, muzzleReference, obstruction, error, sourceFault));
                 }
             }

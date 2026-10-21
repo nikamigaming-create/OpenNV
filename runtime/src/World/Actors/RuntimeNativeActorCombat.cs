@@ -20,12 +20,13 @@ internal sealed partial class RuntimeNativeActorCombat : Node
     private bool _deathPresentationAttempted;
     private readonly Dictionary<string, byte> _parts = new(StringComparer.Ordinal);
     private object? _lastLimbEffect;
+    internal bool EffectiveEnabled => _world.IsEnabled(_state.Reference);
     internal bool Dead => _state.Injury?.Dead == true;
     internal bool EngagedWith(FalloutFormKey target) =>
         _world.HasSelectedCombatTarget(_state.Reference, target);
     internal bool IsInCombat(FalloutFormKey reference) => _world.IsInCombat(reference,
         _world.PlayerInCombat);
-    internal bool CanReceiveExplosionDamage => _state.Enabled && !Dead;
+    internal bool CanReceiveExplosionDamage => EffectiveEnabled && !Dead;
     internal IEnumerable<Vector3> CorpseAimPoints => _ragdoll?.Active == true ? _ragdoll.AimPoints : [];
     internal IEnumerable<Rid> CollisionRids => _actor.FindChildren("*", "", true, false)
         .OfType<CollisionObject3D>().Prepend(_actor as CollisionObject3D).Where(value => value is not null)
@@ -33,6 +34,8 @@ internal sealed partial class RuntimeNativeActorCombat : Node
     internal string? Error { get; private set; }
     internal object Observation => new
     {
+        enabled = EffectiveEnabled,
+        localEnabled = _state.Enabled,
         dead = Dead,
         health = _state.ActorValues.GetValueOrDefault("health")?.Current,
         bodyTarget = ObserveBodyTarget(),

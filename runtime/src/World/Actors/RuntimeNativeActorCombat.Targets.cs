@@ -110,7 +110,7 @@ internal sealed partial class RuntimeNativeActorCombat
         // assistance notification, not another actor merely choosing a target.
         if (!_state.PlayerTeammate || !PackageAllowsUnprovokedCombat()) return false;
         var playerKey = _records.RuntimeFormKey(0x14);
-        var target = CombatActors.Where(actor => actor != this && !actor.Dead && actor._state.Enabled && !actor._state.PlayerTeammate &&
+        var target = CombatActors.Where(actor => actor != this && !actor.Dead && actor.EffectiveEnabled && !actor._state.PlayerTeammate &&
                 (actor._state.Engagement?.Target == playerKey ||
                  actor._state.Engagement is { } engagement && CombatActors.Any(friend => friend._state.Reference == engagement.Target && friend._state.PlayerTeammate)))
             .OrderBy(actor => actor._actor.GlobalPosition.DistanceSquaredTo(_actor.GlobalPosition)).FirstOrDefault();

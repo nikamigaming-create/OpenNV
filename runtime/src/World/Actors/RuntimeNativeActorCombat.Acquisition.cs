@@ -18,7 +18,7 @@ internal sealed partial class RuntimeNativeActorCombat
         var candidates = new List<(FalloutFormKey Reference, RuntimeNativeActorCombat? Actor, float DistanceSquared)>();
         foreach (var candidate in CombatActors)
         {
-            if (candidate == this || candidate.Dead || !candidate._state.Enabled ||
+            if (candidate == this || candidate.Dead || !candidate.EffectiveEnabled ||
                 !_context!.Resident(candidate._actor.GlobalPosition)) continue;
             var distance = _actor.GlobalPosition.DistanceSquaredTo(candidate._actor.GlobalPosition);
             if (distance <= maximumDistanceSquared) candidates.Add((candidate._state.Reference, candidate, distance));
