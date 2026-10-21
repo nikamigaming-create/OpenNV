@@ -15,6 +15,7 @@ internal partial class RuntimeNativeReferencePresentation
 
     private void BindObjectAnimation(FalloutFormKey key, Node3D node)
     {
+        BindObjectPhysics(key, node);
         if (node is RuntimeNativeNpc or RuntimeNativeCreature) return;
         var controllers = NodeTraversal.SelfAndDescendants<RuntimeNifControllerPlayer>(node).ToArray();
         var managed = controllers.Where(controller => controller.SourceController >= 0).ToArray();
@@ -50,6 +51,7 @@ internal partial class RuntimeNativeReferencePresentation
 
     private void UnbindObjectAnimation(FalloutFormKey key)
     {
+        UnbindObjectPhysics(key);
         _doorNodes.Remove(key);
         if (!_objectControllers.Remove(key)) return;
         var instance = _animationInstances[key];
@@ -59,6 +61,7 @@ internal partial class RuntimeNativeReferencePresentation
 
     public override void _ExitTree()
     {
+        foreach (var key in _physicsBindings.Keys.ToArray()) UnbindObjectPhysics(key);
         foreach (var key in _objectControllers.Keys.ToArray()) UnbindObjectAnimation(key);
     }
 

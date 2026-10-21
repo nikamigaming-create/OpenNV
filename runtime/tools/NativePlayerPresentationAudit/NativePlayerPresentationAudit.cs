@@ -12,6 +12,11 @@ public partial class NativePlayerPresentationAudit : Node3D
         try
         {
             var args = OS.GetCmdlineUserArgs();
+            if (args is ["--owned-object-physics", var physicsRoot])
+            {
+                await AuditOwnedObjectPhysics(physicsRoot);
+                GetTree().Quit(); return;
+            }
             if (args is ["--owned-grab", var grabRoot])
             {
                 await AuditOwnedGrab(grabRoot);
