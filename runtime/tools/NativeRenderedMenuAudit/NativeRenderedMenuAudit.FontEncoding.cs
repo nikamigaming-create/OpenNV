@@ -26,7 +26,7 @@ public partial class NativeRenderedMenuAudit
             if (!source.TryRead(path, null, out var bytes, out _)) throw new FileNotFoundException(path);
             var hash = SHA256.HashData(bytes);
             var asset = NativeBitmapFontAsset.Read(settings, fontId);
-            using var atlas = asset.Atlas;
+            var atlas = asset.Atlas;
             using var native = asset.CreateFontFile();
             var size = Mathf.RoundToInt(asset.Font.SourceSize);
             var cache = new Vector2I(size, 0);

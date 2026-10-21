@@ -12,6 +12,7 @@ the evidence-backed repair inventory and work order.
 
 | Area | Current state |
 | --- | --- |
+| Flat UI lifetime | Loading tips now retain borrowed shared font atlases. Normal cold Continue, an exterior/interior/exterior door cycle and F5 pass without the former disposed-image HUD/message failure. HP/AP, reticle and activation text draw. Full runtime checks pass. |
 | Flat dialogue camera | Shared speaker focus and furniture pitch reset pass owned camera checks, a fresh-process questionnaire visual check and the full runtime gate. Normal play completes the questionnaire, tag skills and traits, exits the couch and saves at stage 110. Dialogue zoom/timing and matched retail framing remain open. |
 | Flat object handling | The native-player Grab handler now uses source dynamic bodies, weight limits and bounded force. The owned skull fixture passes motion, collision/obstacle, release, refusal and source-event checks. Pending grab/release marks survive schema-v53 saves; v52 saves remain admitted. Ordinary room placement and physics save/cold continuation remain open. |
 | FNV world | Exploration, interiors and some dialogue render in the user's recording. Missing vegetation/models/materials, physics and LOD behavior remain visible in diagnostics. No world/parity completion. |
