@@ -186,6 +186,25 @@ public partial class NativeActorPerformanceAudit
                 var assignment = state.CapturePackageAssignment;
                 var diagnostic = state.ObservePackageBindingCapture;
                 var scriptError = state.ScriptError;
+                var snapshot = JsonSerializer.Serialize(state.Capture());
+                using (var preparation = new RuntimeNativeNpc.Assembly(
+                    FalloutNpcPreparedGeometry.Read(actor.Appearance, content), content, units,
+                    (_, _, _, _) => new StandardMaterial3D()))
+                {
+                    while (!preparation.Advance()) { }
+                    var body = preparation.Take();
+                    try
+                    {
+                        if (body.IsInsideTree() || body.Combat is not null ||
+                            !ReferenceEquals(state.CapturePackageBindingFailure, capture) ||
+                            !ReferenceEquals(state.QueryCurrentPackage, query) || JsonSerializer.Serialize(state.Capture()) != snapshot)
+                            throw new InvalidDataException("Prepared NPC geometry acquired gameplay ownership or changed captured state.");
+                    }
+                    finally { body.Free(); }
+                }
+                if (JsonSerializer.Serialize(state.Capture()) != snapshot)
+                    throw new InvalidDataException("Discarding prepared NPC geometry changed authoritative state.");
+                GD.Print("OPENNV_NPC_GEOMETRY_PREFETCH_PASS liveBindingsUnchanged=true captureUnchanged=true cancellationUnchanged=true");
                 foreach (var attached in new[] { false, true })
                 {
                     var failedActor = RuntimeNativeNpc.Create(records, content, placed, units,

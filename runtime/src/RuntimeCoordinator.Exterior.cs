@@ -24,6 +24,7 @@ public partial class RuntimeCoordinator
     private readonly List<Node3D> _nativeGridStaged = [];
     private readonly List<RuntimeNativeLandscapeTransportBuilder.Assembly> _nativeLandPreparations = [];
     private readonly Dictionary<FalloutFormKey, Node3D> _nativeGridModels = [];
+    private readonly Dictionary<FalloutFormKey, RuntimeNativeNpc> _nativeGridNpcModels = [];
     private (int X, int Y)? _nativeGridFailed;
     private double _nativeGridUploadMilliseconds;
     private double _nativeGridMaximumUploadMilliseconds;
@@ -60,6 +61,7 @@ public partial class RuntimeCoordinator
         maximumUploadMilliseconds = _nativeGridMaximumUploadMilliseconds,
         maximumUploadSource = _nativeGridMaximumUploadSource,
         preparingNpcs = _nativeGridNpcPreparations.Count,
+        preparedNpcBodies = _nativeGridNpcModels.Count,
         lastCommitMilliseconds = _nativeGridCommitMilliseconds,
         lastCommitPhasesMilliseconds = _nativeGridCommitPhases,
         error = _nativeGridError
@@ -200,6 +202,8 @@ public partial class RuntimeCoordinator
             node.Free();
         }
         _nativeGridStaged.Clear(); _nativeGridModels.Clear();
+        foreach (var actor in _nativeGridNpcModels.Values.Where(GodotObject.IsInstanceValid)) actor.Free();
+        _nativeGridNpcModels.Clear();
         _nativeGridUploads = null; _nativeGridPending = null; _nativeGridTarget = null;
     }
 
@@ -282,9 +286,16 @@ public partial class RuntimeCoordinator
                             if (!npc.Advance(this, grid.Scene, out preparedNpc)) return false;
                         }
                     }
-                    PlaceNativeReference(stagedReference, grid.Scene, reference, observe: false,
-                        preparedModel: model is null ? null : prepared.Models.GetValueOrDefault(model), preparedNpc: preparedNpc);
-                    if (preparedNpc is not null && GodotObject.IsInstanceValid(preparedNpc) && preparedNpc.GetParent() is null) preparedNpc.Free();
+                    if (preparedNpc is not null)
+                    {
+                        // Keep only assembled geometry ahead of residency. The
+                        // normal placement path binds AI/combat/save callbacks
+                        // immediately before attachment at grid publication.
+                        _nativeGridNpcModels.Add(reference.FormKey, preparedNpc);
+                        preparedNpc = null;
+                    }
+                    else PlaceNativeReference(stagedReference, grid.Scene, reference, observe: false,
+                        preparedModel: model is null ? null : prepared.Models.GetValueOrDefault(model));
                     var nodes = stagedReference.GetChildren().OfType<Node3D>().ToArray();
                     if (nodes.Length > 1) throw new InvalidDataException("A source reference must have one presentation root.");
                     foreach (var node in nodes)
@@ -342,6 +353,26 @@ public partial class RuntimeCoordinator
             reference => Math.Abs((int)MathF.Floor(reference.Position[0] / 4096) - center.X) <= grid.Radius + 1 &&
                 Math.Abs((int)MathF.Floor(reference.Position[1] / 4096) - center.Y) <= grid.Radius + 1);
         Mark("reference-residency");
+        var references = grid.Scene.References.ToDictionary(reference => reference.FormKey);
+        foreach (var (key, actor) in _nativeGridNpcModels.ToArray())
+        {
+            _nativeGridNpcModels.Remove(key);
+            try
+            {
+                PlaceNativeReference(root, grid.Scene, references[key], observe: false, preparedNpc: actor);
+                if (GodotObject.IsInstanceValid(actor) && actor.GetParent() == root)
+                {
+                    _nativeReferencePresentation.Register(key, actor);
+                    _nativeGridStaged.Add(actor);
+                }
+            }
+            finally
+            {
+                // Enable/template changes can make a prepared body unused.
+                // Failed placement already retires its own acquired bindings.
+                if (GodotObject.IsInstanceValid(actor) && actor.GetParent() is null) actor.Free();
+            }
+        }
         foreach (var (key, model) in _nativeGridModels)
         {
             root.AddChild(model);
