@@ -2,7 +2,7 @@
 
 Updated 2026-10-21. User priority is **fully playable flat Fallout: New Vegas**.
 Root works alone and owns code, builds, input and Git. Work is active on
-`codex/fnv-creature-patrol`, based on `origin/main` at `0d7b1a16`.
+`codex/fnv-linked-door-access`, based on `origin/main` at `1e8663f7`.
 
 ## Current owner
 
@@ -38,7 +38,7 @@ linked-door error, then recovered Open on the saloon front door, entered with E,
 recovered Sunny's Talk prompt and played her genuine greeting. Selecting her
 training topic changed the source quest and sent Sunny through the actual exit
 portal. This starts the tutorial; shooting, creatures and cooking remain open.
-Linked-door effective lock behavior itself remains unimplemented.
+Linked-door lock lookup is repaired on the current branch as described below.
 
 PR #247 merged actor initialization, dialogue wait and cell retirement. Sunny's
 source editor wait now uses native approach and activation-distance waiting.
@@ -59,7 +59,7 @@ bound owner can now change that status. Capture precedes cell teardown, deferred
 corpse construction completes before retirement, and snapshots defer while real
 corpse ownership is incomplete. Opaque or genuinely unready state still refuses
 capture. Ordinary F5 and cold continuation now pass through the affected route.
-Current repair: creature Patrol execution. Victor's live source selection is
+PR #248 merged creature Patrol execution. Victor's source selection is
 VGSVictorCircuitPatrol, previously refused by the absent creature procedure.
 Its eleven-point source route includes waits and a final reference arrival result
 that resets a quest variable. The new path uses native movement, source heading,
@@ -85,9 +85,30 @@ position and variable without restarting the retired patrol, then commits F5.
 Native owned facing/idle checks pass. Package route queries avoid combat's
 component-region search: selected repeat-run source-query samples are 1.1-1.5 ms,
 with native query slices below 1 ms; this is not a whole-frame performance claim.
-The full gate passes; publication is in progress. Nearby visual and matched retail
+The local and hosted full gates pass. Nearby visual and matched retail
 timing/framing remain unverified; no complete Victor/population parity is claimed.
-Sandbox work for sweeping/farming remains the next population owner.
+
+Current repair: the missing Open action on a source-linked door. The access
+owner formerly refused a lock declared on the opposite side. The implementation
+now resolves the local lock first, then the linked side without creating a remote
+instance during queries. Mutations retain the actual owner. Synthetic source/key,
+dynamic, local-priority and cold-order contracts pass, as does the owned saloon
+source-pair check. Ordinary Continue and walking reach the actual door with visible
+E Open / Door / Locked. E reaches the source lock refusal and F5 commits. A separate
+process continues that save, reacquires the door by ordinary aiming, displays the
+same Open/Locked text, respects the lock and commits F5 again. The full local gate
+passes. Publication and hosted checks are next. The source door is genuinely
+locked; lockpicking itself remains unimplemented, and no locked traversal or
+retail parity is claimed.
+
+Next repair: source Sandbox execution for sweeping/farming and ambient work.
+Goodsprings settlers reach procedure 12 with an editor-position radius and a
+source schedule, but no native Sandbox owner exists. Private static research of
+the matching owned retail build identifies the settings-to-duration formula and
+per-category tables. Its input state, target scoring, probability transitions,
+occupancy and activity continuation are still being traced. No new Sandbox
+gameplay or parity claim is established. Implement the shared source procedure,
+authored idle/furniture use and save continuation; verify through ordinary play.
 The broken-SMG script has an extra source and compiled `endif`; the interpreter
 rejects it. Physical prop persistence and tutorial/campaign progression remain
 open.

@@ -4,6 +4,12 @@ using System.Text.Json;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.World.Cells;
 
+if (args is ["--audit-linked-door-source-lock", var lockData, var firstDoor, var secondDoor])
+{
+    OwnedLinkedDoorLockProbe.Run(lockData, Convert.ToUInt32(firstDoor, 16), Convert.ToUInt32(secondDoor, 16));
+    return;
+}
+
 if (args is ["--grab-event-contracts"])
 {
     GrabEventContracts.Run();
