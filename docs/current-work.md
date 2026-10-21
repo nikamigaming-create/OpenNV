@@ -2,7 +2,7 @@
 
 Updated 2026-10-20. User priority is **fully playable flat Fallout: New Vegas**.
 Root works alone and owns code, builds, input and Git. Work is active on
-`codex/fnv-dialogue-camera`, based on `origin/main` at `1a803001`.
+`codex/fnv-shared-font-lifetime`, based on `origin/main` at `c255a93f`.
 
 ## Current owner
 
@@ -19,17 +19,23 @@ it onto the floor, delivering two source grab/release cycles. F5 saved in v53.
 A fresh Continue restored the player and consumed event marks, but reset the
 skull to its original shelf. Physical prop persistence is a confirmed open defect.
 
-Normal New Game and cold Continue complete Vigor, the seated questionnaire,
-tag skills and traits, reach stage 110, exit the couch with E and save with F5.
-The shared flat dialogue camera now follows the actual animated speaker while
-retaining the source camera position; furniture entry clears the old activation
-pitch. Owned camera ownership/target/release checks, a fresh-process
-questionnaire visual check and the full runtime gate pass. Dialogue
+PR #244 is merged with local and hosted runtime checks passing. Normal New Game
+and cold Continue complete Vigor, the seated questionnaire, tag skills and traits,
+exit the couch with E and save with F5. Dialogue follows the actual animated
+speaker and furniture entry clears the activation pitch. Normal standing dialogue
+also works: Doc's equipment handoff and Hardcore prompt reach stage 200, and the
+real exit door loads Goodsprings and saves character creation complete. Dialogue
 zoom, turn timing and matched retail framing remain open.
+
+The shared font lifetime repair removes a loading tip's disposal of its borrowed
+source-session atlas. A fresh ordinary Continue and exterior/interior/exterior
+door cycle now retain HP/AP, reticle, activation text and message drawing, with
+no disposed-font faults. F5 completes outside. Debug build, selected owned
+gameplay checks and the full runtime gate pass.
 
 The broken-SMG script has an extra source and compiled `endif`; the interpreter
 rejects it. Physical prop persistence and tutorial/campaign progression remain
-open. After publishing this camera repair, the next owner is persistent
+open. After repairing the shared font lifetime, the next owner is persistent
 source-bound dynamic-body state.
 Recording is off during development. Use specific temporary captures only when
 needed to inspect a visual defect, and remove them after inspection.

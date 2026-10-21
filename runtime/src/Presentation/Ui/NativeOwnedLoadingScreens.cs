@@ -61,15 +61,9 @@ internal sealed partial class NativeOwnedLoadingScreens : Control
         private FalloutLoadingTip? _layout;
         private NativeBitmapFontAsset? _font;
         private string[] _lines = [];
+        // These assets are borrowed from the source-session font cache. Other
+        // menus can still draw their atlases after this loading tip is freed.
         private readonly Dictionary<int, NativeBitmapFontAsset> _fonts = [];
-        public override void _Notification(int what)
-        {
-            if (what == NotificationPredelete)
-            {
-                foreach (var font in _fonts.Values) font.Atlas.Dispose();
-                _fonts.Clear();
-            }
-        }
         internal void Select(FalloutPluginStack records, FalloutInstallationSettings settings, FalloutLoadingScreen screen)
         {
             _layout = screen.Type is { } type ? FalloutLoadingScreenType.Tip(records.GetEffective(type)) : null;

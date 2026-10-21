@@ -7,6 +7,8 @@ using OpenNV.Runtime.Formats.Gamebryo;
 
 namespace OpenNV.Runtime.Presentation.Ui;
 
+// Cached per owned source session. Menu consumers borrow the atlas; disposing
+// one consumer must not invalidate the other views of the same source font.
 internal sealed record NativeBitmapFontAsset(FalloutBitmapFont Font, Texture2D Atlas)
 {
     private static readonly ConditionalWeakTable<RuntimeLiveContentSource, Dictionary<string, (string Hash, NativeBitmapFontAsset Asset)>> Assets = new();
