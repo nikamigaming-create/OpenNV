@@ -45,7 +45,8 @@ internal sealed partial class FalloutReferenceWorld
 
     private AccessSource? TerminalAccess(FalloutFormKey reference)
     {
-        var basis = Get(reference).Base;
+        var basis = OptionalAccessForm(AccessRecord(reference), "NAME") ??
+            throw new InvalidDataException("Access reference has no base form.");
         var record = records.GetEffective(basis);
         if (record.Signature != "TERM") return null;
         if (!_terminalAccessSources.TryGetValue(basis, out var source))
@@ -59,8 +60,8 @@ internal sealed partial class FalloutReferenceWorld
             return Convert.ToHexString(SHA256.HashData(Convert.FromHexString(source.Sha256)
                 .Concat(Convert.FromHexString(terminal.Sha256)).ToArray()));
         if (!AccessField(source, "XLOC").IsEmpty || AccessField(source, "XTEL").IsEmpty) return source.Sha256;
-        // A source-less teleport lock is admitted by the absence of a lock on
-        // both winning sides. Retain both declarations and master contexts.
+        // A local override on a source-less teleport door depends on both
+        // declarations and their master contexts.
         var linked = ReciprocalDoorSource(source);
         using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
         hash.AppendData(Encoding.UTF8.GetBytes("opennv-linked-door-access/v1"));
@@ -97,23 +98,21 @@ internal sealed partial class FalloutReferenceWorld
     {
         if (TerminalAccess(reference) is { } terminal) return TerminalLock(terminal, source);
         var field = AccessField(source, "XLOC");
-        if (field.IsEmpty)
-        {
-            if (!AccessField(source, "XTEL").IsEmpty)
-            {
-                var linked = ReciprocalDoorSource(source);
-                var linkedLock = AccessField(linked, "XLOC");
-                if (!linkedLock.IsEmpty)
-                {
-                    _ = ReadReferenceLock(linked, linkedLock);
-                    throw new NotSupportedException("Linked-door source lock inheritance requires its effective lock owner.");
-                }
-                if (_instances.TryGetValue(linked.Record.FormKey, out var opposite) && opposite.LockState is not null)
-                    throw new NotSupportedException("Linked-door dynamic lock inheritance requires its effective lock owner.");
-            }
-            return null;
-        }
+        if (field.IsEmpty) return null;
         return ReadReferenceLock(source, field);
+    }
+
+    private FalloutFormKey LockOwner(FalloutFormKey reference)
+    {
+        var source = Access(reference);
+        if (Get(reference).LockState is not null || !AccessField(source, "XLOC").IsEmpty ||
+            AccessField(source, "XTEL").IsEmpty) return reference;
+        // One hop only. A local lock wins even when the opposite side also
+        // has one. Reading the opposite declaration must not instantiate it.
+        var linked = ReciprocalDoorSource(source);
+        return !AccessField(linked, "XLOC").IsEmpty ||
+            _instances.TryGetValue(linked.Record.FormKey, out var opposite) && opposite.LockState is not null
+            ? linked.Record.FormKey : reference;
     }
 
     private LockDeclaration ReadReferenceLock(AccessSource source, ReadOnlyMemory<byte> field)
@@ -156,12 +155,13 @@ internal sealed partial class FalloutReferenceWorld
 
     private (FalloutReferenceLockState? State, LockDeclaration? Source) EffectiveLock(FalloutFormKey reference)
     {
-        var instance = Get(reference);
-        var source = Access(reference);
-        var declaration = LockSource(reference, source);
-        var state = instance.LockState ?? (declaration is null ? null :
-            new FalloutReferenceLockState(LockSourceHash(reference, source), declaration.Level,
-                declaration.InitiallyLocked && !instance.Unlocked));
+        var owner = LockOwner(reference);
+        _instances.TryGetValue(owner, out var instance);
+        var source = AccessRecord(owner);
+        var declaration = LockSource(owner, source);
+        var state = instance?.LockState ?? (declaration is null ? null :
+            new FalloutReferenceLockState(LockSourceHash(owner, source), declaration.Level,
+                declaration.InitiallyLocked && instance?.Unlocked != true));
         return (state, declaration);
     }
 
@@ -180,8 +180,9 @@ internal sealed partial class FalloutReferenceWorld
         var difficulty = FalloutReferenceLockState.Integer(level);
         RequireCellAccess(cellAccess);
         var (state, _) = EffectiveLock(reference);
-        var instance = Get(reference);
-        instance.LockState = new(LockSourceHash(reference, Access(reference)),
+        var owner = LockOwner(reference);
+        var instance = Get(owner);
+        instance.LockState = new(LockSourceHash(owner, Access(owner)),
             difficulty == 0 ? state?.Level ?? 0 : unchecked((byte)difficulty), true);
         instance.Unlocked = false;
     }
@@ -191,7 +192,7 @@ internal sealed partial class FalloutReferenceWorld
         RequireCellAccess(cellAccess);
         var (state, _) = EffectiveLock(reference);
         if (state is null) return;
-        var instance = Get(reference);
+        var instance = Get(LockOwner(reference));
         instance.LockState = state with { Locked = false };
         instance.Unlocked = true;
     }

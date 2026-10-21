@@ -35,20 +35,21 @@ internal static class LinkedDoorAccessContracts
             Require(world.GetLocked(first) == 1 && world.GetLockLevel(first) == 75 && world.Lock(first)?.Level == 75 &&
                 world.Get(first).Read(1) == 1 && !world.Get(first).DoorOpen && effects == 0,
                 "A real script lock on the calling side did not block access or changed door motion.");
-            Reject(() => world.GetLocked(second)); Reject(() => world.Lock(second));
-            Reject(() => world.UnlockWithKey(second, new FalloutPlayerInventory()));
-            Require(world.GetLocked(first) == 1, "Opposite-side refusal silently unlocked the actual locked side.");
+            Require(world.GetLocked(second) == 1 && world.GetLockLevel(second) == 75 && world.Lock(second)?.Level == 75 &&
+                !world.UnlockWithKey(second, new FalloutPlayerInventory()), "Opposite lookup lost the existing dynamic lock.");
             var locked = RoundTrip(world.Capture());
             foreach (var snapshots in new[] { locked, locked.Reverse().ToArray() })
             {
                 using var cold = new FalloutReferenceWorld(records); cold.Restore(snapshots);
                 Require(cold.InstanceCount == 2 && cold.GetLocked(first) == 1 && cold.GetLockLevel(first) == 75,
                     "Cold linked lock changed state, instantiated an unsaved reference or depended on snapshot order.");
-                Reject(() => cold.GetLocked(second));
-                cold.UnlockReference(first);
-                Require(cold.GetLocked(first) == 0 && cold.GetLockLevel(first) == 75,
+                Require(cold.GetLocked(second) == 1 && cold.GetLockLevel(second) == 75, "Cold inherited lock was lost.");
+                cold.UnlockReference(second);
+                Require(cold.GetLocked(first) == 0 && cold.GetLockLevel(first) == 75 && cold.GetLocked(second) == 0,
                     "Cold Unlock discarded retained linked-door difficulty.");
-                Reject(() => cold.GetLockLevel(second));
+                cold.LockReference(second, 50);
+                Require(cold.GetLockLevel(first) == 50 && cold.GetLockLevel(second) == 50 &&
+                    cold.Get(second).LockState is null, "Inherited mutation created a second lock owner.");
             }
             Run("LinkedA.Unlock\nLinkedA.Lock");
             Require(world.GetLocked(first) == 1 && world.GetLockLevel(first) == 75,
@@ -58,14 +59,15 @@ internal static class LinkedDoorAccessContracts
                 opposite.LockReference(second, 50);
                 Require(opposite.GetLocked(second) == 1 && opposite.GetLockLevel(second) == 50,
                     "Opposite-side actual lock was lost.");
-                Reject(() => opposite.GetLocked(first));
+                Require(opposite.GetLocked(first) == 1 && opposite.GetLockLevel(first) == 50, "Reverse dynamic lookup lost its owner.");
                 var both = locked.Single(snapshot => snapshot.Reference == first);
                 var other = opposite.Capture().Single(snapshot => snapshot.Reference == second);
                 foreach (var snapshots in new[] { new[] { both, other }, new[] { other, both } })
                 {
-                    using var rejected = new FalloutReferenceWorld(records);
-                    Reject(() => rejected.Restore(snapshots));
-                    Require(rejected.InstanceCount == 0, "Unowned simultaneous linked locks partially restored.");
+                    using var restored = new FalloutReferenceWorld(records);
+                    restored.Restore(snapshots);
+                    Require(restored.GetLockLevel(first) == 75 && restored.GetLockLevel(second) == 50,
+                        "Local locks did not take priority over opposite locks independently of restore order.");
                 }
             }
             using (var legacy = new FalloutReferenceWorld(records))
@@ -77,7 +79,13 @@ internal static class LinkedDoorAccessContracts
             }
             Require(world.GetLocked(Key(0x92)) == 1 && world.GetLockLevel(Key(0x92)) == 100 &&
                 world.Lock(Key(0x92))?.Key == Key(0x20), "Declared source-side key lock stopped blocking access.");
-            Reject(() => world.GetLocked(Key(0x93)));
+            Require(world.GetLocked(Key(0x93)) == 1 && world.GetLockLevel(Key(0x93)) == 100 &&
+                world.Lock(Key(0x93))?.Key == Key(0x20), "Opposite source key lock was not inherited.");
+            var keyring = new FalloutPlayerInventory();
+            keyring.Add(records, Key(0x20), 1, 1, true);
+            Require(world.UnlockWithKey(Key(0x93), keyring), "Inherited source key did not admit its actual key.");
+            Require(world.GetLocked(Key(0x92)) == 0 && world.GetLocked(Key(0x93)) == 0 &&
+                world.Get(Key(0x93)).LockState is null, "Opposite source unlock created a competing override.");
             foreach (var reference in Enumerable.Range(0x100, 16).Select(id => Key((uint)id)))
             {
                 Reject(() => world.GetLocked(reference));
@@ -85,10 +93,24 @@ internal static class LinkedDoorAccessContracts
                 Require(world.Get(reference).LockState is null, "Rejected linked source created a dynamic lock.");
             }
             VerifyDrift(directory, plugin, patch, locked);
+            using (var sourceOnly = new FalloutReferenceWorld(records))
+            {
+                Require(sourceOnly.GetLocked(Key(0x93)) == 1 && sourceOnly.InstanceCount == 1 && sourceOnly.ResidentCellCount == 0,
+                    "Inherited source lookup instantiated the other side or loaded its cell.");
+                sourceOnly.UnlockReference(Key(0x93));
+                var saved = RoundTrip(sourceOnly.Capture());
+                foreach (var snapshots in new[] { saved, saved.Reverse().ToArray() })
+                {
+                    using var cold = new FalloutReferenceWorld(records); cold.Restore(snapshots);
+                    Require(cold.GetLocked(Key(0x92)) == 0 && cold.GetLocked(Key(0x93)) == 0 &&
+                        cold.GetLockLevel(Key(0x93)) == 100 && cold.Get(Key(0x93)).LockState is null,
+                        "Cold inherited source unlock changed its owner, difficulty or access.");
+                }
+            }
             Console.WriteLine("OPENNV_LINKED_DOOR_ACCESS_PASS reciprocalUnlocked=true masterAdjusted=true noDestinationInstance=true " +
-                "scriptSelfLock=true oppositeSourceAndDynamicLock=refused malformedAndMissingLinks=refused coldBothOrders=true " +
+                "scriptSelfLock=true oppositeSourceAndDynamicLock=true localPriority=true malformedAndMissingLinks=refused coldBothOrders=true " +
                 "legacyAbsent=true linkedSourceDrift=true masterContextDrift=true invalidAtomic=true effects=none " +
-                "linkedLockInheritance=unbound nativeTraversalAndParity=unverified recording=false");
+                "linkedLockInheritance=true nativeTraversalAndParity=unverified recording=false");
         }
         finally
         {
@@ -130,7 +152,8 @@ internal static class LinkedDoorAccessContracts
             [Field("XTEL", Teleport(destination)), .. fields]);
         var nan = Teleport(0x90); BinaryPrimitives.WriteSingleLittleEndian(nan.AsSpan(4), float.NaN);
         return Join(Header(), Record("DOOR", 1, Field("SCRI", BitConverter.GetBytes(0x50u))), Record("MISC", 2),
-            Record("KEYM", 0x20), Script(), Record("CELL", 0x80, Field("DATA", [1])),
+            Record("KEYM", 0x20, Field("EDID", Text("SourceKey")), Field("FULL", Text("Source Key")),
+                Field("DATA", new byte[8])), Script(), Record("CELL", 0x80, Field("DATA", [1])),
             Record("CELL", 0x81, Field("DATA", [1])), Record("CELL", 0x82, Field("DATA", [1])),
             Group(0x80, Reference(0x90, "LinkedA", 1),
                 Door(0x92, 0x93, Field("XLOC", SourceLock(100, 0x20))), Door(0x93, 0x92)),

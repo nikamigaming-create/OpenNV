@@ -43,18 +43,18 @@ internal static class OwnedLinkedDoorAccessProbe
         world.LockReference(first, 75);
         if (world.GetLocked(first) != 1 || world.GetLockLevel(first) != 75 || world.Lock(first)?.Level != 75)
             throw new InvalidDataException("Selected actual side lost its fixture lock.");
-        RefuseInheritance(() => world.GetLocked(second));
+        RequireInheritance(world, second, 1, 75);
         var locked = RoundTrip(world.Capture());
         foreach (var snapshots in new[] { locked, locked.Reverse().ToArray() })
         {
             using var cold = new FalloutReferenceWorld(records); cold.Restore(snapshots);
             if (cold.GetLocked(first) != 1 || cold.GetLockLevel(first) != 75 || cold.InstanceCount != 2)
                 throw new InvalidDataException("Cold selected fixture lock changed or depended on snapshot order.");
-            RefuseInheritance(() => cold.GetLocked(second));
-            cold.UnlockReference(first);
+            RequireInheritance(cold, second, 1, 75);
+            cold.UnlockReference(second);
             if (cold.GetLocked(first) != 0 || cold.GetLockLevel(first) != 75)
                 throw new InvalidDataException("Cold selected fixture Unlock lost retained difficulty.");
-            RefuseInheritance(() => cold.GetLockLevel(second));
+            RequireInheritance(cold, second, 0, 75);
         }
         using (var legacy = new FalloutReferenceWorld(records))
         {
@@ -80,7 +80,7 @@ internal static class OwnedLinkedDoorAccessProbe
             sourceUnlocked = true,
             sourceCold = true,
             localFixtureLockBlocks = true,
-            oppositeDynamicInheritance = "refused",
+            oppositeDynamicInheritance = true,
             coldBothOrders = true,
             legacyAbsent = true,
             lockDependencySha256 = world.Get(first).LockState!.ReferenceSha256,
@@ -89,16 +89,15 @@ internal static class OwnedLinkedDoorAccessProbe
             recording = false
         }, new JsonSerializerOptions { WriteIndented = true }));
         Console.WriteLine("OPENNV_OWNED_LINKED_DOOR_ACCESS_PASS reciprocalSourceUnlocked=true localFixtureLockBlocks=true " +
-            "coldBothOrders=true legacyAbsent=true sourceUnchanged=true linkedLockInheritance=unbound nativeTraversalAndCampaign=unverified recording=false");
+            "coldBothOrders=true legacyAbsent=true sourceUnchanged=true linkedLockInheritance=true nativeTraversalAndCampaign=unverified recording=false");
     }
 
     private static string Hash(FalloutPluginRecord record) => Convert.ToHexString(SHA256.HashData(record.ReadData()));
     private static FalloutReferenceSnapshot[] RoundTrip(IReadOnlyList<FalloutReferenceSnapshot> snapshots) =>
         JsonSerializer.Deserialize<FalloutReferenceSnapshot[]>(JsonSerializer.Serialize(snapshots))!;
-    private static void RefuseInheritance(Action action)
+    private static void RequireInheritance(FalloutReferenceWorld world, FalloutFormKey reference, int locked, int level)
     {
-        try { action(); }
-        catch (NotSupportedException) { return; }
-        throw new InvalidDataException("Selected opposite-side dynamic lock was silently ignored.");
+        if (world.GetLocked(reference) != locked || world.GetLockLevel(reference) != level)
+            throw new InvalidDataException("Selected opposite-side lock differs from its actual owner.");
     }
 }
