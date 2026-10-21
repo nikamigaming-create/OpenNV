@@ -215,7 +215,9 @@
     },
     "holdDistanceMeters": 1.25,
     "collisionLayer": 1,
-    "collisionMask": 1
+    "collisionMask": 1,
+    "grabResponseHertz": 2.0,
+    "grabMaximumAccelerationMetersPerSecondSquared": 30.0
   },
   "pool": {
     "provenance": {

@@ -35,7 +35,8 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
     FalloutActivationRelaySnapshot? ActivationRelay = null,
     FalloutActorCorpseEquipment? CorpseEquipment = null,
     FalloutActorDeferredPackageContinuation? DeferredPackageContinuation = null,
-    FalloutAggroRadiusWarning? AggroWarning = null)
+    FalloutAggroRadiusWarning? AggroWarning = null,
+    FalloutReferenceGrabEvents? GrabEvents = null)
 {
     internal static void Validate(IReadOnlyList<FalloutReferenceSnapshot> snapshots)
     {
@@ -56,6 +57,7 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
                 if ((name is not ("health" or "aggression") && FalloutActorValue.UserSlot(name) != name) || value is null || !value.IsFinite)
                     throw new InvalidDataException("Saved actor value is invalid.");
             if (snapshot.Animation is { } animation) FalloutActorAnimationState.Validate(animation);
+            snapshot.GrabEvents?.Validate(snapshot.Reference);
             if (snapshot.ObjectAnimations is { } objectAnimations)
             {
                 var controllers = new HashSet<(string, int)>();
@@ -195,6 +197,7 @@ internal sealed class FalloutReferenceInstance
         set { if (_taken == value) return; _taken = value; _stateChanged?.Invoke(this, true); }
     }
     internal bool DoorOpen { get; set; }
+    internal FalloutReferenceGrabEvents? GrabEvents { get; set; }
     internal FalloutDoorMotionState? DoorMotion { get; set; }
     private FalloutActivationRelaySnapshot? _activationRelay;
     internal FalloutActivationRelaySnapshot? ActivationRelay
@@ -407,7 +410,7 @@ internal sealed class FalloutReferenceInstance
                 ? capturePending() : PendingPackageSelection?.Copy() : null,
             AnimationSoundEvents: soundEvents, HitReactionFaults: hitReactionFaults, ActivationRelay: ActivationRelay?.Copy(),
             CorpseEquipment: CaptureCorpseEquipment is { } captureEquipment ? captureEquipment() : CorpseEquipment?.Copy(),
-            DeferredPackageContinuation: DeferredPackageContinuation, AggroWarning: AggroWarning);
+            DeferredPackageContinuation: DeferredPackageContinuation, AggroWarning: AggroWarning, GrabEvents: GrabEvents);
     }
 }
 
@@ -817,6 +820,7 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
             instance.Ragdoll = snapshot.Ragdoll;
             instance.KnockedDown = snapshot.KnockedDown;
             instance.Engagement = snapshot.Engagement;
+            instance.GrabEvents = snapshot.GrabEvents;
             if (snapshot.AggroWarning is { } warning)
             {
                 _ = validated.Actor(snapshot.Reference);

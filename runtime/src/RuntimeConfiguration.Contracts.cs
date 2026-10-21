@@ -167,7 +167,9 @@ internal sealed record PickupConfiguration(
     ConfigurationProvenance Provenance,
     float HoldDistanceMeters,
     uint CollisionLayer,
-    uint CollisionMask);
+    uint CollisionMask,
+    float GrabResponseHertz = 2,
+    float GrabMaximumAccelerationMetersPerSecondSquared = 30);
 
 internal sealed record DesktopKeyBindingConfiguration(
     string Action,

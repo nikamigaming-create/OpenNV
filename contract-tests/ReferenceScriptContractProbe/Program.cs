@@ -4,6 +4,12 @@ using System.Text.Json;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.World.Cells;
 
+if (args is ["--grab-event-contracts"])
+{
+    GrabEventContracts.Run();
+    return;
+}
+
 if (args is ["--follow-package-contracts"])
 {
     FollowPackageContracts.Run();
@@ -675,7 +681,9 @@ try
         .Concat(Record("SCPT", 0x523, Local(1, "count"), Local(2, "timer"), Local(3, "failure"), Field("SCTX", Text(
             "begin OnActivate\nset count to count + 1\nend\nbegin GameMode\nset timer to 10\nend\n" +
             "begin OnActivate\nif failure == 1\nMissingOperation\nendif\nset count to count + 1\nend\n" +
-            "begin OnLoad\nset timer to 20\nend"))))
+            "begin OnLoad\nset timer to 20\nend\n" +
+            "begin OnGrab\nset count to count + 10\nend\n" +
+            "begin OnRelease\nset timer to timer + 100\nend"))))
         .Concat(Explosion(0xA00, flags: 0x12, damage: 28, radius: 256))
         .Concat(Explosion(0xA01, flags: 0x80, damage: 4, radius: 32))
         .Concat(Explosion(0xA02, flags: 0, damage: 4, radius: 32, force: 5))
@@ -703,6 +711,7 @@ try
             EnableChild(0x905, 0x904, 1), EnableChild(0x906, 0x905, 2), EnableChild(0x907, 0x908, 0), EnableChild(0x908, 0x907, 0))).ToArray());
     File.WriteAllBytes(Path.Combine(directory, "Patch.esp"), Header("Base.esm").Concat(Script(2)).ToArray());
     using var records = FalloutPluginStack.Load(directory, ["Base.esm", "Patch.esp"]);
+    GrabEventContracts.VerifyDispatch(records, FalloutCellSceneReader.Read(records, Key(0x805)));
     using (var activationWorld = new FalloutReferenceWorld(records))
     {
         activationWorld.LoadCell(FalloutCellSceneReader.Read(records, Key(0x805)));
@@ -1007,6 +1016,7 @@ EscortContracts.Run();
 PackageDataContracts.Run();
 EditorTravelContracts.Run();
 TravelContracts.Run();
+GrabEventContracts.Run();
 FurnitureContracts.Run();
 AuthoredRagdollContracts.Run();
 ActorDamageContracts.Run();

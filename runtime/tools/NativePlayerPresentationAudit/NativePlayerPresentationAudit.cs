@@ -12,6 +12,11 @@ public partial class NativePlayerPresentationAudit : Node3D
         try
         {
             var args = OS.GetCmdlineUserArgs();
+            if (args is ["--owned-grab", var grabRoot])
+            {
+                await AuditOwnedGrab(grabRoot);
+                GetTree().Quit(); return;
+            }
             if (args.Length >= 6 && args[0] == "--owned-weapon-action")
             {
                 await AuditOwnedWeaponAction(args[1], args[2], args[3], args[4], args[5], args.Skip(6).ToArray());
