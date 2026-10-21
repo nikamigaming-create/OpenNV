@@ -54,6 +54,7 @@ internal sealed partial class RuntimeNativeCreature
         motion = _aiState?.PackageMotion,
         travel = TravelState,
         guard = _guardPackage is null ? null : new { source = _guardPackage, progress = _guardProgress },
+        patrol = PatrolState,
         eventIdle = _aiState?.PackageIdle,
         packageStarts = _aiState?.PackageStarts,
         packageEvents = _packageEvents is null ? null : new
@@ -199,7 +200,10 @@ internal sealed partial class RuntimeNativeCreature
         var restoreTravel = retained?.Travel is not null;
         var restoreGuard = retained?.Guard is not null;
         var restoreAccompany = retained?.AccompanyPortal is not null;
-        var selected = restoreTravel || restoreGuard || restoreAccompany ? _aiRecords!.GetEffective(retained!.Package) :
+        // A retired package may retain its last physical pose. That motion is
+        // not an active assignment and must not restart its procedure on load.
+        var restorePatrol = retained?.Patrol is not null && _aiState!.PackageAssignment?.Package == retained.Package;
+        var selected = restoreTravel || restoreGuard || restoreAccompany || restorePatrol ? _aiRecords!.GetEffective(retained!.Package) :
             FalloutAiPackages.Select(_aiRecords!, Appearance.Creature, PackageCondition, _aiState!.Templates, _aiClock,
                 evaluateRunOn: true,
                 eligible: package => _aiWorld!.PackageEligible(Appearance.Reference!.Value, package, _aiClock,
@@ -207,13 +211,22 @@ internal sealed partial class RuntimeNativeCreature
         if (_aiError is not null && selected is not null && previousFailure == selected.FormKey)
         { _failedPackage = previousFailure; return; }
         _aiError = null;
-        if (_aiPackage?.FormKey == selected?.FormKey) return;
+        if (_aiPackage?.FormKey == selected?.FormKey)
+        {
+            if (_patrol is { } route && _patrolProgress?.Complete == true && _packageEvents?.Done == true)
+            {
+                _patrolProgress = route.Start(_ => 0); Combat!.SetPatrolProgress(_patrolProgress);
+                _packageEvents.Change(null); _packageEvents.Change(FalloutScriptPackage.Read(selected!));
+            }
+            return;
+        }
         _failedPackage = selected?.FormKey;
         var source = selected is null ? null : FalloutScriptPackage.Read(selected);
         FalloutFollowPackage? follow = null;
         FalloutDialoguePackage? dialogue = null;
         FalloutTravelPackage? travel = null;
         FalloutGuardPackage? guard = null;
+        FalloutPatrolRoute? patrol = null;
         if (source is not null)
         {
             if (source.Procedure == 1) follow = FalloutFollowPackage.Read(selected!);
@@ -225,6 +238,7 @@ internal sealed partial class RuntimeNativeCreature
             }
             else if (source.Procedure == 6) travel = FalloutTravelPackage.Read(selected!);
             else if (source.Procedure == 14) guard = FalloutGuardPackage.Read(selected!);
+            else if (source.Procedure == 13) patrol = ReadPatrol(selected!);
             else if (source.Procedure == 15)
             {
                 dialogue = FalloutDialoguePackage.Read(selected!);
@@ -246,17 +260,20 @@ internal sealed partial class RuntimeNativeCreature
             _aiState!.ProcedureCaptureBlocker = restoreGuard ? null : "Guard approach has no first native motion observation.";
         }
         else { _guardPackage = null; _guardProgress = null; }
+        if (patrol is not null) BeginPatrol(patrol, restorePatrol);
+        else { _patrol = null; _patrolProgress = null; _patrolDestination = null; }
         _initialPackageSelected = true;
         var restoreFollow = follow is not null && retained?.Package == source!.Form &&
             _aiState!.PackageAssignment is { } followAssignment && followAssignment.Package == source.Form;
-        if (restoreTravel || restoreGuard || restoreAccompany || restoreFollow || restoredDialogue)
+        if (restoreTravel || restoreGuard || restoreAccompany || restoreFollow || restorePatrol || restoredDialogue)
             _packageEvents!.Restore(source!, restoreFollow ? _aiState!.PackageAssignment!.Done :
+                restorePatrol ? _aiState!.PackageAssignment?.Done == true :
                 restoreGuard || restoreAccompany ? false : restoreTravel ? _travelProgress!.Complete : true);
         else _packageEvents!.Change(source);
         _aiPackage = selected; _followPackage = follow; _dialoguePackage = dialogue; _dialogueRequested = restoredDialogue;
         _accompanyDoor = null; _accompanyDoorDestination = null; _accompanyTargetRegion = null;
         _accompanyPortalRequested = false; _accompanyPortalTransferred = false; _accompanyPortalWait = null;
-        if (travel is null && guard is null)
+        if (travel is null && guard is null && patrol is null)
             _aiState!.ProcedureCaptureBlocker = dialogue is not null && !restoredDialogue ? DialogueCaptureBlocker : null;
         if (!restoredDialogue && _aiState!.PackageMotion is { DialogueCompleted: true } previousMotion)
             _aiState.PackageMotion = previousMotion with { DialogueCompleted = false };
@@ -292,7 +309,13 @@ internal sealed partial class RuntimeNativeCreature
             _packageClock -= delta;
             var scheduleTime = _aiClock?.ScheduleTime();
             if (scheduleTime is { } moment) scheduleTime = moment with { Hour = MathF.Floor(moment.Hour) };
+            // FNV Patrol retains its procedure until completion or an explicit
+            // EVP request. An arrival result changing a quest variable must not
+            // consume the marker's remaining wait/heading through polling.
+            var patrolHolding = _content.Game == RuntimeLiveContentSource.FalloutNewVegasGame &&
+                _patrol is not null && _patrolProgress?.Complete != true && !_evaluateRequested;
             if (!_packageSelectionAttempted || !PackageEndIdlePending && !(_travelPackage?.MustReach == true && _travelProgress?.Complete == false) &&
+                !patrolHolding &&
                 (_evaluateRequested || _packageClock <= 0 || scheduleTime != _aiScheduleTime || _aiQuestRevision != _aiQuests!.Revision))
             {
                 _evaluateRequested = false; _packageClock = 10;
@@ -309,6 +332,7 @@ internal sealed partial class RuntimeNativeCreature
             }
             if (_aiError is not null) return;
             if (_travelPackage is not null) AdvanceTravel(delta);
+            else if (_patrol is not null) AdvancePatrol(delta);
             else if (_guardPackage is { } guard)
                 _guardProgress = Combat.AdvanceGuard(_aiPackage!, guard, _guardProgress!, delta);
             else if (_followPackage is { } follow)

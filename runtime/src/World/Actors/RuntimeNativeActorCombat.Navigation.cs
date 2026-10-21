@@ -72,13 +72,17 @@ internal sealed partial class RuntimeNativeActorCombat
             try
             {
                 var context = _context!;
-                var source = _state.Engagement is not null
-                    ? context.RouteRegion?.Invoke(_actor.GlobalPosition, target, stoppingDistance) : null;
+                // Package destinations are already source-projected. They need
+                // authored prefix regions, but not combat's whole-component
+                // destination-region search on every short movement slice.
+                var source = context.RouteRegion?.Invoke(_actor.GlobalPosition, target,
+                    _state.Engagement is not null ? stoppingDistance : 0);
                 var coarse = source?.Points ?? context.Route(_actor.GlobalPosition, target);
                 if (coarse.Length == 0) throw new InvalidOperationException("No source navigation corridor.");
                 var intent = _routeIntent = NativeCapsuleNavigation.Intent(_actor.GlobalPosition, coarse, target, stoppingDistance,
                     projection: source?.Projection);
-                _routeArrival = intent.Projection is not null ? source?.Arrival : null;
+                _routeArrival = intent.Projection is not null ? source?.Arrival :
+                    !intent.ReferenceApproach && intent.Resume < coarse.Length ? source?.PrefixArrival?.Invoke(intent.Target, intent.Resume) : null;
                 _routeEnd = intent.Target;
                 _routeArrivalRadius = intent.ArrivalRadius;
                 _routeSpacing = Math.Max(.3f, _radius * 2);

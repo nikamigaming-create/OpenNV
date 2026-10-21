@@ -37,6 +37,11 @@ public partial class NativeActorPerformanceAudit
             // inventory weapon. This is not ordinary movement or pixel proof.
             actor.Combat.AdvancePackageMotion(package, actor.GlobalPosition, 1, false, 0, weaponDrawn: route.WeaponDrawn);
             if (actor.Combat.AnimationWeapon is null) throw new InvalidDataException("Patrol weapon was not attached.");
+            actor.Combat.FacePackageDirection(Vector3.Right, .25);
+            var observedRotation = actor.GlobalBasis.Orthonormalized().GetRotationQuaternion();
+            var retainedRotation = actor.Combat.PackageMotion!.Rotation;
+            if (!observedRotation.IsEqualApprox(new Quaternion(retainedRotation[0], retainedRotation[1], retainedRotation[2], retainedRotation[3])))
+                throw new InvalidDataException("Source patrol facing was not published to its saved native motion.");
             var idles = route.Points.SelectMany(point => point.Idles?.Idles ?? []).Distinct().ToArray();
             foreach (var form in idles)
             {

@@ -23,7 +23,8 @@ internal static class PackageEventContracts
                 Record("QUST", 0x60, Field("EDID", Text("PackageQuest"))),
                 Record("DIAL", 0x61, Field("EDID", Text("MasterTopic"))),
                 Record("IDLE", 0x70, Field("EDID", Text("EventIdle"))),
-                Record("CELL", 0x80, Field("DATA", [1])), group));
+                Record("CELL", 0x80, Field("DATA", [1])), group,
+                Record("REFR", 0x91, Event("XPPA", "set counter to counter + 1\nset caller to GetSelf"))));
             File.WriteAllBytes(Path.Combine(directory, "Override.esp"), Join(Header("Results.esm"),
                 Package(0x01000100, Event("POBA", "set counter to counter + 1\nset caller to GetSelf\nSetAV Variable05 7\nSetStage PackageQuest 16", 0x60),
                     Event("POEA", "if counter == 1\nset counter to counter + 1\nendif\nSetStage PackageQuest 20", 0x60)),
@@ -129,6 +130,14 @@ internal static class PackageEventContracts
                 "Duplicate topic metadata admitted speech or skipped its preceding script.");
             Reject(() => scripts.ExecutePackageEvent(duplicate with { Kind = "Unknown" }, Key(0x90)));
             Require(world.Get(Key(0x90)).Read(1) == 10, "An untyped event mutated its source result.");
+            var marker = records.GetEffective(Key(0x91));
+            var arrival = new FalloutPackageEvent(marker, "XPPA", marker.ReadSubrecords().Skip(1).ToArray());
+            scripts.ExecutePackageEvent(arrival, Key(0x90));
+            Require(world.Get(Key(0x90)).Read(1) == 11 && world.Get(Key(0x90)).Read(2) == records.RuntimeFormId(Key(0x90)),
+                "Patrol arrival results lost the actual actor's locals or calling reference.");
+            Reject(() => scripts.ExecutePackageEvent(arrival with { Kind = "POBA" }, Key(0x90)));
+            Reject(() => scripts.ExecutePackageEvent(topicSource.EventPrograms["POBA"] with { Kind = "XPPA" }, Key(0x90)));
+            Require(world.Get(Key(0x90)).Read(1) == 11, "A mismatched source event mutated actor state.");
             Console.WriteLine("OPENNV_PACKAGE_EVENT_RESULTS_PASS actorScope=true ownCompiledScope=true conditional=true stage=true prefixLatch=true coldValues=true invalidAtomic=true topics=source-bound eventOrder=true winner=true actorColdLifecycle=unverified nativeVoice=unverified");
         }
         finally { foreach (var file in Directory.EnumerateFiles(directory)) File.Delete(file); Directory.Delete(directory); }

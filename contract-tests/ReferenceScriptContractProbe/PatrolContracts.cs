@@ -15,11 +15,15 @@ internal static class PatrolContracts
             var header = new byte[12]; BinaryPrimitives.WriteSingleLittleEndian(header, 1.34f);
             File.WriteAllBytes(Path.Combine(directory, "Patrol.esm"), Join(Record("TES4", 0, Field("HEDR", header)),
                 Record("STAT", 0x3b), Package(1, 10), Package(2, 20), Package(3, 20, false), Package(4, 10, false),
+                Package(5, 10, flags: 0x1000, behavior: 0x40), Package(6, 10, flags: 0, behavior: 0x40),
                 Point(10, 11, 0), Point(11, 12, 10), Point(12, null, 20),
                 Point(20, 21, 0), Point(21, 22, 10), Point(22, 20, 20)));
             using var records = FalloutPluginStack.Load(directory, ["Patrol.esm"]);
             FalloutPatrolRoute Route(uint id) => FalloutPatrolRoute.Read(records, records.GetEffective(new("Patrol.esm", id)), new("Patrol.esm", 99));
             var linear = Route(1); var circular = Route(2);
+            Require(Route(5).Points.Count == linear.Points.Count, "Skip Fallout Behavior rejected its disabled behavior lane.");
+            try { Route(6); throw new InvalidOperationException("Unowned patrol behavior was admitted."); }
+            catch (NotSupportedException) { }
             var progress = linear.Start(point => Math.Abs(point.Position[0] - 11));
             Require(progress.Index == 1 && linear.WeaponDrawn && !linear.Circular, "Closest point/source flags lost.");
             Require(linear.Advance(progress, false, 100) == progress, "Time moved an actor that never arrived.");
@@ -61,9 +65,10 @@ internal static class PatrolContracts
         try { action(); } catch (InvalidDataException) { return; }
         throw new InvalidOperationException("Malformed patrol state accepted.");
     }
-    private static byte[] Package(uint id, uint first, bool repeat = true)
+    private static byte[] Package(uint id, uint first, bool repeat = true, uint flags = 0x800000, ushort behavior = 0)
     {
-        var data = new byte[12]; data[4] = 13; BinaryPrimitives.WriteUInt32LittleEndian(data, 0x800000);
+        var data = new byte[12]; data[4] = 13; BinaryPrimitives.WriteUInt32LittleEndian(data, flags);
+        BinaryPrimitives.WriteUInt16LittleEndian(data.AsSpan(6), behavior);
         var location = new byte[12]; BinaryPrimitives.WriteUInt32LittleEndian(location.AsSpan(4), first);
         return Record("PACK", id, Field("PKDT", data), Field("PLDT", location), Field("PKPT", [repeat ? (byte)1 : (byte)0, 0]));
     }

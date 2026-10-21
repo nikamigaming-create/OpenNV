@@ -6,7 +6,8 @@ using OpenNV.Runtime.World.Cells;
 namespace OpenNV.Runtime.World.Actors;
 
 internal sealed record NativeActorNavigationRoute(Vector3[] Points,
-    NativeNavigationProjectionRegion? Projection = null, Func<Vector3, bool>? Arrival = null);
+    NativeNavigationProjectionRegion? Projection = null, Func<Vector3, bool>? Arrival = null,
+    Func<Vector3, int, Func<Vector3, bool>>? PrefixArrival = null);
 
 internal sealed record NativeActorCombatContext(Func<RuntimeNativePlayer?> Player, Func<GameplayVitals> Vitals,
     Action<FalloutWeaponDamage, byte> DamagePlayer, Func<Vector3, Vector3, Vector3[]> Route, Func<Vector3, bool> Resident,

@@ -163,7 +163,8 @@ internal sealed record FalloutPackageEvent(FalloutPluginRecord Package, string K
 
     internal void ValidateScript()
     {
-        if (Package.Signature != "PACK" || Kind is not ("POBA" or "POEA" or "POCA"))
+        if (!(Package.Signature == "PACK" && Kind is "POBA" or "POEA" or "POCA" ||
+            Package.Signature == "REFR" && Kind == "XPPA"))
             throw new InvalidDataException("Package event has no typed source lifecycle owner.");
         var compiled = Fields.Where(field => field.Signature == "SCDA").ToArray();
         if (compiled.Length > 1) throw new InvalidDataException("Package event repeats its compiled program.");

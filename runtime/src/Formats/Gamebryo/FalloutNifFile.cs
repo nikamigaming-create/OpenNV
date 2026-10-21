@@ -237,7 +237,9 @@ internal sealed partial class FalloutNifFile
             "NiSkinPartition" => ReadSkinPartition(block, ref cursor),
             "NiControllerSequence" => ReadControllerSequence(block, ref cursor),
             "BSAnimNotes" => ReadAnimationNotes(block, ref cursor),
-            "NiTransformInterpolator" => ReadTransformInterpolator(block, ref cursor),
+            // The Bethesda subclass adds no serialized fields (NIF XML).
+            // Preserve its block identity while reading the inherited channels.
+            "NiTransformInterpolator" or "BSRotAccumTransfInterpolator" => ReadTransformInterpolator(block, ref cursor),
             "NiBSplineTransformInterpolator" or "NiBSplineCompTransformInterpolator" =>
                 ReadSplineTransformInterpolator(block, ref cursor),
             "NiBSplinePoint3Interpolator" or "NiBSplineCompPoint3Interpolator" => ReadSplinePoint3Interpolator(block, ref cursor),
