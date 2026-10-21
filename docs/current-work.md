@@ -1,8 +1,9 @@
 # Current work
 
 Updated 2026-10-21. User priority is **fully playable flat Fallout: New Vegas**.
-Root works alone and owns code, builds, input and Git. Work is active on
-`codex/fnv-sandbox-work`, based on `origin/main` at `fbd2f2e8`.
+Root works alone and owns code, builds, input and Git. The current implementation
+owner is source-driven Sandbox work; attachment continuation is repaired in
+PR #250. Autonomous activity selection and execution remain unimplemented.
 
 ## Current owner
 
