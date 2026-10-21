@@ -6,7 +6,7 @@ namespace OpenNV.Runtime.World.Cells;
 // furniture base pose and of the collection cursor and replay delays.
 internal sealed record FalloutActorPackageIdleAnimation(FalloutFormKey Idle, string IdleSha256,
     string Resource, string Sha256, FalloutIdleAnimationPlaybackSnapshot Clock, long Revision,
-    FalloutActorResidualPose? ResidualPose = null)
+    FalloutActorResidualPose? ResidualPose = null, IReadOnlyList<FalloutActorIdleObjectBinding>? Objects = null)
 {
     internal void Validate()
     {
@@ -15,6 +15,13 @@ internal sealed record FalloutActorPackageIdleAnimation(FalloutFormKey Idle, str
             Clock is null || Revision <= 0 || Revision == long.MaxValue)
             throw new InvalidDataException("Saved package collection animation has invalid source ownership.");
         Clock.Validate();
+        if (Objects is not null)
+        {
+            if (Objects.Any(value => value is null)) throw new InvalidDataException("Saved idle animation object is absent.");
+            foreach (var binding in Objects) binding.Validate();
+            if (Objects.Select(value => value.Form).Distinct().Count() != Objects.Count)
+                throw new InvalidDataException("Saved idle animation objects repeat a source owner.");
+        }
         (ResidualPose ?? throw new InvalidDataException("Saved collection animation is missing its residual pose.")).Validate();
         if (Clock.Complete) throw new InvalidDataException("Saved collection animation has already released its pose.");
     }
@@ -36,9 +43,8 @@ internal sealed record FalloutActorPackageIdleAnimation(FalloutFormKey Idle, str
         if (!source.AnimationPath.Equals(Resource, StringComparison.OrdinalIgnoreCase) ||
             !FalloutIdleAnimationData.Read(record).AdmitsAdditionalLoops(Clock.SelectedAdditionalLoops))
             throw new InvalidDataException("Saved collection resource or chosen repeats differ from the source IDLE.");
-        if (source.Objects.Count != 0)
-            throw new NotSupportedException("Active collection animation objects require their independent capture owners.");
+        FalloutActorIdleObjectBinding.ValidateSources(records, source, Objects);
     }
 
-    internal FalloutActorPackageIdleAnimation Copy() => this with { ResidualPose = ResidualPose?.Copy() };
+    internal FalloutActorPackageIdleAnimation Copy() => this with { ResidualPose = ResidualPose?.Copy(), Objects = Objects?.ToArray() };
 }

@@ -7,11 +7,20 @@ internal partial class RuntimeNativeNpc
 {
     private string? _idleAnimationResource, _idleAnimationSha256;
 
+    private bool CanCaptureIdleObjects() => _idleObjectBindings is { } bindings && bindings.Count == _animationObjects.Count &&
+        _animationObjects.All(value => Godot.GodotObject.IsInstanceValid(value) && !value.IsQueuedForDeletion());
+
+    private IReadOnlyList<FalloutActorIdleObjectBinding>? CaptureIdleObjects()
+    {
+        if (!CanCaptureIdleObjects()) throw new NotSupportedException("Idle animation object still has an independent or retired owner.");
+        return _idleObjectBindings!.Count == 0 ? null : _idleObjectBindings.ToArray();
+    }
+
     private bool CanCaptureFurnitureIdleAnimation() => _sitting == 1 && _idleOwner == "package-idle" &&
         _idleForm is not null && _animation is not null && _idlePlayback is { Complete: false } && _idleData is not null &&
         _baseAnimation is not null &&
         _idleRevision is > 0 and < long.MaxValue && _idleAnimationResource is not null && _idleAnimationSha256 is not null &&
-        _animationObjects.Count == 0 && Combat?.AnimationWeapon is null && _animationSounds?.CanCaptureSilent != false &&
+        CanCaptureIdleObjects() && Combat?.AnimationWeapon is null && _animationSounds?.CanCaptureSilent != false &&
         _packageIdles?.Capture() is { Cursor: > 0, SelectionCount: > 0, WaitSeconds: 0, Complete: false };
 
     private FalloutActorPackageIdleAnimation CaptureFurnitureIdleAnimation()
@@ -20,7 +29,7 @@ internal partial class RuntimeNativeNpc
             throw new NotSupportedException("Furniture collection animation has an unowned overlay, object or sound continuation.");
         var saved = new FalloutActorPackageIdleAnimation(_idleForm!.Value,
             FalloutActorFurnitureContinuation.RecordHash(_aiStack!.GetEffective(_idleForm.Value)),
-            _idleAnimationResource!, _idleAnimationSha256!, _idlePlayback!.Capture(), _idleRevision, CaptureFurnitureResidualPose());
+            _idleAnimationResource!, _idleAnimationSha256!, _idlePlayback!.Capture(), _idleRevision, CaptureFurnitureResidualPose(), CaptureIdleObjects());
         saved.Validate(_aiStack, _packageIdleSource!.Form);
         return saved;
     }

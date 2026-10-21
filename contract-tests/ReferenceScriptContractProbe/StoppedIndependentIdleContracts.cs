@@ -1,5 +1,6 @@
 using System.Text.Json;
 using OpenNV.Runtime.Content;
+using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.World.Cells;
 
 internal static class StoppedIndependentIdleContracts
@@ -55,10 +56,38 @@ internal static class StoppedIndependentIdleContracts
             Require(rejected.InstanceCount == 0, "Invalid independent IDLE partially restored the cold world.");
         }
         Reject(() => animation.Validate(records, Key(0x21)));
+        var objectBinding = new FalloutActorIdleObjectBinding(Key(0x50), Hash(0x50),
+            "meshes/fixture/object.nif", new string('e', 64));
+        var objectClock = new FalloutIdleAnimationPlayback(0, 2, 1, 2, keys, 2);
+        objectClock.Advance(.875);
+        var withObject = animation with { Idle = Key(0x33), IdleSha256 = Hash(0x33),
+            Resource = "meshes/fixture/with-object.kf", Objects = [objectBinding], Clock = objectClock.Capture() };
+        var withObjectFailure = failure with { IndependentIdle = new("script", withObject) };
+        var objectSnapshots = captured.Select(value => value with { PackageBindingFailure = withObjectFailure }).ToArray();
+        using (var objects = new FalloutReferenceWorld(records))
+        {
+            objects.Restore(JsonSerializer.Deserialize<FalloutReferenceSnapshot[]>(JsonSerializer.Serialize(objectSnapshots))!);
+            var retained = objects.Get(actor.Reference).PackageBindingFailure!.IndependentIdle!.Animation;
+            Require(retained.Objects!.Single() == objectBinding && retained.Clock == withObject.Clock &&
+                !ReferenceEquals(retained.Copy().Objects, retained.Objects),
+                "Cold idle attachment lost its source bindings, selected clock or independent snapshot ownership.");
+        }
+        foreach (var invalidObjects in new IReadOnlyList<FalloutActorIdleObjectBinding>?[]
+        {
+            null, [], [objectBinding, objectBinding], [objectBinding with { Form = Key(0x34) }],
+            [objectBinding with { RecordSha256 = new string('0', 64) }],
+            [objectBinding with { Resource = "meshes/fixture/other.nif" }],
+        }) Reject(() => (withObject with { Objects = invalidObjects }).ValidateSource(records));
+        var previous = JsonSerializer.Deserialize<FalloutNativeCampaignState>(JsonSerializer.Serialize(new
+        { Schema = FalloutNativeCampaignSave.BeforeIdleObjectsSchema, References = captured }))!;
+        var upgraded = FalloutNativeCampaignSave.AdmitPreviousOwnerSchema(previous);
+        Require(upgraded.Schema == FalloutNativeCampaignSave.ExpectedSchema &&
+            ReferenceEquals(upgraded.References, previous.References), "Prior-schema admission changed retained idle state.");
+        Reject(() => FalloutNativeCampaignSave.AdmitPreviousOwnerSchema(previous with { References = objectSnapshots }));
         Reject(() => FalloutReferenceSnapshot.Validate(captured.Select(value => value with
         { Engagement = new(Key(0x902), "idle", 1, false, "meshes/fixture/combat-idle.kf", new string('d', 64),
             [2, 3, 4], [0, 0, 0, 1]) }).ToArray()));
-        Console.WriteLine("OPENNV_STOPPED_INDEPENDENT_IDLE_CONTRACT_PASS sourceIdle=true independentOfPackageCollection=true endlessPhase=true futureTextKeys=true baseClock=true rng=true faultRetained=true residualCopy=true invalidAtomic=true attachmentsRefused=true nativePose=unverified");
+        Console.WriteLine("OPENNV_STOPPED_INDEPENDENT_IDLE_CONTRACT_PASS sourceIdle=true independentOfPackageCollection=true endlessPhase=true futureTextKeys=true baseClock=true rng=true faultRetained=true residualCopy=true invalidAtomic=true attachmentBindings=true missingOrChangedAttachmentsRefused=true priorSchema=true nativePose=unverified");
     }
 
     private static void Reject(Action action)

@@ -170,6 +170,7 @@ internal partial class RuntimeNativeNpc
             idleOwner = _idleOwner,
             idlePlaybackComplete = _idlePlayback?.Complete,
             activeAnimationObjects = _animationObjects.Count,
+            animationObjectsCaptureReady = CanCaptureIdleObjects(),
             hasAnimationWeapon = Combat?.AnimationWeapon is not null,
             responseIdleActive = _responseIdleActive,
             pendingTravelArrival = _travelProgress?.ArrivalPending,
