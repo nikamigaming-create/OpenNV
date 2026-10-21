@@ -66,7 +66,8 @@ internal sealed record FalloutNativeCampaignRestore(
 
 internal static class FalloutNativeCampaignSave
 {
-    internal const string ExpectedSchema = "opennv-native-fnv-campaign-save/v52";
+    internal const string ExpectedSchema = "opennv-native-fnv-campaign-save/v53";
+    internal const string BeforeGrabEventsSchema = "opennv-native-fnv-campaign-save/v52";
     internal const string BeforeAggroWarningsSchema = "opennv-native-fnv-campaign-save/v51";
     internal const string BeforeTransientExplosionsSchema = "opennv-native-fnv-campaign-save/v50";
     internal const string BeforeAbilityScriptsSchema = "opennv-native-fnv-campaign-save/v49";
@@ -481,6 +482,9 @@ internal static class FalloutNativeCampaignSave
 
     internal static FalloutNativeCampaignState AdmitPreviousOwnerSchema(FalloutNativeCampaignState state)
     {
+        if (state.Schema != ExpectedSchema && state.References?.Any(reference => reference.GrabEvents is not null) == true)
+            throw new InvalidDataException("Earlier campaign schemas cannot own grab/release event marks.");
+        if (state.Schema == BeforeGrabEventsSchema) state = state with { Schema = ExpectedSchema };
         if (state.Schema != ExpectedSchema && state.References?.Any(reference => reference.AggroWarning is not null) == true)
             throw new InvalidDataException("Earlier campaign schemas cannot own aggro warning state.");
         if (state.Schema == BeforeAggroWarningsSchema) return state with { Schema = ExpectedSchema };
@@ -498,6 +502,8 @@ internal static class FalloutNativeCampaignSave
         string expectedSaveCompatibilityId,
         FalloutPlayerAbilitySaveAdmission? originalAbilityAdmission)
     {
+        if (state.Schema != ExpectedSchema && state.References?.Any(reference => reference.GrabEvents is not null) == true)
+            throw new InvalidDataException("Earlier campaign schemas cannot own grab/release event marks.");
         if (state.Schema != ExpectedSchema && state.References?.Any(reference => reference.AggroWarning is not null) == true)
             throw new InvalidDataException("Aggro warning state requires the current campaign schema.");
         if (state.Schema != ExpectedSchema && (state.Music is not null || state.TransientExplosions is not null || state.FastTravel is not null))

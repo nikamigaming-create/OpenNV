@@ -11,15 +11,25 @@ internal partial class RuntimeNativePlayer
     private Vector3 _grabLocalPoint;
     private Vector3 _grabTarget;
     private FalloutPluginStack? _grabRecords;
+    private Action<bool>? _grabEvents;
+    internal Func<Node, Action<bool>?>? BindGrabEvents { get; set; }
 
-    internal object GrabState => new
+    internal object GrabState
     {
-        body = GodotObject.IsInstanceValid(_grabbedBody) ? _grabbedBody!.GetPath().ToString() : null,
-        distance = _grabbedBody is null ? (float?)null : _grabDistance,
-        separation = GodotObject.IsInstanceValid(_grabbedBody)
-            ? _grabTarget.DistanceTo(_grabbedBody!.ToGlobal(_grabLocalPoint)) : (float?)null,
-        owner = "source-dynamic-body;bounded-force-adapter",
-    };
+        get
+        {
+            var body = GodotObject.IsInstanceValid(_grabbedBody) && _grabbedBody!.IsInsideTree() && !_grabbedBody.IsQueuedForDeletion()
+                ? _grabbedBody : null;
+            return new
+            {
+                body = body?.GetPath().ToString(),
+                distance = body is null ? (float?)null : _grabDistance,
+                separation = body is null ? (float?)null : _grabTarget.DistanceTo(body.ToGlobal(_grabLocalPoint)),
+                retiring = _grabbedBody is not null && body is null,
+                owner = "source-dynamic-body;bounded-force-adapter",
+            };
+        }
+    }
 
     private bool GrabInput(InputEvent inputEvent)
     {
@@ -44,10 +54,14 @@ internal partial class RuntimeNativePlayer
         // Retain the actual picked surface and depth. The body applies a
         // bounded force on its physics clock; collision remains authoritative.
         var hit = _aimHit;
+        var events = (BindGrabEvents ?? throw new NotSupportedException("Player grab has no reference-event owner."))(body);
+        if (events is null) return false;
         if (!body.TryBeginGrab(this, hit, _configuration.Pickup.GrabResponseHertz,
             _configuration.Pickup.GrabMaximumAccelerationMetersPerSecondSquared)) return false;
         _grabbedBody = body; _grabLocalPoint = body.ToLocal(hit); _grabTarget = hit;
         _grabDistance = ActivationOrigin.DistanceTo(hit);
+        try { events(true); _grabEvents = events; }
+        catch { body.ReleaseGrab(this); _grabbedBody = null; throw; }
         return true;
     }
 
@@ -67,6 +81,8 @@ internal partial class RuntimeNativePlayer
     {
         if (GodotObject.IsInstanceValid(_grabbedBody)) _grabbedBody!.ReleaseGrab(this);
         _grabbedBody = null;
+        var events = _grabEvents; _grabEvents = null;
+        events?.Invoke(false);
     }
 
 }

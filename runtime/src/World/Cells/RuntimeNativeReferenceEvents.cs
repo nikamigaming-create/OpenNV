@@ -36,6 +36,8 @@ internal partial class RuntimeNativeReferenceEvents : Node
     private readonly Dictionary<FalloutFormKey, Binding> _bindings = [];
     private readonly Dictionary<ulong, FalloutFormKey> _nodeReferences = [];
     private long _frames, _executedBlocks, _recoveredReadFaults, _recoveredCommandFaults;
+    private readonly Dictionary<string, long> _completedEventBlocks = new(StringComparer.OrdinalIgnoreCase);
+    internal long CompletedEventBlocks(string name) => _completedEventBlocks.GetValueOrDefault(FalloutReferencePackageEvents.CanonicalName(name));
     private Func<FalloutPlacedReference, Transform3D> _transform = null!;
     private float _unitsToMeters;
     private uint _collisionMask;
@@ -49,6 +51,7 @@ internal partial class RuntimeNativeReferenceEvents : Node
     {
         frames = _frames,
         executedBlocks = _executedBlocks,
+        completedEventBlocks = _completedEventBlocks.Select(pair => new { name = pair.Key, blocks = pair.Value }).ToArray(),
         recoveredReadFaults = _recoveredReadFaults,
         recoveredCommandFaults = _recoveredCommandFaults,
         references = _bindings.Count,
@@ -221,6 +224,20 @@ internal partial class RuntimeNativeReferenceEvents : Node
         return false;
     }
 
+    internal Action<bool>? BindPlayerGrab(Node collider)
+    {
+        for (Node? node = collider; node is not null; node = node.GetParent())
+        {
+            if (!_nodeReferences.TryGetValue(node.GetInstanceId(), out var reference)) continue;
+            if (!_bindings.ContainsKey(reference) || !_world.CanActivate(reference)) return null;
+            // Capture the campaign owner, rather than this cell controller.
+            // Release can retire the hold while a cell is being replaced.
+            var world = _world;
+            return grabbed => world.MarkPlayerGrab(reference, grabbed);
+        }
+        return null;
+    }
+
     internal FalloutPlacedReference? AimedReference(Node collider)
     {
         for (Node? node = collider; node is not null; node = node.GetParent())
@@ -344,6 +361,8 @@ internal partial class RuntimeNativeReferenceEvents : Node
         QueueActivationRelays((float)delta);
         foreach (var binding in _bindings.Values)
         {
+            var grabBatch = binding.Instance.GrabEvents is { HasPending: true } grabEvents ? grabEvents : null;
+            var hasGrabEvents = grabBatch is not null;
             var packageBatch = binding.Signature is "NPC_" or "CREA" &&
                 binding.Node is not RuntimeNativeNpc { PackageEventError: not null } &&
                 _world.PackageEvents.HasPending(binding.Reference.FormKey)
@@ -354,16 +373,16 @@ internal partial class RuntimeNativeReferenceEvents : Node
             var hasHitEvents = hitBatch?.Count > 0;
             var needsAbilities = binding.Signature is "NPC_" or "CREA" && binding.Node is not null &&
                 !_abilityActors.Contains(binding.Reference.FormKey);
-            if (!needsAbilities && !hasPackageEvents && !hasHitEvents && binding.Instance.Script is null && binding.PendingActivation is null && binding.Trigger is null) continue;
+            if (!needsAbilities && !hasPackageEvents && !hasHitEvents && !hasGrabEvents && binding.Instance.Script is null && binding.PendingActivation is null && binding.Trigger is null) continue;
             if (!IsProcessing() || tree.Paused) break; // An effect can unload this cell or open a modal menu.
             if (needsAbilities && _world.IsEnabled(binding.Reference.FormKey) &&
                 _abilityActors.Add(binding.Reference.FormKey)) StartAbilityScripts(binding);
-            if (!hasPackageEvents && !hasHitEvents && binding.Instance.Script is null && binding.PendingActivation is null && binding.Trigger is null) continue;
+            if (!hasPackageEvents && !hasHitEvents && !hasGrabEvents && binding.Instance.Script is null && binding.PendingActivation is null && binding.Trigger is null) continue;
             var enabled = _world.IsEnabled(binding.Reference.FormKey);
             binding.ActorScriptStarted |= enabled;
             if (binding.Signature is "NPC_" or "CREA" && !binding.ActorScriptStarted) continue;
             if (binding.Trigger is { } volume && volume.Visible != enabled) GamebryoReferenceEnableRuntime.Apply(volume, enabled);
-            if (!hasPackageEvents && !hasHitEvents && binding.Instance.Script is null && binding.PendingActivation is null) continue;
+            if (!hasPackageEvents && !hasHitEvents && !hasGrabEvents && binding.Instance.Script is null && binding.PendingActivation is null) continue;
             // Keep admitting real contact transitions after a script fault. The
             // C# owner decides whether a fresh event can retry its source block;
             // suppressing contact sampling here permanently poisoned saved triggers.
@@ -399,6 +418,8 @@ internal partial class RuntimeNativeReferenceEvents : Node
             }
             if (hasPackageEvents) events.AddRange(packageBatch!.Events);
             if (hasHitEvents) events.AddRange(hitBatch!.Events);
+            if (grabBatch?.Grab > 0) events.Add(new("OnGrab", _records.RuntimeFormKey(0x14)));
+            if (grabBatch?.Release > 0) events.Add(new("OnRelease", _records.RuntimeFormKey(0x14)));
             events.Add(new("GameMode"));
             IReadOnlyList<FalloutReferenceScriptEventResult> results;
             if (relay is not null) _dispatchingActivationRelays.Add(binding.Reference.FormKey);
@@ -418,6 +439,7 @@ internal partial class RuntimeNativeReferenceEvents : Node
             // Consume this admission once while preserving marks produced by it.
             if (hasPackageEvents) _world.PackageEvents.Consume(packageBatch!);
             if (hasHitEvents) _world.HitEvents.Consume(hitBatch!);
+            if (grabBatch is not null) _world.ConsumeGrabEvents(binding.Reference.FormKey, grabBatch);
             Report(binding, results);
         }
     }
@@ -425,6 +447,11 @@ internal partial class RuntimeNativeReferenceEvents : Node
     private void Report(Binding binding, IReadOnlyList<FalloutReferenceScriptEventResult> results)
     {
         _executedBlocks += results.Sum(result => result.Blocks);
+        foreach (var result in results.Where(result => result.Blocks > 0))
+        {
+            var name = FalloutReferencePackageEvents.CanonicalName(result.Event);
+            _completedEventBlocks[name] = checked(_completedEventBlocks.GetValueOrDefault(name) + result.Blocks);
+        }
         if (results.FirstOrDefault(result => result.RecoveredError is not null)?.RecoveredError is { } recovered)
         {
             var commandRecovery = recovered.Contains(" command ", StringComparison.Ordinal);

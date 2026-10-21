@@ -12,7 +12,7 @@ the evidence-backed repair inventory and work order.
 
 | Area | Current state |
 | --- | --- |
-| Flat object handling | The missing native-player Grab handler is being repaired using source dynamic bodies and bounded force. The owned skull fixture passes motion, collision/obstacle, release and refusal checks. Ordinary room placement and physics save/cold continuation remain open. |
+| Flat object handling | The native-player Grab handler now uses source dynamic bodies, weight limits and bounded force. The owned skull fixture passes motion, collision/obstacle, release, refusal and source-event checks. Pending grab/release marks survive schema-v53 saves; v52 saves remain admitted. Ordinary room placement and physics save/cold continuation remain open. |
 | FNV world | Exploration, interiors and some dialogue render in the user's recording. Missing vegetation/models/materials, physics and LOD behavior remain visible in diagnostics. No world/parity completion. |
 | Population | User rejects NPC behavior. Logs report missing travel, dialogue-location, patrol, AI condition and creature procedure owners. A few moving actors do not establish a functioning population. |
 | Combat | User rejects combat. Unique compatible attack-group binding now passes source deathclaw/coyote hit, range-miss and cold-clock fixtures. Ordinary deathclaw terrain encounter, embedded emitters and faction assistance remain open. |

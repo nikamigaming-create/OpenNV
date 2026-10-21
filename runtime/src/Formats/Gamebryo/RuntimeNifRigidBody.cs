@@ -18,10 +18,12 @@ internal partial class RuntimeNifRigidBody : RigidBody3D
     internal bool TryBeginGrab(object owner, Vector3 point, float responseHertz, float maximumAcceleration)
     {
         if (_grab is not null || Freeze) return false;
+        var frequency = responseHertz * MathF.Tau;
         if (!point.IsFinite() || !float.IsFinite(responseHertz) || responseHertz <= 0 ||
+            !float.IsFinite(frequency * frequency) || frequency * frequency <= 0 ||
             !float.IsFinite(maximumAcceleration) || maximumAcceleration <= 0)
             throw new InvalidDataException("Grab force configuration is invalid.");
-        _grab = new(owner, ToLocal(point), point, responseHertz * MathF.Tau, maximumAcceleration, ContinuousCd);
+        _grab = new(owner, ToLocal(point), point, frequency, maximumAcceleration, ContinuousCd);
         ContinuousCd = true;
         Sleeping = false;
         return true;

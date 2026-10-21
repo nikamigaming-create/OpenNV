@@ -79,6 +79,8 @@ public partial class RuntimeCoordinator
         if (root.GetChildren().OfType<RuntimeNativeReferenceEvents>().SingleOrDefault() is { } existing)
         {
             _nativeReferenceEvents = existing;
+            existing.Player = _nativePlayer;
+            _nativePlayer!.BindGrabEvents = existing.BindPlayerGrab;
             existing.ActivateHitCallbacks();
             existing.SetProcess(true);
             return;
@@ -118,6 +120,7 @@ public partial class RuntimeCoordinator
             ReferenceTransform, _configuration.World.GameUnitsToMeters, _configuration.Player.CollisionLayer);
         root.AddChild(events);
         _nativeReferenceEvents = events;
+        _nativePlayer!.BindGrabEvents = events.BindPlayerGrab;
         foreach (var reference in events.BoundTriggers)
             _parityObservations.Observe("world/active-cell", $"{cell.Cell.FormKey}/{reference.FormKey}",
                 NativeReferenceState(reference, cell.BaseObjects[reference.Base], "source-primitive-contact-owner"));

@@ -16,11 +16,19 @@ The current change restores the missing flat Grab input to the playable player.
 It applies bounded forces to the actual owned NIF dynamic body, retains collision
 and uses the winning walking/running weight limits. An owned-skull fixture passes
 movement, release/gravity, solid-obstacle, modal/teleport release, weight/frozen
-refusal and source-body retirement checks. The full runtime gate and diff check
-pass. Ordinary room placement and physics save/cold continuation remain unverified.
+refusal and source-body retirement checks. The source OnGrab/OnRelease events now
+use persistent reference-owned marks. Owned script delivery and synthetic event
+effects, ordering and save-owner contracts pass, as do the full runtime gate and
+final owned-skull check. PR #243 carries this repair. Ordinary room placement and
+physics save/cold continuation remain unverified.
 
 A fresh ordinary-input New Game reaches Doc's free-movement/Vigor stage 55 and
-successfully saves. The initial stage 0-to-90 jump belongs to the source intro,
+successfully saves; a separate-process Continue completes Vigor, reaches stage 80,
+saves before the couch, then enters the original seated questionnaire by normal
+movement and activation. Its camera retains the downward activation pitch and
+does not focus on the speaker. The next repair is the shared flat dialogue camera
+owner using the real animated head and source furniture camera position.
+The initial stage 0-to-90 jump belongs to the source intro,
 not an engine defect. The broken-SMG script has an extra source and compiled
 `endif`; the interpreter rejects it. Doc's seated questionnaire/head positioning,
 physical interactions and tutorial/campaign progression remain open.
