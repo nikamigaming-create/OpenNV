@@ -28,6 +28,7 @@ internal partial class NativeOwnedGameplayHud : Control
     private readonly FalloutUiComponentStore? _scriptUi;
     private long _uiRevision = -1;
     internal string? Error { get; private set; }
+    internal string? TargetError { get; private set; }
     internal object State => new
     {
         visible = Visible,
@@ -36,6 +37,7 @@ internal partial class NativeOwnedGameplayHud : Control
         ammo = _lastAmmo,
         notice = _lastNotice,
         error = Error,
+        targetError = TargetError,
         scriptUiRevision = _uiRevision,
         sourceControls = _lastControls,
         hitPointsVisible = _hp is not null && _tiles.Number(_hp, "visible") > 0,
@@ -176,7 +178,7 @@ internal partial class NativeOwnedGameplayHud : Control
             }
             // The movement control also disables world activation. A ray hit
             // cannot advertise Talk/Take/Open while that action is unavailable.
-            var target = controls.Movement && controls.RolloverText ? _target() : null;
+            var target = controls.Movement && controls.RolloverText ? ReadTarget() : null;
             if (target == _last) return;
             _last = target;
             _tiles.Bind(_info, "visible", target is null ? 0 : 1);
@@ -187,6 +189,25 @@ internal partial class NativeOwnedGameplayHud : Control
             QueueRedraw();
         }
         catch (Exception error) { Error = error.Message; GD.PushError($"OPENNV_GAMEPLAY_HUD_FAIL {error.Message}"); }
+    }
+
+    private NativeHudTarget? ReadTarget()
+    {
+        try
+        {
+            var target = _target();
+            TargetError = null;
+            return target;
+        }
+        catch (Exception error)
+        {
+            // A failed source interaction must not advertise an action. It also
+            // must not retire HP/AP or every later, unrelated target's prompt.
+            // Keep the divergence observable until a target resolves normally.
+            if (TargetError != error.Message) GD.PushError($"OPENNV_GAMEPLAY_HUD_TARGET_FAIL {error.Message}");
+            TargetError = error.Message;
+            return null;
+        }
     }
     public override void _Draw()
     {

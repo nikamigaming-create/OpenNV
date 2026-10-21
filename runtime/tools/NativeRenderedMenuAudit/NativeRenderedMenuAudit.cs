@@ -10,6 +10,10 @@ public partial class NativeRenderedMenuAudit : Control
         try
         {
             var args = OS.GetCmdlineUserArgs();
+            if (args is ["--hud-controls", var hudRoot])
+            {
+                await HudControls(hudRoot); GetTree().Quit(); return;
+            }
             if (args is ["--script-music", var musicRoot])
             {
                 await ScriptMusic(musicRoot); GetTree().Quit(); return;
