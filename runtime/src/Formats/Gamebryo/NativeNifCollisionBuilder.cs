@@ -278,6 +278,11 @@ internal static partial class NativeNifCollisionBuilder
     {
         if (collision["collider"].AsGodotObject() is not CollisionObject3D body)
             throw new NotSupportedException("Hit collider has no source material owner.");
+        if (body.GetParent() is Content.RuntimeNativeLandscapeTransport landscape)
+        {
+            var point = landscape.ToLocal(collision["position"].AsVector3()) / landscape.GameUnitsToMeters;
+            return landscape.ImpactMaterials.At(point.X, -point.Z);
+        }
         var shape = body.ShapeOwnerGetOwner(body.ShapeFindOwner(collision["shape"].AsInt32())) as CollisionShape3D;
         RequireCompoundMaterial(shape);
         if (shape?.HasMeta("opennv_havok_material") == true)

@@ -6,6 +6,16 @@ source transport in process. Native texture publication, quadrant tangent and
 mesh creation, and collision construction advance separately. No transformed
 retail content is a persistent launch input.
 
+LAND shot impacts use the source horizontal hit position to select a terrain
+vertex, then its strongest runtime texture weight. The point query retains source
+triangle tie order and reassigns a snapped shared vertex to the preceding quadrant.
+The residual base and normalized alpha weights are prepared once with the terrain.
+Player and NPC shots use the same owner. A per-face material table cannot resolve
+painted blends and is retained only for diagnostics. Static FNV analysis supports
+the selection rule; matched retail impacts and global cell-edge selection remain
+unverified. The observed selector examines six runtime slots, including the base;
+the sixth authored alpha still contributes to normalization but is not selected.
+
 Near-cell and distant-world publication share a two-millisecond CPU admission
 allowance. When both have work, first admission alternates each frame. An
 indivisible native operation can exceed the allowance; this is not a hard GPU
