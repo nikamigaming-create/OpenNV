@@ -212,7 +212,13 @@ internal static class CorpseEquippedLootContracts
             { Bodies = state.Ragdoll!.Bodies.Select(body => body with { Sleeping = false }).ToArray() };
             if (scope == "pending-hit") world.HitEvents.Mark(state.Reference, Key(0x902), Key(0x50), FalloutReferenceHitKind.Melee);
             if (scope == "resident-no-owner") world.LoadCell(FalloutCellSceneReader.Read(records, state.Cell));
-            if (scope == "opaque-native") state.CorpseEquipmentCaptureBlocker = "Original opaque equipment continuation.";
+            if (scope == "opaque-native")
+            {
+                Func<FalloutActorCorpseEquipment?> originalOwner = () => state.CorpseEquipment;
+                state.CaptureCorpseEquipment = originalOwner;
+                state.SetCorpseEquipmentCaptureBlocker(originalOwner, "Original opaque equipment continuation.");
+                state.CaptureCorpseEquipment = null;
+            }
             if (scope == "source-drift") state.CorpseEquipment = state.CorpseEquipment! with
             {
                 Attachments = state.CorpseEquipment!.Attachments.Select(attachment => attachment with

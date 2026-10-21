@@ -304,6 +304,11 @@ internal sealed partial class RuntimeNativeActorCombat
         _sourceBindingsRetired = true;
         try
         {
+            // Ready may have queued corpse construction earlier in this frame.
+            // A streamed candidate can retire before that deferred call runs.
+            // Complete its actual native body while it still owns the binding.
+            if (Dead && !_deathPresentationAttempted && _state.CaptureCorpseEquipment == CaptureCorpseEquipment)
+                RestoreDeath();
             RetainCorpseEquipment();
             RetainStoppedPoseReadiness();
             // A destination can already own the same reference. Only the

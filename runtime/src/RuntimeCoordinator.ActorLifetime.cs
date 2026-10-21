@@ -6,6 +6,18 @@ namespace OpenNV.Runtime;
 
 public partial class RuntimeCoordinator
 {
+    internal static void RetireNativeActorBindings(Node root)
+    {
+        // Capture while transforms, physical bodies and attachment nodes still
+        // belong to the scene. ExitTree runs after descendant teardown begins.
+        foreach (var combat in SceneGraph.NodeTraversal.SelfAndDescendants<RuntimeNativeActorCombat>(root))
+            combat.RetireSourceBindings();
+        foreach (var npc in SceneGraph.NodeTraversal.SelfAndDescendants<RuntimeNativeNpc>(root))
+            npc.RetireSourceBindings();
+        foreach (var creature in SceneGraph.NodeTraversal.SelfAndDescendants<RuntimeNativeCreature>(root))
+            creature.RetireSourceBindings();
+    }
+
     internal static void DiscardNativeActor(Node3D actor, Node3D? previousActor)
     {
         if (ReferenceEquals(actor, previousActor))

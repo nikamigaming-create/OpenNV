@@ -60,6 +60,7 @@ internal partial class RuntimeNativeReferencePresentation : Node
             _fadeGeometry.Remove(key); _publishedOpacity.Remove(key);
             // Free synchronously: QueueFree leaves source callbacks alive
             // until the next frame, after the replacement factory has run.
+            RuntimeCoordinator.RetireNativeActorBindings(node);
             NativeOwnedAnimationSoundPlayer.UnloadSourceLoops(node);
             node.Free();
         }
@@ -109,7 +110,11 @@ internal partial class RuntimeNativeReferencePresentation : Node
                 NativeOwnedAnimationSoundPlayer.UnloadSourceLoops(node);
                 GamebryoReferenceEnableRuntime.Apply(node, false);
                 if (retainWarm?.Invoke(previous[key]) == true) _warmNodes.Add(key, (previous[key], node));
-                else node.QueueFree();
+                else
+                {
+                    RuntimeCoordinator.RetireNativeActorBindings(node);
+                    node.QueueFree();
+                }
             }
             _enabled.Remove(key); _fadeGeometry.Remove(key); _publishedOpacity.Remove(key);
         }
@@ -123,6 +128,7 @@ internal partial class RuntimeNativeReferencePresentation : Node
             else if (retainWarm?.Invoke(warm.Source) != true)
             {
                 _warmNodes.Remove(key);
+                RuntimeCoordinator.RetireNativeActorBindings(warm.Node);
                 NativeOwnedAnimationSoundPlayer.UnloadSourceLoops(warm.Node);
                 warm.Node.QueueFree();
             }

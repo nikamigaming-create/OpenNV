@@ -3,8 +3,8 @@ using OpenNV.Runtime.Gameplay.State;
 
 namespace OpenNV.Runtime.World.Cells;
 
-// A settled procedure waiting for its authored dialogue target. An outstanding
-// conversation, legacy route or moving native capsule remains a separate owner.
+// A dialogue wait, including native movement toward its authored editor point.
+// The shared PackageMotion retains that capsule's source animation and pose.
 internal sealed record FalloutActorDialogueContinuation(FalloutActorPackageAssignment Assignment,
     long EventRevision, string? LastEvent, FalloutFormKey? LastPackage, string? LastPackageSha256,
     float[] Pose, float[] WaitPosition, bool WaitReached, bool NativeMovement, ulong RandomState,
@@ -15,7 +15,7 @@ internal sealed record FalloutActorDialogueContinuation(FalloutActorPackageAssig
     internal void Validate()
     {
         (Assignment ?? throw new InvalidDataException("Saved dialogue has no package assignment.")).Validate();
-        if (Assignment.Done || !WaitReached || IdleState is null || IdleState.ActiveAnimation is not null || !double.IsFinite(PollRemaining) || PollRemaining < 0 ||
+        if (Assignment.Done || !WaitReached && !NativeMovement || IdleState is null || IdleState.ActiveAnimation is not null || !double.IsFinite(PollRemaining) || PollRemaining < 0 ||
             EventRevision <= 0 || EventRevision == long.MaxValue || LastEvent is not ("POBA" or "POCA" or "POEA") ||
             LastPackage is not { } last || !FalloutActorFurnitureContinuation.ValidKey(last) ||
             !FalloutActorFurnitureContinuation.ValidHash(LastPackageSha256) ||
@@ -46,8 +46,9 @@ internal sealed record FalloutActorDialogueContinuation(FalloutActorPackageAssig
             throw new InvalidDataException("Saved dialogue wait differs from its winning source.");
         var source = FalloutScriptPackage.Read(package);
         var dialogue = FalloutDialoguePackage.Read(package);
-        if (NativeMovement != (source.LocationType is null) || source.LocationType is not null &&
-            (source.LocationType is not (0 or 2) || source.LocationRadius != 0) ||
+        if (NativeMovement != (source.LocationType is null or 2 or 3) || source.LocationType is not null &&
+            (source.LocationType is not (0 or 2 or 3) || source.LocationRadius != 0) ||
+            !WaitReached && (source.LocationType != 3 || actor.PackageMotion?.Package != source.Form) ||
             dialogue.TriggerLocation is not null && records.RuntimeFormId(dialogue.Target) != 0x14 && dialogue.ControlsTargetMovement)
             throw new InvalidDataException("Saved dialogue wait has no admitted source movement owner.");
         IdleState.Validate(records, Assignment.Package);

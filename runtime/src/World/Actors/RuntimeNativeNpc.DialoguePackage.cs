@@ -13,6 +13,7 @@ internal partial class RuntimeNativeNpc
     private Vector3 _dialogueWaitPosition;
     private bool _dialogueWaitPositionPending;
     private (Vector3 Authored, Vector3 Floor)? _dialogueTargetDestination;
+    private Vector3? _dialogueWaitFloor;
     internal Action<FalloutDialoguePackage, Action>? BeginPackageDialogue { get; set; }
     internal Func<FalloutFormKey, Node3D?>? ResolveDialogueTarget { get; set; }
     internal Func<bool>? PackageSpeechBusy { get; set; }
@@ -25,7 +26,7 @@ internal partial class RuntimeNativeNpc
             throw new NotSupportedException("Dialogue trigger location needs target movement ownership.");
         var motion = _aiWorld?.Get(Appearance.Reference!.Value).PackageMotion;
         var restored = initializing && motion?.Package == package.FormKey && motion.DialogueCompleted;
-        if (restored && (dialogue.Type != 1 || wait is not null))
+        if (restored && wait is not null)
             throw new InvalidDataException("Saved dialogue completion differs from its supported source procedure.");
         // An unowned furniture/object waiting location cannot publish a running
         // dialogue procedure before its movement owner is admitted. The failed
@@ -33,9 +34,10 @@ internal partial class RuntimeNativeNpc
         if (wait is not null) RequireTravelMarker(package, wait);
         _dialoguePackage = dialogue; _dialoguePackageRequested = restored;
         _dialogueNativeMovement = wait is null;
-        _dialogueWaitReached = wait is null;
+        _dialogueWaitReached = restored || wait is null && _packageIdleSource!.LocationType != 3;
         _dialogueWaitPositionPending = !IsInsideTree();
-        if (!_dialogueWaitPositionPending) _dialogueWaitPosition = GlobalPosition;
+        if (!_dialogueWaitPositionPending) _dialogueWaitPosition = ResolveDialogueWaitPosition();
+        _dialogueWaitFloor = null;
         _dialogueTargetDestination = null;
         _aiPackage = package;
         if (_aiWorld is { } world)
@@ -60,6 +62,18 @@ internal partial class RuntimeNativeNpc
         }
         _dialoguePackage = null; _dialoguePackageRequested = false; _dialogueNativeMovement = false;
         _dialogueTargetDestination = null;
+        _dialogueWaitFloor = null;
+    }
+
+    private Vector3 ResolveDialogueWaitPosition()
+    {
+        if (_packageIdleSource!.LocationType != 3) return GlobalPosition;
+        var world = _aiWorld ?? throw new NotSupportedException("Dialogue editor wait has no reference placement owner.");
+        var placement = world.EditorPlacement(Appearance.Reference!.Value);
+        if (placement.Cell != _aiCell!.Cell.FormKey)
+            throw new NotSupportedException("Dialogue editor wait requires its other-cell route owner.");
+        return GetParent<Node3D>().ToGlobal(new Vector3(placement.Position[0], placement.Position[2],
+            -placement.Position[1]) * Skeleton.UnitsToMetres);
     }
 
     private void AdvanceDialogueTarget(double delta)
@@ -77,13 +91,23 @@ internal partial class RuntimeNativeNpc
         if (_dialoguePackage is not { } dialogue || _dialoguePackageRequested || _aiError is not null) return;
         if (_dialogueWaitPositionPending)
         {
-            _dialogueWaitPosition = GlobalPosition;
+            _dialogueWaitPosition = ResolveDialogueWaitPosition();
             _dialogueWaitPositionPending = false;
         }
         if (PackageSpeechBusy?.Invoke() == true) { Combat?.StopPackageMotion(); return; }
         if (!_dialogueWaitReached)
         {
-            if (_travelActive) return;
+            if (_dialogueNativeMovement)
+            {
+                if (Combat is null || Combat.OwnsPose || !Combat.PackageMovementReady || _conversationTarget is not null) return;
+                var floor = _dialogueWaitFloor ??= Combat.ProjectPackageDestination(_dialogueWaitPosition);
+                var radius = SafeMargin * 8;
+                Combat.AdvancePackageMotion(_aiPackage!, floor, radius, dialogue.Running, delta,
+                    dialogue.WeaponDrawn, requireArrivalHeight: true);
+                if (!IsOnFloor() || GlobalPosition.DistanceTo(floor) > radius) return;
+                Combat.StopPackageMotion();
+            }
+            else if (_travelActive) return;
             _dialogueWaitReached = true;
         }
         if (_dialogueNativeMovement && (Combat is null || Combat.OwnsPose || !Combat.PackageMovementReady || _conversationTarget is not null)) return;
@@ -114,11 +138,11 @@ internal partial class RuntimeNativeNpc
             approach = _dialogueTargetDestination.Value.Floor;
         }
         var distance = dialogue.ActivationDistance * Skeleton.UnitsToMetres;
-        var waitForTarget = dialogue.TriggerLocation is not null && _packageIdleSource!.LocationType is not null &&
-            _packageIdleSource.LocationRadius == 0;
-        // PLDT controls the speaker's wait position. Its zero radius does not
-        // remove the independent PLD2 condition on the dialogue target.
-        if (dialogue.TriggerLocation is { } trigger && !DialogueTriggerContains(trigger, target)) return;
+        var waitForTarget = dialogue.WaitsForTarget(_packageIdleSource!);
+        // A zero-radius wait keeps the speaker in place until activation range.
+        // Trigger-region entry starts pursuit only when the wait has a radius.
+        if (!waitForTarget && dialogue.TriggerLocation is { } trigger && !DialogueTriggerContains(trigger, target)) return;
+        if (waitForTarget && GlobalPosition.DistanceTo(target) > distance) return;
         if (_dialogueNativeMovement)
         {
             Combat!.AdvancePackageMotion(_aiPackage!, waitForTarget ? _dialogueWaitPosition : approach,
@@ -149,9 +173,9 @@ internal partial class RuntimeNativeNpc
             // previous audio/conversation must not complete that newer owner.
             if (!IsInstanceValid(this) || !IsInsideTree() || !ReferenceEquals(_dialoguePackage, dialogue) ||
                 CurrentPackage != dialogue.Form) return;
-            if (_dialogueNativeMovement && dialogue.Type == 1) Combat!.CompleteDialoguePackage();
+            if (_dialogueNativeMovement) Combat!.CompleteDialoguePackage();
             _packageEvents!.Complete();
-            if (ReferenceEquals(_dialoguePackage, dialogue) && _dialogueNativeMovement && dialogue.Type == 1 && _aiWorld is { } world)
+            if (ReferenceEquals(_dialoguePackage, dialogue) && _dialogueNativeMovement && _aiWorld is { } world)
                 world.Get(Appearance.Reference!.Value).ProcedureCaptureBlocker = null;
         });
     }

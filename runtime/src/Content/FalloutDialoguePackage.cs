@@ -10,6 +10,8 @@ internal sealed record FalloutDialoguePackage(FalloutFormKey Form, FalloutFormKe
     internal bool Running => (PackageFlags & 0x2000) != 0;
     internal bool WeaponDrawn => (PackageFlags & 0x800000) != 0;
     internal bool ControlsTargetMovement => (Flags & 0x100) == 0;
+    internal bool WaitsForTarget(FalloutScriptPackage source) =>
+        TriggerLocation is not null && source.LocationType is not null && source.LocationRadius == 0;
 
     internal static FalloutDialoguePackage Read(FalloutPluginRecord record)
     {

@@ -61,6 +61,7 @@ public partial class RuntimeCoordinator
         var cellChildren = _nativeCurrentCellRoot?.GetChildren();
         using var cellChildrenOwner = cellChildren is null ? null : (Godot.Collections.Array)cellChildren;
         var cellNodes = cellChildren?.ToArray() ?? [];
+        var pendingCorpseCaptures = detailed ? _nativeReferences?.PendingCorpseEquipmentCaptureCount : null;
         return new
         {
             paused = GetTree().Paused,
@@ -90,6 +91,8 @@ public partial class RuntimeCoordinator
                 pendingPackageEvents = _nativeReferences.PendingPackageEventCount,
                 pendingProcedureCaptures = _nativeReferences.PendingProcedureCaptureCount,
                 pendingProcedureCaptureOwners = _nativeReferences.PendingProcedureCaptures,
+                pendingCorpseCaptures,
+                corpseCaptureBlockers = _nativeReferences.PendingCorpseEquipmentCaptures,
                 pendingAnimationSoundCaptures = _nativeReferences.PendingAnimationSoundCaptureCount,
                 pendingAnimationSoundCaptureOwners = _nativeReferences.PendingAnimationSoundCaptures,
                 detection = _nativeReferences.DetectionState,
@@ -98,7 +101,7 @@ public partial class RuntimeCoordinator
                 talkingActivatorBindings = _nativeReferences.TalkingActivatorBindings,
                 unloadedActorPackages = _nativeReferences.UnloadedPackages?.State,
                 state = detailed && !_nativeReferences.PlayerMoves.Pending && _nativeReferences.PendingPackageEventCount == 0 &&
-                    _nativeReferences.PendingProcedureCaptureCount == 0 && _nativeReferences.PendingAnimationSoundCaptureCount == 0
+                    _nativeReferences.PendingProcedureCaptureCount == 0 && pendingCorpseCaptures == 0 && _nativeReferences.PendingAnimationSoundCaptureCount == 0
                     ? _nativeReferences.Capture() : null,
                 actorOverrides = detailed && !_nativeReferences.PlayerMoves.Pending ? _nativeReferences.CaptureActorOverrides() : null
             },

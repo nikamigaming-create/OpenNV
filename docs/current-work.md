@@ -2,7 +2,7 @@
 
 Updated 2026-10-20. User priority is **fully playable flat Fallout: New Vegas**.
 Root works alone and owns code, builds, input and Git. Work is active on
-`codex/fnv-door-access`, based on `origin/main` at `a019fea7`.
+`codex/fnv-actor-lifecycle`, based on `origin/main` at `3c2a0405`.
 
 ## Current owner
 
@@ -33,20 +33,33 @@ door cycle now retain HP/AP, reticle, activation text and message drawing, with
 no disposed-font faults. F5 completes outside. Debug build, selected owned
 gameplay checks and the full runtime gate pass.
 
-PR #245 merged the checked shared font lifetime repair. The latest ordinary-play
-failure is an absent Open interaction: a linked-door lock query throws, and the
-HUD permanently latches that target error, losing every later prompt and HUD
-update. Target failure isolation now passes the native rendered check: invalid
-activation stays hidden, HP continues updating, and a valid target restores its
-exact previous pixels. The full runtime gate passes. Linked-door effective
-lock behavior itself remains unimplemented.
+PR #246 merged the checked HUD target recovery. Ordinary play reproduced the
+linked-door error, then recovered Open on the saloon front door, entered with E,
+recovered Sunny's Talk prompt and played her genuine greeting. Selecting her
+training topic changed the source quest and sent Sunny through the actual exit
+portal. This starts the tutorial; shooting, creatures and cooking remain open.
+Linked-door effective lock behavior itself remains unimplemented.
+
+Current repair: actor initialization, dialogue wait and cell retirement. Sunny's
+source editor wait now uses native approach and activation-distance waiting.
+Ordinary play opens the saloon, saves while she waits, cold-loads that wait and
+walks into her voiced automatic greeting without pressing Talk. Normal Goodbye
+then F5 commits again, with no pending procedure or corpse capture blockers.
+Moving dialogue retains its native package pose and clock. Source-dead NPCs skip
+living AI selection and EVP. Synthetic ownership and cold-state contracts pass;
+the required full runtime gate passes. Publication is in progress.
 
 The user also reports missing sweeping/farming idles, dialogue and broken Victor.
 Live Goodsprings settlers select Sandbox PACK procedure 12, which the NPC runtime
 rejects before any work behavior starts. Creature procedures 12/13 are also
-unimplemented. The latest F5 failed with actor-procedure-initialization; it did
-not commit a slot, although the later stable session had no pending procedure
-captures. Victor's live source selection is VGSVictorCircuitPatrol, refused by
+unimplemented. The save failures reached through the saloon were traced to a
+source corpse incorrectly selecting a living patrol, and detached preparation
+diagnostics poisoning a different native owner's corpse capture status. Only the
+bound owner can now change that status. Capture precedes cell teardown, deferred
+corpse construction completes before retirement, and snapshots defer while real
+corpse ownership is incomplete. Opaque or genuinely unready state still refuses
+capture. Ordinary F5 and cold continuation now pass through the affected route.
+Victor's live source selection is VGSVictorCircuitPatrol, refused by
 the creature runtime's absent Patrol procedure. These source package owners are
 the next implementation work.
 The broken-SMG script has an extra source and compiled `endif`; the interpreter

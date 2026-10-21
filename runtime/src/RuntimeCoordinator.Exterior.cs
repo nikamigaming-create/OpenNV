@@ -195,16 +195,7 @@ public partial class RuntimeCoordinator
         {
             // A detached actor has never entered the tree, so Free cannot
             // deliver its normal _ExitTree binding retirement callback.
-            if (node is RuntimeNativeNpc npc)
-            {
-                npc.Combat?.RetireSourceBindings();
-                npc.RetireSourceBindings();
-            }
-            else if (node is RuntimeNativeCreature creature)
-            {
-                creature.Combat?.RetireSourceBindings();
-                creature.RetireSourceBindings();
-            }
+            RetireNativeActorBindings(node);
             NativeOwnedAnimationSoundPlayer.UnloadSourceLoops(node);
             node.Free();
         }

@@ -144,6 +144,27 @@ internal static class ActorDamageContracts
                 Check(conditions.Evaluate(deathCondition) == 0 &&
                     conditions.Evaluate(deathCondition with { Reference = 0x93 }) == 1,
                     "Dialogue death requires presentation or ignored source-authored zero health.");
+                var pendingCorpseOwner = unloaded.Get(Key(0x93));
+                pendingCorpseOwner.CanCaptureCorpseEquipment = _ => false;
+                Check(unloaded.PendingCorpseEquipmentCaptureCount == 1,
+                    "Unready native corpse ownership did not defer source snapshot capture.");
+                Reject(() => unloaded.Capture());
+                pendingCorpseOwner.CanCaptureCorpseEquipment = _ => true;
+                Check(unloaded.PendingCorpseEquipmentCaptureCount == 0,
+                    "Completed native corpse ownership kept source snapshot capture blocked.");
+                Func<FalloutActorCorpseEquipment?> committedCorpse = () => null;
+                Func<FalloutActorCorpseEquipment?> detachedCorpse = () => null;
+                pendingCorpseOwner.CaptureCorpseEquipment = committedCorpse;
+                pendingCorpseOwner.SetCorpseEquipmentCaptureBlocker(committedCorpse, "Current native owner is preparing.");
+                pendingCorpseOwner.SetCorpseEquipmentCaptureBlocker(detachedCorpse, null);
+                pendingCorpseOwner.SetCorpseEquipmentCaptureBlocker(detachedCorpse, "Abandoned preparation failed.");
+                Check(pendingCorpseOwner.CorpseEquipmentCaptureBlocker == "Current native owner is preparing.",
+                    "Detached corpse diagnostics changed the committed native owner's save admission.");
+                pendingCorpseOwner.SetCorpseEquipmentCaptureBlocker(committedCorpse, null);
+                pendingCorpseOwner.CaptureCorpseEquipment = null;
+                pendingCorpseOwner.SetCorpseEquipmentCaptureBlocker(committedCorpse, "Retired owner failed.");
+                Check(pendingCorpseOwner.CorpseEquipmentCaptureBlocker is null,
+                    "Retired corpse owner poisoned reference snapshot capture.");
             }
             using var world = new FalloutReferenceWorld(records);
             world.LoadCell(cell);
