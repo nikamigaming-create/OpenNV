@@ -102,7 +102,17 @@ internal sealed partial class RuntimeNativeActorCombat
     {
         PrepareMovement();
         var route = _context!.Route(authored, authored);
-        if (route.Length == 0 || route[^1].DistanceTo(authored) > _radius * 6)
+        return ProjectPackageDestination(authored, route, _radius);
+    }
+
+    internal static Vector3 ProjectPackageDestination(Vector3 authored, IReadOnlyList<Vector3> route, float radius)
+    {
+        // Source markers may float above their NAVM floor. Their elevation is
+        // not a locomotion step: movement still follows and physically refines
+        // the authored route to the projected floor. Retain lateral proximity
+        // and the existing bound for projections above the marker.
+        var offset = route.Count == 0 ? Vector3.Inf : route[^1] - authored;
+        if (!offset.IsFinite() || new Vector3(offset.X, Math.Max(0, offset.Y), offset.Z).Length() > radius * 6)
             throw new NotSupportedException("Package destination has no nearby authored navigation floor.");
         return route[^1];
     }
