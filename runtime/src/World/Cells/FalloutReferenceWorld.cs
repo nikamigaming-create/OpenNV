@@ -652,8 +652,8 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
             if (snapshot is null || validated._instances.ContainsKey(snapshot.Reference))
                 throw new InvalidDataException("Saved reference is absent or duplicated.");
             var instance = validated.Get(snapshot.Reference);
-            if (snapshot.ObjectPhysics is not null && records.GetEffective(snapshot.Reference).Signature != "REFR")
-                throw new InvalidDataException("Object physics cannot replace an actor or projectile continuation owner.");
+            if (snapshot.ObjectPhysics is not null && records.GetEffective(snapshot.Reference).Signature is not ("REFR" or "PGRE" or "PMIS"))
+                throw new InvalidDataException($"Object physics for {snapshot.Reference} cannot replace an actor continuation owner.");
             if (snapshot.Templates is { } templates)
             {
                 instance.Templates = new(templates);

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Gameplay.State;
+using OpenNV.Runtime.World.Cells;
 
 internal static class OwnedPatrolProbe
 {
@@ -9,11 +10,20 @@ internal static class OwnedPatrolProbe
         RuntimeLiveContentSource.Configure(root, RuntimeLiveContentSource.FalloutNewVegasGame);
         using var source = RuntimeLiveContentSource.Current!;
         using var records = FalloutPluginStack.Load(source.PluginSources);
+        using var world = new FalloutReferenceWorld(records);
         var results = new List<object>();
-        foreach (var (id, packageId) in new (uint, uint)[] { (0xea2b4, 0x23619), (0x15a794, 0x23619), (0x1073e8, 0x16addc) })
+        foreach (var (id, packageId) in new (uint, uint)[] { (0xea2b4, 0x23619), (0x15a794, 0x23619), (0x1073e8, 0x16addc),
+            (0x10a1fe, 0x25482), (0x10a1fd, 0x25482) })
         {
             var actor = records.RuntimeFormKey(id);
             var package = records.GetEffective(records.RuntimeFormKey(packageId));
+            if (packageId == 0x25482)
+            {
+                if (world.GetLinkedRef(actor) is not null || world.PackageEligible(actor, package, null, null, false))
+                    throw new InvalidDataException("Owned unlinked creature incorrectly admitted a linked-start patrol.");
+                results.Add(new { actor = actor.ToString(), package = package.FormKey.ToString(), eligible = false, reason = "absent-linked-start" });
+                continue;
+            }
             var route = FalloutPatrolRoute.Read(records, package, actor);
             if (route.Points.Count < 2 || (id == 0x1073e8 ? route.Repeatable || route.Points.Count != 11 : !route.Repeatable || !route.WeaponDrawn))
                 throw new InvalidDataException("Selected owned patrol lost its source route/flags.");

@@ -84,6 +84,31 @@ public partial class NativePlayerPresentationAudit
         }
         finally { scene.Free(); prototype.Scene.Root.Free(); }
 
+        var grenade = records.GetEffective(records.RuntimeFormKey(0x1743b2));
+        var grenadeCell = FalloutCellSceneReader.Read(records, FalloutCellSceneReader.ParentCell(grenade)!.Value);
+        var placed = grenadeCell.References.Single(value => value.FormKey == grenade.FormKey);
+        grenadeCell = grenadeCell with { References = [placed] };
+        var grenadePath = grenadeCell.BaseObjects[placed.Base].ModelPath!;
+        if (!content.TryRead(grenadePath, null, out var grenadeBytes, out _)) throw new FileNotFoundException(grenadePath);
+        var grenadePrototype = new RuntimeNativeNifPrototype(grenadeBytes, configuration.World.GameUnitsToMeters);
+        var grenadeScene = new Node3D(); AddChild(grenadeScene);
+        using var grenadeWorld = new FalloutReferenceWorld(records); grenadeWorld.LoadCell(grenadeCell);
+        try
+        {
+            var model = grenadePrototype.InstantiatePlaced(new Transform3D(Basis.Identity, new(0, 4, 0)));
+            grenadeScene.AddChild(model);
+            var presentation = new RuntimeNativeReferencePresentation(grenadeWorld, grenadeCell.References, _ => null);
+            presentation.Register(placed.FormKey, model); grenadeScene.AddChild(presentation);
+            await PhysicsFrames(3);
+            var saved = JsonSerializer.Deserialize<FalloutReferenceSnapshot[]>(JsonSerializer.Serialize(grenadeWorld.Capture()))!;
+            Require(saved.Single().ObjectPhysics is { Count: > 0 }, "Placed grenade has no captured physical body.");
+            using var cold = new FalloutReferenceWorld(records); cold.Restore(saved);
+            Require(JsonSerializer.Serialize(cold.Capture().Single().ObjectPhysics) == JsonSerializer.Serialize(saved.Single().ObjectPhysics),
+                "Placed grenade physics changed during world restoration.");
+            GD.Print("OPENNV_NATIVE_PLACED_GRENADE_PHYSICS_PASS source=PGRE jsonRoundtrip=true worldRestore=true");
+        }
+        finally { grenadeScene.Free(); grenadePrototype.Scene.Root.Free(); }
+
         async Task PhysicsFrames(int count)
         {
             for (var index = 0; index < count; index++) await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
