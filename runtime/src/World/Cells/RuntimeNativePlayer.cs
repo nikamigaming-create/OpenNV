@@ -36,6 +36,7 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
         var adapter = new RuntimeNativeInputControls(controls, _configuration.Player.DesktopInput, physicalKeyPressed);
         adapter.Remapped += changed =>
         {
+            if (changed.Contains(27)) ReleaseGrab();
             if (changed.Any(index => index is 4 or 6 or 7))
             {
                 _reloadPressed = false; _weaponTriggerHeld = false; _pendingShotCount = 0;
@@ -76,6 +77,7 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
 
     internal void ConfigureLocomotion(FalloutPluginStack records, Func<GameplayVitals?> vitals)
     {
+        _grabRecords = records;
         _jumpHeightMeters = checked((float)FalloutGameSettingFloats.ReadRetained(records, "fJumpHeightMin", nameof(RuntimeNativePlayer))) * UnitsToMeters;
         if (!float.IsFinite(_jumpHeightMeters) || _jumpHeightMeters <= 0)
             throw new InvalidDataException("Source jump height must be finite and positive.");
@@ -168,6 +170,7 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
         _modalInput = modal;
         if (modal)
         {
+            ReleaseGrab();
             _weaponTriggerHeld = false;
             _pendingShotCount = 0;
             Velocity = Vector3.Zero;
@@ -183,6 +186,7 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
         _movementEnabled = state.Movement;
         _lookingEnabled = state.Looking;
         _activationEnabled = state.Movement;
+        if (!_activationEnabled) ReleaseGrab();
         RolloverTextEnabled = state.RolloverText;
         if (!_movementEnabled)
             Velocity = Vector3.Zero;
@@ -244,6 +248,7 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
 
     internal void Teleport(Transform3D authoredFloorTransform)
     {
+        ReleaseGrab();
         if (_furniturePhase != 0) throw new NotSupportedException("Teleporting an active furniture interaction needs interruption/phase restoration.");
         if (_configuration is null)
             throw new InvalidOperationException("Native player is not configured.");
@@ -289,6 +294,7 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
         ObserveSaveInput(inputEvent, "unhandled");
         if (_xr is not null) return;
         var input = _configuration.Player.DesktopInput;
+        if (GrabInput(inputEvent)) { GetViewport().SetInputAsHandled(); return; }
         if (_inputControls is null && !_modalInput && _movementEnabled && _furniturePhase == 0 && _sourceCamera is null &&
             inputEvent is InputEventKey { Pressed: true, Echo: false, PhysicalKeycode: Key.Q or Key.H } wheel)
         {
@@ -369,6 +375,7 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
     {
         using var frameWork = OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Measure(OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Owner.PlayerPhysics);
         PublishXrPointer();
+        AdvanceGrab();
         if (_xr is not null && GetTree().Paused) return;
         AdvanceExplosionExposure(delta);
         if (_furniturePhase != 0) { AdvanceFurniture(delta); return; }
@@ -472,6 +479,7 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
         left = Input.GetActionStrength(_configuration.Player.DesktopInput.MoveLeft.Action),
         right = Input.GetActionStrength(_configuration.Player.DesktopInput.MoveRight.Action),
         controls = _inputControls?.State,
+        grab = GrabState,
         saveControl = SaveInputState,
     };
     internal Node? AimedObject()

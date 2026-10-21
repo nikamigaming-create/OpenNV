@@ -11,6 +11,38 @@ internal partial class RuntimeNifRigidBody : RigidBody3D
 {
     private Node3D _visual = null!;
     private Transform3D _bodyToVisual;
+    private readonly record struct GrabControl(object Owner, Vector3 LocalPoint, Vector3 Target,
+        float AngularFrequency, float MaximumAcceleration, bool PreviousContinuousCd);
+    private GrabControl? _grab;
+
+    internal bool TryBeginGrab(object owner, Vector3 point, float responseHertz, float maximumAcceleration)
+    {
+        if (_grab is not null || Freeze) return false;
+        if (!point.IsFinite() || !float.IsFinite(responseHertz) || responseHertz <= 0 ||
+            !float.IsFinite(maximumAcceleration) || maximumAcceleration <= 0)
+            throw new InvalidDataException("Grab force configuration is invalid.");
+        _grab = new(owner, ToLocal(point), point, responseHertz * MathF.Tau, maximumAcceleration, ContinuousCd);
+        ContinuousCd = true;
+        Sleeping = false;
+        return true;
+    }
+
+    internal void SetGrabTarget(object owner, Vector3 target)
+    {
+        if (_grab is not { } grab || !ReferenceEquals(grab.Owner, owner))
+            throw new InvalidOperationException("Grab target belongs to another owner.");
+        if (!target.IsFinite()) throw new InvalidDataException("Grab target is not finite.");
+        _grab = grab with { Target = target };
+        Sleeping = false;
+    }
+
+    internal void ReleaseGrab(object owner)
+    {
+        if (_grab is not { } grab || !ReferenceEquals(grab.Owner, owner)) return;
+        ContinuousCd = grab.PreviousContinuousCd;
+        _grab = null;
+        Sleeping = false;
+    }
     private FalloutSoundRandomState? _windRandom;
     internal bool RespondsToWind => (GetMeta("opennv_nif_body_flags", 0).AsUInt32() & FalloutWindForce.ResponsiveBodyFlag) != 0;
 
@@ -37,6 +69,17 @@ internal partial class RuntimeNifRigidBody : RigidBody3D
 
     public override void _IntegrateForces(PhysicsDirectBodyState3D state)
     {
+        if (_grab is { } grab)
+        {
+            var error = grab.Target - state.Transform * grab.LocalPoint;
+            // A critically damped translational spring, capped before mass
+            // and time conversion. Apply no pose or collision-mask changes.
+            // Central force permits collision-driven rotation without an
+            // unbounded point-joint torque. This is explicit adapter policy.
+            var acceleration = error * (grab.AngularFrequency * grab.AngularFrequency) -
+                state.LinearVelocity * (2 * grab.AngularFrequency) - state.TotalGravity;
+            state.ApplyCentralImpulse(acceleration.LimitLength(grab.MaximumAcceleration) * Mass * state.Step);
+        }
         if (_visual is not null) _visual.GlobalTransform = state.Transform * _bodyToVisual;
     }
 }

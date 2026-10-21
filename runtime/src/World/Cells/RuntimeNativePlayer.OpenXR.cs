@@ -124,6 +124,7 @@ internal partial class RuntimeNativePlayer
     }
     public override void _ExitTree()
     {
+        ReleaseGrab();
         ReleaseAutoAimShapes();
         ReleaseFurnitureReservation();
         ReleaseXrContacts();

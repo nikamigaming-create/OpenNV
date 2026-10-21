@@ -278,6 +278,8 @@ internal sealed record RuntimeConfiguration(
         if (Xr.SnapTurnResetThreshold >= Xr.SnapTurnActivationThreshold)
             throw new InvalidOperationException("XR snap-turn reset threshold must be lower than activation.");
         RequirePositive(Pickup.HoldDistanceMeters, nameof(Pickup.HoldDistanceMeters));
+        RequirePositive(Pickup.GrabResponseHertz, nameof(Pickup.GrabResponseHertz));
+        RequirePositive(Pickup.GrabMaximumAccelerationMetersPerSecondSquared, nameof(Pickup.GrabMaximumAccelerationMetersPerSecondSquared));
         if (Pickup.CollisionLayer == 0 || Pickup.CollisionMask == 0)
             throw new InvalidOperationException(
                 "Pickup collision layer and mask must be nonzero.");

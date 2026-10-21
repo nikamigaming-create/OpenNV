@@ -1,14 +1,18 @@
 # Implementation plan
 
-Updated 2026-10-18: the user directs Fallout 1 completion and original-art fidelity
-first. The active classic sequence is in [classic-fallout-plan.md](classic-fallout-plan.md)
-and [classic-world-realization.md](classic-world-realization.md); the verified
-owner is in [current-work.md](current-work.md). Root works alone and owns code,
-builds, live input and Git.
+Updated 2026-10-20: the user directs fully playable flat Fallout: New Vegas first.
+Start with correct Doc Mitchell positioning and the original questionnaire,
+physical object handling including the skull, every Goodsprings tutorial,
+shooting, creature combat and campfire cooking, then Primm/ED-E and the Strip.
+Repair shared runtime behavior from owned records and actual gameplay. Continue
+to remaining campaign behavior; a selected successful route is not full game
+support. The active owner is in [current-work.md](current-work.md).
+Root works alone and owns code, builds, live input and Git.
 
-The following inventory preserves the FNV repair requirements from the rejected
-physical VR playtest of package g. Its former FNV-first sequence is deferred
-while FO1 is the user's active priority.
+The following inventory preserves FNV repair requirements from the rejected
+physical VR playtest of package g. Shared gameplay defects also block flat mode.
+Classic plans remain preserved in [classic-fallout-plan.md](classic-fallout-plan.md)
+and [classic-world-realization.md](classic-world-realization.md).
 
 ## Acceptance reset
 
@@ -56,6 +60,11 @@ remain open. Details and the current owner are in current-work.md.
 
 ## Work order and reviewable blocks
 
+The active flat sequence is Doc Mitchell -> Goodsprings tutorials -> Primm/ED-E
+-> the Strip, fixing each reached gameplay blocker at its shared runtime owner.
+The inventory below supplies those owners. Physical VR repairs do not block a
+flat repair; they remain required before a new VR handoff.
+
 1. Preserve the failing save/profile privately and bind evidence to source commit,
    content winners, graphics driver and session. Inventory all observed failure
    classes; keep unobserved campaign coverage explicitly unknown.
@@ -89,10 +98,13 @@ runtime gate, and publishes a checked PR merged into main. Confirm local main
 matches origin/main and no task PR remains before the next block. No asset,
 save, private capture, address or decompilation output enters the repository.
 
-## Release acceptance
+## Flat delivery acceptance
 
-The next handoff needs all of: ordinary gameplay outcomes, full source-state
-continuation, final-eye temporal review and a successful physical user retest.
+The flat handoff needs ordinary gameplay outcomes, full source-state save/cold
+continuation, and actual flat audiovisual and input review across the requested
+route. Whole-game completion additionally requires the remaining campaign and
+supported content. A new VR handoff separately requires final-eye temporal review
+and a successful physical headset retest.
 Keep an explicit pass/fail/unproven entry for population, combat, quest changes,
 input release, rendering, audio, loading and saves. Log every unsupported owner
 and every missing entity; do not turn an exception into nominal success.
