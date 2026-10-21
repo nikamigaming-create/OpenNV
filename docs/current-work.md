@@ -1,8 +1,8 @@
 # Current work
 
-Updated 2026-10-20. User priority is **fully playable flat Fallout: New Vegas**.
+Updated 2026-10-21. User priority is **fully playable flat Fallout: New Vegas**.
 Root works alone and owns code, builds, input and Git. Work is active on
-`codex/fnv-actor-lifecycle`, based on `origin/main` at `3c2a0405`.
+`codex/fnv-creature-patrol`, based on `origin/main` at `0d7b1a16`.
 
 ## Current owner
 
@@ -40,28 +40,54 @@ training topic changed the source quest and sent Sunny through the actual exit
 portal. This starts the tutorial; shooting, creatures and cooking remain open.
 Linked-door effective lock behavior itself remains unimplemented.
 
-Current repair: actor initialization, dialogue wait and cell retirement. Sunny's
+PR #247 merged actor initialization, dialogue wait and cell retirement. Sunny's
 source editor wait now uses native approach and activation-distance waiting.
 Ordinary play opens the saloon, saves while she waits, cold-loads that wait and
 walks into her voiced automatic greeting without pressing Talk. Normal Goodbye
 then F5 commits again, with no pending procedure or corpse capture blockers.
 Moving dialogue retains its native package pose and clock. Source-dead NPCs skip
 living AI selection and EVP. Synthetic ownership and cold-state contracts pass;
-the required full runtime gate passes. Publication is in progress.
+the required local and hosted runtime gates pass.
 
 The user also reports missing sweeping/farming idles, dialogue and broken Victor.
 Live Goodsprings settlers select Sandbox PACK procedure 12, which the NPC runtime
-rejects before any work behavior starts. Creature procedures 12/13 are also
-unimplemented. The save failures reached through the saloon were traced to a
+rejects before any work behavior starts. Creature Sandbox and additional Patrol
+inputs also remain unimplemented. The save failures reached through the saloon were traced to a
 source corpse incorrectly selecting a living patrol, and detached preparation
 diagnostics poisoning a different native owner's corpse capture status. Only the
 bound owner can now change that status. Capture precedes cell teardown, deferred
 corpse construction completes before retirement, and snapshots defer while real
 corpse ownership is incomplete. Opaque or genuinely unready state still refuses
 capture. Ordinary F5 and cold continuation now pass through the affected route.
-Victor's live source selection is VGSVictorCircuitPatrol, refused by
-the creature runtime's absent Patrol procedure. These source package owners are
-the next implementation work.
+Current repair: creature Patrol execution. Victor's live source selection is
+VGSVictorCircuitPatrol, previously refused by the absent creature procedure.
+Its eleven-point source route includes waits and a final reference arrival result
+that resets a quest variable. The new path uses native movement, source heading,
+arrival results and retained patrol state. The reached Securitron wheel uses a
+Bethesda transform subclass with the published inherited layout; the reader now
+admits it and owned key sampling passes. Ordinary exterior Continue moves Victor
+with his source walk clip and commits F5. A centimetre-scale NAVM/collision floor
+difference then exposed a too-small arrival tolerance; it now matches the existing
+native NPC patrol tolerance while requiring physical floor contact. Cold
+Continue restores the saved motion without repeating POBA, and the first six
+points run. The cemetery descent then repeatedly targets a blocked source guide
+midpoint. Actor route prefixes now retain the authored next triangle as their
+arrival region instead of requiring that exact midpoint; an initial long slice
+retains its progress plane. Native capsule, floor and residency checks remain
+mandatory. Synthetic actual movement crosses an occupied midpoint in both
+directions, refuses a full wall and retains wrong-floor/source-boundary refusals.
+Continue from the saved failure now crosses the descent and the remaining source
+markers. Victor reaches home, its XPPA result changes bVictorPatrol from 1 to 0,
+and FNV retains the final wait through automatic polling before POEA and POCA.
+Explicit EVP remains eligible. Source facing publishes its actual saved rotation.
+F5 commits the completed route; a separate process restores the exact saved home
+position and variable without restarting the retired patrol, then commits F5.
+Native owned facing/idle checks pass. Package route queries avoid combat's
+component-region search: selected repeat-run source-query samples are 1.1-1.5 ms,
+with native query slices below 1 ms; this is not a whole-frame performance claim.
+The full gate passes; publication is in progress. Nearby visual and matched retail
+timing/framing remain unverified; no complete Victor/population parity is claimed.
+Sandbox work for sweeping/farming remains the next population owner.
 The broken-SMG script has an extra source and compiled `endif`; the interpreter
 rejects it. Physical prop persistence and tutorial/campaign progression remain
 open.

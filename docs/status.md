@@ -1,6 +1,6 @@
 # Product status
 
-Updated 2026-10-20. User priority: **fully playable flat Fallout: New Vegas**.
+Updated 2026-10-21. User priority: **fully playable flat Fallout: New Vegas**.
 FO1 remains an incomplete classic preview with selected movement, inventory,
 equipment, door and save flows. Complete campaign execution and 1:1 3D art are
 unverified. See [current-work.md](current-work.md) for the active owner.
@@ -18,6 +18,7 @@ the evidence-backed repair inventory and work order.
 | Flat object handling | The native-player Grab handler now uses source dynamic bodies, weight limits and bounded force. The owned skull fixture passes motion, collision/obstacle, release, refusal and source-event checks. Pending grab/release marks survive schema-v53 saves; v52 saves remain admitted. Ordinary room placement and physics save/cold continuation remain open. |
 | FNV world | Exploration, interiors and some dialogue render in the user's recording. Missing vegetation/models/materials, physics and LOD behavior remain visible in diagnostics. No world/parity completion. |
 | Population | User rejects NPC behavior. Logs report missing travel, dialogue-location, patrol, AI condition and creature procedure owners. A few moving actors do not establish a functioning population. |
+| Creature patrol (current branch) | Source linked routes, retained waits/motion, native walk clips and actor-scoped XPPA results are implemented. The Securitron walk's inherited Bethesda rotation layout is decoded. Ordinary play saves/cold-loads patrol, crosses the saved cemetery failure through source-prefix triangle regions, reaches home, changes its quest variable, waits and retires through POEA/POCA. Post-result F5, separate-process Continue without restart and another F5 pass. Native capsule, wall, wrong-floor, saved-facing and the full runtime checks pass. Other patrol inputs, marker idles, duration holds, Sandbox, full Victor dialogue and visual/retail parity remain open. |
 | Automatic greeting / actor lifetime | Source editor-position dialogue waits retain native approach state. Ordinary saloon entry, F5 while waiting, cold Continue, walking into Sunny's voiced greeting, Goodbye and another F5 pass. Source corpses skip living AI; detached diagnostics cannot change another owner's corpse capture admission. Full runtime gate and synthetic contracts pass. Sandbox work and Victor's creature patrol remain unimplemented. |
 | Combat | User rejects combat. Unique compatible attack-group binding now passes source deathclaw/coyote hit, range-miss and cold-clock fixtures. Ordinary deathclaw terrain encounter, embedded emitters and faction assistance remain open. |
 | VR rig | Visible severe rifle hand/forearm deformation around source recording 32:10-32:48. Physical VR acceptance failed. |

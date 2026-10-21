@@ -6,6 +6,11 @@ using OpenNV.Runtime.Formats.Gamebryo;
 TextKeyContracts.Run();
 AnimationNotesLayoutContracts.Run();
 TbcKeyContracts.Run(TbcTransformFixture);
+if (args is ["--owned-rot-accum", var rotArchive, var rotMember])
+{
+    RotAccumContracts.Audit(rotArchive, rotMember);
+    return;
+}
 if (args.Length == 3 && args[0] == "--owned-tbc")
 {
     TbcKeyContracts.Audit(args[1], args[2]);
@@ -89,6 +94,15 @@ Require(((FalloutNifSplineData)compact.ReadObject(1)).CompactControlPoints[1] ==
 ExpectInvalid(() => new FalloutNifAnimationSampler(Spline(false, 5, [0, 0, 0]), 0));
 ExpectInvalid(() => new FalloutNifAnimationSampler(Spline(false, 3, new float[9]), 0));
 var keyed = new FalloutNifAnimationSampler(Keyed(), 0);
+var accumulatedSource = Keyed("BSRotAccumTransfInterpolator");
+var accumulated = new FalloutNifAnimationSampler(accumulatedSource, 0);
+Require(accumulatedSource.ReadObject(0).Block.TypeName == "BSRotAccumTransfInterpolator",
+    "Bethesda transform interpolation lost its source type identity.");
+foreach (var time in new[] { -1f, 0f, .25f, .5f, .75f, 1f, 2f })
+    Require(accumulated.Sample(time) == keyed.Sample(time), "Bethesda inherited transform keys changed their source samples.");
+ExpectInvalid(() => Wrap(("BSRotAccumTransfInterpolator", new byte[35])).ReadObject(0));
+ExpectInvalid(() => Wrap(("BSRotAccumTransfInterpolator", new byte[37])).ReadObject(0));
+Console.WriteLine("OPENNV_NIF_ROT_ACCUM_LAYOUT_PASS inheritedFields=true sourceIdentity=true keyedSamples=true malformedRefused=true retailAccumulation=unverified");
 foreach (var allocationSampler in new[] { heldRotation, sampler, interior, compactSampler, keyed })
 {
     for (var warmup = 0; warmup < 100; warmup++) _ = allocationSampler.Sample(.5f);
@@ -491,8 +505,8 @@ static FalloutNifFile ScalarSpline(bool compact, uint handle) => Wrap(
         if (compact) foreach (var value in new short[] { -32767, -10922, 10922, 32767 }) writer.Write(value);
     })), ("NiBSplineBasisData", Bytes(writer => writer.Write(4u))));
 
-static FalloutNifFile Keyed() => Wrap(
-    ("NiTransformInterpolator", Bytes(writer =>
+static FalloutNifFile Keyed(string interpolator = "NiTransformInterpolator") => Wrap(
+    (interpolator, Bytes(writer =>
     {
         for (var index = 0; index < 8; index++) writer.Write(float.MinValue);
         writer.Write(1);

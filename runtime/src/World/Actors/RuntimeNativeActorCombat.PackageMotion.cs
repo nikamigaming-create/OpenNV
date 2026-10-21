@@ -87,7 +87,17 @@ internal sealed partial class RuntimeNativeActorCombat
         if (_state.PackageMotion is not { } motion) throw new NotSupportedException("Dialogue completion has no observed package motion.");
         _state.PackageMotion = motion with { DialogueCompleted = true };
     }
-    internal void FacePackageDirection(Vector3 direction, double delta) => TurnToward(_actor.GlobalPosition + direction, delta);
+    internal void FacePackageDirection(Vector3 direction, double delta)
+    {
+        TurnToward(_actor.GlobalPosition + direction, delta);
+        // Marker/guard facing follows the motion observation in this step.
+        // Publish that actual rotation before a save or package retirement.
+        if (PackageOwnsPose && _state.PackageMotion is { } motion)
+        {
+            var rotation = _actor.GlobalBasis.Orthonormalized().GetRotationQuaternion();
+            _state.PackageMotion = motion with { Rotation = [rotation.X, rotation.Y, rotation.Z, rotation.W] };
+        }
+    }
     internal Vector3 ProjectPackageDestination(Vector3 authored)
     {
         PrepareMovement();

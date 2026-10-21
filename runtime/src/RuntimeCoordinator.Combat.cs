@@ -35,12 +35,18 @@ public partial class RuntimeCoordinator
         var units = _configuration.World.GameUnitsToMeters;
         Vector3 Source(Vector3 point) => new Vector3(point.X, -point.Z, point.Y) / units;
         Vector3 World(Vector3 point) => new Vector3(point.X, point.Z, -point.Y) * units;
-        var path = _botNavigation!.FindPath(Source(from), Source(to), destinationRadiusGameUnits: radius / units);
+        var path = _botNavigation!.FindPath(Source(from), Source(to), out var prefixRegion,
+            destinationRadiusGameUnits: radius / units);
         var points = path.Select(World).ToArray();
-        if (radius <= 0) return new(points);
+        Func<Vector3, bool> Prefix(Vector3 target, int resume)
+        {
+            var source = prefixRegion(Source(target), resume, .01f / units, NativeCapsuleNavigation.SourceHeightTolerance / units);
+            return point => source(Source(point));
+        }
+        if (radius <= 0) return new(points, PrefixArrival: Prefix);
         var region = _botNavigation.ArrivalRegion(Source(from), Source(to), path[^1], radius / units,
             .01f / units, NativeCapsuleNavigation.SourceHeightTolerance / units);
         points = NativeCapsuleNavigation.TerminalRegionCorridor(points, point => region(Source(point)));
-        return new(points, new(to, points[^1], radius), point => region(Source(point)));
+        return new(points, new(to, points[^1], radius), point => region(Source(point)), Prefix);
     }
 }

@@ -18,8 +18,9 @@ internal sealed record FalloutPatrolRoute(FalloutFormKey Package, string SourceS
         var data = FalloutPackageData.Read(package);
         if (data.Procedure != 13) throw new InvalidDataException("Package procedure is not Patrol.");
         var flags = data.Flags;
-        const uint supported = 0x00800000 | 0x00002000 | 0x01000000;
-        if ((flags & ~supported) != 0 || fields.Any(field => field.Signature is "PLD2" or "PTDT" or "PTD2"))
+        const uint supported = 0x00800000 | 0x00001000 | 0x00002000 | 0x01000000;
+        if ((flags & ~supported) != 0 || (flags & 0x1000) == 0 && data.BehaviorFlags != 0 ||
+            data.SpecificFlags is not (null or 0) || fields.Any(field => field.Signature is "PLD2" or "PTDT" or "PTD2"))
             throw new NotSupportedException("Patrol package flags or alternate targets need their procedure owner.");
         var location = Required(fields, "PLDT", 12).Span;
         var repeat = Required(fields, "PKPT", 2).Span[0];

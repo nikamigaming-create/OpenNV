@@ -245,6 +245,20 @@ internal static class NativeNavigationContracts
                "triangles":[{"vertexIndices":[0,1,2],"adjacentTriangles":[-1,-1,-1],"flags":0}],"externalConnections":[]}]}
             """);
         var graph = CellNavigationGraph.Load(source.RootElement, new HashSet<string> { "cell" });
+        var corridor = graph.FindPath(new(-2, -2, 0), new(2, 2, 0), out var prefixFactory);
+        var prefixRegion = prefixFactory(corridor[0], 1, .01f, .6f);
+        if (!prefixRegion(new(2, -1, .01f)) || prefixRegion(new(-2, -1, 0)) ||
+            prefixRegion(new(2, -1, 1)) || prefixRegion(new(3.1f, 1, 0)) || prefixRegion(new(4.2f, 1, 0)))
+            throw new InvalidOperationException("Source prefix lost portal width, directed progress or its actual triangle/floor.");
+        var badPrefix = false;
+        try { _ = prefixFactory(corridor[0] + Vector3.Right, 1, .01f, .6f); }
+        catch (InvalidDataException) { badPrefix = true; }
+        if (!badPrefix) throw new InvalidOperationException("Source prefix admitted a mismatched portal identity.");
+        _ = graph.FindPath(new(-2, -2, 0), new(-.1f, -.1f, 0), out var cutFactory);
+        var cutRegion = cutFactory(new(-1, -1, 0), 0, .01f, .6f);
+        if (!cutRegion(new(-.5f, -1.4f, .01f)) || cutRegion(new(-1.1f, -1.1f, 0)) || cutRegion(new(-.5f, -1.4f, 1)))
+            throw new InvalidOperationException("First source slice lost its progress plane or admitted another floor.");
+        Console.WriteLine("OPENNV_SOURCE_PREFIX_REGION_PASS portalWidth=true nextTriangle=true firstSliceProgress=true wrongFloorRefused=true sourceIdentity=true");
         var requested = new Vector3(2.5f, 2.5f, .2f);
         var sourceSelected = new Vector3(2.5f, 2.5f, 0);
         var region = graph.ArrivalRegion(new(-2, -2, 0), requested, sourceSelected, 2, .01f, .6f, out var sourceFloor);

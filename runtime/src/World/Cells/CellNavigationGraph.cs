@@ -60,6 +60,14 @@ internal sealed partial class CellNavigationGraph
         Vector3 destinationGameUnits,
         Func<Vector3, bool>? permittedPortal = null,
         float destinationRadiusGameUnits = 0)
+        => FindPath(startGameUnits, destinationGameUnits, out _, permittedPortal, destinationRadiusGameUnits);
+
+    internal IReadOnlyList<Vector3> FindPath(
+        Vector3 startGameUnits,
+        Vector3 destinationGameUnits,
+        out Func<Vector3, int, float, float, Func<Vector3, bool>> prefixRegion,
+        Func<Vector3, bool>? permittedPortal = null,
+        float destinationRadiusGameUnits = 0)
     {
         if (_navmeshes.Count == 0)
             throw new InvalidOperationException(
@@ -79,6 +87,8 @@ internal sealed partial class CellNavigationGraph
             endpoint.DistanceSquaredTo(destinationGameUnits) > destinationRadiusGameUnits * destinationRadiusGameUnits)
             throw new InvalidOperationException("Owned NAVM endpoint lies outside the source destination radius.");
         result.Add(endpoint);
+        prefixRegion = (target, resume, horizontal, height) =>
+            PrefixRegion(startGameUnits, result, trianglePath, target, resume, horizontal, height);
         return result;
     }
 

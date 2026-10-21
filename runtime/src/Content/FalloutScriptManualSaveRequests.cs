@@ -101,7 +101,8 @@ internal sealed class FalloutScriptManualSaveRequests(FalloutPluginStack records
             !(caller == program.FormKey && program.Signature == "SCPT"))
             throw new InvalidDataException("Script save invocation caller has no source instance.");
         var winning = records.GetEffective(program.FormKey);
-        if (winning.Signature is not ("SCPT" or "QUST" or "INFO" or "PACK" or "TERM") ||
+        if (!(winning.Signature is "SCPT" or "QUST" or "INFO" or "PACK" or "TERM" ||
+            winning.Signature == "REFR" && winning.ReadSubrecords().Count(field => field.Signature == "XPPA") == 1) ||
             winning.Plugin != program.Plugin || winning.HeaderOffset != program.HeaderOffset)
             throw new InvalidDataException("Script save invocation differs from its winning program owner.");
         if (!_recordHashes.TryGetValue(program.FormKey, out var recordHash))
