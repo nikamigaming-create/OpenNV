@@ -1,12 +1,29 @@
 using System.Text.Json;
 using Godot;
 using OpenNV.Runtime.Content;
+using OpenNV.Runtime.World.Actors;
 using OpenNV.Runtime.World.Cells;
 
 internal static class NativeNavigationContracts
 {
+    private static void CheckElevatedPackageMarker()
+    {
+        var marker = new Vector3(0, 3, 0);
+        var floor = new Vector3(.05f, 0, .05f);
+        if (RuntimeNativeActorCombat.ProjectPackageDestination(marker, [floor], .3f) != floor)
+            throw new InvalidOperationException("Elevated package marker rejected its nearby source floor.");
+        foreach (var route in new Vector3[][] { [], [new(3, 0, 0)], [new(0, 6, 0)] })
+        {
+            try { RuntimeNativeActorCombat.ProjectPackageDestination(marker, route, .3f); }
+            catch (NotSupportedException) { continue; }
+            throw new InvalidOperationException("Package projection admitted an absent, distant or overhead floor.");
+        }
+        Console.WriteLine("OPENNV_PACKAGE_MARKER_FLOOR_PASS elevated=true lateralAndOverheadRefused=true missingRefused=true");
+    }
+
     internal static void Run()
     {
+        CheckElevatedPackageMarker();
         CheckProjectionBounds();
         CheckRefinementIntent();
         CheckTerminalArrivalIntent();
