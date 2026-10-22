@@ -49,7 +49,6 @@ internal sealed record FalloutActorThreat(FalloutFormKey Owner, byte Aggression,
         var from = actor.Where(pair => pair.Value >= 0).Select(pair => pair.Key).ToArray();
         var to = target.Where(pair => pair.Value >= 0).Select(pair => pair.Key).ToHashSet();
         var reactions = new HashSet<uint>();
-        if (from.Any(to.Contains)) reactions.Add(2);
         foreach (var faction in from)
         {
             if (query is not null)
@@ -73,8 +72,8 @@ internal sealed record FalloutActorThreat(FalloutFormKey Owner, byte Aggression,
                 if (to.Contains(other) && reaction != 0) reactions.Add(reaction);
             }
         }
-        if (reactions.Contains(1) && reactions.Any(value => value >= 2))
-            throw new NotSupportedException("Conflicting enemy and friendly factions require their disposition priority owner.");
-        return reactions.Count == 0 ? 0 : reactions.Max();
+        // Combat reactions have their own priority: ally, friend, enemy,
+        // neutral. Keep validating every admitted pair before selecting it.
+        return reactions.Contains(2) ? 2u : reactions.Contains(3) ? 3u : reactions.Contains(1) ? 1u : 0u;
     }
 }

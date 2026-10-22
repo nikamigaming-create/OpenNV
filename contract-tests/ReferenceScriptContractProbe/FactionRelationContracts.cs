@@ -14,6 +14,22 @@ internal static class FactionRelationContracts
         {
             File.WriteAllBytes(Path.Combine(directory.FullName, "Relations.esm"), Join(Header(),
                 Faction(0x10, "FirstFaction", 1), Faction(0x11, "SecondFaction"),
+                ReactionFaction(0x12, "EnemyInput", 0x16, 1, int.MaxValue),
+                ReactionFaction(0x13, "FriendInput", 0x16, 3, int.MinValue),
+                ReactionFaction(0x14, "RemovedAllyInput", 0x16, 2, int.MaxValue),
+                ReactionFaction(0x15, "NeutralInput", 0x16, 0, 100),
+                ReactionFaction(0x17, "InvalidReaction", 0x16, 4, 0),
+                Record("FACT", 0x18, Field("XNAM", Join(U32(0x16), U32(0)))),
+                Faction(0x19, "EmptySharedFaction"),
+                ReactionFaction(0x1a, "SelfAlly", 0x1a, 2, 0),
+                ReactionFaction(0x1b, "SelfFriend", 0x1b, 3, 0),
+                ReactionFaction(0x1c, "SelfEnemy", 0x1c, 1, 0),
+                ReactionFaction(0x1d, "SelfNeutral", 0x1d, 0, 0),
+                Record("FACT", 0x16, Field("EDID", Text("DirectedTarget")),
+                    Field("XNAM", Join(U32(0x12), BitConverter.GetBytes(int.MinValue), U32(1))),
+                    Field("XNAM", Join(U32(0x13), BitConverter.GetBytes(int.MaxValue), U32(0)))),
+                FactionActor(0x70, (0x12, 0), (0x13, 127), (0x14, -1), (0x15, 0), (0x19, 0)),
+                FactionActor(0x71, (0x16, 1), (0x19, 0)),
                 Actor(7, 0x10), Actor(8, 0x11), Record("ACTI", 9, Field("SCRI", U32(0x50))),
                 Record("PACK", 0x40, Field("PTDT", Join(U32(0), U32(0x92), new byte[8]))),
                 Record("SCPT", 0x50, Field("SCHR", new byte[20]), Field("SCRO", U32(0x10)), Field("SCRO", U32(0x11)),
@@ -22,12 +38,14 @@ internal static class FactionRelationContracts
                 Record("SCPT", 0x51, Field("SCHR", QuestHeader()), Field("SCRO", U32(0x10)), Field("SCRO", U32(0x11)),
                     Field("SCTX", Text("begin GameMode\nSetEnemy FirstFaction SecondFaction 1 0\nend"))),
                 Record("CELL", 0x80, Field("DATA", [1])), Group(0x80,
-                    Reference("REFR", 0x90, 9), Reference("ACHR", 0x91, 7), Reference("ACHR", 0x92, 8)),
+                    Reference("REFR", 0x90, 9), Reference("ACHR", 0x91, 7), Reference("ACHR", 0x92, 8),
+                    Reference("ACHR", 0x94, 0x70), Reference("ACHR", 0x95, 0x71)),
                 Record("CELL", 0x81, Field("DATA", [1])), Group(0x81, Reference("ACHR", 0x93, 8))));
             File.WriteAllBytes(Path.Combine(directory.FullName, "Patch.esp"), Join(Header("Relations.esm"), Faction(0x10, "FirstFaction", 3),
                 Record("PACK", 0x40, Field("PTDT", Join(U32(0), U32(0x92), new byte[8])),
                     Field("CTDA", SameCellCondition(0x14)))));
             using var records = FalloutPluginStack.Load(directory.FullName, ["Relations.esm", "Patch.esp"]);
+            ExerciseArbitration(records);
             using var world = new FalloutReferenceWorld(records);
             world.LoadCell(FalloutCellSceneReader.Read(records, Key(0x80)));
             Require(world.FactionCombatReaction(Key(0x10), Key(0x11)) == 3 && world.ActorRelation(Key(0x91), Key(0x92)) == 3,
@@ -123,6 +141,99 @@ internal static class FactionRelationContracts
     }
 
     private static FalloutFormKey Key(uint id) => new("Relations.esm", id);
+    private static void ExerciseArbitration(FalloutPluginStack records)
+    {
+        // Explicit contract table, indexed by reaction labels 0..3. This
+        // deliberately differs from numeric maximum (ally 2 beats friend 3).
+        uint[,] expected = { { 0, 1, 2, 3 }, { 1, 1, 2, 3 }, { 2, 2, 2, 2 }, { 3, 3, 2, 3 } };
+        var to = new Dictionary<FalloutFormKey, sbyte> { [Key(0x16)] = 0 };
+        for (uint first = 0; first < 4; first++)
+            for (uint second = 0; second < 4; second++)
+                foreach (var reverse in new[] { false, true })
+                {
+                    var from = new Dictionary<FalloutFormKey, sbyte>();
+                    foreach (var key in reverse ? new uint[] { 0x13, 0x12 } : new uint[] { 0x12, 0x13 }) from.Add(Key(key), 0);
+                    Require(FalloutActorThreat.Relation(records, from, to,
+                        (faction, _) => faction == Key(0x12) ? first : second) == expected[first, second],
+                        "Mixed faction reaction ignored the contract table or depended on membership order.");
+                }
+        uint[][] orders = [[0x12, 0x13, 0x14], [0x12, 0x14, 0x13], [0x13, 0x12, 0x14],
+            [0x13, 0x14, 0x12], [0x14, 0x12, 0x13], [0x14, 0x13, 0x12]];
+        foreach (var order in orders)
+        {
+            var from = order.ToDictionary(Key, _ => (sbyte)0);
+            Require(FalloutActorThreat.Relation(records, from, to,
+                (faction, _) => faction == Key(0x12) ? 1u : faction == Key(0x13) ? 3u : 2u) == 2,
+                "Three-way actor arbitration did not retain ally priority.");
+        }
+        var active = new Dictionary<FalloutFormKey, sbyte> { [Key(0x12)] = 0, [Key(0x13)] = 127, [Key(0x14)] = -1 };
+        Require(FalloutActorThreat.Relation(records, active, to,
+            (faction, _) => faction == Key(0x14) ? throw new InvalidOperationException("Removed membership was queried.") : faction == Key(0x12) ? 1u : 3u) == 3,
+            "Removed rank participated or active rank magnitude replaced reaction priority.");
+        active[Key(0x12)] = 127; active[Key(0x13)] = 0;
+        Require(FalloutActorThreat.Relation(records, active, to,
+            (faction, _) => faction == Key(0x12) ? 1u : 3u) == 3,
+            "A higher active membership rank replaced the stronger combat relation.");
+        Reject(() => FalloutActorThreat.Relation(records, active, to, (faction, _) => faction == Key(0x12) ? 2u : 4u));
+        foreach (var invalid in new uint[] { 0x17, 0x18 })
+            Reject(() => FalloutActorThreat.Relation(records,
+                new Dictionary<FalloutFormKey, sbyte> { [Key(0x1a)] = 0, [Key(invalid)] = 0 },
+                new Dictionary<FalloutFormKey, sbyte> { [Key(0x1a)] = 0 }));
+        var shared = new Dictionary<FalloutFormKey, sbyte> { [Key(0x19)] = 0 };
+        Require(FalloutActorThreat.Relation(records, shared, shared) == 0 &&
+            FalloutActorThreat.Relation(records,
+                new Dictionary<FalloutFormKey, sbyte> { [Key(0x12)] = 0, [Key(0x19)] = 0 },
+                new Dictionary<FalloutFormKey, sbyte> { [Key(0x16)] = 0, [Key(0x19)] = 0 }) == 1,
+            "Shared empty faction invented an ally or masked a real enemy pair.");
+        foreach (var (faction, reaction) in new (uint, uint)[] { (0x1a, 2), (0x1b, 3), (0x1c, 1), (0x1d, 0) })
+        {
+            var self = new Dictionary<FalloutFormKey, sbyte> { [Key(faction)] = 0 };
+            Require(FalloutActorThreat.Relation(records, self, self) == reaction,
+                "Authored self XNAM was replaced by an implicit shared-membership reaction.");
+        }
+        for (uint reaction = 0; reaction < 4; reaction++)
+            Require(FalloutActorThreat.Relation(records, shared, shared, (_, _) => reaction) == reaction,
+                "Directed current self-pair query was bypassed for shared membership.");
+
+        using var world = new FalloutReferenceWorld(records);
+        world.LoadCell(FalloutCellSceneReader.Read(records, Key(0x80)));
+        Require(world.ActorRelation(Key(0x94), Key(0x95)) == 3 && world.ActorRelation(Key(0x95), Key(0x94)) == 1,
+            "Winning FACT pairs did not preserve directional friend-over-enemy arbitration independently of disposition scores.");
+        world.ChangeFaction(Key(0x94), Key(0x14), 0, false);
+        Require(world.ActorRelation(Key(0x94), Key(0x95)) == 2, "New active ally membership did not outrank friend and enemy.");
+        world.ChangeFaction(Key(0x94), Key(0x14), -1, false);
+        world.SetFactionRelationship(Key(0x13), Key(0x16), false, 0, 1);
+        Require(world.ActorRelation(Key(0x94), Key(0x95)) == 1, "Live enemy overlay did not replace its source friend pair.");
+        world.SetFactionRelationship(Key(0x12), Key(0x16), true, 0, 1);
+        Require(world.ActorRelation(Key(0x94), Key(0x95)) == 2 && world.ActorRelation(Key(0x95), Key(0x94)) == 3,
+            "Directional live ally/friend overlays did not outrank the remaining enemy inputs.");
+        for (uint reaction = 0; reaction < 4; reaction++)
+        {
+            var friendly = reaction is 2 or 3;
+            var flag = reaction is 0 or 3 ? 1 : 0;
+            world.SetFactionRelationship(Key(0x19), Key(0x19), friendly, flag, flag);
+            Require(FalloutActorThreat.Relation(records, shared, shared, world.FactionCombatReaction) == reaction,
+                "Actual dynamic self overlay was replaced by shared-membership inference.");
+        }
+        var references = JsonSerializer.Deserialize<FalloutReferenceSnapshot[]>(JsonSerializer.Serialize(world.Capture()))!;
+        var overrides = JsonSerializer.Deserialize<FalloutActorOverrides[]>(JsonSerializer.Serialize(world.CaptureActorOverrides()))!;
+        var relations = JsonSerializer.Deserialize<FalloutFactionRelationSnapshot[]>(JsonSerializer.Serialize(world.CaptureFactionRelations()))!;
+        using var cold = new FalloutReferenceWorld(records);
+        cold.Restore(references); cold.RestoreActorOverrides(overrides); cold.RestoreFactionRelations(relations);
+        Require(cold.ActorRelation(Key(0x94), Key(0x95)) == 2 && cold.ActorRelation(Key(0x95), Key(0x94)) == 3 &&
+            FalloutActorThreat.Relation(records, shared, shared, cold.FactionCombatReaction) == 3 &&
+            cold.ActorFactions(Key(0x94))[Key(0x14)] == -1 &&
+            JsonSerializer.Serialize(cold.CaptureActorOverrides()) == JsonSerializer.Serialize(world.CaptureActorOverrides()) &&
+            JsonSerializer.Serialize(cold.CaptureFactionRelations()) == JsonSerializer.Serialize(world.CaptureFactionRelations()),
+            "Cold arbitration changed removed membership, directional overlays or their source identities.");
+        Console.WriteLine("OPENNV_FACTION_ARBITRATION_PASS allReactionPairs=true orderIndependent=true threeWay=true allyOverFriendOverEnemy=true dispositionScoreIndependent=true removedRank=true directional=true liveOverlays=true cold=true malformedAfterAllyRefused=true sharedEmptyNeutral=true authoredAndDynamicSelfPairs=true assistanceAndRetailParity=unverified");
+    }
+
+    private static byte[] ReactionFaction(uint id, string name, uint target, uint reaction, int disposition) =>
+        Record("FACT", id, Field("EDID", Text(name)), Field("XNAM", Join(U32(target), BitConverter.GetBytes(disposition), U32(reaction))));
+    private static byte[] FactionActor(uint id, params (uint Faction, sbyte Rank)[] factions) =>
+        Record("NPC_", id, [Field("ACBS", new byte[24]), Field("AIDT", new byte[20]),
+            .. factions.Select(value => Field("SNAM", Join(U32(value.Faction), [unchecked((byte)value.Rank), 0, 0, 0])))]);
     private static byte[] Faction(uint id, string name, uint? reaction = null) => Record("FACT", id, Field("EDID", Text(name)),
         reaction is { } value ? Field("XNAM", Join(U32(0x11), U32(0), U32(value))) : []);
     private static byte[] Actor(uint id, uint faction) => Record("NPC_", id, Field("ACBS", new byte[24]),
