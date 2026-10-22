@@ -9,6 +9,30 @@ lockpicking, hacking and all 13 skills. No campaign or parity completion is clai
 
 ## Active block
 
+Checked baseline: PR260 merged as cf541f16cdb2ac58b33108093813b84b27645e5a
+after all five checks passed on 721fdc7a. Local main and origin/main were verified
+equal and clean, with no outstanding task PR. The next feature branch is
+codex/fnv-vault21-render-admission. The checked repair resolves shared controller
+manager binding across a validated node-controller chain. The owned Strip
+forcefield declares manager -> deferred visibility -> multi-target companion;
+the importer currently assumes the companion is the immediate next block.
+Synthetic refusal controls and the owned forcefield's four source groups now pass
+native sequence, clock, material-value, cold and independent-instance checks.
+The owned model has 64 checked material samples. The serial Debug build passes
+with zero warnings/errors; the full required gate passes with exit0 and all
+2,033 frozen source/configuration hashes unchanged. These checks do not establish ordinary door Open/Close,
+visibility-animation support or final pixels.
+The coordinator owns checked publication, builds, native execution and Git;
+the implementation writer is frozen.
+
+The finite Vault21 investigation stopped after two approaches: null runtime
+shader state is handled without drawing or aborting siblings, but the selected
+references' transient preparation context and warm prepared state remain unbound.
+No guessed material or geometry omission is admitted. Marker readiness and the
+deferred request consumer are qualified; native outgoing/queued animation,
+deactivation acknowledgement and physical occupancy remain missing owners.
+Marker execution is parked while the independent rendering repair advances.
+
 Current immediate user priority: repair visible Strip material omissions and
 camera validity, then deliver corrected native images and progress a systematic
 matched retail/OpenNV location sweep. Preserve the written gameplay work below;
@@ -60,7 +84,7 @@ and alert changes, private staging clocks, and consumed package history. Publica
 is checked synchronously by callers outside Godot lifecycle callbacks; changed
 authority or publication faults refuse without erasing the cold receipt. Its
 required gate passed with exit0; exact source and publication receipts are tracked
-in ready PR260. SourcePlacement now relinquishes authority after successful native
+in merged PR260. SourcePlacement now relinquishes authority after successful native
 pose publication so later dialogue-facing changes survive queries and saves. This acknowledgement
 repair passes focused/default managed contracts and bounded source review. The
 actual Godot fixture now passes for all four genuine saved NPCs: twelve before-
@@ -81,7 +105,7 @@ fault/generation contracts pass. The unchanged native recorded-input audit and
 renewed full required gate pass; all 2,032 source/configuration hashes match
 the frozen snapshot. The original hosted deadline failure does not establish
 whether queueing or file I/O caused its delay. No deadline or loss assertion
-was relaxed, and hosted acceptance is required on the published correction.
+was relaxed. All five hosted checks passed on the correction before PR260 merged.
 The diagnostic reference-event host now has a managed-tested correction:
 clock/presentation scripts can bind without a fabricated player, while reached
 gameplay commands still require their real owner. This targets the authored Strip
@@ -113,9 +137,8 @@ All originals, provenance and selected active framing diagnostics are local;
 six Library images comprise five diagnostic compositions and the prior genuine
 Goodsprings gameplay fallback. They are not six accepted polished scenes.
 
-The speech, diagnostics and marker prerequisites are merged through PR259,
-main adc3d086fe763726d74d4a30c9c2e3962e3cd94e. The coordinator is on
-codex/fnv-active-sandbox-save. The stopped-state repair addresses four NPCs
+The speech, diagnostics, marker prerequisites and stopped-state repair are merged
+through PR260. The stopped-state repair addresses four NPCs
 (10a72b,1629a7,1629a8,1629a9): PACK074fe6 POBA consumed, first activity candidate
 admission unsupported, no selected activity or motion. Ordinary isolated F5 and
 cold continuation now retain these actors and consumed history. The selected native
@@ -142,9 +165,12 @@ winning IDLM declarations respectively contain four sequential idles with a
 two-second collection wait and one smoking idle with a sixteen-second wait.
 These waits are not Sandbox activity durations; the marker dispatcher does not
 apply their patrol wait/DoOnce policy. Shared source-bound PACK/IDLM collection
-validation preserves strict package save admission. Marker admission, approach,
-expiry/interruption and script-visible procedure contracts are qualified; native
-activity dispatch and its complete retained continuation remain unimplemented.
+validation preserves strict package save admission. Collection, reservation and
+selection primitives have bounded proof. A newer complete marker lifecycle
+contract was not recovered: the retained dossier leaves native queued/current
+readiness and the physical occupancy owner unresolved. Admission/approach,
+expiry/interruption and script-visible procedure integration therefore remain
+unaccepted, alongside native activity dispatch and its retained continuation.
 Furniture requires a nested physical continuation; NPC eating requires its own
 consumption transaction. Neither can be omitted from mixed candidate sets.
 The SWG execution window has ended. The prior merged source's serial OpenNV gate passed

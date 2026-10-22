@@ -6,6 +6,8 @@ internal static partial class RuntimeNativeNifMeshBuilder
 {
     private sealed partial class BuildState
     {
+        private readonly Dictionary<int, FalloutNifMultiTargetTransformController> _managerTargets = [];
+
         private void ValidateNodeController(FalloutNifNode owner, Node3D node)
         {
             // Validate the entire original linked list before publishing any
@@ -79,13 +81,14 @@ internal static partial class RuntimeNativeNifMeshBuilder
                 if (controller is FalloutNifControllerManager manager)
                 {
                     ValidateNodeControllerManager(owner, node, manager);
-                    // The existing manager owner requires its exact terminal
-                    // multi-target companion. It is not a second direct owner.
-                    if (ordinal + 1 >= chain.Count || chain[ordinal + 1].Block.Index != manager.Time.NextController)
-                        throw new InvalidDataException("NIF controller manager lost its original companion order.");
-                    ordinal++;
                     continue;
                 }
+                // A manager's transform companion can follow another typed
+                // controller. That intervening controller keeps its own owner;
+                // only the resolved companion is consumed by the manager.
+                if (controller is FalloutNifMultiTargetTransformController companion &&
+                    _managerTargets.Values.Any(value => value.Block.Index == companion.Block.Index))
+                    continue;
                 throw new NotSupportedException(
                     $"NIF node {owner.Block.Index} ({owner.Name}) controller {controller.Block.Index} " +
                     $"{controller.Block.TypeName} has no native node channel owner.");
@@ -103,8 +106,14 @@ internal static partial class RuntimeNativeNifMeshBuilder
                 manager.ObjectPalette == -1 || manager.Time.NextController == -1)
                 throw new NotSupportedException(
                     $"NIF node {owner.Block.Index} ({owner.Name}) has an unsupported active controller manager contract: {manager}.");
-            if (_source.ReadObject(manager.Time.NextController) is not FalloutNifMultiTargetTransformController multi ||
-                multi.Time.NextController != -1 || multi.Time.Flags != DormantMultiTargetFlags ||
+            var chain = FalloutNifNodeControllerChain.Read(_source, owner);
+            var suffix = chain.SkipWhile(value => value.Block.Index != manager.Block.Index).Skip(1)
+                .TakeWhile(value => value is not FalloutNifControllerManager).ToArray();
+            var companions = suffix.OfType<FalloutNifMultiTargetTransformController>().ToArray();
+            if (companions.Length != 1)
+                throw new NotSupportedException($"NIF controller manager {manager.Block.Index} has no unique transform companion.");
+            var multi = companions[0];
+            if (multi.Time.NextController != -1 || multi.Time.Flags != DormantMultiTargetFlags ||
                 multi.Time.Frequency != 1.0f || multi.Time.Phase != 0.0f ||
                 multi.Time.StartTime != float.MaxValue || multi.Time.StopTime != float.MinValue ||
                 multi.Time.Target != owner.Block.Index || multi.Time.UnknownInteger != 0 ||
@@ -132,6 +141,7 @@ internal static partial class RuntimeNativeNifMeshBuilder
                     throw new NotSupportedException(
                         $"NIF controller manager {manager.Block.Index} has an unsupported sequence chain.");
             }
+            _managerTargets.Add(manager.Block.Index, multi);
             _controllerManagers.Add(manager);
             node.SetMeta("opennv_nif_dormant_controller_manager", manager.Block.Index);
         }
