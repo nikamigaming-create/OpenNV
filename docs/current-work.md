@@ -9,6 +9,35 @@ lockpicking, hacking and all 13 skills. No campaign or parity completion is clai
 
 ## Active block
 
+The speech and diagnostics repairs are merged. The integration coordinator is
+advancing the shared Sandbox idle-marker owner on codex/fnv-sandbox-marker.
+Current population failures include placed markers 15ad26 and 16140d; their
+winning IDLM declarations respectively contain four sequential idles with a
+two-second collection wait and one smoking idle with a sixteen-second wait.
+These waits are not Sandbox activity durations; the marker dispatcher does not
+apply their patrol wait/DoOnce policy. Shared source-bound PACK/IDLM collection
+validation preserves strict package save admission. The previous gameplay owner is qualifying marker
+admission, approach, expiry/interruption and script-visible procedure contracts.
+Furniture requires a nested physical continuation; NPC eating requires its own
+consumption transaction. Neither can be omitted from mixed candidate sets.
+The SWG execution window has ended. The serial OpenNV gate passes
+(sandbox-marker-runtime-gate.log, exit0), including all four new contract groups.
+The gated source manifest is unchanged. Recording remains off. Live equipment queries now share one-level
+FLST matching, including null termination and first-match ordering. The focused
+NPC/player equipment contracts and both owned IDLE equipment-list audits pass;
+carrying, wearing, live changes, query immutability and cold state are distinct
+assertions. Sandbox's script package code is 36; its phase-sensitive procedure
+query remains unbound. Marker reservation and process-cursor primitives are
+implemented but not dispatched by the live Sandbox owner.
+The final owned equipment audit passes against the gated build
+(sandbox-equipment-owned-final.log). The counted owned-body speech failure
+regression also passes (sandbox-prerequisite-speech-counted.log), preserving one
+committed result through cleanup, ticks/retry and save refusal; all ten owned
+plugin hashes remain unchanged. None of these receipts proves full IDLE admission
+or ordinary marker playback.
+The existing four-request owned NAVM audit also passes against runtime module
+6057edd3-b11b-40b5-9dfd-becd65846a5d (sandbox-prerequisite-owned-wander.log).
+
 Preserve unrelated PR #242. Ambient speech startup now retires participant reservations
 through the shared failure owner while retaining unresolved voice/results and
 save refusal. The owned Trudy/Sunny HELLO failure fixture passes and fails its
@@ -28,11 +57,11 @@ Near/LOD publication diagnostics now separate exact charged step/source duration
 and faults from batch wall time. Admission remains 2 ms; no rendered performance
 improvement is established. Typed clocks, shared semantic fields/provenance,
 event/audio/particle and final-frame joins remain required for retail comparison.
-No local game or build is running. Frame recording remains off. The selected owned
+Frame recording remains off. The selected owned
 10a210/074fe6 four-request navigation audit passes (integration-owned-wander.log,
 exit0). git diff --check passes. The integration coordinator retains Git and
-execution ownership; the previous gameplay owner is qualifying source cadence
-read-only without competing edits or native jobs.
+execution ownership; the previous gameplay owner is qualifying the remaining
+marker movement/readiness contracts read-only without competing edits or jobs.
 
 The shared NPC/creature Sandbox owner now moves actors along source NAVM requests
 and retains the selected activity separately from individual destinations. Its
@@ -102,6 +131,27 @@ query was a fixture, not its live selected package.
   still need binding. Dialogue search includes the source extra range. Actor energy comes from the effective AIDT template owner.
 
 ## Next work
+
+The user prioritizes whole-game playability before repeated deep optimization.
+The following finite ledger selects implementation by campaign dependency;
+each row stays open until ordinary outcomes and cold state are proved. Routes
+provide incremental evidence and must expand to the remaining campaign.
+
+| Priority / pillar | Concrete open blocker | Next bounded outcome |
+| --- | --- | --- |
+| 1. NPC packages + persistence | Current population stops at IDLM admission/execution; phase, queued/current animation readiness, location-return and saved marker continuation are not owned. Furniture and eating also remain unexecuted. | Bind the next qualified shared marker lifecycle; competing actors, genuine approach/playback, interruption, save and separate-process Continue. Do not substitute clip completion for native readiness. |
+| 2. Quests/scripts | Current campaign checkpoint is Sunny stage50 at the second well; later wells, ingredients and campfire cooking have no completed ordinary-play proof. | Continue the real tutorial, repair the first reached shared script/gameplay failure, retain its exact result prefix and save/cold outcome. |
+| 3. Combat | Ordinary gecko/settler pursuit, damage and kills have bounded proof; healing/retreat, remaining encounters, attack families and reactions are still incomplete. | Complete the current source encounter with actual hits/misses/health, loot and survivable continuation; extend to the next reached family rather than claim all combat. |
+| 4. Access interactions | Missing keys/passwords return before lockpicking/hacking; hacking also has a separate creation refusal. | Implement a source-qualified access transaction with ordinary input, skill/perk admission, success/failure consequences and retained per-reference outcome. The read-only access owner is finishing admission/result-commit qualification. |
+| 5. World transitions | Existing door/exterior owners are present; complete campaign travel and transition persistence remain unproved. | Exercise the next required authored transition with script/cell/save state intact. Treat prefetch/loading stalls as immediate work only if they block play or validation. |
+| 6. UI/inventory | Loot/healing owners exist; inventory scrolling, bottle destruction and all reached crafting/menu paths still need ordinary review. | Complete the next required inventory/crafting interaction with actual state changes and modal-input release, including cold continuation. |
+| 7. Save/load across all pillars | Selected retained owners pass contracts; ordinary population, voiced exchanges and marker/furniture/eating state do not yet have complete save admission. | Require manual save and separate-process Continue after each new gameplay owner, preserving targets, RNG, scripts, sound/animation and exactly-once commits. |
+
+The scoped equipment predicate repair is implemented and proved by synthetic
+live inventory and selected owned-list audits. Marker reservation/selection
+primitives are prerequisites, not closure of the first ledger row. Do not make
+telemetry, streaming optimization or broad perpetual audits the primary work
+while these campaign blockers remain.
 
 The next implementation work is remaining admission, activity execution and the
 independent movement request clock; do not revert unrestricted packages to

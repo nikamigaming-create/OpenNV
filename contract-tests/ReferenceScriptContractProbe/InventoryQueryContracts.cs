@@ -5,7 +5,7 @@ using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.World.Cells;
 
-internal static class InventoryQueryContracts
+internal static partial class InventoryQueryContracts
 {
     internal static void Run()
     {
@@ -145,6 +145,7 @@ internal static class InventoryQueryContracts
                 "Cold query did not read retained item counts.");
             player.Add(records, Key(1), int.MaxValue - 1, 1, true);
             Check(commands.ItemCount(Key(0x14), new("Queries.esp", 0x120)) == 2d * int.MaxValue + 1, "List total overflowed the source numeric result.");
+            EquipmentQueries();
             Console.WriteLine("OPENNV_INVENTORY_QUERY_CONTRACT_PASS self=true player=true listener=true explicit=true sourceMasters=true list=true liveChanges=true readonly=true cold=true fallback=true typed=true missingOwnerRefused=true weaponDraw=true equipmentSwitch=true winningWeaponType=true");
         }
         finally { directory.Delete(true); }

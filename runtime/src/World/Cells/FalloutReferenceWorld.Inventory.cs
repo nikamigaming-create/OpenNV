@@ -155,6 +155,15 @@ internal sealed partial class FalloutReferenceWorld
         if (records.GetEffective(InventoryBase(reference)).Signature == "NPC_") InvalidateActorAppearance(reference);
     }
 
+    internal bool IsEquipped(FalloutFormKey reference, FalloutFormKey item, int level, FalloutGlobalState? globals = null) =>
+        FalloutEquippedItems.Any(records, item, direct =>
+        {
+            var source = records.GetEffective(direct);
+            if (source.Signature == "WEAP") return EquippedObject(reference, 5, level, globals) == direct;
+            if (source.Signature == "ARMO") _ = EquippedArmor(reference, level, globals);
+            return Inventory(reference, level, globals).Contents.IsEquipped(records, direct);
+        });
+
     internal FalloutFormKey? EquippedObject(FalloutFormKey reference, uint slot, int level, FalloutGlobalState? globals = null)
     {
         if (reference != records.RuntimeFormKey(0x14)) _ = Actor(reference);

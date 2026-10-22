@@ -972,6 +972,7 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
         _residentCells.Clear();
         _residentReferences.Clear();
         _furnitureSeats.Clear();
+        _idleMarkerReservations.Clear();
         _instances.Clear();
         _enableWork.Clear();
         _activationWork.Clear();

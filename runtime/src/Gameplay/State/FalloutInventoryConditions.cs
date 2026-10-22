@@ -23,7 +23,8 @@ internal static class FalloutInventoryConditions
         return condition.Function switch
         {
             47 => (float)FalloutInventoryItemCounts.Count(records, inventory, condition.FormArgument1),
-            182 => inventory.Equipped.Contains(records.RuntimeFormId(condition.FormArgument1)) ? 1 : 0,
+            182 => FalloutEquippedItems.Any(records, condition.FormArgument1,
+                item => inventory.IsEquipped(records, item)) ? 1 : 0,
             382 => records.GetEffective(condition.FormArgument1).Signature != "NOTE"
                 ? throw new InvalidDataException("GetHasNote argument is not NOTE.")
                 : inventory.Item(condition.FormArgument1) is { Count: > 0 } ? 1 : 0,

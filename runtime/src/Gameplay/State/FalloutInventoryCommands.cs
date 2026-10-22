@@ -30,13 +30,9 @@ internal sealed class FalloutInventoryCommands(FalloutPluginStack records, Fallo
 
     internal bool IsEquipped(FalloutFormKey target, FalloutFormKey item)
     {
-        var source = records.GetEffective(item);
-        if (!IsPlayer(target))
-        {
-            if (source.Signature == "WEAP") return EquippedObject(target, 5) == item;
-            if (source.Signature == "ARMO") _ = world.EquippedArmor(target, level(), globals);
-        }
-        return Inventory(target).IsEquipped(records, item);
+        return IsPlayer(target)
+            ? FalloutEquippedItems.Any(records, item, direct => player.IsEquipped(records, direct))
+            : world.IsEquipped(target, item, level(), globals);
     }
 
     internal void Execute(FalloutInventoryCommand command)

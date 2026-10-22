@@ -74,6 +74,7 @@ internal partial class RuntimeNativeNpc
             0 => 0,
             2 => 2,
             6 => 14, // Source PACK travel type -> script-visible Travel package.
+            12 => 36, // Sandbox's script package code differs from its PACK type.
             13 => 37, // Fallout script-visible Patrol code (not the PACK type).
             _ => throw new NotSupportedException("Current package condition needs its active procedure owner."),
         });
@@ -571,7 +572,8 @@ internal partial class RuntimeNativeNpc
         160 => _seat?.MarkerId ?? 0,
         162 => _furnitureReference == condition.FormArgument1 ? 1 : 0,
         163 => _seat?.Furniture == condition.FormArgument1 ? 1 : 0,
-        182 => Appearance.EquippedArmor.Contains(condition.FormArgument1) ? 1 : 0,
+        182 => (Combat ?? throw new NotSupportedException("AI equipment query has no live actor owner."))
+            .PackageIsEquipped(condition.FormArgument1) ? 1 : 0,
         286 => Activity.Sneaking ? 1 : 0,
         287 => Activity.Running ? 1 : 0,
         300 when condition.RunOn == 0 => (_aiWorld ?? throw new NotSupportedException("AI interior query has no world owner."))

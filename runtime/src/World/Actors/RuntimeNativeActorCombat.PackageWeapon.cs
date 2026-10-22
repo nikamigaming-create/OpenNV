@@ -16,6 +16,12 @@ internal sealed partial class RuntimeNativeActorCombat
         ? FalloutWeaponPresentation.ScriptAnimationType(WeaponAnimationType) : 0;
     internal NativeActorWeaponAttachment? AnimationWeapon => OwnsPose ? _enemyObject : _packageWeaponsVisible ? _packageWeapon : null;
 
+    internal bool PackageIsEquipped(FalloutFormKey item)
+    {
+        var context = _context ?? throw new NotSupportedException("Actor equipment query has no gameplay context.");
+        return _world.IsEquipped(_state.Reference, item, context.Level(), context.Globals);
+    }
+
     internal void PrepareInventoryChange()
     {
         if (OwnsPose || _enemyWeapon is not null || _packageWeapon is not null)
