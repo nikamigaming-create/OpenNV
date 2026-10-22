@@ -38,7 +38,8 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
     FalloutAggroRadiusWarning? AggroWarning = null,
     FalloutReferenceGrabEvents? GrabEvents = null,
     IReadOnlyList<FalloutObjectPhysicsSnapshot>? ObjectPhysics = null,
-    float? ConversationSuppressionSeconds = null, FalloutConversationHistory? ConversationHistory = null)
+    float? ConversationSuppressionSeconds = null, FalloutConversationHistory? ConversationHistory = null,
+    FalloutActorSandboxAdmissionFailure? SandboxAdmissionFailure = null)
 {
     internal static void Validate(IReadOnlyList<FalloutReferenceSnapshot> snapshots)
     {
@@ -98,6 +99,17 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
             snapshot.PackageAssignment?.Validate();
             snapshot.DeferredPackageContinuation?.ValidateShape(snapshot);
             snapshot.PackageBindingFailure?.Validate();
+            snapshot.SandboxAdmissionFailure?.Validate();
+            if (snapshot.SandboxAdmissionFailure is { } sandbox && (snapshot.Animation is null || snapshot.SoundRandomState is null ||
+                snapshot.Unconscious || snapshot.Restrained || sandbox.Activity.InCombat ||
+                snapshot.PackageMotion is not null || snapshot.PackageIdle is not null ||
+                snapshot.PackageBindingFailure is not null || snapshot.SelectionFailure is not null ||
+                snapshot.PendingPackageSelection is not null || snapshot.FurnitureContinuation is not null ||
+                snapshot.DialogueContinuation is not null || snapshot.DeferredPackageContinuation is not null ||
+                snapshot.Engagement is not null || snapshot.Ragdoll is not null || snapshot.Injury?.Dead == true ||
+                snapshot.PackageAssignment is { } sandboxAssignment && (sandboxAssignment.Package != sandbox.Package ||
+                    sandboxAssignment.Done || !sandboxAssignment.Sha256.Equals(sandbox.PackageSha256, StringComparison.OrdinalIgnoreCase))))
+                throw new InvalidDataException("Stopped Sandbox admission requires its base clock and exclusive stationary lifecycle.");
             snapshot.SelectionFailure?.Validate();
             snapshot.PendingPackageSelection?.Validate();
             if (snapshot.PendingPackageSelection is not null && (snapshot.Animation is null ||
@@ -228,6 +240,11 @@ internal sealed partial class FalloutReferenceInstance
     internal FalloutActorDeferredPackageContinuation? DeferredPackageContinuation { get; set; }
     internal Func<FalloutActorPackageAssignment?>? CapturePackageAssignment { get; set; }
     internal FalloutActorPackageBindingFailure? PackageBindingFailure { get; set; }
+    internal FalloutActorSandboxAdmissionFailure? SandboxAdmissionFailure { get; set; }
+    internal Func<bool>? CanCaptureSandboxAdmissionFailure { get; set; }
+    internal Func<FalloutActorSandboxAdmissionFailure>? CaptureSandboxAdmissionFailure { get; set; }
+    internal bool SandboxAdmissionFailureCaptureReady => CanCaptureSandboxAdmissionFailure?.Invoke() ??
+        SandboxAdmissionFailure is { } failure && ProcedureCaptureBlocker == FalloutSandboxPackage.CaptureBlockerPrefix + failure.Error;
     internal Func<bool>? CanCapturePackageBindingFailure { get; set; }
     internal Func<FalloutActorPackageBindingFailure>? CapturePackageBindingFailure { get; set; }
     internal Func<IReadOnlyList<OpenNV.Runtime.Content.FalloutFiniteSoundVoice>?>? PendingPackageBindingFiniteVoices { get; set; }
@@ -399,7 +416,7 @@ internal sealed partial class FalloutReferenceInstance
         var hitReactionFaults = _hitReactionFaults?.Capture();
         var failureReady = bindingOverride is not null || PackageBindingFailureCaptureReady;
         var selectionReady = selectionOverride is not null || SelectionFailureCaptureReady;
-        if (ProcedureCaptureBlocker is { } blocker && !failureReady && !FurnitureCaptureReady && !selectionReady && !DialogueCaptureReady && !PendingPackageSelectionCaptureReady &&
+        if (ProcedureCaptureBlocker is { } blocker && !failureReady && !FurnitureCaptureReady && !selectionReady && !DialogueCaptureReady && !PendingPackageSelectionCaptureReady && !SandboxAdmissionFailureCaptureReady &&
             DeferredPackageContinuation?.CanCapture(this) != true)
             throw new NotSupportedException($"Reference {Reference} cannot save: {blocker}");
         var bindingFailure = bindingOverride?.Copy() ?? (failureReady ? CapturePackageBindingFailure is { } captureFailure
@@ -427,7 +444,9 @@ internal sealed partial class FalloutReferenceInstance
             CorpseEquipment: CaptureCorpseEquipment is { } captureEquipment ? captureEquipment() : CorpseEquipment?.Copy(),
             DeferredPackageContinuation: DeferredPackageContinuation, AggroWarning: AggroWarning, GrabEvents: GrabEvents,
             ObjectPhysics: CaptureObjectPhysics?.Invoke() ?? ObjectPhysics?.Select(body => body.Copy()).ToArray(),
-            ConversationSuppressionSeconds: ConversationSuppressionSeconds, ConversationHistory: ConversationHistory?.Copy());
+            ConversationSuppressionSeconds: ConversationSuppressionSeconds, ConversationHistory: ConversationHistory?.Copy(),
+            SandboxAdmissionFailure: SandboxAdmissionFailureCaptureReady ? CaptureSandboxAdmissionFailure is { } captureSandbox
+                ? captureSandbox() : SandboxAdmissionFailure?.Copy() : null);
     }
 }
 
@@ -597,7 +616,7 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
 
     private bool PendingProcedureCapture(FalloutReferenceInstance instance) =>
         instance.ProcedureCaptureBlocker is not null && !instance.PackageBindingFailureCaptureReady && !instance.FurnitureCaptureReady &&
-        !instance.SelectionFailureCaptureReady && !instance.DialogueCaptureReady && !instance.PendingPackageSelectionCaptureReady &&
+        !instance.SelectionFailureCaptureReady && !instance.DialogueCaptureReady && !instance.PendingPackageSelectionCaptureReady && !instance.SandboxAdmissionFailureCaptureReady &&
         (IsResident(instance.Reference) || instance.DeferredPackageContinuation?.CanCapture(instance) != true);
     internal int PendingProcedureCaptureCount => _instances.Values.Count(PendingProcedureCapture);
     internal int StoppedPackageBindingCount => _instances.Values.Count(instance => instance.PackageBindingFailureCaptureReady);
@@ -893,6 +912,13 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
         // placements must be restored before validating their Travel anchors.
         foreach (var snapshot in snapshots)
         {
+            if (snapshot.SandboxAdmissionFailure is { } sandbox)
+            {
+                var actor = validated.Get(snapshot.Reference);
+                sandbox.Validate(records, actor);
+                actor.SandboxAdmissionFailure = sandbox.Copy();
+                actor.ProcedureCaptureBlocker = FalloutSandboxPackage.CaptureBlockerPrefix + sandbox.Error;
+            }
             if (snapshot.PendingPackageSelection is { } pendingSelection)
             {
                 var actor = validated.Get(snapshot.Reference);

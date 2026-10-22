@@ -9,6 +9,19 @@ if (args is ["--audit-owned-sandbox-equipment", var sandboxEquipmentData])
     OwnedSandboxEquipmentProbe.Run(sandboxEquipmentData);
     return;
 }
+if (args is ["--audit-owned-location-inventory", var locationData, var locationOutput])
+{
+    OwnedLocationInventoryProbe.Run(locationData, locationOutput);
+    return;
+}
+if (args is ["--audit-owned-location-inventory-vanilla", var vanillaLocationData, var vanillaLocationOutput])
+{
+    RuntimeLiveContentSource.Configure(vanillaLocationData, RuntimeLiveContentSource.FalloutNewVegasGame,
+        activePlugins: RuntimeLiveContentSource.ResolveVanillaPlugins(vanillaLocationData), includeImplicitPlugins: false);
+    using var locationContent = RuntimeLiveContentSource.Current!;
+    OwnedLocationInventoryProbe.Run(vanillaLocationData, vanillaLocationOutput);
+    return;
+}
 
 if (args is ["--audit-linked-door-source-lock", var lockData, var firstDoor, var secondDoor])
 {
@@ -235,6 +248,16 @@ if (args is ["--attack-variant-contracts"])
 if (args is ["--stopped-pose-contracts"])
 {
     StoppedPoseContracts.Run();
+    return;
+}
+if (args is ["--sandbox-admission-contracts"])
+{
+    SandboxAdmissionFailureContracts.Run();
+    return;
+}
+if (args is ["--hacking-contracts"])
+{
+    HackingContracts.Run();
     return;
 }
 if (args is ["--package-data-contracts"])
@@ -1041,6 +1064,8 @@ FurnitureContracts.Run();
 AuthoredRagdollContracts.Run();
 ActorDamageContracts.Run();
 StoppedPoseContracts.Run();
+SandboxAdmissionFailureContracts.Run();
+HackingContracts.Run();
 TerminalContracts.Run();
 ScriptDeathContracts.Run();
 ActivationParentContracts.Run();

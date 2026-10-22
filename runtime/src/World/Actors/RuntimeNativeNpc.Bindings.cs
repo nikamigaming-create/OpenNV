@@ -12,6 +12,8 @@ internal partial class RuntimeNativeNpc
         if (ReferenceEquals(state.CapturePendingPackageSelection, _pendingSelectionCapture)) state.CapturePendingPackageSelection = null;
         if (ReferenceEquals(state.CanCapturePackageBindingFailure, _bindingFailureReady)) state.CanCapturePackageBindingFailure = null;
         if (ReferenceEquals(state.CapturePackageBindingFailure, _bindingFailureCapture)) state.CapturePackageBindingFailure = null;
+        if (ReferenceEquals(state.CanCaptureSandboxAdmissionFailure, _sandboxAdmissionReady)) state.CanCaptureSandboxAdmissionFailure = null;
+        if (ReferenceEquals(state.CaptureSandboxAdmissionFailure, _sandboxAdmissionCapture)) state.CaptureSandboxAdmissionFailure = null;
         if (ReferenceEquals(state.PendingPackageBindingFiniteVoices, _bindingFailureWait)) state.PendingPackageBindingFiniteVoices = null;
         if (ReferenceEquals(state.ObservePackageBindingCapture, _bindingFailureDiagnostic)) state.ObservePackageBindingCapture = null;
         if (ReferenceEquals(state.CanCaptureSelectionFailure, _selectionFailureReady)) state.CanCaptureSelectionFailure = null;
@@ -39,6 +41,8 @@ internal partial class RuntimeNativeNpc
         state.CapturePendingPackageSelection ??= _pendingSelectionCapture;
         state.CanCapturePackageBindingFailure ??= _bindingFailureReady;
         state.CapturePackageBindingFailure ??= _bindingFailureCapture;
+        state.CanCaptureSandboxAdmissionFailure ??= _sandboxAdmissionReady;
+        state.CaptureSandboxAdmissionFailure ??= _sandboxAdmissionCapture;
         state.PendingPackageBindingFiniteVoices ??= _bindingFailureWait;
         state.ObservePackageBindingCapture ??= _bindingFailureDiagnostic;
         state.CanCaptureSelectionFailure ??= _selectionFailureReady;

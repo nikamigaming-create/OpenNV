@@ -57,6 +57,7 @@ internal sealed class FalloutUnloadedActorPackages(FalloutPluginStack records, F
         if (state.ScriptError is { } failure) throw new NotSupportedException(failure);
         if (state.PendingPackageSelection is { } pending) return pending.Package;
         if (state.PackageBindingFailure is { } stopped) return stopped.Package;
+        if (state.SandboxAdmissionFailure is { } sandbox) return sandbox.Package;
         if (state.SelectionFailure is not null) return null;
         var templates = state.Templates ?? world.InitializeActorTemplates(actor, playerLevel(), globals);
         if (!_actors.TryGetValue(actor, out var events))
@@ -99,7 +100,18 @@ internal sealed class FalloutUnloadedActorPackages(FalloutPluginStack records, F
         if (_actors.ContainsKey(actor)) throw new InvalidOperationException("Actor already has an unloaded package lifecycle.");
         var retained = new FalloutPackageEvents((package, kind) => Dispatch(actor, package, kind));
         if (events.Error is { } failure) world.Get(actor).ScriptError ??= failure;
-        else if (events.Active is { } active) retained.Restore(active, events.Done);
+        else if (events.Active is { } active)
+        {
+            retained.Restore(active, events.Done);
+            if (world.Get(actor).SandboxAdmissionFailure is { } sandbox)
+            {
+                sandbox.Validate(records, world.Get(actor));
+                if (active.Form != sandbox.Package || events.Done || events.Revision != sandbox.EventRevision ||
+                    events.LastEvent != sandbox.LastEvent || events.LastPackage != sandbox.LastPackage)
+                    throw new InvalidDataException("Retiring Sandbox differs from its stopped lifecycle.");
+                retained.RestoreHistory(events.Revision, events.LastEvent, events.LastPackage);
+            }
+        }
         _actors.Add(actor, retained);
         _deferred.Remove(actor);
         world.Get(actor).DeferredPackageContinuation = null;
@@ -109,6 +121,17 @@ internal sealed class FalloutUnloadedActorPackages(FalloutPluginStack records, F
     internal void BindNative(FalloutFormKey actor, FalloutPackageEvents events)
     {
         var state = world.Get(actor);
+        if (state.SandboxAdmissionFailure is { } sandbox)
+        {
+            sandbox.Validate(records, state);
+            if (_actors.TryGetValue(actor, out var prior) && (prior.Error is not null || prior.Done ||
+                prior.Active?.Form != sandbox.Package || prior.Revision != sandbox.EventRevision ||
+                prior.LastEvent != sandbox.LastEvent || prior.LastPackage != sandbox.LastPackage))
+                throw new InvalidDataException("Unloaded Sandbox differs from its stopped lifecycle.");
+            // The resident owner restores the exact history into fresh events.
+            _actors.Remove(actor); _deferred.Remove(actor);
+            return;
+        }
         if (state.DeferredPackageContinuation is { } deferred)
         {
             deferred.BindNative(records, state, events);

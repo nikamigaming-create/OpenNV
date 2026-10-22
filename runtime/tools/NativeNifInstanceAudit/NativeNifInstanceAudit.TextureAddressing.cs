@@ -33,7 +33,20 @@ public partial class NativeNifInstanceAudit
         if (split < 1) throw new ArgumentException("Owned model audit needs model paths then --dependencies.");
         var setup = new FalloutModStackSelection([new(mod, root, arguments[(split + 1)..])]).Resolve(game);
         using var content = setup.OpenSource();
-        foreach (var model in arguments[..split])
+        ExerciseOwnedModelResources(content, arguments[..split]);
+    }
+
+    private void ExerciseOwnedInstallationModels(string root, string[] models)
+    {
+        if (models.Length == 0) throw new ArgumentException("Owned installation audit needs source model paths.");
+        using var content = RuntimeLiveContentSource.Open(root, RuntimeLiveContentSource.FalloutNewVegasGame,
+            activePlugins: RuntimeLiveContentSource.ResolveVanillaPlugins(root), includeImplicitPlugins: false);
+        ExerciseOwnedModelResources(content, models);
+    }
+
+    private void ExerciseOwnedModelResources(RuntimeLiveContentSource content, string[] models)
+    {
+        foreach (var model in models)
         {
             if (!content.TryRead(model, null, out var bytes, out var identity)) throw new FileNotFoundException(model);
             var nif = FalloutNifFile.Read(bytes);
@@ -111,6 +124,8 @@ public partial class NativeNifInstanceAudit
                 GD.Print($"OPENNV_OWNED_NIF_PRESENTATION_PASS source={identity} nodes={scene.Nodes} surfaces={scene.Surfaces} collisionBodies={scene.CollisionBodies} collisionShapes={scene.CollisionShapes} samplerModes={string.Join(',', samplerModes)} textureChannelSamples={channels} finalPixels=unverified");
             }
             finally { scene.Root.Free(); }
+            if (!content.TryRead(model, null, out var after, out var afterIdentity) || identity != afterIdentity || !bytes.AsSpan().SequenceEqual(after))
+                throw new InvalidDataException("Owned model bytes changed during native construction.");
         }
     }
 }

@@ -9,20 +9,103 @@ lockpicking, hacking and all 13 skills. No campaign or parity completion is clai
 
 ## Active block
 
-The speech and diagnostics repairs are merged. The integration coordinator is
-advancing the shared Sandbox idle-marker owner on codex/fnv-sandbox-marker.
+Current immediate user priority: repair visible Strip material omissions and
+camera validity, then deliver corrected native images and progress a systematic
+matched retail/OpenNV location sweep. Preserve the written gameplay work below;
+do not start another scripting milestone ahead of this visual correction.
+The finite location denominator must come from loaded winning map markers and
+CELL/worldspace/door graph, separated by plugin/DLC and interior/exterior.
+The selected ten-plugin inventory now reports 44,517 winning CELLs (44,025
+exterior, 492 interior), 320 map-marker candidates and 1,378 XTEL links, with
+zero decode issues. These are source declarations, not 44,517 named locations
+or proven playable cells. The private inventory/checkpoint retains partitions,
+hashes and source-graph reachability separately from actual visits.
+Unvisited, blocked, unmatched, repaired and retested are independent statuses.
+No matched retail pair exists yet. The user approved a bounded normal-retail-
+profile comparison with verified backups and restoration of test changes.
+The access owner is preparing that transaction while the coordinator retains
+the exclusive native window. Camera/environment observation and frame joining
+remain separate acceptance checks. Recorded input delivery alone is not state
+or event alignment.
+
+Initial Strip day/night are rejected as post-ready: camera clearance/street
+height was unverified, and six building references failed the shared lighting
+shader validator on flags2=9. Gomorrah REFR13ba40/STAT10a40d has an absent opaque
+shell, not proven low opacity. Qualified shader bit8 suppresses decal distance
+fade; it is distinct from REFR NoFade and never exempts explicit reference
+fade alpha. The 188 missing observations include 171 enabled
+model-less references and 17 explicit refusals, not 188 missing buildings.
+The diagnostic omits normal player/quest-event assembly, so nonvisual owners
+remain unverified. Other captured scenes: Mojave/Jacobstown/Vault22 show zero
+of this lighting rejection class; Vault21 has three separate shaderless-material
+refusals. Exact NoFade lighting support is now implemented from its qualified
+decal-distance contract, preserving ordinary material and explicit fade alpha.
+Native builder/clone/opacity regression and all six owned building model audits
+pass. The new same-camera OpenNV frame visibly restores their shells, with
+unchanged plugin/config hashes; this is not a retail pair. It is in Library as
+libfile_fdffce9d63488191ae58c1e278efd9fd. The entrance view is collision-clear
+but canopy-obstructed. The actual authored road point exposed capsule tangent
+contact on a 2.8-degree walkable slope; capture refused rather than ignoring the
+contact. Camera support height now derives from the normalized native floor
+normal and capsule radius, retaining full obstruction queries. The pinned Debug
+build and native 2.8/30-degree slope fixtures pass; unlifted slope, wall, ceiling,
+missing-floor and near-plane controls still refuse. The same authored road point
+now passes both camera checks in day and night. Inspected frames show restored
+opaque shells from a side street; lighting/emissive response and scene completeness
+remain unaccepted. No position scan was used. The day original is in Library as
+libfile_07071c411b9c8191b764403944e43ae9. The capture process exited normally.
+The final required runtime gate passed with exit0 (visual-final-runtime-gate.log).
+All 1,938 source/script hashes match its frozen snapshot; whitespace checks pass.
+All runtime writers remain frozen for publication. The approved retail fallback
+then entered once with verified backups and a distinct copied checkpoint. Retail
+currently stops at a Steam Error modal before core/private bridge initialization;
+no gameplay command or capture was sent. Normal exit, profile postdiff and any
+required restoration remain pending. Do not relaunch or overlap native jobs.
+All originals, provenance and selected active framing diagnostics are local;
+six Library images comprise five diagnostic compositions and the prior genuine
+Goodsprings gameplay fallback. They are not six accepted polished scenes.
+
+The speech, diagnostics and marker prerequisites are merged through PR259,
+main adc3d086fe763726d74d4a30c9c2e3962e3cd94e. The coordinator is on
+codex/fnv-active-sandbox-save. Ordinary F5 in the isolated stage50 continuation
+refused four NPCs (10a72b,1629a7,1629a8,1629a9): PACK074fe6 POBA consumed,
+first activity candidate admission unsupported, no selected activity or motion.
+The next gate is exact stopped-active capture, off-cell retention and cold
+restoration without repeating package events or losing clocks/RNG/history.
+Later activity, navigation, combat and unknown voice states must still refuse.
+This repair does not implement the missing marker activity.
+
+One capture owner has the native window for six requested diagnostic-positioned
+stills using full native builders and owned source cells. First launch exposed a
+missing pinned .NET environment; it exited normally and the corrected launch
+reached Strip13b3cd. Capture provenance reports missing references rather than
+claiming complete scenery. No competing builds or native tests while it runs.
+The interim inspected Goodsprings night gameplay preview is in Library as
+libfile_0c472d90e9a88191aec482f453855421. Source edits continue independently:
+the native NPC writer owns stopped admission binding/capture, the coordinator
+owns world/save/unloaded integration, and the access writer owns isolated
+qualified hacking candidate/attempt/bracket primitives. These edits are not yet
+published. The frozen save/hacking/capture checkpoint passed the full required
+gate (active-sandbox-runtime-gate.log, exit0), including both new contract groups,
+after correcting screenshot-helper formatting. Native F5/cold player proof is
+still pending. Camera validation and location-inventory edits begun after that
+gate are not covered by its receipt. Original and isolated stage50 save hashes
+remain unchanged.
+
+Shared Sandbox idle-marker prerequisites are established.
 Current population failures include placed markers 15ad26 and 16140d; their
 winning IDLM declarations respectively contain four sequential idles with a
 two-second collection wait and one smoking idle with a sixteen-second wait.
 These waits are not Sandbox activity durations; the marker dispatcher does not
 apply their patrol wait/DoOnce policy. Shared source-bound PACK/IDLM collection
-validation preserves strict package save admission. The previous gameplay owner is qualifying marker
-admission, approach, expiry/interruption and script-visible procedure contracts.
+validation preserves strict package save admission. Marker admission, approach,
+expiry/interruption and script-visible procedure contracts are qualified; native
+activity dispatch and its complete retained continuation remain unimplemented.
 Furniture requires a nested physical continuation; NPC eating requires its own
 consumption transaction. Neither can be omitted from mixed candidate sets.
-The SWG execution window has ended. The serial OpenNV gate passes
+The SWG execution window has ended. The prior merged source's serial OpenNV gate passed
 (sandbox-marker-runtime-gate.log, exit0), including all four new contract groups.
-The gated source manifest is unchanged. Recording remains off. Live equipment queries now share one-level
+That receipt applies to PR259, not the current edits. Recording remains off. Live equipment queries now share one-level
 FLST matching, including null termination and first-match ordering. The focused
 NPC/player equipment contracts and both owned IDLE equipment-list audits pass;
 carrying, wearing, live changes, query immutability and cold state are distinct
@@ -142,7 +225,7 @@ provide incremental evidence and must expand to the remaining campaign.
 | 1. NPC packages + persistence | Current population stops at IDLM admission/execution; phase, queued/current animation readiness, location-return and saved marker continuation are not owned. Furniture and eating also remain unexecuted. | Bind the next qualified shared marker lifecycle; competing actors, genuine approach/playback, interruption, save and separate-process Continue. Do not substitute clip completion for native readiness. |
 | 2. Quests/scripts | Current campaign checkpoint is Sunny stage50 at the second well; later wells, ingredients and campfire cooking have no completed ordinary-play proof. | Continue the real tutorial, repair the first reached shared script/gameplay failure, retain its exact result prefix and save/cold outcome. |
 | 3. Combat | Ordinary gecko/settler pursuit, damage and kills have bounded proof; healing/retreat, remaining encounters, attack families and reactions are still incomplete. | Complete the current source encounter with actual hits/misses/health, loot and survivable continuation; extend to the next reached family rather than claim all combat. |
-| 4. Access interactions | Missing keys/passwords return before lockpicking/hacking; hacking also has a separate creation refusal. | Implement a source-qualified access transaction with ordinary input, skill/perk admission, success/failure consequences and retained per-reference outcome. The read-only access owner is finishing admission/result-commit qualification. |
+| 4. Access interactions | Missing keys/passwords return before lockpicking/hacking; hacking also has a separate creation refusal. | Qualified candidate/count/attempt/bracket primitives pass contracts. Bind shared admission, ordinary UI/input, retained terminal outcomes and success reward/statistic owners; authoritative generation callbacks and owned tape remain required. |
 | 5. World transitions | Existing door/exterior owners are present; complete campaign travel and transition persistence remain unproved. | Exercise the next required authored transition with script/cell/save state intact. Treat prefetch/loading stalls as immediate work only if they block play or validation. |
 | 6. UI/inventory | Loot/healing owners exist; inventory scrolling, bottle destruction and all reached crafting/menu paths still need ordinary review. | Complete the next required inventory/crafting interaction with actual state changes and modal-input release, including cold continuation. |
 | 7. Save/load across all pillars | Selected retained owners pass contracts; ordinary population, voiced exchanges and marker/furniture/eating state do not yet have complete save admission. | Require manual save and separate-process Continue after each new gameplay owner, preserving targets, RNG, scripts, sound/animation and exactly-once commits. |

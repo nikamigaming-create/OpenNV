@@ -164,7 +164,7 @@ Write-Output "OPENNV_NATIVE_MENU_GEOMETRY_PROJECTION_PASS actualCamera=true disp
 $instanceOutput = & $Godot --headless --verbose --path $runtime res://tools/NativeNifInstanceAudit/NativeNifInstanceAudit.tscn 2>&1
 $instanceText = $instanceOutput | Out-String
 if ($LASTEXITCODE -ne 0 -or $instanceText -match $godotFailurePattern -or
-    $instanceText -notmatch "OPENNV_NIF_INSTANCE_AUDIT_PASS") {
+    $instanceText -notmatch "OPENNV_NIF_INSTANCE_AUDIT_PASS" -or $instanceText -notmatch "OPENNV_SHADER_NO_FADE_PASS") {
     throw "OpenNV native instance binding failed:`n$instanceText"
 }
 Write-Output "OPENNV_NIF_INSTANCE_AUDIT_PASS controllers=independent targets=instance-owned prototype=unchanged"

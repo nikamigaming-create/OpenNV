@@ -100,6 +100,21 @@ internal sealed partial class FalloutReferenceWorld
                 throw new InvalidDataException("Native actor spatial query differs from its authoritative cell placement.");
             return observed;
         }
+        if (state.SandboxAdmissionFailure is { } stopped)
+        {
+            stopped.Validate(records, state);
+            var basis = stopped.Basis;
+            var stoppedFacing = GamebryoCoordinate.ReferenceEuler(new Basis(
+                new Vector3(basis[0], basis[1], basis[2]), new Vector3(basis[3], basis[4], basis[5]),
+                new Vector3(basis[6], basis[7], basis[8])));
+            var retained = placement with
+            {
+                Position = [stopped.Position[0] / unitsToMetres, -stopped.Position[2] / unitsToMetres, stopped.Position[1] / unitsToMetres],
+                RotationRadians = [stoppedFacing.X, stoppedFacing.Y, stoppedFacing.Z]
+            };
+            retained.Validate();
+            return retained;
+        }
         var engagement = state.CaptureEngagement?.Invoke() ?? state.Engagement;
         var motion = engagement?.Position ?? state.PackageMotion?.Position;
         if (motion is null) return placement;

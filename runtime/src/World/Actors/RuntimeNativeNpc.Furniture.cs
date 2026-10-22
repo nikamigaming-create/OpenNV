@@ -305,6 +305,7 @@ internal partial class RuntimeNativeNpc
             RetainHeadTracking();
             RetainPendingSelection();
             RetainBindingFailure();
+            RetainSandboxAdmissionFailure();
             RetainSelectionFailure();
             RetainDialogueContinuation();
             retainedFurniture = RetainFurnitureContinuation();

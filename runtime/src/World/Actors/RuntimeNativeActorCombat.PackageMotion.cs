@@ -37,6 +37,9 @@ internal sealed partial class RuntimeNativeActorCombat
             new(cell, [position.X, -position.Z, position.Y], [0, 0, 0]), _skeleton.UnitsToMetres);
     }
     internal FalloutActorPackageMotion? PackageMotion => _state.PackageMotion;
+    internal bool SandboxAdmissionCaptureReady => !Dead && !OwnsPose && !_state.Restrained && StoppedAiPoseCaptureReady &&
+        _state.Engagement is null && _state.PackageMotion is null && _pursuitPath.Length == 0 &&
+        _routeSearch is null && _routeDoor is null && _packageSounds?.CanCaptureSilent != false;
     internal float PackageActivationRange => _context?.ActivationDistanceMeters is { } range && float.IsFinite(range) && range > 0
         ? range : throw new NotSupportedException("NPC portal has no validated configured interaction range.");
     internal bool RequestPackagePortal(FalloutFormKey door) =>
@@ -127,6 +130,7 @@ internal sealed partial class RuntimeNativeActorCombat
 
     internal void RestorePackageMotion()
     {
+        if (_state.SandboxAdmissionFailure is not null) return;
         if (_state.Engagement is not null) return;
         if (_state.FurnitureContinuation is not null) return;
         if (_state.SelectionFailure is not null) return;

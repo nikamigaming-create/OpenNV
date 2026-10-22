@@ -12,6 +12,10 @@ public partial class NativeNifInstanceAudit : Node
     {
         try
         {
+            if (OS.GetCmdlineUserArgs() is ["--shader-no-fade"])
+            {
+                ExerciseShaderNoFade(); GetTree().Quit(); return;
+            }
             if (OS.GetCmdlineUserArgs() is ["--external-animation-targets"])
             {
                 ExerciseExternalAnimationTargets(); GetTree().Quit(); return;
@@ -85,6 +89,11 @@ public partial class NativeNifInstanceAudit : Node
             if (OS.GetCmdlineUserArgs() is ["--owned-models", var modelGame, var modelMod, var modelRoot, .. var modelArguments])
             {
                 ExerciseTextureAddressing(); ExerciseOwnedModels(modelGame, modelMod, modelRoot, modelArguments);
+                GetTree().Quit(); return;
+            }
+            if (OS.GetCmdlineUserArgs() is ["--owned-install-models", var installationRoot, .. var installationModels])
+            {
+                ExerciseOwnedInstallationModels(installationRoot, installationModels);
                 GetTree().Quit(); return;
             }
             if (OS.GetCmdlineUserArgs() is ["--model-textures"])
@@ -194,6 +203,7 @@ public partial class NativeNifInstanceAudit : Node
             ExerciseTextureAddressing();
             ExerciseHeadTracking();
             ExerciseAuthoredDecalSurfaces();
+            ExerciseShaderNoFade();
             ExerciseDormantEnvironmentMask();
             ExerciseDormantBillboardEnvironmentFlag();
             ExerciseLocalMapHideSecret();
