@@ -6,6 +6,14 @@ namespace OpenNV.Runtime.Diagnostics.Parity;
 internal readonly record struct LiveHarnessFileWrite(
     int Attempts, double Milliseconds, int? LastRetryError, string? LastRetryFailure);
 
+internal enum LiveHarnessFilePhase
+{
+    TextWriteStarted,
+    TextWriteCompleted,
+    CommitStarted,
+    CommitCompleted,
+}
+
 internal static class LiveHarnessAtomicFile
 {
     private static readonly UTF8Encoding Encoding = new(false);
@@ -29,19 +37,24 @@ internal static class LiveHarnessAtomicFile
         }
     }
 
-    internal static LiveHarnessFileWrite Write(string path, string text)
+    internal static LiveHarnessFileWrite Write(string path, string text, Action<LiveHarnessFilePhase>? observePhase = null)
     {
         var started = Stopwatch.GetTimestamp();
         var pending = path + ".pending";
+        observePhase?.Invoke(LiveHarnessFilePhase.TextWriteStarted);
         File.WriteAllText(pending, text, Encoding);
+        observePhase?.Invoke(LiveHarnessFilePhase.TextWriteCompleted);
         // Windows Move(overwrite) rejects a destination with an open reader,
         // even when it permits delete sharing. Replace preserves that reader's
         // complete old snapshot while new readers receive the complete new one.
-        return Commit(() =>
+        observePhase?.Invoke(LiveHarnessFilePhase.CommitStarted);
+        var written = Commit(() =>
         {
             if (File.Exists(path)) File.Replace(pending, path, null);
             else File.Move(pending, path);
         }, () => File.Exists(pending), started);
+        observePhase?.Invoke(LiveHarnessFilePhase.CommitCompleted);
+        return written;
     }
 
     internal static LiveHarnessFileWrite Delete(string path) =>

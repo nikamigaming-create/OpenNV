@@ -19,7 +19,7 @@ internal sealed partial class RuntimeLiveHarness : Node
     private double _lastSnapshotMilliseconds, _lastSerializeMilliseconds, _lastFileMilliseconds;
     private LiveHarnessPendingPublication? _stateWrite;
     private long _statePublicationSequence;
-    private LiveHarnessPublicationTiming? _lastStatePublicationTiming;
+    private readonly LiveHarnessPublicationHistory _statePublicationHistory = new();
     private bool _statePublicationRequested;
     private long _statePublicationDeferredRequests;
     private LiveHarnessFileWrite? _lastFileWrite;
@@ -416,7 +416,8 @@ internal sealed partial class RuntimeLiveHarness : Node
                 drawCount = Engine.GetFramesDrawn(),
                 error = error.Message,
                 failures = _statePublicationFailures,
-                publicationTiming = _lastStatePublicationTiming,
+                publicationTiming = _statePublicationHistory.LatestTiming,
+                lastFailedStatePublication = _statePublicationHistory.LastFailed,
             }, Json));
         }
         catch (Exception markerError) when (markerError is IOException or UnauthorizedAccessException)
@@ -438,7 +439,10 @@ internal sealed partial class RuntimeLiveHarness : Node
         if (pending is null) return;
         if (wait) pending.Wait();
         var observation = pending.Observe();
-        _lastStatePublicationTiming = observation.Timing;
+        // Live snapshots retain a late writer's eventual completion. The error
+        // marker below keeps its existing first-loss/terminal-writer-error
+        // policy, so a late successful completion need not refresh that file.
+        _statePublicationHistory.Observe(observation);
         if (observation.Completed) _stateWrite = null;
         if (observation.NewLoss || observation is { Completed: true, Receipt.Error: not null })
         {
@@ -499,7 +503,8 @@ internal sealed partial class RuntimeLiveHarness : Node
             lastStatePublicationFailure = _lastStatePublicationFailure,
             statePublicationSharingRetries = _statePublicationSharingRetries,
             statePublicationDeferredRequests = _statePublicationDeferredRequests,
-            previousStatePublicationTiming = _lastStatePublicationTiming,
+            previousStatePublicationTiming = _statePublicationHistory.LatestTiming,
+            lastFailedStatePublication = _statePublicationHistory.LastFailed,
             nextCommandRequest = _nextRequest,
             commandReadFailure = _commandReadFailure,
             gameplay = _captureSummary(),
@@ -563,7 +568,7 @@ internal sealed partial class RuntimeLiveHarness : Node
         // thread. Only immutable text and file IO cross to this single writer.
         _stateWrite = LiveHarnessPendingPublication.Start(checked(++_statePublicationSequence), _statePublicationFailures,
             static () => Stopwatch.GetTimestamp() * (1000.0 / Stopwatch.Frequency),
-            () => LiveHarnessAtomicFile.Write(path, json),
+            phase => LiveHarnessAtomicFile.Write(path, json, phase),
             static work => { _ = Task.Run(work); });
         _statePublicationCadence.Scheduled(Time.GetTicksMsec());
         _statePublicationRequested = false;

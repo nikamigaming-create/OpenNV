@@ -3,14 +3,50 @@ namespace OpenNV.Runtime.Diagnostics.Parity;
 internal sealed record LiveHarnessPublicationTiming(long Publication, long SnapshotFailureGeneration,
     double EnqueuedMilliseconds, double? WorkerStartedMilliseconds, double? CompletedMilliseconds)
 {
+    // Every boundary uses the pending owner's monotonic clock. A phase's
+    // elapsed time includes any descheduling; it is not a disk-service timer.
+    public LiveHarnessFilePhase? FilePhase { get; init; }
+    public double? TextWriteStartedMilliseconds { get; init; }
+    public double? TextWriteCompletedMilliseconds { get; init; }
+    public double? CommitStartedMilliseconds { get; init; }
+    public double? CommitCompletedMilliseconds { get; init; }
     public double? QueueMilliseconds => WorkerStartedMilliseconds - EnqueuedMilliseconds;
     public double? WorkerMilliseconds => CompletedMilliseconds - WorkerStartedMilliseconds;
     public double? TotalMilliseconds => CompletedMilliseconds - EnqueuedMilliseconds;
+    public double? TextWriteMilliseconds => TextWriteCompletedMilliseconds - TextWriteStartedMilliseconds;
+    public double? CommitMilliseconds => CommitCompletedMilliseconds - CommitStartedMilliseconds;
+    public double? ReceiptMilliseconds => CompletedMilliseconds - CommitCompletedMilliseconds;
 }
 internal sealed record LiveHarnessPublicationReceipt(LiveHarnessFileWrite? Write, Exception? Error,
     LiveHarnessPublicationTiming Timing);
 internal sealed record LiveHarnessPublicationObservation(bool Completed, bool NewLoss, bool Lost,
     Exception? Failure, LiveHarnessPublicationReceipt? Receipt, LiveHarnessPublicationTiming Timing);
+
+internal sealed record LiveHarnessPublicationError(string Type, int HResult, string Message, bool MessageTruncated)
+{
+    internal static LiveHarnessPublicationError? From(Exception? error) => error is null ? null :
+        new(error.GetType().FullName ?? error.GetType().Name, error.HResult,
+            error.Message.Length <= 2048 ? error.Message : error.Message[..2048], error.Message.Length > 2048);
+}
+
+internal sealed record LiveHarnessFailedPublication(LiveHarnessPublicationTiming Timing, bool Completed,
+    LiveHarnessFileWrite? Write, LiveHarnessPublicationError? Failure, LiveHarnessPublicationError? WriterError);
+
+// Owner-thread history retains the completion of a previously overdue writer.
+// Healthy successors update current timing without erasing the failed receipt.
+internal sealed class LiveHarnessPublicationHistory
+{
+    internal LiveHarnessPublicationTiming? LatestTiming { get; private set; }
+    internal LiveHarnessFailedPublication? LastFailed { get; private set; }
+
+    internal void Observe(LiveHarnessPublicationObservation observation)
+    {
+        LatestTiming = observation.Timing;
+        if (observation.Lost)
+            LastFailed = new(observation.Timing, observation.Completed, observation.Receipt?.Write,
+                LiveHarnessPublicationError.From(observation.Failure), LiveHarnessPublicationError.From(observation.Receipt?.Error));
+    }
+}
 
 // One immutable snapshot, one writer, and one owner-side loss notification.
 // The clock and scheduler are injected so queueing and completion boundaries
@@ -19,7 +55,7 @@ internal sealed class LiveHarnessPendingPublication
 {
     private readonly object _gate = new();
     private readonly Func<double> _clock;
-    private readonly Func<LiveHarnessFileWrite> _write;
+    private readonly Func<Action<LiveHarnessFilePhase>, LiveHarnessFileWrite> _write;
     private readonly TaskCompletionSource _settled = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private LiveHarnessPublicationTiming _timing;
     private LiveHarnessPublicationReceipt? _receipt;
@@ -27,7 +63,7 @@ internal sealed class LiveHarnessPendingPublication
     private bool _lossReported;
 
     private LiveHarnessPendingPublication(long publication, long failureGeneration,
-        Func<double> clock, Func<LiveHarnessFileWrite> write)
+        Func<double> clock, Func<Action<LiveHarnessFilePhase>, LiveHarnessFileWrite> write)
     {
         _clock = clock; _write = write;
         var enqueued = clock();
@@ -37,7 +73,11 @@ internal sealed class LiveHarnessPendingPublication
     }
 
     internal static LiveHarnessPendingPublication Start(long publication, long failureGeneration,
-        Func<double> clock, Func<LiveHarnessFileWrite> write, Action<Action> schedule)
+        Func<double> clock, Func<LiveHarnessFileWrite> write, Action<Action> schedule) =>
+        Start(publication, failureGeneration, clock, _ => write(), schedule);
+
+    internal static LiveHarnessPendingPublication Start(long publication, long failureGeneration,
+        Func<double> clock, Func<Action<LiveHarnessFilePhase>, LiveHarnessFileWrite> write, Action<Action> schedule)
     {
         var pending = new LiveHarnessPendingPublication(publication, failureGeneration, clock, write);
         schedule(pending.Execute);
@@ -56,6 +96,32 @@ internal sealed class LiveHarnessPendingPublication
         return now;
     }
 
+    private void ObserveFilePhase(LiveHarnessFilePhase phase)
+    {
+        lock (_gate)
+        {
+            var expected = _timing.FilePhase switch
+            {
+                null => LiveHarnessFilePhase.TextWriteStarted,
+                LiveHarnessFilePhase.TextWriteStarted => LiveHarnessFilePhase.TextWriteCompleted,
+                LiveHarnessFilePhase.TextWriteCompleted => LiveHarnessFilePhase.CommitStarted,
+                LiveHarnessFilePhase.CommitStarted => LiveHarnessFilePhase.CommitCompleted,
+                _ => throw new InvalidDataException("Publication file phase continued after commit completion."),
+            };
+            if (_receipt is not null || _timing.WorkerStartedMilliseconds is null || phase != expected)
+                throw new InvalidDataException("Publication file phase is out of order.");
+            var now = ReadClock();
+            _timing = phase switch
+            {
+                LiveHarnessFilePhase.TextWriteStarted => _timing with { FilePhase = phase, TextWriteStartedMilliseconds = now },
+                LiveHarnessFilePhase.TextWriteCompleted => _timing with { FilePhase = phase, TextWriteCompletedMilliseconds = now },
+                LiveHarnessFilePhase.CommitStarted => _timing with { FilePhase = phase, CommitStartedMilliseconds = now },
+                LiveHarnessFilePhase.CommitCompleted => _timing with { FilePhase = phase, CommitCompletedMilliseconds = now },
+                _ => throw new InvalidDataException("Publication file phase is unsupported."),
+            };
+        }
+    }
+
     private void Execute()
     {
         LiveHarnessFileWrite? written = null;
@@ -63,7 +129,7 @@ internal sealed class LiveHarnessPendingPublication
         try
         {
             lock (_gate) _timing = _timing with { WorkerStartedMilliseconds = ReadClock() };
-            written = _write(); // No I/O or engine access under the completion lock.
+            written = _write(ObserveFilePhase); // No I/O or engine access under the completion lock.
         }
         catch (Exception error) { failure = error; }
         lock (_gate)
@@ -107,5 +173,5 @@ internal sealed class LiveHarnessPendingPublication
     }
 
     private static string Describe(LiveHarnessPublicationTiming timing, double observed) =>
-        FormattableString.Invariant($"publication={timing.Publication} snapshotFailureGeneration={timing.SnapshotFailureGeneration} queuedAtMs={timing.EnqueuedMilliseconds:R} workerStartedAtMs={timing.WorkerStartedMilliseconds:R} completedAtMs={timing.CompletedMilliseconds:R} observedAtMs={observed:R} queueMs={timing.QueueMilliseconds:R} workerMs={timing.WorkerMilliseconds:R}");
+        FormattableString.Invariant($"publication={timing.Publication} snapshotFailureGeneration={timing.SnapshotFailureGeneration} queuedAtMs={timing.EnqueuedMilliseconds:R} workerStartedAtMs={timing.WorkerStartedMilliseconds:R} completedAtMs={timing.CompletedMilliseconds:R} observedAtMs={observed:R} queueMs={timing.QueueMilliseconds:R} workerMs={timing.WorkerMilliseconds:R} filePhase={timing.FilePhase} textWriteStartedAtMs={timing.TextWriteStartedMilliseconds:R} textWriteCompletedAtMs={timing.TextWriteCompletedMilliseconds:R} commitStartedAtMs={timing.CommitStartedMilliseconds:R} commitCompletedAtMs={timing.CommitCompletedMilliseconds:R}");
 }

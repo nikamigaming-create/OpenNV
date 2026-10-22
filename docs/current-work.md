@@ -9,24 +9,53 @@ lockpicking, hacking and all 13 skills. No campaign or parity completion is clai
 
 ## Active block
 
-Checked baseline: PR264 merged as 25d737c109fbed5ab77ca1fc327f1ee6dc292fc3
-after all five checks passed on 73a6975d and independent review found no concrete
-headless-input regression. Local main and origin/main were verified equal and clean,
-with no outstanding task PR. The active branch is codex/fnv-default-land-impact-material.
-The coordinator owns builds, native execution and Git; scoped writers have no
-active file assignment until the next reached failure is identified.
+Checked baseline: PR265 merged as 538b8ee45b81e113b08d19c99b6b92ba3ed2ea57
+after all five checks passed on c914378d and independent review found no concrete
+default-LAND regression. Local main and origin/main were verified equal and clean,
+with no outstanding task PR. The active branch is codex/fnv-tutorial-wells-resume-20261022.
+The coordinator owns builds, native execution and Git. One scoped writer owns
+the pending-publication phase/history diagnostics and their existing contract probe.
 
-Current bounded milestone: repair the default LAND base's missing physics input
-reached by an ordinary second-well rifle miss. The shot consumed one round and
+Current bounded milestone: diagnose publication 155, which exceeded the harness's
+250 ms deadline during whole-save Continue before combat input. The worker started
+in 0.027 ms, but the retained receipt cannot distinguish text writing, atomic commit
+or completion delay. Add same-clock phase timestamps and a bounded last-failed
+receipt that survives later healthy writes; preserve loss and marker semantics.
+This is diagnostic instrumentation, not an established latency repair.
+
+The four-file implementation passes a zero-warning/error Debug build and the
+telemetry contracts: actual atomic-file ordering/failure, deterministic text/
+commit/receipt delays, exact deadline/loss, eventual failed-write completion and
+healthy-successor retention. Independent bounded source review is clean. One
+instrumented ordinary whole-save Continue reaches gameplay with zero publication
+losses and exits normally; source and copied checkpoints remain byte-identical.
+Its final observed text/commit/receipt durations are 0.747/11.603/0.0025 ms. No
+movement, combat or save command is sent. The original delay remains unexplained;
+do not infer a cause or latency improvement from this healthy repeat. The required
+full runtime gate passes with exit 0, all 2,185 frozen source/configuration hashes
+unchanged and a clean whitespace check. Checked publication is next; keep this
+head frozen through hosted acceptance. Remaining-wells combat then resumes from
+the complete pre-death F5 with 110 HP and five loaded rounds.
+
+One controlled repeat changed only the harness directory to Temp. It stayed healthy
+through ordinary forward input, reload and F5, retaining the complete campaign at
+110 HP with five loaded rounds. The player subsequently died through shared vitals;
+the attacker is not yet qualified. Ordinary Quit exited with code 0. The original
+post-impact checkpoint remains byte-identical. A healthy repeat does not explain
+the earlier loss. After phase validation, make one bounded Continue observation,
+then resume remaining-wells combat from the pre-death F5. Do not clear failures,
+relax the cutoff, seed quests or place actors.
+
+Completed default-LAND milestone: an ordinary second-well rifle miss consumed one round and
 resolved its terrain hit, but impact effects failed at LAND 0e25c7 quadrant 1
 vertex 115. The selected default base has weight 0.536605; this is not a real LTEX
 missing HNAM or an alpha-slot-limit failure. Qualified static initialization and
 selection support default physics bytes material 2, friction 30, restitution 30,
-independently of visual INI paths. Add that value only to default texture transport,
-then verify synthetic ownership, the actual recorded native LAND hit and ordinary
-shot effects. Do not infer malformed BTXT behavior or silently skip effects.
-Continue the genuine remaining-wells objective afterward, preserving all real
-actors/shared state and original saves; no quest seeding or teleporting.
+independently of visual INI paths. The fix adds it only to default texture transport;
+synthetic ownership, the recorded native LAND hit and ordinary shot effects pass.
+Malformed BTXT behavior remains unqualified and effects are not silently skipped.
+Preserve all real actors/shared state and original saves during the tutorial;
+no quest seeding or teleporting.
 Headless gameplay is state/behavior proof only, with no rendered-frame claim.
 
 The default transport now carries only the qualified (2,30,30) physical triplet;
@@ -40,8 +69,8 @@ source dirt impact, projected decal and sound dispatch complete with no effect
 error. One round is consumed; no actor hit or quest progress is claimed. F5 writes
 a v56 slot and the session exits normally. Recording and measured drawn frames
 remain zero. The required full gate passes with exit 0, all 2,183 frozen source/
-configuration hashes unchanged and a clean whitespace check. Checked publication
-is next. Malformed BTXT,
+configuration hashes unchanged and a clean whitespace check. PR265 is accepted.
+Malformed BTXT,
 active-effect cold retention, matched retail effects and pixels remain unverified.
 
 The reached headless mouse-look blocker is repaired: only actual headless mouse
@@ -57,8 +86,7 @@ are not displayed: remaining wells were already accepted, so Sunny's generic
 greeting does not justify a dialogue change. Remaining-well combat is next.
 The required full runtime gate passes with exit 0, all 2,181 frozen source and
 configuration hashes unchanged and a clean whitespace check. PR264 is accepted.
-The coordinator owns validation/Git; scoped source work follows the current
-default-LAND milestone. No campaign, rendered
+The coordinator owns validation/Git and the current tutorial observation. No campaign, rendered
 frame, retail parity or complete tutorial claim follows from these receipts.
 
 Established gravity capability: Debug builds pass with zero warnings/errors. Synthetic native gravity tests

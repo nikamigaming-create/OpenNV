@@ -1,3 +1,4 @@
+using System.Text.Json;
 using OpenNV.Runtime.Diagnostics.Parity;
 
 internal static class PendingPublicationProbe
@@ -11,9 +12,13 @@ internal static class PendingPublicationProbe
         OwnerCanObserveStalledWriter();
         MarkerGeneration();
         SchedulerAndClockFaults();
+        AtomicFilePhasesAndSnapshots();
+        PhaseTimingAndHistory();
+        PhaseFaults();
         Console.WriteLine("OPENNV_PENDING_PUBLICATION_PASS deadlineMilliseconds=250 queueIncluded=true completionTimestamp=true " +
             "pendingAndCompletedLate=true oncePerWriteLoss=true queueAndWorkerSeparated=true ownerNotBlockedByWriter=true " +
-            "originalFaultRetained=true markerGeneration=true cumulativeLossRetained=true injectedClockAndWriter=true");
+            "originalFaultRetained=true markerGeneration=true cumulativeLossRetained=true injectedClockAndWriter=true " +
+            "actualAtomicPhases=true durableSnapshots=true phaseTiming=true completedLossHistory=true boundedErrors=true");
     }
 
     private static void TimelyCompletionObservedLate()
@@ -94,11 +99,15 @@ internal static class PendingPublicationProbe
         using var observed = new ManualResetEventSlim();
         long now = 0;
         Action? work = null;
-        var pending = LiveHarnessPendingPublication.Start(1, 0, () => Volatile.Read(ref now), () =>
+        var pending = LiveHarnessPendingPublication.Start(1, 0, () => Volatile.Read(ref now), phase =>
         {
+            phase(LiveHarnessFilePhase.TextWriteStarted);
             entered.Set();
             if (!release.Wait(limit + limit)) throw new TimeoutException("Controlled writer was not released.");
             Volatile.Write(ref now, 300);
+            phase(LiveHarnessFilePhase.TextWriteCompleted);
+            phase(LiveHarnessFilePhase.CommitStarted);
+            phase(LiveHarnessFilePhase.CommitCompleted);
             return Success();
         }, action => work = action);
         Exception? writerFailure = null;
@@ -115,12 +124,14 @@ internal static class PendingPublicationProbe
             }
             catch (Exception error) { ownerFailure = error; }
             finally { observed.Set(); }
-        }) { IsBackground = true };
+        })
+        { IsBackground = true };
         var writer = new Thread(() =>
         {
             try { work!(); }
             catch (Exception error) { writerFailure = error; }
-        }) { IsBackground = true };
+        })
+        { IsBackground = true };
         var ownerStarted = false;
         Volatile.Write(ref now, 1);
         writer.Start();
@@ -195,6 +206,182 @@ internal static class PendingPublicationProbe
             "Completion clock fault overwrote the original writer failure.");
     }
 
+    private static void AtomicFilePhasesAndSnapshots()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "opennv-publication-phases-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var path = Path.Combine(directory, "live.json");
+            File.WriteAllText(path, "old-complete-snapshot");
+            var phases = new List<LiveHarnessFilePhase>();
+            using (var priorReader = new StreamReader(new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete)))
+            {
+                var result = LiveHarnessAtomicFile.Write(path, "new-complete-snapshot", phase =>
+                {
+                    phases.Add(phase);
+                    if (phase != LiveHarnessFilePhase.CommitCompleted)
+                        Require(File.ReadAllText(path) == "old-complete-snapshot", "File publication exposed new text before atomic commit.");
+                    if (phase is LiveHarnessFilePhase.TextWriteCompleted or LiveHarnessFilePhase.CommitStarted)
+                        Require(File.ReadAllText(path + ".pending") == "new-complete-snapshot", "Text completion was reported before the immutable pending file was complete.");
+                    if (phase == LiveHarnessFilePhase.CommitCompleted)
+                        Require(File.ReadAllText(path) == "new-complete-snapshot" && !File.Exists(path + ".pending"),
+                            "Commit completion was reported before the destination snapshot replaced its pending file.");
+                });
+                Require(phases.SequenceEqual(Enum.GetValues<LiveHarnessFilePhase>()) && result.Attempts >= 1 &&
+                    priorReader.ReadToEnd() == "old-complete-snapshot", "Atomic phase order or the existing reader's old complete snapshot was lost.");
+            }
+            phases.Clear();
+            try
+            {
+                LiveHarnessAtomicFile.Write(Path.Combine(directory, "absent", "live.json"), "new", phases.Add);
+                throw new InvalidOperationException("Absent-directory text write was accepted.");
+            }
+            catch (DirectoryNotFoundException) { }
+            Require(phases.SequenceEqual([LiveHarnessFilePhase.TextWriteStarted]), "Failed text I/O invented a completed text or commit phase.");
+            phases.Clear();
+            try
+            {
+                LiveHarnessAtomicFile.Write(path, "not-committed", phase =>
+                {
+                    phases.Add(phase);
+                    // Deliberately remove only this fixture's pending file to
+                    // exercise an actual atomic-commit I/O failure.
+                    if (phase == LiveHarnessFilePhase.CommitStarted) File.Delete(path + ".pending");
+                });
+                throw new InvalidOperationException("Missing pending snapshot was committed.");
+            }
+            catch (IOException) { }
+            Require(phases.SequenceEqual([LiveHarnessFilePhase.TextWriteStarted, LiveHarnessFilePhase.TextWriteCompleted, LiveHarnessFilePhase.CommitStarted]) &&
+                File.ReadAllText(path) == "new-complete-snapshot", "Commit failure invented completion or replaced the last durable snapshot.");
+        }
+        finally
+        {
+            foreach (var path in Directory.EnumerateFiles(directory)) File.Delete(path);
+            Directory.Delete(directory);
+        }
+    }
+
+    private static void PhaseTimingAndHistory()
+    {
+        foreach (var heldPhase in new[] { LiveHarnessFilePhase.TextWriteStarted, LiveHarnessFilePhase.CommitStarted, LiveHarnessFilePhase.CommitCompleted })
+        {
+            var fixture = new Fixture();
+            var history = new LiveHarnessPublicationHistory();
+            var losses = 0;
+            LiveHarnessPendingPublication? pending = null;
+            pending = fixture.Start(phase =>
+            {
+                fixture.Now = 2; phase(LiveHarnessFilePhase.TextWriteStarted); Hold(LiveHarnessFilePhase.TextWriteStarted);
+                ++fixture.Now; phase(LiveHarnessFilePhase.TextWriteCompleted);
+                ++fixture.Now; phase(LiveHarnessFilePhase.CommitStarted); Hold(LiveHarnessFilePhase.CommitStarted);
+                ++fixture.Now; phase(LiveHarnessFilePhase.CommitCompleted); Hold(LiveHarnessFilePhase.CommitCompleted);
+                ++fixture.Now; return Success();
+            }, publication: 155);
+            fixture.Now = 1; fixture.Run();
+            var completed = pending.Observe(); history.Observe(completed);
+            Require(completed is { Completed: true, Lost: true, NewLoss: false, Receipt.Error: null } &&
+                !pending.CanClearFailureMarker(0) && losses == 1 && history.LastFailed is { Completed: true, Write: not null, WriterError: null } &&
+                history.LastFailed.Timing == completed.Timing && history.LastFailed.Failure is not null,
+                "A pending timeout lost its eventual successful completion, duplicated its loss or cleared its marker.");
+            var timing = completed.Timing;
+            var expected = heldPhase switch
+            {
+                LiveHarnessFilePhase.TextWriteStarted => (Text: 259d, Commit: 1d, Receipt: 1d),
+                LiveHarnessFilePhase.CommitStarted => (Text: 1d, Commit: 257d, Receipt: 1d),
+                _ => (Text: 1d, Commit: 1d, Receipt: 256d),
+            };
+            Require(timing.QueueMilliseconds == 1 && timing.TextWriteMilliseconds == expected.Text &&
+                timing.CommitMilliseconds == expected.Commit && timing.ReceiptMilliseconds == expected.Receipt,
+                "Measured text, commit or receipt delay changed clock domain or was attributed to the wrong phase.");
+            var retained = history.LastFailed;
+            var healthy = new Fixture { Now = 300 };
+            var successor = healthy.Start(phase =>
+            {
+                healthy.Now = 302; phase(LiveHarnessFilePhase.TextWriteStarted);
+                healthy.Now = 303; phase(LiveHarnessFilePhase.TextWriteCompleted);
+                healthy.Now = 304; phase(LiveHarnessFilePhase.CommitStarted);
+                healthy.Now = 305; phase(LiveHarnessFilePhase.CommitCompleted);
+                healthy.Now = 306; return Success();
+            }, generation: losses, publication: 156);
+            healthy.Now = 301; healthy.Run();
+            var next = successor.Observe(); history.Observe(next);
+            Require(!next.Lost && !next.NewLoss && successor.CanClearFailureMarker(losses) && losses == 1 &&
+                ReferenceEquals(history.LastFailed, retained) && history.LatestTiming?.Publication == 156,
+                "Healthy publication erased completed failure history or changed its failure generation.");
+            var json = JsonSerializer.SerializeToElement(history.LastFailed);
+            Require(json.GetProperty("Completed").GetBoolean() && json.GetProperty("Timing").GetProperty("Publication").GetInt64() == 155 &&
+                json.GetProperty("WriterError").ValueKind == JsonValueKind.Null,
+                "Retained completed timeout cannot be serialized independently of a healthy successor.");
+
+            void Hold(LiveHarnessFilePhase phase)
+            {
+                if (phase != heldPhase) return;
+                fixture.Now = 249;
+                var onTime = pending!.Observe(); history.Observe(onTime);
+                Require(!onTime.Lost && history.LastFailed is null, "File phase failed before the exact publication deadline.");
+                fixture.Now = 250;
+                var late = pending.Observe(); history.Observe(late);
+                if (late.NewLoss) ++losses;
+                Require(late is { Completed: false, Lost: true, NewLoss: true } && late.Timing.FilePhase == phase &&
+                    late.Timing.CompletedMilliseconds is null && history.LastFailed is { Completed: false },
+                    "In-flight publication inferred a different phase or invented its completion.");
+                if (phase == LiveHarnessFilePhase.TextWriteStarted) Require(late.Timing.TextWriteCompletedMilliseconds is null, "Pending text write invented completion.");
+                if (phase == LiveHarnessFilePhase.CommitStarted) Require(late.Timing.CommitCompletedMilliseconds is null, "Pending commit invented completion.");
+                fixture.Now = 260;
+            }
+        }
+    }
+
+    private static void PhaseFaults()
+    {
+        foreach (var failedPhase in new[] { LiveHarnessFilePhase.TextWriteStarted, LiveHarnessFilePhase.CommitStarted })
+        {
+            var fixture = new Fixture();
+            var sourceError = new IOException(new string('x', 2200));
+            var pending = fixture.Start(phase =>
+            {
+                fixture.Now = 2; phase(LiveHarnessFilePhase.TextWriteStarted);
+                if (failedPhase == LiveHarnessFilePhase.CommitStarted)
+                {
+                    fixture.Now = 3; phase(LiveHarnessFilePhase.TextWriteCompleted);
+                    fixture.Now = 4; phase(LiveHarnessFilePhase.CommitStarted);
+                }
+                throw sourceError;
+            });
+            fixture.Now = 1; fixture.Run();
+            var result = pending.Observe();
+            var history = new LiveHarnessPublicationHistory(); history.Observe(result);
+            Require(result.NewLoss && result.Completed && !pending.Observe().NewLoss && ReferenceEquals(result.Receipt?.Error, sourceError) &&
+                result.Timing.FilePhase == failedPhase && result.Timing.CommitCompletedMilliseconds is null &&
+                history.LastFailed?.WriterError is { Type: "System.IO.IOException", MessageTruncated: true, Message.Length: 2048 } error &&
+                error.HResult == sourceError.HResult && !pending.CanClearFailureMarker(0),
+                "Phase failure lost its source exception, invented completion or escaped its bounded retained projection.");
+            _ = JsonSerializer.Serialize(history.LastFailed);
+            if (failedPhase == LiveHarnessFilePhase.TextWriteStarted)
+                Require(result.Timing.TextWriteCompletedMilliseconds is null, "Failed text write acquired a completion timestamp.");
+        }
+        var invalid = new Fixture();
+        var outOfOrder = invalid.Start(phase => { phase(LiveHarnessFilePhase.CommitStarted); return Success(); });
+        invalid.Now = 1; invalid.Run();
+        Require(outOfOrder.Observe() is { NewLoss: true, Receipt.Error: InvalidDataException, Timing.FilePhase: null },
+            "Out-of-order phase marker was silently accepted.");
+        var regressed = new Fixture { Now = 10 };
+        var clockFault = regressed.Start(phase =>
+        {
+            phase(LiveHarnessFilePhase.TextWriteStarted);
+            regressed.Now = 10; phase(LiveHarnessFilePhase.TextWriteCompleted);
+            return Success();
+        });
+        regressed.Now = 11; regressed.Run(); regressed.Now = 11;
+        Require(clockFault.Observe() is
+        {
+            NewLoss: true, Receipt.Error: not null,
+            Timing.FilePhase: LiveHarnessFilePhase.TextWriteStarted, Timing.TextWriteCompletedMilliseconds: null
+        },
+            "File phase accepted a regressed clock or hid its failure.");
+    }
+
     private static LiveHarnessFileWrite Success() => new(1, 1, null, null);
     private static void Require(bool value, string message) { if (!value) throw new InvalidDataException(message); }
     private sealed class Fixture
@@ -205,6 +392,9 @@ internal static class PendingPublicationProbe
         internal List<Action> Scheduled { get; } = [];
         internal LiveHarnessPendingPublication Start(Func<LiveHarnessFileWrite> write, long generation = 0) =>
             LiveHarnessPendingPublication.Start(1, generation, () => Now, () => { ++Writes; return write(); }, Scheduled.Add);
+        internal LiveHarnessPendingPublication Start(Func<Action<LiveHarnessFilePhase>, LiveHarnessFileWrite> write,
+            long generation = 0, long publication = 1) =>
+            LiveHarnessPendingPublication.Start(publication, generation, () => Now, phase => { ++Writes; return write(phase); }, Scheduled.Add);
         internal void Run() => Scheduled.Single()();
     }
 }
