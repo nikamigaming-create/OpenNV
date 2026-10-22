@@ -1,6 +1,6 @@
 # Implementation plan
 
-Updated 2026-10-20: the user directs fully playable flat Fallout: New Vegas first.
+Updated 2026-10-21: the user directs fully playable flat Fallout: New Vegas first.
 Start with correct Doc Mitchell positioning and the original questionnaire,
 physical object handling including the skull, every Goodsprings tutorial,
 shooting, creature combat and campfire cooking, then Primm/ED-E and the Strip.
@@ -8,6 +8,23 @@ Repair shared runtime behavior from owned records and actual gameplay. Continue
 to remaining campaign behavior; a selected successful route is not full game
 support. The active owner is in [current-work.md](current-work.md).
 Root works alone and owns code, builds, live input and Git.
+
+The user explicitly includes terminals, lockpicking, hacking and all 13 NV skills:
+Barter, Energy Weapons, Explosives, Lockpick, Medicine, Melee Weapons, Repair,
+Science, Guns, Sneak, Speech, Survival and Unarmed. Include their progression,
+temporary modifiers, perks, dialogue checks, crafting and combat consequences.
+Acceptance requires ordinary successful and failed interactions and their real
+world/quest consequences; loading skill values or displaying a menu is insufficient.
+
+The current access path stops locked DOOR/CONT/TERM activation when the player
+lacks a key/password. Terminal pages and authored results have owners, but hacking
+is explicitly unbound and no lockpicking interaction starts at that gate. Implement
+source-owned skill admission, lockpicking input and pick consumption, hacking
+attempts/lockout and perk effects, then shared unlock/event/XP/crime consequences
+where the source requires them. Check both unlocked access and failed/cancelled
+attempts, including persistence and quest-controlled locks. Do not unlock on a
+skill threshold alone or bypass these systems to finish a quest. This remains
+required work alongside the active population/package repair.
 
 The following inventory preserves FNV repair requirements from the rejected
 physical VR playtest of package g. Shared gameplay defects also block flat mode.

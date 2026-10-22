@@ -60,6 +60,7 @@ internal partial class RuntimeNativeNpc
         : _sitting == 2
         ? throw new NotSupportedException("Furniture entry needs its native script-visible procedure code.")
         : _guardPackage is not null ? throw new NotSupportedException("Guard script-visible procedure code has no source declaration.")
+        : _sandboxPackage is not null ? throw new NotSupportedException("Sandbox script-visible procedure code has no source declaration.")
         : _escortPackage is not null ? _escortProgress?.Complete == true ? 17 : _escortStatus switch
         {
             "ApproachTarget" => 19,
@@ -119,7 +120,7 @@ internal partial class RuntimeNativeNpc
             Activity.Revision,
         },
         factions = _factions.Select(value => new { faction = value.Key.ToString(), rank = value.Value }).ToArray(),
-        currentProcedure = Combat?.ScriptCombatProcedure ?? (_sitting == 2 || _requestedSelection is not null || _aiError is not null || _guardPackage is not null ? (int?)null : CurrentAiProcedure),
+        currentProcedure = Combat?.ScriptCombatProcedure ?? (_sitting == 2 || _requestedSelection is not null || _aiError is not null || _guardPackage is not null || _sandboxPackage is not null ? (int?)null : CurrentAiProcedure),
         navigation = TravelState,
         escort = EscortState,
         editorTravel = EditorTravelState,
@@ -423,6 +424,9 @@ internal partial class RuntimeNativeNpc
                 ClearDialoguePackage();
                 _patrol = null; _patrolProgress = null;
                 _guardPackage = null; _guardProgress = null;
+                _sandboxPackage = null; _sandboxWander = null;
+                if (_aiReferenceState?.ProcedureCaptureBlocker?.StartsWith(FalloutSandboxPackage.CaptureBlockerPrefix, StringComparison.Ordinal) == true)
+                    _aiReferenceState.ProcedureCaptureBlocker = null;
                 if ((_escortPackage is not null || _editorTravel is not null) && _aiWorld is { } escortWorld)
                     escortWorld.Get(Appearance.Reference!.Value).ProcedureCaptureBlocker = null;
                 _escortPackage = null; _escortProgress = null; _escortDestination = null; _escortStatus = null;
@@ -437,6 +441,7 @@ internal partial class RuntimeNativeNpc
             _packageIdles = new(_packageIdleSource, _idleReplays,
                 idle => _idleConditions!.AllPass(idle, EvaluateAiCondition));
             if (_packageIdleSource.Procedure == 0) { BeginFindFurniture(selected); return; }
+            if (_packageIdleSource.Procedure == 12) { BeginSandbox(selected, initializing); return; }
             if (_packageIdleSource.Procedure == 2) { BeginEscort(selected, initializing); return; }
             if (_packageIdleSource.Procedure == 13) { BeginPatrol(selected); return; }
             if (_packageIdleSource.Procedure == 14) { BeginGuard(selected, initializing); return; }

@@ -246,7 +246,9 @@ internal sealed partial class RuntimeNativeActorCombat
             retained?.Package == package.FormKey ? retained.EditorTravel : null,
             retained?.Package == package.FormKey && retained.DialogueCompleted,
             retained?.Package == package.FormKey ? retained.Travel : null,
-            retained?.Package == package.FormKey ? retained.Guard : null);
+            retained?.Package == package.FormKey ? retained.Guard : null,
+            Wander: retained?.Package == package.FormKey ? retained.Wander : null,
+            Sandbox: retained?.Package == package.FormKey ? retained.Sandbox : null);
         _packageDestination = target;
         _packageDestinationActive = movementRequested;
         PackageOwnsPose = true;

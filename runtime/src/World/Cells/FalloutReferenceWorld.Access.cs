@@ -136,6 +136,20 @@ internal sealed partial class FalloutReferenceWorld
         return linked;
     }
 
+    private AccessSource LinkedDoorOwnershipSource(AccessSource source)
+    {
+        var destination = AccessDoorLink(source);
+        if (destination == source.Record.FormKey) throw new InvalidDataException("XTEL door links to itself.");
+        var linked = AccessRecord(destination);
+        if (linked.Record.Signature != "REFR" || FalloutCellSceneReader.ParentCell(linked.Record) is not { } cell ||
+            records.GetEffective(cell).Signature != "CELL" || OptionalAccessForm(linked, "NAME") is not { } basis ||
+            records.GetEffective(basis).Signature != "DOOR")
+            throw new InvalidDataException("Linked ownership source is not a placed DOOR.");
+        // Ownership reads the destination's local fields. A return teleport
+        // is not necessary and must not be inferred for a one-way door.
+        return linked;
+    }
+
     private FalloutFormKey AccessDoorLink(AccessSource source)
     {
         if (source.Record.Signature != "REFR" || FalloutCellSceneReader.ParentCell(source.Record) is not { } cell ||
@@ -206,6 +220,40 @@ internal sealed partial class FalloutReferenceWorld
     internal FalloutReferenceOwnership Ownership(FalloutFormKey reference)
     {
         var source = Access(reference);
+        var local = LocalOwnership(source);
+        // Teleport links contribute their local fields independently. Do not
+        // recurse through the pair or materialize its other placed instance:
+        // cold restoration may not have restored that instance yet.
+        if ((local.Owner is null || local.FactionRank is null or -1 || local.Global is null) &&
+            !AccessField(source, "XTEL").IsEmpty)
+        {
+            var linked = LocalOwnership(LinkedDoorOwnershipSource(source));
+            local = new(local.Owner ?? linked.Owner,
+                local.FactionRank is null or -1 ? linked.FactionRank : local.FactionRank,
+                local.Global ?? linked.Global);
+        }
+        // Rank and global conditions do not follow the owner as one bundle.
+        // Rank consults the encounter zone before the current cell; globals
+        // consult the cell directly. A door's owner still does not inherit
+        // from either of those containers.
+        if (local.FactionRank is null or -1 || local.Global is null)
+        {
+            var instance = Get(reference);
+            var cell = LocalOwnership(AccessRecord(ReferenceSpatialCell(instance)));
+            var rank = local.FactionRank;
+            if (rank is null or -1 && ReferenceEncounterZone(instance) is { } zone)
+            {
+                var zoneRank = FalloutEncounterZone.Read(records.GetEffective(zone)).Rank;
+                if (zoneRank != -1) rank = zoneRank;
+            }
+            if (rank is null or -1) rank = cell.FactionRank;
+            local = local with { FactionRank = rank is -1 ? null : rank, Global = local.Global ?? cell.Global };
+        }
+        return local;
+    }
+
+    private FalloutReferenceOwnership LocalOwnership(AccessSource source)
+    {
         var owner = OptionalAccessForm(source, "XOWN");
         if (owner is { } declared && records.GetEffective(declared).Signature is not ("NPC_" or "FACT" or "ACHR" or "CREA"))
             throw new InvalidDataException("Reference source ownership has an invalid owner type.");
@@ -214,7 +262,7 @@ internal sealed partial class FalloutReferenceWorld
         var global = OptionalAccessForm(source, "XGLB");
         if (global is { } condition && records.GetEffective(condition).Signature != "GLOB")
             throw new InvalidDataException("Reference ownership global is not a GLOB form.");
-        return new(Get(reference).OwnershipOverride?.Owner ?? owner,
+        return new((_instances.TryGetValue(source.Record.FormKey, out var instance) ? instance.OwnershipOverride?.Owner : null) ?? owner,
             rank.IsEmpty ? null : BinaryPrimitives.ReadInt32LittleEndian(rank.Span), global);
     }
 

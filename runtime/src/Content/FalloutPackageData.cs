@@ -7,6 +7,12 @@ internal readonly record struct FalloutPackageData(uint Flags, byte Procedure, u
 {
     internal int SourceExtent => SpecificFlags is null ? 8 : 12;
 
+    // Runtime package kinds which reserve the listener for their own response.
+    // Get-up and search-for-attacker are not members of this source table;
+    // their actual physical/combat state is checked independently.
+    internal bool BlocksAmbientConversation => Procedure is >= 18 and <= 25 or
+        >= 27 and <= 29 or >= 31 and <= 36;
+
     internal static FalloutPackageData Read(FalloutPluginRecord record)
     {
         if (record.Signature != "PACK") throw new InvalidDataException("Package data source is not PACK.");

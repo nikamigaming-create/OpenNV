@@ -17,11 +17,14 @@ internal sealed partial class RuntimeNativeCreature
     private FalloutReferenceWorld? _aiWorld;
     private FalloutReferenceInstance? _aiState;
     private Func<FalloutFormKey?>? _currentPackageQuery;
+    private Func<int>? _sittingQuery;
     private Func<FalloutActorPackageAssignment?>? _packageAssignmentCapture;
     private FalloutPluginRecord? _aiPackage;
     private FalloutFollowPackage? _followPackage;
     private FalloutGuardPackage? _guardPackage;
     private FalloutTravelProgress? _guardProgress;
+    private FalloutSandboxPackage? _sandboxPackage;
+    private FalloutWanderProgress? _sandboxWander;
     private FalloutDialoguePackage? _dialoguePackage;
     private FalloutPackageEvents? _packageEvents;
     private bool _dialogueRequested;
@@ -54,6 +57,7 @@ internal sealed partial class RuntimeNativeCreature
         motion = _aiState?.PackageMotion,
         travel = TravelState,
         guard = _guardPackage is null ? null : new { source = _guardPackage, progress = _guardProgress },
+        sandbox = _sandboxPackage is null ? null : new { source = _sandboxPackage, wander = _sandboxWander, dialogue = Combat?.SandboxObservation },
         patrol = PatrolState,
         eventIdle = _aiState?.PackageIdle,
         packageStarts = _aiState?.PackageStarts,
@@ -80,6 +84,8 @@ internal sealed partial class RuntimeNativeCreature
         _aiState = world.Get(Appearance.Reference!.Value);
         world.BindActorAlert(Appearance.Reference!.Value, Activity);
         _aiState.QueryCurrentPackage = _currentPackageQuery = () => _aiPackage?.FormKey;
+        _aiState.QuerySitting = _sittingQuery = () => _aiState.FurnitureContinuation is null ? 0 :
+            throw new NotSupportedException("Creature furniture continuation has no physical sitting owner.");
         _packageEvents = new(DispatchPackageEvent);
         if (world.UnloadedPackages is { } unloaded)
             unloaded.BindNative(Appearance.Reference!.Value, _packageEvents);
@@ -116,6 +122,7 @@ internal sealed partial class RuntimeNativeCreature
             finally
             {
                 state.QueryCurrentPackage = null;
+                if (ReferenceEquals(state.QuerySitting, _sittingQuery)) state.QuerySitting = null;
                 if (ReferenceEquals(state.CapturePackageAssignment, _packageAssignmentCapture)) state.CapturePackageAssignment = null;
             }
         }
@@ -126,6 +133,7 @@ internal sealed partial class RuntimeNativeCreature
         if (!IsInsideTree() || _sourceBindingsRetired || _aiState is not { } state ||
             state.QueryCurrentPackage is not null && !ReferenceEquals(state.QueryCurrentPackage, _currentPackageQuery)) return;
         state.QueryCurrentPackage ??= _currentPackageQuery;
+        state.QuerySitting ??= _sittingQuery;
         state.CapturePackageAssignment ??= _packageAssignmentCapture;
         Combat?.RestoreSourceBindings();
     }
@@ -199,11 +207,13 @@ internal sealed partial class RuntimeNativeCreature
         var retained = !_initialPackageSelected ? _aiState!.PackageMotion : null;
         var restoreTravel = retained?.Travel is not null;
         var restoreGuard = retained?.Guard is not null;
+        var restoreSandbox = (retained?.Wander is not null || retained?.Sandbox is not null) &&
+            _aiState!.PackageAssignment?.Package == retained!.Package;
         var restoreAccompany = retained?.AccompanyPortal is not null;
         // A retired package may retain its last physical pose. That motion is
         // not an active assignment and must not restart its procedure on load.
         var restorePatrol = retained?.Patrol is not null && _aiState!.PackageAssignment?.Package == retained.Package;
-        var selected = restoreTravel || restoreGuard || restoreAccompany || restorePatrol ? _aiRecords!.GetEffective(retained!.Package) :
+        var selected = restoreTravel || restoreGuard || restoreAccompany || restorePatrol || restoreSandbox ? _aiRecords!.GetEffective(retained!.Package) :
             FalloutAiPackages.Select(_aiRecords!, Appearance.Creature, PackageCondition, _aiState!.Templates, _aiClock,
                 evaluateRunOn: true,
                 eligible: package => _aiWorld!.PackageEligible(Appearance.Reference!.Value, package, _aiClock,
@@ -226,6 +236,7 @@ internal sealed partial class RuntimeNativeCreature
         FalloutDialoguePackage? dialogue = null;
         FalloutTravelPackage? travel = null;
         FalloutGuardPackage? guard = null;
+        FalloutSandboxPackage? sandbox = null;
         FalloutPatrolRoute? patrol = null;
         if (source is not null)
         {
@@ -238,6 +249,7 @@ internal sealed partial class RuntimeNativeCreature
             }
             else if (source.Procedure == 6) travel = FalloutTravelPackage.Read(selected!);
             else if (source.Procedure == 14) guard = FalloutGuardPackage.Read(selected!);
+            else if (source.Procedure == 12) sandbox = FalloutSandboxPackage.Read(selected!);
             else if (source.Procedure == 13) patrol = ReadPatrol(selected!);
             else if (source.Procedure == 15)
             {
@@ -260,21 +272,26 @@ internal sealed partial class RuntimeNativeCreature
             _aiState!.ProcedureCaptureBlocker = restoreGuard ? null : "Guard approach has no first native motion observation.";
         }
         else { _guardPackage = null; _guardProgress = null; }
+        _sandboxPackage = sandbox;
+        _sandboxWander = sandbox is not null && restoreSandbox ? retained!.Wander : null;
+        if (_sandboxWander is not null) _aiWorld!.ValidatePackageWander(Appearance.Reference!.Value, _sandboxWander);
         if (patrol is not null) BeginPatrol(patrol, restorePatrol);
         else { _patrol = null; _patrolProgress = null; _patrolDestination = null; }
         _initialPackageSelected = true;
         var restoreFollow = follow is not null && retained?.Package == source!.Form &&
             _aiState!.PackageAssignment is { } followAssignment && followAssignment.Package == source.Form;
-        if (restoreTravel || restoreGuard || restoreAccompany || restoreFollow || restorePatrol || restoredDialogue)
+        if (restoreTravel || restoreGuard || restoreAccompany || restoreFollow || restorePatrol || restoreSandbox || restoredDialogue)
             _packageEvents!.Restore(source!, restoreFollow ? _aiState!.PackageAssignment!.Done :
                 restorePatrol ? _aiState!.PackageAssignment?.Done == true :
-                restoreGuard || restoreAccompany ? false : restoreTravel ? _travelProgress!.Complete : true);
+                restoreGuard || restoreAccompany || restoreSandbox ? false : restoreTravel ? _travelProgress!.Complete : true);
         else _packageEvents!.Change(source);
         _aiPackage = selected; _followPackage = follow; _dialoguePackage = dialogue; _dialogueRequested = restoredDialogue;
         _accompanyDoor = null; _accompanyDoorDestination = null; _accompanyTargetRegion = null;
         _accompanyPortalRequested = false; _accompanyPortalTransferred = false; _accompanyPortalWait = null;
         if (travel is null && guard is null && patrol is null)
             _aiState!.ProcedureCaptureBlocker = dialogue is not null && !restoredDialogue ? DialogueCaptureBlocker : null;
+        if (sandbox is not null && !restoreSandbox)
+            _aiState!.ProcedureCaptureBlocker = FalloutSandboxPackage.CaptureBlockerPrefix + "awaiting first native movement observation.";
         if (!restoredDialogue && _aiState!.PackageMotion is { DialogueCompleted: true } previousMotion)
             _aiState.PackageMotion = previousMotion with { DialogueCompleted = false };
         if (restoreTravel) _evaluateRequested = true;
@@ -332,6 +349,8 @@ internal sealed partial class RuntimeNativeCreature
             }
             if (_aiError is not null) return;
             if (_travelPackage is not null) AdvanceTravel(delta);
+            else if (_sandboxPackage is { } sandbox)
+                _sandboxWander = Combat.AdvanceSandboxWander(_aiPackage!, sandbox, _sandboxWander, delta);
             else if (_patrol is not null) AdvancePatrol(delta);
             else if (_guardPackage is { } guard)
                 _guardProgress = Combat.AdvanceGuard(_aiPackage!, guard, _guardProgress!, delta);
@@ -378,6 +397,8 @@ internal sealed partial class RuntimeNativeCreature
             var changed = _aiError != error.Message;
             _aiError = error.Message;
             if (_guardPackage is not null) _guardProgress = Combat.PackageMotion?.Guard ?? _guardProgress;
+            if (_sandboxPackage is not null)
+                _aiState!.ProcedureCaptureBlocker = FalloutSandboxPackage.CaptureBlockerPrefix + error.Message;
             if (!selecting) _failedPackage = _aiPackage?.FormKey;
             if (changed) GD.PushError($"OPENNV_CREATURE_AI_DIVERGENCE reference={Appearance.Reference}: {_aiError}");
         }

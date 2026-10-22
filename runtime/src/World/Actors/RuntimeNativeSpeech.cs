@@ -321,14 +321,15 @@ internal partial class RuntimeNativeSpeech : Node
     }
 
     private void ExecuteCommand(FalloutSayToCommand command, FalloutFormKey speaker, FalloutFormKey topic, FalloutFormKey? target,
-        Action? packageCompleted = null, bool npcConversation = false, PackageEventSpeech? packageEvent = null)
+        Action? packageCompleted = null, bool npcConversation = false, PackageEventSpeech? packageEvent = null,
+        bool defaultNpcOpening = false)
     {
         if (Error is not null) throw new InvalidOperationException(Error);
         try
         {
             if (!DeferScriptedSpeech(command, speaker, topic, target, packageCompleted, npcConversation))
                 StartCore(command, _stack.GetEffective(speaker), topic, target, packageCompleted,
-                    forceNpcConversation: npcConversation, packageEvent: packageEvent);
+                    forceNpcConversation: npcConversation, packageEvent: packageEvent, defaultNpcOpening: defaultNpcOpening);
         }
         catch (Exception error) when (error is InvalidDataException or NotSupportedException or FileNotFoundException or InvalidOperationException)
         {
@@ -338,7 +339,8 @@ internal partial class RuntimeNativeSpeech : Node
 
     private void StartCore(FalloutSayToCommand command, FalloutPluginRecord speaker, FalloutFormKey topicForm, FalloutFormKey? target,
         Action? packageCompleted = null, NpcDialogueExchange? exchange = null, FalloutDialogueInfo? selectedInfo = null,
-        bool forceNpcConversation = false, PackageEventSpeech? packageEvent = null, FalloutRadioConversation? radio = null)
+        bool forceNpcConversation = false, PackageEventSpeech? packageEvent = null, FalloutRadioConversation? radio = null,
+        bool defaultNpcOpening = false, bool ambientConversation = false)
     {
         if (speaker.Signature is not ("ACHR" or "ACRE" or "REFR")) throw new InvalidDataException("Scripted speaker is not a dialogue reference.");
         var npcKey = FalloutDialogueTopic.RequiredForm(speaker, "NAME");
@@ -372,7 +374,19 @@ internal partial class RuntimeNativeSpeech : Node
             _topics.Add(command.TopicEditorId, topic = FalloutDialogueTopic.Read(_stack, topicForm));
         var actor = radio is null ? ResidentSpeaker(speaker) : _presentation?.Invoke(speaker.FormKey);
         var npcConversation = forceNpcConversation || exchange is not null || listenerReference is not null && FalloutDialogueTopic.Type(_stack, topicForm) == 1;
-        var info = selectedInfo ?? SelectSpeechInfo(topic, speaker.FormKey, target, npcConversation);
+        FalloutDialogueInfo? info;
+        if (selectedInfo is null && forceNpcConversation && exchange is null)
+        {
+            var opening = SelectNpcConversationOpening(speaker.FormKey,
+                target ?? throw new InvalidDataException("NPC conversation has no listener."), defaultNpcOpening ? null : topicForm);
+            info = opening?.Info;
+            if (opening is { } selected)
+            {
+                topicForm = selected.Topic;
+                command = command with { TopicEditorId = topicForm.ToString() };
+            }
+        }
+        else info = selectedInfo ?? SelectSpeechInfo(topic, speaker.FormKey, target, npcConversation);
         if (info is null)
         {
             if (IsTalking(speaker.FormKey))
@@ -385,13 +399,13 @@ internal partial class RuntimeNativeSpeech : Node
         if (voice.Info is not null || voice.Player.Playing)
             throw new NotSupportedException("Replacing the actor's active speech requires its interruption owner.");
         if (exchange is null && npcConversation && (forceNpcConversation || packageCompleted is not null && info.Choices.Count != 0))
-            exchange = BeginNpcExchange(speaker.FormKey, target!.Value, topicForm, command, packageCompleted);
+            exchange = BeginNpcExchange(speaker.FormKey, target!.Value, topicForm, command, packageCompleted, ambientConversation);
         if (radio is null) BindSpeaker(voice, speaker, actor!);
         else BindRadioSpeaker(voice, speaker, actor, radio);
         voice.Command = command;
         voice.Radio = radio;
         if (radio is null) voice.Player.VolumeDb = 0;
-        voice.CommandKind = radio is not null ? "radio-conversation" : packageEvent is not null ? "package-event-topic" :
+        voice.CommandKind = exchange?.Ambient == true ? "ambient-conversation" : radio is not null ? "radio-conversation" : packageEvent is not null ? "package-event-topic" :
             packageCompleted is not null ? "dialogue-package" : command.TargetEditorId.Length == 0 ? "Say" : "SayTo";
         voice.PackageCompleted = exchange is null ? packageCompleted : null;
         voice.PackageEvent = packageEvent;
@@ -403,7 +417,7 @@ internal partial class RuntimeNativeSpeech : Node
         voice.Binding = null; voice.LipSha256 = null; voice.Player.Stream = null;
         voice.Lip = null; voice.LipWeights = [];
         ++voice.Generation; _lastVoice = voice;
-        if (exchange is { Completed: null, Completion: null })
+        if (exchange is { Ambient: false, Completed: null, Completion: null })
             exchange.Completion = new(exchange.Speaker, new HashSet<FalloutFormKey> { exchange.Topic },
                 info.Record.FormKey, voice.Generation);
         if ((info.Flags & 4) != 0) _said.Add(info.Record.FormKey);

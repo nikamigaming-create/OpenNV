@@ -17,6 +17,10 @@ internal static class OwnedIngestibleProbe
         var form = FalloutDialogueTopic.Find(records, "ALCH", "Stimpak").FormKey;
         var player = records.RuntimeFormKey(7);
         var source = FalloutIngestible.Read(records, form);
+        if (FalloutActorFood.IsFood(records, form)) throw new InvalidDataException("Owned Stimpak was admitted as actor food.");
+        var foods = records.EffectiveRecords("ALCH").Count(record => FalloutActorFood.IsFood(records, record.FormKey));
+        if (foods == 0) throw new InvalidDataException("Owned ingestibles supplied no actor food.");
+        Console.WriteLine($"OPENNV_OWNED_ACTOR_FOOD_PASS ingestibles=true foodCount={foods} medicineExcluded=true gameplay=unverified");
         var body = FalloutBodyPartData.Read(records.GetEffective(records.RuntimeFormKey(0x1d)));
         var expectedMagnitude = source.Effects.Single(effect => effect.Archetype == 34 && effect.Magnitude == 30).Magnitude *
             (FalloutGameSettingFloats.Read(records, "fMagicMedicineSkillBase") + FalloutGameSettingFloats.Read(records, "fMagicMedicineSkillMult") * .5f);

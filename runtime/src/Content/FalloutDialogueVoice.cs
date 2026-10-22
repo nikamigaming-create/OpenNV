@@ -8,6 +8,27 @@ internal sealed record FalloutDialogueSpeaker(FalloutFormKey Actor, FalloutFormK
 {
     internal string RecordType { get; init; } = "NPC_";
 
+    // Ambient conversation creation checks a creature's voice before looking
+    // up topics. Absence is a normal inability to start, not a corrupt INFO or
+    // a reason to reject the creature's entire AI package.
+    internal static bool HasConversationVoice(FalloutPluginStack records, FalloutFormKey actor,
+        FalloutActorTemplateSelection? selection = null)
+    {
+        var record = records.GetEffective(actor);
+        if (record.Signature == "NPC_") return true;
+        if (record.Signature != "CREA") throw new InvalidDataException("Ambient conversation caller is not an actor base.");
+        var traits = FalloutActorTemplateOwner.Resolve(records, record, 1, selection);
+        var fields = traits.ReadSubrecords().Where(field => field.Signature == "VTCK").ToArray();
+        if (fields.Length > 1 || fields.Length == 1 && fields[0].Data.Length != 4)
+            throw new InvalidDataException("Creature conversation voice has an invalid declaration.");
+        if (fields.Length == 0) return false;
+        var voice = traits.Plugin.AdjustOptionalFormId(BinaryPrimitives.ReadUInt32LittleEndian(fields[0].Data.Span));
+        if (voice is null) return false;
+        if (records.GetEffective(voice.Value).Signature != "VTYP")
+            throw new InvalidDataException("Creature conversation voice is not VTYP.");
+        return true;
+    }
+
     internal static FalloutDialogueSpeaker Read(FalloutPluginStack records, FalloutFormKey actor, FalloutActorTemplateSelection? selection = null)
     {
         var record = records.GetEffective(actor);

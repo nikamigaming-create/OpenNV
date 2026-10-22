@@ -37,7 +37,8 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
     FalloutActorDeferredPackageContinuation? DeferredPackageContinuation = null,
     FalloutAggroRadiusWarning? AggroWarning = null,
     FalloutReferenceGrabEvents? GrabEvents = null,
-    IReadOnlyList<FalloutObjectPhysicsSnapshot>? ObjectPhysics = null)
+    IReadOnlyList<FalloutObjectPhysicsSnapshot>? ObjectPhysics = null,
+    float? ConversationSuppressionSeconds = null, FalloutConversationHistory? ConversationHistory = null)
 {
     internal static void Validate(IReadOnlyList<FalloutReferenceSnapshot> snapshots)
     {
@@ -57,6 +58,9 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
             foreach (var (name, value) in snapshot.ActorValues ?? new Dictionary<string, FalloutActorValue>())
                 if ((name is not ("health" or "aggression") && FalloutActorValue.UserSlot(name) != name) || value is null || !value.IsFinite)
                     throw new InvalidDataException("Saved actor value is invalid.");
+            if (snapshot.ConversationSuppressionSeconds is { } suppression && !float.IsFinite(suppression))
+                throw new InvalidDataException("Saved conversation suppression is not finite.");
+            snapshot.ConversationHistory?.Validate();
             if (snapshot.Animation is { } animation) FalloutActorAnimationState.Validate(animation);
             snapshot.GrabEvents?.Validate(snapshot.Reference);
             if (snapshot.ObjectPhysics is { } physics) FalloutObjectPhysicsSnapshot.ValidateSet(physics);
@@ -153,6 +157,8 @@ internal sealed partial class FalloutReferenceInstance
     internal FalloutFormKey Base { get; }
     internal FalloutReferenceScriptDefinition? Script { get; private set; }
     internal FalloutActorTemplateSelection? Templates { get; set; }
+    internal float? ConversationSuppressionSeconds { get; set; }
+    internal FalloutConversationHistory? ConversationHistory { get; set; }
     internal Dictionary<uint, double> Variables { get; }
     internal string? ScriptError { get; set; }
     internal FalloutReferenceScriptStoppedFrame? ScriptStoppedFrame { get; set; }
@@ -420,7 +426,8 @@ internal sealed partial class FalloutReferenceInstance
             AnimationSoundEvents: soundEvents, HitReactionFaults: hitReactionFaults, ActivationRelay: ActivationRelay?.Copy(),
             CorpseEquipment: CaptureCorpseEquipment is { } captureEquipment ? captureEquipment() : CorpseEquipment?.Copy(),
             DeferredPackageContinuation: DeferredPackageContinuation, AggroWarning: AggroWarning, GrabEvents: GrabEvents,
-            ObjectPhysics: CaptureObjectPhysics?.Invoke() ?? ObjectPhysics?.Select(body => body.Copy()).ToArray());
+            ObjectPhysics: CaptureObjectPhysics?.Invoke() ?? ObjectPhysics?.Select(body => body.Copy()).ToArray(),
+            ConversationSuppressionSeconds: ConversationSuppressionSeconds, ConversationHistory: ConversationHistory?.Copy());
     }
 }
 
@@ -790,6 +797,19 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
                 };
             }
             validated.RestorePackageTiming(instance, snapshot);
+            if (snapshot.ConversationSuppressionSeconds is { } suppression)
+            {
+                _ = validated.Actor(snapshot.Reference);
+                instance.ConversationSuppressionSeconds = suppression;
+            }
+            if (snapshot.ConversationHistory is { } history)
+            {
+                _ = validated.Actor(snapshot.Reference);
+                foreach (var partner in history.Partners)
+                    if (records.GetEffective(partner).Signature is not ("ACHR" or "ACRE"))
+                        throw new InvalidDataException("Saved conversation partner is not an actor reference.");
+                instance.ConversationHistory = history.Copy();
+            }
             if (snapshot.SoundRandomState is { } soundRandom) instance.SoundRandom.Restore(soundRandom);
             if (snapshot.AnimationSoundEvents is { } soundEvents) instance.AnimationSoundEvents.Restore(soundEvents, records);
             if (snapshot.HitReactionFaults is { } hitFaults)
@@ -915,6 +935,11 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
                     .Validate(records, validated, snapshot.Reference, guard);
             if (snapshot.PackageMotion?.AccompanyPortal is { } accompanyPortal)
                 accompanyPortal.Validate(records, validated, snapshot.Reference, records.GetEffective(snapshot.PackageMotion.Package));
+            if (snapshot.PackageMotion?.Wander is { } wander)
+                validated.ValidatePackageWander(snapshot.Reference, wander);
+            if (snapshot.PackageMotion?.Sandbox?.Target is { } conversationTarget &&
+                records.GetEffective(conversationTarget).Signature is not ("ACHR" or "ACRE"))
+                throw new InvalidDataException("Saved Sandbox conversation target is not an actor reference.");
         }
         validated.PackageEvents.Restore(snapshots);
         _packageEvents = validated._packageEvents;

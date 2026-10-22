@@ -23,7 +23,7 @@ internal partial class RuntimeNativeNpc
     private void AdvanceFindFurniture(double delta)
     {
         if (_findFurniture is null || _seat is not null || _aiError is not null || Combat is null ||
-            !Combat.PackageMovementReady || _conversationTarget is not null) return;
+            Combat.OwnsPose || !Combat.PackageMovementReady || _conversationTarget is not null) return;
         _furnitureSearchRemaining -= delta;
         if (_furnitureSearchRemaining > 0) return;
         _furnitureSearchRemaining = .5;

@@ -262,7 +262,8 @@ internal sealed partial class CellNavigationGraph
             .EnumerateArray()
             .Select(value => new NavigationExternalConnection(
                 value.GetProperty("navmeshFormId").GetString()!,
-                value.GetProperty("triangleIndex").GetInt32()))
+                value.GetProperty("triangleIndex").GetInt32(),
+                value.TryGetProperty("type", out var type) ? type.GetUInt32() : 0))
             .ToArray();
         if (vertices.Length == 0 || triangles.Length == 0 ||
             vertices.Any(value => !value.IsFinite()) ||
@@ -308,7 +309,8 @@ internal sealed partial class CellNavigationGraph
 
     private sealed record NavigationExternalConnection(
         string NavMeshFormId,
-        int TriangleIndex);
+        int TriangleIndex,
+        uint Type = 0);
 
     private sealed class NavigationMeshRecord
     {

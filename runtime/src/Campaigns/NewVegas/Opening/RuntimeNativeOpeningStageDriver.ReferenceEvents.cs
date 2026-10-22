@@ -236,6 +236,9 @@ internal partial class RuntimeNativeOpeningStageDriver
         throw new InvalidOperationException("Actor speech owner is absent.");
     internal bool IsNpcDialogueActive(FalloutFormKey actor) => _speech?.IsNpcDialogueActive(actor) ??
         throw new InvalidOperationException("Actor speech owner is absent.");
+    internal bool TryAmbientConversation(FalloutFormKey actor, FalloutFormKey target) =>
+        (_speech ?? throw new InvalidOperationException("Actor speech owner is absent."))
+            .TryStartNpcConversation(actor, target, null);
     internal bool IsInCombat(FalloutFormKey actor) => _scripts.References!.IsInCombat(actor,
         _scripts.References.PlayerInCombat);
     internal void RequestPackageDialogue(FalloutFormKey speaker, FalloutDialoguePackage package, Action completed)
@@ -245,7 +248,7 @@ internal partial class RuntimeNativeOpeningStageDriver
                 package.Topic ?? throw new InvalidDataException("SayTo dialogue package has no source topic."), completed);
         else if (_pluginStack.RuntimeFormId(package.Target) != 0x14)
             (_speech ?? throw new InvalidOperationException("Speech owner is absent.")).StartNpcConversation(speaker, package.Target,
-                package.Topic ?? FalloutDialogueTopic.Find(_pluginStack, "DIAL", "GREETING").FormKey, completed);
+                package.Topic, completed);
         else (_conversation ?? throw new InvalidOperationException("Conversation owner is absent.")).Request(speaker, package.Target, package.Topic, completed);
     }
     internal double ActorValue(FalloutFormKey actor, string name) => _pluginStack.RuntimeFormId(actor) == 0x14 ?

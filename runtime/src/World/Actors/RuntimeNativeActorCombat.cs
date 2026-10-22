@@ -38,6 +38,8 @@ internal sealed partial class RuntimeNativeActorCombat : Node
         localEnabled = _state.Enabled,
         dead = Dead,
         health = _state.ActorValues.GetValueOrDefault("health")?.Current,
+        conversationSuppressionSeconds = _state.ConversationSuppressionSeconds,
+        conversationHistory = _state.ConversationHistory,
         bodyTarget = ObserveBodyTarget(),
         injury = _state.Injury,
         ragdoll = _ragdoll?.Observation,
@@ -77,6 +79,8 @@ internal sealed partial class RuntimeNativeActorCombat : Node
             _context = context
         };
         state.QuerySpatialPlacement = owner.CaptureSpatialPlacement;
+        state.ConversationSuppressionSeconds ??= FalloutConversationSuppression.Sample(records.NumericSettings, state.SoundRandom.NextUnitFloat);
+        state.ConversationHistory ??= FalloutConversationHistory.Create(records.NumericSettings);
         owner.PrepareHitReactionResources();
         actor.AddChild(owner);
         return owner;

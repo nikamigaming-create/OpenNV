@@ -50,6 +50,11 @@ internal sealed partial class FalloutReferenceWorld
     {
         var assigned = FalloutEncounterZone.Assignment(records.GetEffective(instance.Reference));
         if (assigned is not null) return assigned;
+        return CellEncounterZone(ReferenceSpatialCell(instance));
+    }
+
+    private FalloutFormKey ReferenceSpatialCell(FalloutReferenceInstance instance)
+    {
         var cell = instance.Placement?.Cell ?? instance.Cell;
         var record = records.GetEffective(cell);
         // Persistent exterior references belong to a world container in the
@@ -59,7 +64,7 @@ internal sealed partial class FalloutReferenceWorld
             var position = Placement(instance.Reference).Position;
             cell = (_encounterGrid ??= new(records)).SpatialCell(world, position[0], position[1]);
         }
-        return CellEncounterZone(cell);
+        return cell;
     }
 
     private (int Level, int ListLevel, bool? AllLevels) ActorEncounter(FalloutReferenceInstance instance, int playerLevel)

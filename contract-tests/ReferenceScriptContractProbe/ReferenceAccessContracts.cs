@@ -29,6 +29,16 @@ internal static class ReferenceAccessContracts
             FalloutReferenceScripts Scripts(FalloutReferenceWorld owner) => new(records, owner, quests,
                 new((_, _) => false, _ => ++effects));
             var scripts = Scripts(world);
+            var wanderGlobals = FalloutGlobalState.Read(records);
+            Require(world.PackageWanderDoorCost(Key(0xb0), wanderGlobals) is null &&
+                world.PackageWanderDoorCost(Key(0xb2), wanderGlobals) == 0,
+                "Wander used an actor ownership context or rejected its faction access rule.");
+            wanderGlobals.Set(Key(0x40), 0);
+            Require(world.PackageWanderDoorCost(Key(0xb3), wanderGlobals) is null,
+                "Wander admitted a locked conditional door with a zero global.");
+            wanderGlobals.Set(Key(0x40), -1);
+            Require(world.PackageWanderDoorCost(Key(0xb3), wanderGlobals) == 0 && world.GetLocked(Key(0xb3)) == 1,
+                "Wander ignored a nonzero condition or unlocked the door during its search.");
             Require(world.CanNpcOpenDoor(Key(0xb0), Key(0x9a)) && world.CanNpcOpenDoor(Key(0xb1), Key(0x9a)) &&
                 !world.CanNpcOpenDoor(Key(0xb0), Key(14)) && !world.CanNpcOpenDoor(Key(0xb2), Key(0x9a)) &&
                 !world.CanNpcOpenDoor(Key(0xb3), Key(0x9a)) && !world.CanNpcOpenDoor(Key(0xb4), Key(0x9a)) &&
@@ -229,7 +239,7 @@ internal static class ReferenceAccessContracts
         Record("TERM", 0x33, Field("DNAM", [0, 0, 0, 0]), Field("PNAM", BitConverter.GetBytes(8u))),
         Record("NPC_", 8, Field("EDID", Text("OtherNpc")), Field("SCRI", BitConverter.GetBytes(0x50u))),
         Record("CREA", 9, Field("EDID", Text("CreatureBase"))), Record("FACT", 11), Item("KEYM", 20, "SourceKey"),
-        Record("GLOB", 0x40, Field("FLTV", BitConverter.GetBytes(.5f))),
+        Record("GLOB", 0x40, Field("FNAM", [(byte)'f']), Field("FLTV", BitConverter.GetBytes(.5f))),
         Script(false),
         Record("QUST", 0x60, Field("EDID", Text("AccessQuest"))), Record("CELL", 0x80, Field("DATA", [1])),
         Group(0x80, Reference("ACHR", 14, 7, "PlayerRef"),

@@ -10,8 +10,12 @@ public partial class NativeLocomotionAudit : Node3D
         try
         {
             GD.Print($"OPENNV_NATIVE_NAVIGATION_OWNER_BUILD ownerBuild={typeof(NativeCapsuleNavigation).Module.ModuleVersionId} " +
-                "fixture=synthetic gameplay=separate parity=unverified");
+                "fixture=selected-by-arguments gameplay=separate parity=unverified");
             var arguments = OS.GetCmdlineUserArgs();
+            if (arguments.FirstOrDefault() == "--owned-wander")
+            {
+                NativeOwnedWanderAudit.Run(arguments.Skip(1).ToArray()); GetTree().Quit(); return;
+            }
             if (arguments is ["--navigation-contracts"])
             {
                 NativeNavigationContracts.Run(); GetTree().Quit(); return;

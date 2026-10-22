@@ -7,6 +7,20 @@ internal readonly record struct FalloutNpcDialogueTurn(FalloutFormKey Speaker, F
 // that reference with the remote actor supplying its voice.
 internal static class FalloutNpcDialogueLinks
 {
+    internal static FalloutFormKey OpeningTopic(FalloutPluginStack records, FalloutFormKey? requested) =>
+        requested ?? records.RuntimeFormKey(0xd2);
+
+    // Built-in conversation opening and fallback identities are engine forms.
+    // Resolve them through the winning graph rather than an editor-name search.
+    // A non-conversation explicit topic does not acquire a fallback.
+    internal static IEnumerable<FalloutFormKey> OpeningTopics(FalloutPluginStack records, FalloutFormKey? requested)
+    {
+        var topic = OpeningTopic(records, requested);
+        yield return topic;
+        if (requested is null || FalloutDialogueTopic.Type(records, topic) == 1)
+            yield return records.RuntimeFormKey(0xd4);
+    }
+
     internal static IReadOnlyList<FalloutNpcDialogueTurn> Candidates(byte nextSpeaker, byte flags,
         IReadOnlyList<FalloutFormKey> links, FalloutFormKey speaker, FalloutFormKey listener, FalloutFormKey goodbye)
     {

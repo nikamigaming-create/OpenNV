@@ -63,6 +63,7 @@ internal static class DialoguePackageContracts
             Reject(() => FalloutAiPackages.IsCurrentPackage(condition with { RunOn = 2 }, caller, null, Query));
             Reject(() => FalloutAiPackages.IsCurrentPackage(condition with { RunOn = 2, Reference = 0x702 }, caller, null, Query));
             Reject(() => FalloutAiPackages.IsCurrentPackage(condition with { RunOn = 3 }, caller, null, Query));
+            ConversationOpenings(directory);
             FurnitureOrder(directory);
             Console.WriteLine("OPENNV_DIALOGUE_PACKAGE_CONTRACT_PASS optionalLocation=true sourceTarget=true sourceType=true requiredSpeechTopic=true malformedRejected=true");
         }
@@ -91,6 +92,28 @@ internal static class DialoguePackageContracts
             triggerFields = Join(triggerFields, Field("PLD2", conflicting));
         }
         return Record("PACK", id, Field("EDID", Encoding.ASCII.GetBytes("SourceDialogue\0")), Field("PKDT", data), Field("PTDT", target), Field("PKDD", dialogue), wait, triggerFields);
+    }
+
+    private static void ConversationOpenings(string directory)
+    {
+        byte[] Topic(uint id, byte type, string editorId) => Record("DIAL", id,
+            Field("EDID", Encoding.ASCII.GetBytes(editorId + '\0')), Field("DATA", [type, 0]));
+        File.WriteAllBytes(Path.Combine(directory, "Openings.esm"), Join(
+            Record("TES4", 0, Field("HEDR", new byte[12])),
+            Topic(0xd2, 0, "RenamedHello"), Topic(0xd4, 1, "RenamedGoodbye"),
+            Topic(0x200, 1, "CustomConversation"), Topic(0x201, 0, "CustomTopic"),
+            Topic(0x202, 1, "GREETING")));
+        using var records = FalloutPluginStack.Load(directory, ["Openings.esm"]);
+        FalloutFormKey Key(uint id) => records.RuntimeFormKey(id);
+        var initial = FalloutNpcDialogueLinks.OpeningTopic(records, null);
+        if (initial != Key(0xd2) ||
+            !FalloutNpcDialogueLinks.OpeningTopics(records, null).SequenceEqual([Key(0xd2), Key(0xd4)]) ||
+            !FalloutNpcDialogueLinks.OpeningTopics(records, initial).SequenceEqual([Key(0xd2)]) ||
+            FalloutNpcDialogueLinks.OpeningTopic(records, Key(0x200)) != Key(0x200) ||
+            !FalloutNpcDialogueLinks.OpeningTopics(records, Key(0x200)).SequenceEqual([Key(0x200), Key(0xd4)]) ||
+            !FalloutNpcDialogueLinks.OpeningTopics(records, Key(0x201)).SequenceEqual([Key(0x201)]))
+            throw new InvalidDataException("NPC conversation lost engine opening identities, explicit topic or type-gated fallback.");
+        Console.WriteLine("OPENNV_NPC_CONVERSATION_OPENING_PASS defaultHello=true goodbyeFallback=true explicitTopic=true nonConversationNoFallback=true editorRenameIndependent=true playback=unverified");
     }
 
     private static void FurnitureOrder(string directory)
