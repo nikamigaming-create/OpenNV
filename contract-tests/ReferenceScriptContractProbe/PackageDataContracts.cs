@@ -2,17 +2,119 @@ using System.Buffers.Binary;
 using System.Security.Cryptography;
 using System.Text;
 using OpenNV.Runtime.Content;
+using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.World.Cells;
 
 internal static class PackageDataContracts
 {
+    private static void CheckSandboxActivitySelection()
+    {
+        var preferences = new FalloutSandboxPreferences();
+        var ordinary = preferences.ActivityWeights(null, false, false, false);
+        Require(ordinary.SequenceEqual([128, 0, 113, 128, 128, 128]), "Sandbox ambient weights include unscheduled sleep or lose food context.");
+        var food = preferences.ActivityWeights(null, true, true, true);
+        Require(food.SequenceEqual([128, 0, 148, 128, 128, 0]), "Sandbox food/furniture or dialogue suppression changed unrelated activities.");
+        foreach (var scheduled in new[] { FalloutSandboxActivity.Sleep, FalloutSandboxActivity.Eat })
+        {
+            var weights = preferences.ActivityWeights(scheduled, false, false, true);
+            Require(weights.Sum() == 10 && weights[(int)scheduled] == 10, "Sandbox scheduled activity did not override ambient preference.");
+        }
+        preferences.Selected(FalloutSandboxActivity.Eat);
+        var restored = new FalloutSandboxPreferences(preferences.Capture());
+        var suppressedFood = restored.ActivityWeights(null, false, false, false);
+        Require(suppressedFood[2] == -14 && FalloutSandboxPreferences.CandidateWeight(1, suppressedFood[2]) == 0 &&
+            restored.Weight(FalloutSandboxActivity.Wander) == 129, "Sandbox continuation lost preference or clamped before candidate selection.");
+        Require(FalloutSandboxPreferences.Choose([0, 3, 0, 2], 3) == 3,
+            "Sandbox selection crossed a zero-weight candidate or the wrong ticket boundary.");
+        var exclusions = new FalloutSandboxActivities(31);
+        Require(Enum.GetValues<FalloutSandboxActivity>().Where(exclusions.Allows).SequenceEqual([FalloutSandboxActivity.Wander]),
+            "Sandbox exclusion mask disabled wandering or admitted a forbidden activity.");
+        var actorData = new byte[20]; actorData[2] = 255;
+        Require(FalloutActorThreat.Decode(new("Base.esm", 0x700), actorData).Energy == 255,
+            "Actor energy was read from the wrong AIDT byte or silently clamped.");
+        Console.WriteLine("OPENNV_SANDBOX_ACTIVITY_CONTRACT_PASS context=true preferenceContinuation=true exclusions=true energy=true gameplay=unverified");
+    }
+
+    private static void CheckSandboxDailyWindows(FalloutNumericGameSettings settings)
+    {
+        var sleep = new FalloutSandboxDailyWindow(0, 40, 23, 8);
+        Require(sleep.Contains(40, 23) && sleep.Contains(41, 6) && !sleep.Contains(40, 22) && !sleep.Contains(41, 7),
+            "Sandbox sleep window lost midnight rollover or its exclusive end.");
+        var restored = System.Text.Json.JsonSerializer.Deserialize<FalloutSandboxDailyWindow>(System.Text.Json.JsonSerializer.Serialize(sleep))!;
+        Require(FalloutSandboxDailyWindow.Refresh(restored, 41, 6, _ => throw new InvalidOperationException("Unexpected redraw.")) == sleep,
+            "Sandbox cold continuation redrew an unfinished daily window.");
+        var draws = new List<int>();
+        var next = FalloutSandboxDailyWindow.Refresh(restored, 41, 7, slot =>
+        {
+            draws.Add(slot);
+            return slot == 0 ? (0f, 8f) : (7f, 2f);
+        });
+        Require(next.Slot == 1 && draws.SequenceEqual([0, 1]), "Expired sleep restarted on the same day or skipped the active meal.");
+        Require(next.EligibleActivity(41, 8, false, true) is null &&
+            next.EligibleActivity(41, 8, true, false) == FalloutSandboxActivity.Eat,
+            "Daily meal eligibility ignored actual food availability.");
+        var future = FalloutSandboxDailyWindow.Refresh(null, 41, 10,
+            slot => slot switch { 0 => (23f, 8f), 1 => (7f, 1f), 2 => (12f, 1f), _ => (18f, 1f) });
+        Require(future is { Slot: 2, Day: 41, StartHour: 12 }, "Daily selection did not choose the nearest future window.");
+        var bounds = new List<(float, float)>();
+        var wrapped = FalloutSandboxDailyWindow.Refresh(null, 41, 1, settings, (low, high) =>
+        {
+            bounds.Add((low, high));
+            return high;
+        });
+        Require(wrapped is { Slot: 0, Day: 41, StartHour: 1, DurationHours: 10 } &&
+            bounds.SequenceEqual([(19f, 25f), (6f, 10f)]), "Daily source settings lost a start range crossing midnight.");
+        Console.WriteLine("OPENNV_SANDBOX_DAILY_CONTRACT_PASS midnight=true coldWindow=true expiredWindow=true nearestFuture=true sourceSettings=true gameplay=unverified");
+    }
+
     internal static void Run()
     {
+        CheckSandboxActivitySelection();
         var directory = Path.Combine(Path.GetTempPath(), "opennv-package-data-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(directory);
         try
         {
             var packages = new List<byte[]>();
+            var activitySettings = new (string Name, float Value)[]
+            {
+                ("fSandboxDurationBase", 10), ("fSandboxDurationMultWandering", 2),
+                ("fSandboxEnergyMult", .01f), ("fSandboxEnergyMultWandering", .5f),
+                ("fSandboxDurationRangeMult", .25f)
+            };
+            packages.AddRange(activitySettings.Select((setting, index) => Record("GMST", 0xb30u + (uint)index,
+                Field("EDID", Encoding.UTF8.GetBytes(setting.Name + "\0")), Field("DATA", BitConverter.GetBytes(setting.Value)))));
+            foreach (var (id, flags) in new[] { (0xb00u, 0u), (0xb01u, 1u), (0xb02u, 0x400000u) })
+            {
+                var effect = new byte[72];
+                BinaryPrimitives.WriteUInt32LittleEndian(effect, flags);
+                packages.Add(Record("MGEF", id, Field("DATA", effect)));
+            }
+            for (uint index = 0; index < 5; index++)
+            {
+                var header = new byte[20]; header[4] = index == 0 ? (byte)0 : (byte)2;
+                var effects = index switch
+                {
+                    1 => new[] { Field("EFID", BitConverter.GetBytes(0xb01u)) },
+                    2 => new[] { Field("EFID", BitConverter.GetBytes(0xb02u)) },
+                    3 => new[] { Field("EFID", BitConverter.GetBytes(0xb01u)), Field("EFID", BitConverter.GetBytes(0xb00u)) },
+                    _ => Array.Empty<byte[]>()
+                };
+                packages.Add(Record("ALCH", 0xb10u + index, new[] { Field("ENIT", header) }.Concat(effects).ToArray()));
+            }
+            packages.Add(Record("INGR", 0xb20, Field("ENIT", [0, 0, 0, 0, 2, 0, 0, 0])));
+            packages.Add(Record("INGR", 0xb21, Field("ENIT", new byte[8])));
+            packages.Add(Record("ALCH", 0xb22, Field("ENIT", new byte[8])));
+            var sandboxSettings = new (string Name, float Value)[]
+            {
+                ("SleepStartMin", 19), ("SleepStartMax", 1), ("SleepDurationMin", 6), ("SleepDurationMax", 10),
+                ("BreakfastMin", 6), ("BreakfastMax", 9), ("LunchMin", 11), ("LunchMax", 14),
+                ("DinnerMin", 17), ("DinnerMax", 20), ("MealDurationMin", .5f), ("MealDurationMax", 2)
+            };
+            packages.AddRange(sandboxSettings.Select((setting, index) => Record("GMST", 0x600u + (uint)index,
+                Field("EDID", Encoding.UTF8.GetBytes("fSandbox" + setting.Name + "\0")), Field("DATA", BitConverter.GetBytes(setting.Value)))));
+            packages.Add(Record("GMST", 0x620, Field("EDID", "fAISocialTimerForConversationsMin\0"u8.ToArray()), Field("DATA", BitConverter.GetBytes(20f))));
+            packages.Add(Record("GMST", 0x621, Field("EDID", "fAISocialTimerForConversationsMax\0"u8.ToArray()), Field("DATA", BitConverter.GetBytes(10f))));
+            packages.Add(Record("GMST", 0x622, Field("EDID", "fAItalktosameNPCtimer\0"u8.ToArray()), Field("DATA", BitConverter.GetBytes(10f))));
             foreach (var extent in new[] { 8, 12 })
             {
                 var first = extent == 8 ? 0x400u : 0x420u;
@@ -37,13 +139,65 @@ internal static class PackageDataContracts
             packages.Add(Package(0x482, 8, 6, 0, Location(3), behavior: 1));
             packages.Add(Package(0x483, 12, 6, 0, Location(3), specific: 1));
             packages.Add(Record("PACK", 0x484, Field("EDID", "NoSchedule\0"u8.ToArray()), Field("PKDT", Data(8, 6)), Location(3)));
+            packages.Add(Package(0x485, 12, 12, 0, Location(3), specific: 4));
+            packages.Add(Package(0x486, 12, 12, 0, Location(3)));
+            for (byte kind = 18; kind <= 38; kind++)
+                packages.Add(Package(0xa00u + kind, 12, kind, 0));
             File.WriteAllBytes(Path.Combine(directory, "Base.esm"), Join(
                 Record("TES4", 0, Field("HEDR", new byte[12])),
-                Record("NPC_", 0x700, Field("ACBS", new byte[24]),
+                Record("NPC_", 0x700, Field("ACBS", new byte[24]), Field("AIDT", new byte[20]),
                     Field("PKID", BitConverter.GetBytes(0x480u)), Field("PKID", BitConverter.GetBytes(0x481u))),
+                Record("CREA", 0x710, Field("ACBS", new byte[24]), Field("AIDT", new byte[20])),
+                Record("CREA", 0x711, Field("ACBS", new byte[24]), Field("VTCK", new byte[4])),
+                Record("CREA", 0x712, Field("ACBS", new byte[24]), Field("VTCK", BitConverter.GetBytes(0x715u))),
+                Record("CREA", 0x713, Field("ACBS", new byte[24]), Field("VTCK", BitConverter.GetBytes(0x700u))),
+                Record("CREA", 0x714, Field("ACBS", new byte[24]), Field("VTCK", new byte[3])),
+                Record("VTYP", 0x715),
                 Record("STAT", 0x3b), Record("CELL", 0x800, Field("DATA", [1])), References(), Join(packages.ToArray())));
             using var records = FalloutPluginStack.Load(directory, ["Base.esm"]);
+            CheckSandboxDailyWindows(new FalloutNumericGameSettings(records));
+            var activity = FalloutSandboxActivityProgress.Select(records.NumericSettings, 100,
+                FalloutSandboxActivity.Wander, 10.25f, new FalloutSandboxPreferences(), () => .5f);
+            var coldActivity = System.Text.Json.JsonSerializer.Deserialize<FalloutSandboxActivityProgress>(
+                System.Text.Json.JsonSerializer.Serialize(activity))!;
+            Require(activity.Duration == 30 && !coldActivity.Expired(10.75f) && coldActivity.Expired(10.8f) &&
+                coldActivity.Preferences[3] == 1 && coldActivity.Preferences[5] == 129 &&
+                FalloutSandboxActivityProgress.Elapsed(10.75f, 11.25f) == 31 &&
+                FalloutSandboxActivityProgress.Elapsed(23.5f, .5f) == -77,
+                "Sandbox activity lost its source clock, strict expiry, duration or cold preference history.");
+            Reject(() => coldActivity.Expired(float.NaN));
+            var dialogueActivity = FalloutSandboxActivityProgress.Select(records.NumericSettings, 100,
+                FalloutSandboxActivity.Dialogue, 10.25f, new FalloutSandboxPreferences(activity.Preferences), () => .5f,
+                new("Base.esm", 0x901));
+            var coldDialogue = System.Text.Json.JsonSerializer.Deserialize<FalloutSandboxActivityProgress>(
+                System.Text.Json.JsonSerializer.Serialize(dialogueActivity))!;
+            coldDialogue.Validate();
+            Require(coldDialogue.Target == new FalloutFormKey("Base.esm", 0x901) && coldDialogue.Preferences[5] == 1 &&
+                coldDialogue.Preferences[3] == 2, "Sandbox dialogue continuation lost its selected listener or category history.");
+            Reject(() => (coldDialogue with { Target = null }).Validate());
+            Reject(() => (coldActivity with { Target = coldDialogue.Target }).Validate());
+            Console.WriteLine("OPENNV_SANDBOX_ACTIVITY_CLOCK_PASS gameHour=true strictExpiry=true sourceMinuteComponents=true coldPreferences=true gameplay=unverified");
+            var social = FalloutConversationSuppression.Sample(records.NumericSettings, () => .25f);
+            Require(social == 12.5f && FalloutConversationSuppression.Advance(social, 13) == -.5f,
+                "Conversation suppression lost reversed setting bounds or expired through-zero continuation.");
+            var preferences = new FalloutSandboxPreferences();
+            Require(preferences.ActivityWeights(null, false, false, social > 0)[5] == 0 &&
+                preferences.ActivityWeights(null, false, false, FalloutConversationSuppression.Advance(social, 13) > 0)[5] > 0,
+                "Conversation suppression did not release the activity after expiration.");
             FalloutFormKey Key(uint id) => new("Base.esm", id);
+            Require(!FalloutActorFood.IsFood(records, Key(0xb10)) &&
+                !FalloutActorFood.IsFood(records, Key(0xb11)) && !FalloutActorFood.IsFood(records, Key(0xb12)) &&
+                FalloutActorFood.IsFood(records, Key(0xb13)) && FalloutActorFood.IsFood(records, Key(0xb14)) &&
+                FalloutActorFood.IsFood(records, Key(0xb20)) && !FalloutActorFood.IsFood(records, Key(0xb21)) &&
+                !FalloutActorFood.IsFood(records, Key(0x700)), "Actor food classification lost food flags, mixed effects or ingredient semantics.");
+            Reject(() => FalloutActorFood.IsFood(records, Key(0xb22)));
+            Require(!FalloutDialogueSpeaker.HasConversationVoice(records, Key(0x710)) &&
+                !FalloutDialogueSpeaker.HasConversationVoice(records, Key(0x711)) &&
+                FalloutDialogueSpeaker.HasConversationVoice(records, Key(0x712)) &&
+                FalloutDialogueSpeaker.HasConversationVoice(records, Key(0x700)),
+                "Ambient voice admission confused voiceless creatures, voiced creatures or NPCs.");
+            Reject(() => FalloutDialogueSpeaker.HasConversationVoice(records, Key(0x713)));
+            Reject(() => FalloutDialogueSpeaker.HasConversationVoice(records, Key(0x714)));
             var hashes = records.EffectiveRecords("PACK").ToDictionary(record => record.FormKey,
                 record => Convert.ToHexString(SHA256.HashData(record.ReadData())));
             foreach (var extent in new[] { 8, 12 })
@@ -76,6 +230,105 @@ internal static class PackageDataContracts
                 "Package data admission substituted schedule validation for its source extent.");
             Reject(() => FalloutPackageSchedule.Read(records.GetEffective(Key(0x484))));
             using var world = new FalloutReferenceWorld(records);
+            foreach (var reference in new[] { Key(0x900), Key(0x901) })
+            {
+                var participant = world.Get(reference);
+                Require(!world.BlocksAmbientConversation(reference), "Available actor was rejected by preliminary conversation gates.");
+                participant.Engagement = new(Key(0x14));
+                Require(world.BlocksAmbientConversation(reference), "Combat actor remained an ambient conversation candidate.");
+                participant.Engagement = null;
+                participant.KnockedDown = true;
+                Require(world.BlocksAmbientConversation(reference), "Knocked-down actor remained an ambient conversation candidate.");
+                participant.KnockedDown = false;
+                participant.Enabled = false;
+                Require(world.BlocksAmbientConversation(reference), "Disabled actor remained an ambient conversation candidate.");
+                participant.Enabled = true;
+                Require(!world.BlocksAmbientConversation(reference), "Recovered actor retained a stale conversation rejection.");
+                participant.Injury = new(true, null, new Dictionary<byte, float>());
+                Require(world.BlocksAmbientConversation(reference), "Dead actor remained an ambient conversation candidate.");
+                participant.Injury = null;
+                FalloutFormKey? targetPackage = Key(0x485);
+                var sitting = 0;
+                participant.QuerySitting = () => sitting;
+                participant.QueryCurrentPackage = () => targetPackage;
+                Require(world.BlocksAmbientConversationTarget(reference), "Target Sandbox dialogue exclusion was ignored.");
+                targetPackage = Key(0x486);
+                Require(!world.BlocksAmbientConversationTarget(reference), "Target retained an obsolete package exclusion.");
+                targetPackage = Key(0x481);
+                Require(!world.BlocksAmbientConversationTarget(reference), "Non-Sandbox target inherited Sandbox exclusions.");
+                foreach (var transition in new[] { 1, 2, 4 })
+                {
+                    sitting = transition;
+                    Require(world.BlocksAmbientConversationTarget(reference), "Furniture transition admitted an ambient listener.");
+                }
+                sitting = 3;
+                Require(!world.BlocksAmbientConversationTarget(reference), "Fully seated actor was rejected as a furniture transition.");
+                var restrictedKinds = new byte[] { 18, 19, 20, 21, 22, 23, 24, 25, 27, 28, 29, 31, 32, 33, 34, 35, 36 };
+                for (byte kind = 18; kind <= 38; kind++)
+                {
+                    targetPackage = Key(0xa00u + kind);
+                    Require(world.BlocksAmbientConversationTarget(reference) == restrictedKinds.Contains(kind),
+                        "Listener package restriction differs from the source kind table.");
+                }
+                participant.QuerySitting = null;
+                Reject(() => world.BlocksAmbientConversationTarget(reference));
+                participant.QueryCurrentPackage = null;
+            }
+            Reject(() => world.BlocksAmbientConversation(Key(0x902)));
+            Console.WriteLine("OPENNV_AMBIENT_PARTICIPANT_GATES_PASS npc=true creature=true combat=true knockdown=true disabled=true dead=true recovered=true currentTargetExclusion=true completeAdmission=unverified");
+            Require(!world.BlocksAmbientConversationRelationship(Key(0x900), Key(0x901)),
+                "Unaggressive neutral actors were treated as hostile conversation partners.");
+            world.ChangeActorValue(Key(0x901), "aggression", "setav", 2);
+            Require(world.BlocksAmbientConversationRelationship(Key(0x900), Key(0x901)) &&
+                world.BlocksAmbientConversationRelationship(Key(0x901), Key(0x900)),
+                "Conversation hostility ignored the reverse direction, live aggression or zero-confidence actor.");
+            world.ChangeActorValue(Key(0x901), "aggression", "setav", 0);
+            Require(!world.BlocksAmbientConversationRelationship(Key(0x900), Key(0x901)),
+                "Conversation hostility retained obsolete aggression.");
+            world.Get(Key(0x901)).PlayerTeammate = true;
+            Reject(() => world.BlocksAmbientConversationRelationship(Key(0x900), Key(0x901)));
+            world.Get(Key(0x901)).PlayerTeammate = false;
+            Console.WriteLine("OPENNV_CONVERSATION_HOSTILITY_PASS directional=true liveAggression=true confidenceIndependent=true recovered=true teammateUnboundVisible=true");
+            Require(!world.IsRecentConversationPartner(Key(0x900), Key(0x901), 100), "Empty conversation history consumed a populated-history interval.");
+            world.RememberConversationAttempt(Key(0x900), Key(0x901));
+            Require(world.Get(Key(0x900)).ConversationHistory!.Partners.SequenceEqual([Key(0x901)]) &&
+                world.Get(Key(0x901)).ConversationHistory!.Partners.SequenceEqual([Key(0x900)]),
+                "Conversation attempt did not retain reciprocal participants.");
+            Require(world.IsRecentConversationPartner(Key(0x900), Key(0x901), 4), "Recent conversation partner was admitted before expiry.");
+            using (var coldHistory = new FalloutReferenceWorld(records))
+            {
+                coldHistory.Restore([world.Get(Key(0x900)).Capture()]);
+                Require(coldHistory.Get(Key(0x900)).ConversationHistory!.RemainingSeconds == 6 &&
+                    !coldHistory.IsRecentConversationPartner(Key(0x900), Key(0x901), 6),
+                    "Cold conversation history redrew or failed to expire its retained interval.");
+            }
+            Require(!world.IsRecentConversationPartner(Key(0x900), Key(0x901), 6) &&
+                world.Get(Key(0x900)).ConversationHistory!.Partners.Count == 0,
+                "Conversation history did not clear at its boundary.");
+            records.NumericSettings.Set("fAItalktosameNPCtimer", 3);
+            _ = world.IsRecentConversationPartner(Key(0x900), Key(0x901), 100);
+            Require(world.Get(Key(0x900)).ConversationHistory!.RemainingSeconds == 3,
+                "Empty conversation history did not refresh from current settings.");
+            Console.WriteLine("OPENNV_CONVERSATION_HISTORY_PASS reciprocalAttempt=true candidateClock=true cold=true expirationBoundary=true liveSettingRefresh=true playback=unverified");
+            world.Get(Key(0x900)).ConversationSuppressionSeconds = -.5f;
+            var socialSnapshot = world.Get(Key(0x900)).Capture();
+            using (var coldSocial = new FalloutReferenceWorld(records))
+            {
+                coldSocial.Restore([socialSnapshot]);
+                Require(coldSocial.Get(Key(0x900)).ConversationSuppressionSeconds == -.5f,
+                    "Cold actor reconstruction discarded or redrew an expired conversation timer.");
+            }
+            using (var invalidSocial = new FalloutReferenceWorld(records))
+            {
+                Reject(() => invalidSocial.Restore([socialSnapshot with { ConversationSuppressionSeconds = float.NaN }]));
+                Require(invalidSocial.InstanceCount == 0, "Invalid conversation timer partially restored the world.");
+            }
+            records.NumericSettings.Set("fAISocialTimerForConversationsMin", 7);
+            records.NumericSettings.Set("fAISocialTimerForConversationsMax", 7);
+            Require(FalloutConversationSuppression.Sample(records.NumericSettings,
+                () => throw new InvalidOperationException("Equal conversation bounds consumed randomness.")) == 7,
+                "Fixed conversation timer ignored live settings.");
+            Console.WriteLine("OPENNV_CONVERSATION_SUPPRESSION_PASS reversedBounds=true expiredNegative=true weightRelease=true cold=true invalidAtomic=true fixedNoDraw=true");
             var queries = 0; var eligible = new List<FalloutFormKey>();
             var selected = FalloutAiPackages.Select(records, Key(0x700), _ => { queries++; return 0; },
                 eligible: record => { eligible.Add(record.FormKey); return world.PackageEligible(Key(0x900), record, null, null, false); });
@@ -120,6 +373,7 @@ internal static class PackageDataContracts
     {
         var pose = new float[] { 1, 2, 3, 0, 0, 0 }.SelectMany(BitConverter.GetBytes).ToArray();
         var references = Join(Record("ACHR", 0x900, Field("NAME", BitConverter.GetBytes(0x700u)), Field("DATA", pose)),
+            Record("ACRE", 0x901, Field("NAME", BitConverter.GetBytes(0x710u)), Field("DATA", pose)),
             Record("REFR", 0x902, Field("NAME", BitConverter.GetBytes(0x3bu)), Field("DATA", pose)));
         var group = new byte[24 + references.Length]; Encoding.ASCII.GetBytes("GRUP").CopyTo(group, 0);
         BinaryPrimitives.WriteUInt32LittleEndian(group.AsSpan(4), (uint)group.Length);

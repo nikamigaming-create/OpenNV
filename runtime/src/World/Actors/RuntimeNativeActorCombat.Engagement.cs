@@ -18,7 +18,9 @@ internal sealed record NativeActorCombatContext(Func<RuntimeNativePlayer?> Playe
     Func<ulong, FalloutFormKey?>? CollisionReference = null,
     Func<FalloutFormKey, FalloutFormKey, bool>? RequestPortal = null,
     float? ActivationDistanceMeters = null,
-    Func<Vector3, Vector3, float, NativeActorNavigationRoute>? RouteRegion = null);
+    Func<Vector3, Vector3, float, NativeActorNavigationRoute>? RouteRegion = null,
+    Func<FalloutFormKey, bool>? DialogueBusy = null,
+    Func<FalloutFormKey, FalloutFormKey, bool>? TryAmbientConversation = null);
 
 internal sealed partial class RuntimeNativeActorCombat
 {
@@ -163,6 +165,8 @@ internal sealed partial class RuntimeNativeActorCombat
         if (_context is null || !EffectiveEnabled || _state.Unconscious) return;
         var player = _context.Player();
         if (!_context.Resident(_actor.GlobalPosition)) return;
+        if (_state.ConversationSuppressionSeconds is { } suppression)
+            _state.ConversationSuppressionSeconds = FalloutConversationSuppression.Advance(suppression, delta);
         if (ReactingToHit && !_engagementPrepared && _state.Engagement is not null)
         {
             try

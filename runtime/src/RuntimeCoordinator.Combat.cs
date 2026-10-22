@@ -27,7 +27,10 @@ public partial class RuntimeCoordinator
         collider => _nativeReferenceEvents?.CollisionReference(collider),
         (actor, door) => (_nativeReferenceEvents ?? throw new NotSupportedException("NPC portal has no resident event owner."))
             .RequestNpcPortal(actor, door), _configuration.Player.ActivationDistanceMeters,
-        FindNativeActorNavigationRoute);
+        FindNativeActorNavigationRoute,
+        actor => (_nativeOpeningStageDriver ?? throw new NotSupportedException("Actor dialogue has no gameplay owner.")).IsDialogueBusy(actor),
+        (actor, target) => (_nativeOpeningStageDriver ?? throw new NotSupportedException("Ambient dialogue has no gameplay owner."))
+            .TryAmbientConversation(actor, target));
 
     private NativeActorNavigationRoute FindNativeActorNavigationRoute(Vector3 from, Vector3 to, float radius)
     {

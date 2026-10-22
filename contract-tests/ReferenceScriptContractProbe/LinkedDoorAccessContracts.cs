@@ -17,6 +17,26 @@ internal static class LinkedDoorAccessContracts
             File.WriteAllBytes(Path.Combine(directory, "Links.esm"), plugin);
             File.WriteAllBytes(Path.Combine(directory, "LinksPatch.esp"), patch);
             using var records = FalloutPluginStack.Load(directory, ["Links.esm", "LinksPatch.esp"]);
+            using (var ownershipWorld = new FalloutReferenceWorld(records))
+            {
+                var inherited = ownershipWorld.Ownership(Key(0x94));
+                Require(inherited.Owner == Key(0x21) && inherited.FactionRank == 2 && inherited.Global == Key(0x23) &&
+                    ownershipWorld.InstanceCount == 1,
+                    "Linked ownership lost independent fields or materialized the destination.");
+                ownershipWorld.SetOwnership(Key(0x95), Key(0x22));
+                Require(ownershipWorld.Ownership(Key(0x94)).Owner == Key(0x22),
+                    "Linked ownership ignored an authoritative destination override.");
+                ownershipWorld.SetOwnership(Key(0x94), Key(0x21));
+                Require(ownershipWorld.Ownership(Key(0x94)).Owner == Key(0x21) &&
+                    ownershipWorld.Ownership(Key(0x94)).FactionRank == 2,
+                    "Local ownership override erased independently inherited rank.");
+                var cellAccess = ownershipWorld.Ownership(Key(0x96));
+                Require(cellAccess.Owner is null && cellAccess.FactionRank == 3 && cellAccess.Global == Key(0x24),
+                    "Door inherited a container owner, lost its cell global, or used cell rank before encounter rank.");
+                var localAccess = ownershipWorld.Ownership(Key(0x97));
+                Require(localAccess.FactionRank == 0 && localAccess.Global == Key(0x23),
+                    "Container access replaced an explicit local zero rank or global.");
+            }
             using var world = new FalloutReferenceWorld(records);
             var first = Key(0x90); var second = PatchKey(0x120);
             Require(world.GetLocked(first) == 0 && world.GetLockLevel(first) == 0 && world.Lock(first) is null &&
@@ -151,11 +171,25 @@ internal static class LinkedDoorAccessContracts
         byte[] Door(uint id, uint destination, params byte[][] fields) => Reference(id, "Invalid" + id, 1,
             [Field("XTEL", Teleport(destination)), .. fields]);
         var nan = Teleport(0x90); BinaryPrimitives.WriteSingleLittleEndian(nan.AsSpan(4), float.NaN);
+        var zoneData = new byte[8]; zoneData[4] = 3;
         return Join(Header(), Record("DOOR", 1, Field("SCRI", BitConverter.GetBytes(0x50u))), Record("MISC", 2),
+            Record("FACT", 0x21), Record("FACT", 0x22),
+            Record("GLOB", 0x23, Field("FNAM", [(byte)'f']), Field("FLTV", BitConverter.GetBytes(1f))),
+            Record("GLOB", 0x24, Field("FNAM", [(byte)'f']), Field("FLTV", BitConverter.GetBytes(0f))),
+            Record("ECZN", 0x25, Field("DATA", zoneData)),
+            Record("CELL", 0x83, Field("DATA", [1]), Field("XEZN", BitConverter.GetBytes(0x25u)),
+                Field("XOWN", BitConverter.GetBytes(0x22u)), Field("XRNK", BitConverter.GetBytes(4)),
+                Field("XGLB", BitConverter.GetBytes(0x24u))),
+            Group(0x83, Reference(0x96, "InheritedConditions", 1),
+                Reference(0x97, "LocalConditions", 1, Field("XRNK", BitConverter.GetBytes(0)),
+                    Field("XGLB", BitConverter.GetBytes(0x23u)))),
             Record("KEYM", 0x20, Field("EDID", Text("SourceKey")), Field("FULL", Text("Source Key")),
                 Field("DATA", new byte[8])), Script(), Record("CELL", 0x80, Field("DATA", [1])),
             Record("CELL", 0x81, Field("DATA", [1])), Record("CELL", 0x82, Field("DATA", [1])),
             Group(0x80, Reference(0x90, "LinkedA", 1),
+                Door(0x94, 0x95, Field("XRNK", BitConverter.GetBytes(-1))),
+                Door(0x95, 0x94, Field("XOWN", BitConverter.GetBytes(0x21u)),
+                    Field("XRNK", BitConverter.GetBytes(2)), Field("XGLB", BitConverter.GetBytes(0x23u))),
                 Door(0x92, 0x93, Field("XLOC", SourceLock(100, 0x20))), Door(0x93, 0x92)),
             Group(0x82,
                 Reference(0x100, "ShortTeleport", 1, Field("XTEL", new byte[31])),

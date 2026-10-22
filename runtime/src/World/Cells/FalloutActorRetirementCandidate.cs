@@ -137,6 +137,8 @@ internal sealed class FalloutActorRetirementCandidate
         _state.HeadTracking,
         _state.Placement,
         _state.ObjectAnimations,
+        _state.ConversationSuppressionSeconds,
+        _state.ConversationHistory,
         soundRandom = _state.SoundRandom.State,
     });
 

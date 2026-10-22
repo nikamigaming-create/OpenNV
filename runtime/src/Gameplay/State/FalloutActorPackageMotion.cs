@@ -8,7 +8,8 @@ internal sealed record FalloutActorPackageMotion(FalloutFormKey Package, string 
     string Animation, string AnimationSha256, double Seconds, bool StartPending,
     float[] Position, float[] Rotation, FalloutPatrolProgress? Patrol = null, FalloutEscortProgress? Escort = null,
     FalloutEditorTravelProgress? EditorTravel = null, bool DialogueCompleted = false, FalloutTravelProgress? Travel = null,
-    FalloutTravelProgress? Guard = null, FalloutAccompanyPortalArrival? AccompanyPortal = null)
+    FalloutTravelProgress? Guard = null, FalloutAccompanyPortalArrival? AccompanyPortal = null,
+    FalloutWanderProgress? Wander = null, FalloutSandboxActivityProgress? Sandbox = null)
 {
     internal void Validate()
     {
@@ -18,7 +19,13 @@ internal sealed record FalloutActorPackageMotion(FalloutFormKey Package, string 
         Travel?.Validate();
         Guard?.Validate();
         AccompanyPortal?.Validate();
-        if (new object?[] { Patrol, Escort, EditorTravel, Travel, Guard, AccompanyPortal }.Count(value => value is not null) + (DialogueCompleted ? 1 : 0) > 1)
+        Wander?.Validate();
+        Sandbox?.Validate();
+        if (Sandbox is not null && (Sandbox.Activity is not (FalloutSandboxActivity.Wander or FalloutSandboxActivity.Dialogue) ||
+            Wander is not null && Sandbox.Activity != FalloutSandboxActivity.Wander ||
+            new object?[] { Patrol, Escort, EditorTravel, Travel, Guard, AccompanyPortal }.Any(value => value is not null) || DialogueCompleted))
+            throw new InvalidDataException("Saved Sandbox activity conflicts with its procedure continuation.");
+        if (new object?[] { Patrol, Escort, EditorTravel, Travel, Guard, AccompanyPortal, Wander }.Count(value => value is not null) + (DialogueCompleted ? 1 : 0) > 1)
             throw new InvalidDataException("Saved package has conflicting procedure progress.");
         static bool Hash(string hash) => hash is { Length: 64 } && hash.All(Uri.IsHexDigit);
         if (string.IsNullOrWhiteSpace(Package.OwnerPlugin) || Package.ObjectId == 0 || !Hash(PackageSha256) ||

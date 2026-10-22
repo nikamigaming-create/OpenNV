@@ -38,7 +38,7 @@ internal sealed partial class CellNavigationGraph
             source.Vertices.Select(value => new Vector3(value.X, value.Y, value.Z)).ToArray(),
             source.Triangles.Select(value => new NavigationTriangle(value.Vertices.Select(index => (int)index).ToArray(),
                 value.Edges.Select(index => (int)index).ToArray(), value.Flags)).ToArray(),
-            source.Edges.Select(value => new NavigationExternalConnection(value.Mesh.ToString(), value.Triangle)).ToArray());
+            source.Edges.Select(value => new NavigationExternalConnection(value.Mesh.ToString(), value.Triangle, value.Type)).ToArray());
         }).ToArray();
         foreach (var mesh in meshes) mesh.ValidateAdjacency(cancellation);
         var graph = new CellNavigationGraph(meshes);

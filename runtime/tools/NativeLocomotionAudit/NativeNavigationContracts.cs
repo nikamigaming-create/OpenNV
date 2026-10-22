@@ -4,7 +4,7 @@ using OpenNV.Runtime.Content;
 using OpenNV.Runtime.World.Actors;
 using OpenNV.Runtime.World.Cells;
 
-internal static class NativeNavigationContracts
+internal static partial class NativeNavigationContracts
 {
     private static void CheckElevatedPackageMarker()
     {
@@ -23,6 +23,7 @@ internal static class NativeNavigationContracts
 
     internal static void Run()
     {
+        CheckWanderSelection();
         CheckElevatedPackageMarker();
         CheckProjectionBounds();
         CheckRefinementIntent();

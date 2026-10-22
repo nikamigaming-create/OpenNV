@@ -5,6 +5,8 @@ namespace OpenNV.Runtime.Content;
 internal sealed record FalloutActorThreat(FalloutFormKey Owner, byte Aggression, byte Confidence,
     byte Assistance, bool RadiusBehavior, int Radius)
 {
+    internal byte Energy { get; init; }
+
     internal static FalloutActorThreat Read(FalloutPluginStack records, FalloutFormKey actor, FalloutActorTemplateSelection? selection = null)
     {
         var owner = FalloutActorTemplateOwner.Resolve(records, records.GetEffective(actor), 16, selection);
@@ -16,7 +18,8 @@ internal sealed record FalloutActorThreat(FalloutFormKey Owner, byte Aggression,
     {
         if (data.Length != 20) throw new NotSupportedException("Actor AIDT extent is unbound.");
         var result = new FalloutActorThreat(owner, data[0], data[1], data[14], (data[15] & 1) != 0,
-            BinaryPrimitives.ReadInt32LittleEndian(data[16..]));
+            BinaryPrimitives.ReadInt32LittleEndian(data[16..]))
+        { Energy = data[2] };
         if (result.Aggression > 3 || result.Confidence > 4 || result.Assistance > 2 || (data[15] & ~1) != 0 || result.Radius < 0)
             throw new InvalidDataException("Actor threat parameters are invalid.");
         return result;
@@ -24,8 +27,11 @@ internal sealed record FalloutActorThreat(FalloutFormKey Owner, byte Aggression,
 
     // FACT group combat reactions: neutral, enemy, ally, friend. Aggression
     // and faction membership come from independent template groups.
+    internal bool Hostile(uint relation) => relation > 3 ? throw new ArgumentOutOfRangeException(nameof(relation)) :
+        Aggression == 3 || Aggression == 2 && relation < 2 || Aggression == 1 && relation == 1;
+
     internal bool Initiates(uint relation) => relation > 3 ? throw new ArgumentOutOfRangeException(nameof(relation)) :
-        Confidence != 0 && (Aggression == 3 || Aggression == 2 && relation < 2 || Aggression == 1 && relation == 1);
+        Confidence != 0 && Hostile(relation);
 
     internal bool Warns(uint relation) => relation > 3 ? throw new ArgumentOutOfRangeException(nameof(relation)) :
         Aggression != 0 && Confidence != 0 && RadiusBehavior && Radius > 0 && relation < 2;
