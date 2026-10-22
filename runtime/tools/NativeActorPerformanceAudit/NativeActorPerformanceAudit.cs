@@ -10,6 +10,11 @@ public partial class NativeActorPerformanceAudit : Node
         try
         {
             var args = OS.GetCmdlineUserArgs();
+            if (args is ["--owned-sandbox-staging", var sandboxGame, var sandboxSave, var sandboxActors])
+            {
+                await OwnedSandboxStaging(sandboxGame, sandboxSave, sandboxActors.Split(','));
+                GetTree().Quit(); return;
+            }
             if (args is ["--owned-idle-objects", var objectData, var objectActor, var objectIdle])
             {
                 await OwnedIdleObjects(objectData, objectActor, objectIdle);

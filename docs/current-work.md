@@ -59,19 +59,24 @@ All 1,938 source/script hashes match its frozen snapshot; whitespace checks pass
 PR260 contains the tested checkpoint afb3bdf26f9ff3bb39c8c89e4685e534c8484a11.
 It remains draft: independent review found stopped receipts stale after relocation
 or shared alert changes, and failed detached staging could erase retained history.
-The follow-up checkpoint 23d9a5cd passes the managed Debug build, focused
+The checked checkpoint baf2c046 passes the full required gate, focused managed
 regressions and default reference contracts. It retains authoritative relocation
 and alert changes, private staging clocks, and consumed package history. Publication
 is checked synchronously by callers outside Godot lifecycle callbacks; changed
 authority or publication faults refuse without erasing the cold receipt. Its
 renewed required gate passed with exit0 in an isolated checkout; that exact commit
-is now the verified remote head of draft PR260. Subsequent source changes remain
-separate. Actual Godot staging fault injection remains pending; the managed stage
-helper does not prove that engine boundary. Independent review also found that
+is now the verified remote head of draft PR260. Independent review also found that
 SourcePlacement must relinquish authority after successful native pose publication
 so later dialogue-facing changes survive queries and saves. The new acknowledgement
-repair passes focused/default managed contracts and bounded source review; actual
-Godot dialogue-facing/fault-discard proof remains the next native fixture.
+repair passes focused/default managed contracts and bounded source review. The
+actual Godot fixture now passes for all four genuine saved NPCs: twelve before-
+event/after-configure/stale-publication failure, discard and retry cases, plus
+four actual conversation-facing, retirement and cold-reconstruction cases.
+Retained revisions, exact pending-event/start baselines, clocks, AI/shared RNG
+and later native basis/heading survive. The fixture admits the selected genuine
+actor and actual shared lanes; it is not a full-campaign save-admission test.
+No compiled POBA result program was exercised. The two new audit files still
+require the final full gate before publication; product code is unchanged.
 The diagnostic reference-event host now has a managed-tested correction:
 clock/presentation scripts can bind without a fabricated player, while reached
 gameplay commands still require their real owner. This targets the authored Strip
@@ -88,9 +93,9 @@ with exit0. There were no rendered frames, retail input or frame recording.
 The owned native light audit passes with actual script/controller owners: noon
 selects Right, 22:00 selects Left, 06:00/20:00 select neither, repeated frames are
 stable and the scriptless AlwaysOn object is unchanged. No brightness override
-was added. Actual pixels remain unverified. Native fault-discard and relocation/
-facing remain separate pending checks. These subsequent source changes have not
-passed a full gate.
+was added. Actual pixels remain unverified. Full-campaign/cross-reference fidelity,
+ordinary dialogue and matched retail presentation remain separate acceptance
+checks; the selected native fixture does not certify them.
 The approved retail fallback then entered once with verified backups and a distinct copied checkpoint. Retail
 currently stops at a Steam Error modal before core/private bridge initialization;
 no gameplay command or capture was sent. Normal exit, profile postdiff and any
@@ -108,18 +113,23 @@ main adc3d086fe763726d74d4a30c9c2e3962e3cd94e. The coordinator is on
 codex/fnv-active-sandbox-save. The stopped-state repair addresses four NPCs
 (10a72b,1629a7,1629a8,1629a9): PACK074fe6 POBA consumed, first activity candidate
 admission unsupported, no selected activity or motion. Ordinary isolated F5 and
-cold continuation now retain these actors and consumed history. Remaining gates
-include post-publication relocation/facing and actual fault-discard atomicity,
-including clocks/RNG at the native publication boundary.
+cold continuation now retain these actors and consumed history. The selected native
+fixture additionally verifies relocation/facing and fault-discard atomicity,
+including clocks/RNG at the native publication boundary. Whole-campaign coverage
+and the missing activity owner remain open.
 Later activity, navigation, combat and unknown voice states must still refuse.
 This repair does not implement the missing marker activity.
 
 No capture job is running. The coordinator owns serial validation and Git;
-scoped writers own the relocation acknowledgement and owned clock/light fixture.
+scoped writers are frozen after the pose/native-audit and clock/light handoffs.
 Retail modal dismissal still gates the matched visual lane, while independent
 headless validation can proceed safely. Requested native originals and selected
 before/after diagnostics remain private. The protected source checkpoint hash
 is unchanged; only isolated test copies and their save catalogs were updated.
+Vault21 remains explicitly blocked: the authored geometry lacks a shader property,
+the traced producer does not supply a default, and earlier property synthesis/
+sibling admission remains unqualified. No guessed unlit or fixed-function fallback
+is justified.
 
 Shared Sandbox idle-marker prerequisites are established.
 Current population failures include placed markers 15ad26 and 16140d; their
