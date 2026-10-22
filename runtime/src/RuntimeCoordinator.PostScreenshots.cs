@@ -17,6 +17,11 @@ public partial class RuntimeCoordinator
         string? output = null;
         try
         {
+            var assemblyOnly = _options.ContainsKey("post-screenshots-assembly-only");
+            var headless = DisplayServer.GetName() == "headless";
+            if ((assemblyOnly && !headless) || (headless && !assemblyOnly &&
+                !_options.ContainsKey("post-screenshot-camera-contracts")))
+                throw new InvalidOperationException("Headless post-screenshot requests require explicit --post-screenshots-assembly-only; assembly-only mode requires headless rendering.");
             var content = RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("Screenshots need an owned installation.");
             using var manifest = JsonDocument.Parse(File.ReadAllText(manifestPath));
             if (manifest.RootElement.GetProperty("schema").GetString() != "opennv-post-screenshots/v1")
@@ -202,7 +207,8 @@ public partial class RuntimeCoordinator
                     }
                     finally { GetTree().Paused = previousPause; }
                     for (var warm = 0; warm < 30; ++warm)
-                        await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+                        if (assemblyOnly) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                        else await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
                     // Actors and streamed collision can change during warmup.
                     // Recheck the actual unchanged pose at the capture boundary.
                     row["initialCameraValidation"] = cameraCheck.Evidence;
@@ -228,13 +234,49 @@ public partial class RuntimeCoordinator
                         }).ToArray();
                     var geometry = root.FindChildren("*", "", true, false).OfType<GeometryInstance3D>().Count(node => node.IsVisibleInTree());
                     if (geometry == 0) throw new InvalidDataException("Requested source CELL presents no visible native geometry.");
-                    var png = Path.Combine(output, $"{index + 1:D2}-{ids[index]}{(cameraCheck.Passed ? "" : ".invalid-camera")}.png");
-                    using var image = GetViewport().GetTexture().GetImage();
-                    if (image.IsEmpty() || image.SavePng(png) != Error.Ok) throw new IOException("Native viewport PNG could not be saved.");
-                    row["status"] = cameraCheck.Passed ? "native-rendered-diagnostic" : "native-rendered-invalid-camera-diagnostic";
-                    row["image"] = Path.GetFileName(png); row["width"] = image.GetWidth(); row["height"] = image.GetHeight();
-                    row["pngBytes"] = new FileInfo(png).Length;
-                    row["pngSha256"] = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(png)));
+                    string? png = null;
+                    if (assemblyOnly)
+                    {
+                        if (Engine.GetFramesDrawn() != 0)
+                            throw new InvalidOperationException("Assembly-only mode unexpectedly rendered a frame.");
+                        row["status"] = cameraCheck.Passed ? "native-assembled-diagnostic" : "native-assembled-invalid-camera-diagnostic";
+                        row["image"] = null;
+                        row["nativeReferences"] = _nativeReferencePresentation!.Nodes.Select(pair => new
+                        {
+                            reference = pair.Key.ToString(),
+                            insideTree = pair.Value.IsInsideTree(),
+                            enabled = _nativeReferences!.IsEnabled(pair.Key),
+                            geometryNodes = pair.Value.FindChildren("*", "", true, false).OfType<GeometryInstance3D>().Count(),
+                            controllers = pair.Value.FindChildren("*", "", true, false).OfType<RuntimeNifControllerPlayer>()
+                                .Select(player => new
+                                {
+                                    player.SourceController,
+                                    player.SourceSha256,
+                                    player.SequenceNames,
+                                    player.ActiveSequence,
+                                    player.SourceTimeSeconds
+                                }).ToArray(),
+                            portals = pair.Value.GetChildren().OfType<RuntimeNativeDoorPortal>().Select(portal => new
+                            {
+                                reference = portal.Reference.ToString(),
+                                destination = portal.Destination.ToString(),
+                                cell = portal.DestinationCell.ToString(),
+                                worldspace = portal.DestinationWorldspace?.ToString(),
+                                portal.ActivationRequests,
+                            }).ToArray(),
+                        }).ToArray();
+                    }
+                    else
+                    {
+                        png = Path.Combine(output, $"{index + 1:D2}-{ids[index]}{(cameraCheck.Passed ? "" : ".invalid-camera")}.png");
+                        using var image = GetViewport().GetTexture().GetImage();
+                        if (image.IsEmpty() || image.SavePng(png) != Error.Ok) throw new IOException("Native viewport PNG could not be saved.");
+                        row["status"] = cameraCheck.Passed ? "native-rendered-diagnostic" : "native-rendered-invalid-camera-diagnostic";
+                        row["image"] = Path.GetFileName(png); row["width"] = image.GetWidth(); row["height"] = image.GetHeight();
+                        row["pngBytes"] = new FileInfo(png).Length;
+                        row["pngSha256"] = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(png)));
+                    }
+                    row["assemblyOnly"] = assemblyOnly;
                     row["capturedUtc"] = DateTime.UtcNow; row["drawCount"] = Engine.GetFramesDrawn();
                     row["requestedCell"] = cellKey.ToString(); row["requestedCellEditorId"] = GalleryRecordText(cellRecord, "EDID");
                     row["requestedCellSha256"] = FalloutActorRecordHash(cellRecord);
@@ -254,7 +296,7 @@ public partial class RuntimeCoordinator
                     row["exteriorLod"] = root.GetChildren().OfType<RuntimeNativeExteriorLod>().SingleOrDefault()?.State;
                     row["actorDivergences"] = _nativeActorDivergences.ToArray(); row["referenceDivergences"] = _nativeReferenceDivergences.ToArray();
                     row["missingRuntimeReferences"] = _parityObservations.Snapshot().Missing.ToArray();
-                    GD.Print($"OPENNV_POST_SCREENSHOT_CAPTURED id={ids[index]} cell={scene.Cell.FormKey} hour={_nativeGameTime.Hour} png={png}");
+                    GD.Print($"OPENNV_POST_SCREENSHOT_{(assemblyOnly ? "ASSEMBLED" : "CAPTURED")} id={ids[index]} cell={scene.Cell.FormKey} hour={_nativeGameTime.Hour} png={png}");
                 }
                 catch (Exception error)
                 {
@@ -290,13 +332,18 @@ public partial class RuntimeCoordinator
                     isolatedSavePath = savePath,
                     sourceSaveWritten = File.Exists(savePath),
                     recording = false,
+                    assemblyOnly,
+                    imagesWritten = rows.Count(row => row.TryGetValue("image", out var image) && image is string),
                     generatedImages = false,
                     retailCaptureUsed = false,
-                    boundary = "Diagnostic camera/time and fresh source state; no ordinary gameplay, complete-scene, retail-parity or FPS claim.",
+                    boundary = assemblyOnly
+                        ? "Native assembly and camera-query diagnostic only; zero rendered frames or images. No ordinary gameplay, activation, transition, complete-scene or parity claim."
+                        : "Diagnostic camera/time and fresh source state; no ordinary gameplay, complete-scene, retail-parity or FPS claim.",
                     shots = rows,
                 });
             }
-            GetTree().Quit(rows.All(row => (string?)row["status"] == "native-rendered-diagnostic") ? 0 : 1);
+            GetTree().Quit(rows.All(row => (string?)row["status"] ==
+                (assemblyOnly ? "native-assembled-diagnostic" : "native-rendered-diagnostic")) ? 0 : 1);
         }
         catch (Exception error)
         {

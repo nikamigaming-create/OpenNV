@@ -4,6 +4,18 @@ using System.Text.Json;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.World.Cells;
 
+if (args is ["--else-payload-contracts"])
+{
+    ElsePayloadContracts.Run();
+    return;
+}
+
+if (args is ["--owned-strip-gate-activation", var stripGateData, var stripGate, var stripGateActor])
+{
+    OwnedStripGateActivationProbe.Run(stripGateData, stripGate, stripGateActor);
+    return;
+}
+
 if (args is ["--audit-owned-sandbox-equipment", var sandboxEquipmentData])
 {
     OwnedSandboxEquipmentProbe.Run(sandboxEquipmentData);
@@ -1077,6 +1089,7 @@ StoppedPoseContracts.Run();
 SandboxAdmissionFailureContracts.Run();
 ReferenceEventHostContracts.Run();
 HackingContracts.Run();
+ElsePayloadContracts.Run();
 TerminalContracts.Run();
 ScriptDeathContracts.Run();
 ActivationParentContracts.Run();
