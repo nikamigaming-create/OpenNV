@@ -59,13 +59,13 @@ All 1,938 source/script hashes match its frozen snapshot; whitespace checks pass
 PR260 contains the tested checkpoint afb3bdf26f9ff3bb39c8c89e4685e534c8484a11.
 It remains draft: independent review found stopped receipts stale after relocation
 or shared alert changes, and failed detached staging could erase retained history.
-The checked checkpoint baf2c046 passes the full required gate, focused managed
+The checked runtime/audit checkpoint ff5c3b82 passes the full required gate, focused managed
 regressions and default reference contracts. It retains authoritative relocation
 and alert changes, private staging clocks, and consumed package history. Publication
 is checked synchronously by callers outside Godot lifecycle callbacks; changed
 authority or publication faults refuse without erasing the cold receipt. Its
 renewed required gate passed with exit0 in an isolated checkout; that exact commit
-is now the verified remote head of draft PR260. Independent review also found that
+is tracked with exact source and publication receipts in PR260. Independent review also found that
 SourcePlacement must relinquish authority after successful native pose publication
 so later dialogue-facing changes survive queries and saves. The new acknowledgement
 repair passes focused/default managed contracts and bounded source review. The
@@ -75,8 +75,9 @@ four actual conversation-facing, retirement and cold-reconstruction cases.
 Retained revisions, exact pending-event/start baselines, clocks, AI/shared RNG
 and later native basis/heading survive. The fixture admits the selected genuine
 actor and actual shared lanes; it is not a full-campaign save-admission test.
-No compiled POBA result program was exercised. The two new audit files still
-require the final full gate before publication; product code is unchanged.
+No compiled POBA result program was exercised. The final full gate passed with
+exit0; all 2,030 tracked source/configuration hashes match the frozen snapshot.
+The audit handoff did not change product code.
 The diagnostic reference-event host now has a managed-tested correction:
 clock/presentation scripts can bind without a fabricated player, while reached
 gameplay commands still require their real owner. This targets the authored Strip
