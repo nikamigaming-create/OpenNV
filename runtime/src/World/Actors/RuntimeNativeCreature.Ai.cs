@@ -172,6 +172,10 @@ internal sealed partial class RuntimeNativeCreature
             91 => Activity.Alerted ? 1 : 0,
             101 => Activity.WeaponDrawn ? 1 : 0,
             107 => Combat?.KnockedDown == true ? 2 : 0,
+            110 => Combat?.ScriptCombatPackage ?? (_aiPackage is null ? 0 : _sandboxPackage is not null ? 36 :
+                throw new NotSupportedException("Creature current package code needs its active procedure owner.")),
+            182 => (Combat ?? throw new NotSupportedException("Creature equipment query has no live actor owner."))
+                .PackageIsEquipped(condition.FormArgument1) ? 1 : 0,
             244 => _aiState!.Restrained ? 1 : 0,
             286 => Activity.Sneaking ? 1 : 0,
             287 => Activity.Running ? 1 : 0,

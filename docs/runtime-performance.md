@@ -29,9 +29,12 @@ the shared allowance, including a faulting step. Their source fields identify
 the queued near callback or distant tile payload (terrain and object paths);
 a LOD `MoveNext` may traverse both paths, so it is not attributed to one texture.
 These intervals include the admitted operation's queue and retirement bookkeeping,
-not measured GPU execution. `uploadSteps` and `faultedUploadSteps` count executed
-callbacks/iterator advances; discarded obsolete LOD payloads still consume their
-existing admission time but do not invent an iterator step.
+not measured GPU execution. `uploadSteps` counts executed callbacks/iterator
+advances. `faultedUploadSteps` counts exceptions escaping those operations;
+failures reported and caught inside a LOD iterator are not escaping faults.
+Discarded obsolete LOD payloads still consume their existing admission time but
+do not invent an iterator step. The synthetic accumulator probe does not execute
+the production budget or native callback/iterator boundary.
 
 `lastUploadBatchMilliseconds` and `maximumUploadBatchMilliseconds` measure the
 whole queue-processing interval separately, including admission and timing
@@ -520,7 +523,7 @@ The live harness reports process CPU/memory availability, OS, architecture,
 renderer, graphics adapter, content budget, frame intervals and asynchronous
 render measurement age/errors. Performance checks keep recording and builds
 off. Moving gameplay must be measured separately from loading and stationary
-views. Whole-object uploads still can exceed the nominal three-millisecond
+views. Whole-object uploads still can exceed the nominal two-millisecond
 publication budget; bounded CPU preparation does not solve that stall by itself.
 
 Actor navigation retains exact source triangle projection but first orders mesh

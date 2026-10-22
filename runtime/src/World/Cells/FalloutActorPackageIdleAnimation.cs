@@ -26,11 +26,16 @@ internal sealed record FalloutActorPackageIdleAnimation(FalloutFormKey Idle, str
         if (Clock.Complete) throw new InvalidDataException("Saved collection animation has already released its pose.");
     }
 
-    internal void Validate(FalloutPluginStack records, FalloutFormKey package)
+    internal void Validate(FalloutPluginStack records, FalloutFormKey package) =>
+        ValidateCollection(records, package, "PACK");
+
+    internal void ValidateCollection(FalloutPluginStack records, FalloutFormKey source, string expectedSignature)
     {
         ValidateSource(records);
-        if (!FalloutScriptPackage.Read(records.GetEffective(package)).Idles.Contains(Idle))
-            throw new InvalidDataException("Saved collection animation is absent from its source package.");
+        var record = records.GetEffective(source);
+        if (expectedSignature is not ("PACK" or "IDLM") || record.Signature != expectedSignature ||
+            !FalloutIdleCollection.ReadSource(record).Idles.Contains(Idle))
+            throw new InvalidDataException("Saved collection animation is absent from its expected source collection.");
     }
 
     internal void ValidateSource(FalloutPluginStack records)

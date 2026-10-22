@@ -4,6 +4,12 @@ using System.Text.Json;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.World.Cells;
 
+if (args is ["--audit-owned-sandbox-equipment", var sandboxEquipmentData])
+{
+    OwnedSandboxEquipmentProbe.Run(sandboxEquipmentData);
+    return;
+}
+
 if (args is ["--audit-linked-door-source-lock", var lockData, var firstDoor, var secondDoor])
 {
     OwnedLinkedDoorLockProbe.Run(lockData, Convert.ToUInt32(firstDoor, 16), Convert.ToUInt32(secondDoor, 16));
@@ -233,6 +239,9 @@ if (args is ["--stopped-pose-contracts"])
 }
 if (args is ["--package-data-contracts"])
 {
+    IdleCollectionSourceContracts.Run();
+    IdleMarkerReservationContracts.Run();
+    SandboxIdleSelectionContracts.Run();
     PackageDataContracts.Run();
     EditorTravelContracts.Run();
     TravelContracts.Run();
@@ -1020,6 +1029,9 @@ NpcDialogueLinkContracts.Run();
 RadioContracts.Run();
 PatrolContracts.Run();
 EscortContracts.Run();
+IdleCollectionSourceContracts.Run();
+IdleMarkerReservationContracts.Run();
+SandboxIdleSelectionContracts.Run();
 PackageDataContracts.Run();
 EditorTravelContracts.Run();
 TravelContracts.Run();

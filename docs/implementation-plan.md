@@ -1,12 +1,19 @@
 # Implementation plan
 
-Updated 2026-10-21: the user directs fully playable flat Fallout: New Vegas first.
+Updated 2026-10-22: the user directs complete-game playability in flat Fallout:
+New Vegas before repeated deep optimization.
 Start with correct Doc Mitchell positioning and the original questionnaire,
 physical object handling including the skull, every Goodsprings tutorial,
 shooting, creature combat and campfire cooking, then Primm/ED-E and the Strip.
 Repair shared runtime behavior from owned records and actual gameplay. Continue
 to remaining campaign behavior; a selected successful route is not full game
 support. The active owner is in [current-work.md](current-work.md).
+Ordinary play should preserve retail behavior while improving measured frame rate,
+distance and streaming. Track exterior prefetch, transition readiness, cold/warm
+loading and rendered frame stalls. Preserve cell, script and save semantics;
+interior presentation must retain authored teleports/transitions and memory
+ownership rather than assuming all interiors are spatially contiguous. Seamless
+presentation is an acceptance goal, not an established blanket no-load capability.
 The user authorizes coordinated writers. The local integration coordinator owns
 builds, live input and Git; writers use separate scopes and serialize native tests.
 
@@ -86,9 +93,10 @@ flat repair; they remain required before a new VR handoff.
 1. Preserve the failing save/profile privately and bind evidence to source commit,
    content winners, graphics driver and session. Inventory all observed failure
    classes; keep unobserved campaign coverage explicitly unknown.
-2. Measure loading, first firing, genuine combat and streaming from copied saves
-   before and after repairs, with builds and recording off. Performance is a
-   requirement of each gameplay block, not a final polish phase. First save block:
+2. Complete whole-game playability before repeated deep optimization. Measure
+   performance immediately when stalls or resource failures block playability or
+   trustworthy validation; keep builds and recording off during measurements.
+   First save block:
    reproduce the hit-reaction-to-save failure on the
    affected owned creature. Repair the general NIF/reaction continuation owner,
    then prove ordinary hit -> manual save -> cold Continue. This prevents combat

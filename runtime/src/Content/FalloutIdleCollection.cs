@@ -6,6 +6,16 @@ internal sealed record FalloutIdleCollection(FalloutFormKey Form, byte IdleFlags
 {
     internal bool RunInSequence => (IdleFlags & 1) != 0;
     internal bool DoOnce => (IdleFlags & 4) != 0;
+    internal static FalloutIdleCollection ReadSource(FalloutPluginRecord record)
+    {
+        if (record.Signature == "IDLM") return Read(record);
+        if (record.Signature != "PACK") throw new InvalidDataException("Idle collection source is neither PACK nor IDLM.");
+        // Package and marker declarations have different required fields and
+        // count extents. Preserve each format's existing decoder.
+        var package = FalloutScriptPackage.Read(record);
+        return new(package.Form, package.IdleFlags, package.IdleTimer, package.Idles);
+    }
+
     internal static FalloutIdleCollection Read(FalloutPluginRecord record)
     {
         if (record.Signature != "IDLM") throw new InvalidDataException("Patrol idle source is not IDLM.");
