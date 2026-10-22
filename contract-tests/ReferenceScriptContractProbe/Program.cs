@@ -255,6 +255,11 @@ if (args is ["--sandbox-admission-contracts"])
     SandboxAdmissionFailureContracts.Run();
     return;
 }
+if (args is ["--reference-event-host-contracts"])
+{
+    ReferenceEventHostContracts.Run();
+    return;
+}
 if (args is ["--hacking-contracts"])
 {
     HackingContracts.Run();
@@ -338,9 +343,14 @@ if (args.Length >= 6 && args[0] == "--inspect-owned-stage")
         if (begin < 0) throw new InvalidDataException("Requested source stage is absent.");
         var end = begin + 1;
         while (end < fields.Length && fields[end].Signature is not ("INDX" or "QOBJ")) ++end;
-        Console.WriteLine(JsonSerializer.Serialize(new { quest = quest.FormKey, winner = quest.Plugin.Name, stage,
+        Console.WriteLine(JsonSerializer.Serialize(new
+        {
+            quest = quest.FormKey,
+            winner = quest.Plugin.Name,
+            stage,
             sources = fields[(begin + 1)..end].Where(field => field.Signature == "SCTX")
-                .Select(field => FalloutDialogueTopic.ScriptText(field.Data.Span)).ToArray() }));
+                .Select(field => FalloutDialogueTopic.ScriptText(field.Data.Span)).ToArray()
+        }));
     }
     finally { RuntimeLiveContentSource.Clear(); }
     return;
@@ -1065,6 +1075,7 @@ AuthoredRagdollContracts.Run();
 ActorDamageContracts.Run();
 StoppedPoseContracts.Run();
 SandboxAdmissionFailureContracts.Run();
+ReferenceEventHostContracts.Run();
 HackingContracts.Run();
 TerminalContracts.Run();
 ScriptDeathContracts.Run();

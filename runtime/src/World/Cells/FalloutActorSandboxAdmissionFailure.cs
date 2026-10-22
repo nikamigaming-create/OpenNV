@@ -98,6 +98,33 @@ internal sealed record FalloutActorSandboxAdmissionFailure(FalloutFormKey Packag
         return Copy() with { SourcePlacement = placement.Copy() };
     }
 
+    internal FalloutActorSandboxAdmissionFailure PublishPose(Godot.Transform3D actual)
+    {
+        if (!actual.IsFinite()) throw new InvalidDataException("Stopped Sandbox published pose is not finite.");
+        var pose = Copy() with
+        {
+            Position = [actual.Origin.X, actual.Origin.Y, actual.Origin.Z],
+            Basis = [actual.Basis.X.X, actual.Basis.X.Y, actual.Basis.X.Z,
+                actual.Basis.Y.X, actual.Basis.Y.Y, actual.Basis.Y.Z, actual.Basis.Z.X, actual.Basis.Z.Y, actual.Basis.Z.Z],
+            SourcePlacement = null
+        };
+        pose.Validate();
+        return pose;
+    }
+
+    internal static bool AcknowledgePlacement(FalloutReferenceInstance actor, FalloutActorSandboxAdmissionFailure expected,
+        Godot.Transform3D intended, Godot.Transform3D actual)
+    {
+        if (actor.SandboxAdmissionFailure is { SourcePlacement: null }) return false;
+        if (!ReferenceEquals(actor.SandboxAdmissionFailure, expected) || expected.SourcePlacement is null)
+            throw new InvalidDataException("Stopped Sandbox placement authority changed before acknowledgment.");
+        if (!actual.IsFinite() || !actual.IsEqualApprox(intended))
+            throw new InvalidDataException("Stopped Sandbox source placement has not reached its native pose.");
+        var published = expected.PublishPose(actual);
+        actor.SandboxAdmissionFailure = published;
+        return true;
+    }
+
     // Source placement is local to the resident cell root, like ordinary
     // reference materialization. The retained global pose is only the fallback
     // when no later authoritative relocation has superseded it.
@@ -153,7 +180,9 @@ internal sealed class FalloutSandboxAdmissionStaging
 
     internal void EnterLive() => EnterLive(static () => { });
 
-    internal void EnterLive(Action publish)
+    internal void EnterLive(Action publish) => EnterLive(publish, null);
+
+    internal void EnterLive(Action publish, Func<Godot.Transform3D>? observePose)
     {
         if (_live) return;
         if (PublicationError is not null)
@@ -163,7 +192,10 @@ internal sealed class FalloutSandboxAdmissionStaging
             ValidateAuthority();
             publish();
             ValidateAuthority();
+            var published = observePose is null ? null : _initialReceipt.PublishPose(observePose());
+            ValidateAuthority();
             _actor.Animation.Restore(Clock.Capture()!);
+            if (published is not null) _actor.SandboxAdmissionFailure = published;
             _live = true;
         }
         catch (Exception error)

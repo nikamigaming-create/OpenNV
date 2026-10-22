@@ -41,7 +41,7 @@ internal partial class RuntimeNativeNpc
                 GlobalTransform = restoredTransform;
                 if (!GlobalTransform.IsEqualApprox(restoredTransform))
                     throw new InvalidDataException("Stopped Sandbox native pose publication did not apply.");
-            });
+            }, () => GlobalTransform);
             staging.RequirePublished();
             _baseClock = _aiReferenceState!.Animation;
             _sandboxAdmissionStagedPose = null;
@@ -56,6 +56,17 @@ internal partial class RuntimeNativeNpc
     private void CompleteSandboxAdmissionStaging()
     {
         _sandboxAdmissionConfigurationComplete = true;
+    }
+
+    internal void AcknowledgeSandboxPlacement(FalloutActorSandboxAdmissionFailure expected)
+    {
+        if (_aiReferenceState?.SandboxAdmissionFailure is { SourcePlacement: null }) return;
+        if (!CanCaptureSandboxAdmissionFailure() || _aiReferenceState is not { } state)
+            throw new NotSupportedException("Stopped Sandbox placement has no live capture owner to acknowledge it.");
+        expected.Validate(_aiStack!, state);
+        var intended = expected.ResolveTransform(GetParentNode3D()?.GlobalTransform ?? Transform3D.Identity,
+            Skeleton.UnitsToMetres, Scale.X);
+        FalloutActorSandboxAdmissionFailure.AcknowledgePlacement(state, expected, intended, GlobalTransform);
     }
 
     private void ReleaseDetachedSandboxAdmission()

@@ -145,7 +145,19 @@ public partial class RuntimeCoordinator
                     if (exterior is not null) AddExteriorLandscape(root, exterior);
                     AddChild(root);
                     if (exterior is null) AddNativeCellEnvironment(root, scene); else AddExteriorEnvironment(root, scene.Cell);
+                    // Construction can span many native frames. Settle the requested
+                    // isolated clock immediately before binding ordinary source events.
+                    _nativeGameTime.SetHour(hour); _nativeGameTime.AdvanceSimulation(0);
                     SetNativeActiveCell(root, scene);
+                    var eventDivergences = new List<string>();
+                    _nativeReferenceEvents!.ReportDivergence = message =>
+                    {
+                        eventDivergences.Add(message);
+                        GD.PushError(message);
+                    };
+                    row["referenceEventClockHourAtBinding"] = _nativeGameTime.Hour;
+                    row["referenceEventHost"] = "shared-native-reference-events-without-gameplay-player";
+                    row["referenceEventDivergences"] = eventDivergences;
                     var camera = new Camera3D
                     {
                         Name = "RequestedDiagnosticCamera",
@@ -203,6 +215,17 @@ public partial class RuntimeCoordinator
                     if (!cameraCheck.Passed && !(placement == "exact-reference" &&
                         shot.TryGetProperty("retainInvalidCameraDiagnostic", out var retainInvalidFinal) && retainInvalidFinal.GetBoolean()))
                         throw new InvalidDataException("Screenshot capture-boundary camera rejected: " + cameraCheck.Reason);
+                    row["referenceEvents"] = _nativeReferenceEvents!.State;
+                    row["referenceScriptPresentation"] = scene.References.Select(reference => _nativeReferences!.Get(reference.FormKey))
+                        .Where(instance => instance.Script is not null || instance.CaptureObjectAnimations is not null)
+                        .Select(instance => new
+                        {
+                            reference = instance.Reference.ToString(),
+                            sourceScriptSha256 = instance.Script?.Sha256,
+                            enabled = _nativeReferences!.IsEnabled(instance.Reference),
+                            error = instance.ScriptError,
+                            objectAnimations = instance.CaptureObjectAnimations?.Invoke() ?? instance.ObjectAnimations,
+                        }).ToArray();
                     var geometry = root.FindChildren("*", "", true, false).OfType<GeometryInstance3D>().Count(node => node.IsVisibleInTree());
                     if (geometry == 0) throw new InvalidDataException("Requested source CELL presents no visible native geometry.");
                     var png = Path.Combine(output, $"{index + 1:D2}-{ids[index]}{(cameraCheck.Passed ? "" : ".invalid-camera")}.png");
@@ -244,6 +267,7 @@ public partial class RuntimeCoordinator
                     if (_nativeActiveCell is { } active && _nativeReferences!.IsCellResident(active.Cell.FormKey))
                         _nativeReferences.UnloadCell(active.Cell.FormKey);
                     _nativeCurrentCellRoot = null; _nativeActiveCell = null;
+                    _nativeReferenceEvents = null; _nativeReferencePresentation = null;
                     foreach (var prototype in _nativeNifPrototypes.Values) prototype.Scene.Root.Free();
                     _nativeNifPrototypes.Clear();
                 }

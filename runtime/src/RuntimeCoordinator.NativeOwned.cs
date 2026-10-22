@@ -281,10 +281,16 @@ public partial class RuntimeCoordinator
 
     private async Task LoadNativeLiveStackAsync()
     {
+        var headless = DisplayServer.GetName() == "headless";
+        var headlessLive = _options.ContainsKey("headless-live");
+        if (headlessLive && (!headless || !_options.TryGetValue("live-harness", out var harnessDirectory) ||
+            !Path.IsPathFullyQualified(harnessDirectory)))
+            throw new ArgumentException("--headless-live requires the headless display server and an absolute --live-harness directory.");
         var source = RuntimeLiveContentSource.Current ??
             throw new InvalidOperationException("Live retail source was not configured.");
         SetLoadingStatus("Reading game data");
-        if (DisplayServer.GetName() == "headless" || _options.ContainsKey("new-game"))
+        if (headlessLive) GD.Print("OPENNV_NATIVE_HEADLESS_LIVE route=ordinary-session harness=explicit");
+        if ((headless && !headlessLive) || _options.ContainsKey("new-game"))
         {
             _nativeMenuRead = Task.Run(() => IndexNativeLiveStack(source.PluginSources));
             await _nativeMenuRead;
@@ -299,7 +305,7 @@ public partial class RuntimeCoordinator
                 _nativeMenuRead = LoadNativeInitialCell();
                 await _nativeMenuRead;
             }
-            if (DisplayServer.GetName() == "headless")
+            if (headless && !headlessLive)
                 GetTree().Quit(0);
             return;
         }
@@ -515,7 +521,7 @@ public partial class RuntimeCoordinator
         {
             // Publish the loading state in flat and the shared XR menu surface
             // before synchronous native scene publication starts.
-            await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+            await YieldNativeLoadingFrame();
             if (!_nativeContinueOpening)
             {
                 InitializeNativePlayerInventory();
@@ -1276,7 +1282,7 @@ public partial class RuntimeCoordinator
         _nativeActiveCell = cell;
         _nativeWalkableGrid.Clear();
         foreach (var land in root.GetChildren().OfType<RuntimeNativeLandscapeTransport>()) _nativeWalkableGrid.Add(land.Source.ActiveCoordinates);
-        if (_nativePlayer is not null) BindNativeReferenceEvents(root, cell);
+        BindNativeReferenceEvents(root, cell);
     }
 
     private void AddNativeReferenceEmittance(Node3D instance, FalloutPlacedReference reference)

@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using Godot;
 using OpenNV.Runtime.Content;
+using OpenNV.Runtime.Formats.Gamebryo;
 using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.World.Cells;
 
@@ -143,6 +144,7 @@ internal static class SandboxAdmissionFailureContracts
                 "Retain-to-native handoff changed the stopped lifecycle or consumed results again.");
             ExerciseRelocation();
             ExerciseDetachedStaging();
+            ExercisePlacementAcknowledgment();
             using var rejectedWorld = new FalloutReferenceWorld(records);
             var invalidSnapshots = snapshots.Select(value => value with
             { SandboxAdmissionFailure = saved with { PackageSha256 = new('0', 64), LastPackageSha256 = new('0', 64) } }).ToArray();
@@ -183,7 +185,75 @@ internal static class SandboxAdmissionFailureContracts
                 "Current schema admission replaced stopped Sandbox state.");
             Console.WriteLine("OPENNV_SANDBOX_ADMISSION_FAILURE_CONTRACT_PASS countedBeginDispatch=true compiledResultProof=false " +
                 "coldWorldRestoreNoReplay=true unloadedHandoff=true sourceAndConflictRejection=true " +
-                "atomicEventRestore=true exclusiveSnapshot=true priorSchemaGuard=true relocationCold=true sourceParentTransform=true sharedAlertRestore=true detachedStagingNoReplay=true gameplay=unverified");
+                "atomicEventRestore=true exclusiveSnapshot=true priorSchemaGuard=true relocationCold=true sourceParentTransform=true sharedAlertRestore=true detachedStagingNoReplay=true placementAcknowledged=true laterFacingCold=true gameplay=unverified");
+
+            void ExercisePlacementAcknowledgment()
+            {
+                using var owner = new FalloutReferenceWorld(records);
+                owner.Restore(snapshots);
+                var target = owner.Get(worldActor.Reference);
+                var destination = new FalloutReferencePlacement(Key(0x801), [25, 30, 7], [0, 0, MathF.PI / 2]);
+                owner.SetPlacement(target.Reference, destination);
+                var pending = target.SandboxAdmissionFailure!;
+                var intended = pending.ResolveTransform(Transform3D.Identity, .02f, 1);
+                var stalePose = new FalloutReferencePlacement(Key(0x800), [3, -5, 4], [0, 0, 0]);
+                target.QuerySpatialPlacement = () => stalePose;
+                var player = new FalloutReferencePlacement(Key(0x801), [35, 30, 7], [0, 0, 0]);
+                Require(owner.SpawnPlacement(target.Reference, player, .02f).Position.SequenceEqual(destination.Position),
+                    "Pending relocation stopped protecting source queries before publication.");
+                var failed = new FalloutSandboxAdmissionStaging(target);
+                Reject(() => failed.EnterLive(static () => { }, () => new Transform3D(Basis.Identity, new(float.NaN, 0, 0))));
+                Require(!failed.IsLive && ReferenceEquals(target.SandboxAdmissionFailure, pending),
+                    "Invalid observed pose consumed the pending source placement or committed staging.");
+                var published = new FalloutSandboxAdmissionStaging(target);
+                stalePose = destination.Copy();
+                published.EnterLive(static () => { }, () => intended);
+                published.RequirePublished();
+                var publishedReceipt = target.SandboxAdmissionFailure!;
+                Require(publishedReceipt.SourcePlacement is null &&
+                    publishedReceipt.ResolveTransform(Transform3D.Identity, .02f, 1).IsEqualApprox(intended),
+                    "Successful publication retained pending source placement or lost actual native pose.");
+                // Native dialogue turning publishes a later world basis. This
+                // managed receipt check does not claim an actual Look fixture.
+                var turned = new Transform3D(GamebryoCoordinate.ConvertReferenceEuler(new(0, 0, -.4f), 1), intended.Origin);
+                var later = publishedReceipt.PublishPose(turned);
+                target.SandboxAdmissionFailure = later;
+                target.QuerySpatialPlacement = null;
+                published.EnterLive(() => throw new InvalidDataException("Repeated publication reapplied the old placement."), () => intended);
+                Require(ReferenceEquals(target.SandboxAdmissionFailure, later) &&
+                    !FalloutActorSandboxAdmissionFailure.AcknowledgePlacement(target, pending, intended, intended),
+                    "Repeated acknowledgment or publication replaced the later actual pose.");
+                var expectedHeading = FalloutHeadingAngle.Between(destination.Position, player.Position, -.4f);
+                var laterPose = owner.SpawnPlacement(target.Reference, player, .02f);
+                Require(Math.Abs(laterPose.RotationRadians[2] + .4f) < .0001f &&
+                    Math.Abs(owner.HeadingAngle(target.Reference, records.RuntimeFormKey(0x14), player, .02f) - expectedHeading) < .0001f,
+                    "Evicted stopped actor returned its earlier placement facing after a later basis publication.");
+                var coldJson = JsonSerializer.Serialize(owner.Capture());
+                using var next = new FalloutReferenceWorld(records);
+                next.Restore(JsonSerializer.Deserialize<FalloutReferenceSnapshot[]>(coldJson)!);
+                var retained = next.Get(target.Reference).SandboxAdmissionFailure!;
+                Require(retained.SourcePlacement is null && retained.ResolveTransform(Transform3D.Identity, .02f, 1).IsEqualApprox(turned) &&
+                    Math.Abs(next.SpawnPlacement(target.Reference, player, .02f).RotationRadians[2] + .4f) < .0001f &&
+                    JsonSerializer.Serialize(retained with { Position = pending.Position, Basis = pending.Basis, SourcePlacement = pending.SourcePlacement }) ==
+                    JsonSerializer.Serialize(pending),
+                    "Save/cold restored the earlier source heading or changed gameplay history/RNG during pose acknowledgment.");
+                owner.SetPlacement(target.Reference, destination);
+                var livePending = target.SandboxAdmissionFailure!;
+                Reject(() => FalloutActorSandboxAdmissionFailure.AcknowledgePlacement(target, livePending, intended, turned));
+                Require(ReferenceEquals(target.SandboxAdmissionFailure, livePending),
+                    "Failed already-live readback consumed pending placement.");
+                Require(FalloutActorSandboxAdmissionFailure.AcknowledgePlacement(target, livePending, intended, intended),
+                    "Already-live native placement did not acknowledge its observed pose.");
+                var acknowledged = target.SandboxAdmissionFailure;
+                Require(!FalloutActorSandboxAdmissionFailure.AcknowledgePlacement(target, livePending, intended, intended) &&
+                    ReferenceEquals(target.SandboxAdmissionFailure, acknowledged),
+                    "Repeated already-live acknowledgment was not idempotent.");
+                owner.SetPlacement(target.Reference, new(Key(0x801), [30, 30, 7], [0, 0, 0]));
+                var replacement = target.SandboxAdmissionFailure;
+                Reject(() => FalloutActorSandboxAdmissionFailure.AcknowledgePlacement(target, livePending, intended, intended));
+                Require(ReferenceEquals(target.SandboxAdmissionFailure, replacement) && replacement!.SourcePlacement is not null && effects == 1,
+                    "Stale already-live acknowledgment erased a newer authoritative placement.");
+            }
 
             void ExerciseDetachedStaging()
             {
