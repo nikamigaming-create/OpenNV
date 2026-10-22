@@ -23,8 +23,8 @@ hashes and source-graph reachability separately from actual visits.
 Unvisited, blocked, unmatched, repaired and retested are independent statuses.
 No matched retail pair exists yet. The user approved a bounded normal-retail-
 profile comparison with verified backups and restoration of test changes.
-The access owner is preparing that transaction while the coordinator retains
-the exclusive native window. Camera/environment observation and frame joining
+The verified backup transaction is prepared; its one launch is held at the
+Steam error described below. Camera/environment observation and frame joining
 remain separate acceptance checks. Recorded input delivery alone is not state
 or event alignment.
 
@@ -54,20 +54,14 @@ now passes both camera checks in day and night. Inspected frames show restored
 opaque shells from a side street; lighting/emissive response and scene completeness
 remain unaccepted. No position scan was used. The day original is in Library as
 libfile_07071c411b9c8191b764403944e43ae9. The capture process exited normally.
-The final required runtime gate passed with exit0 (visual-final-runtime-gate.log).
-All 1,938 source/script hashes match its frozen snapshot; whitespace checks pass.
-PR260 contains the tested checkpoint afb3bdf26f9ff3bb39c8c89e4685e534c8484a11.
-It remains draft: independent review found stopped receipts stale after relocation
-or shared alert changes, and failed detached staging could erase retained history.
 The checked runtime/audit checkpoint ff5c3b82 passes the full required gate, focused managed
 regressions and default reference contracts. It retains authoritative relocation
 and alert changes, private staging clocks, and consumed package history. Publication
 is checked synchronously by callers outside Godot lifecycle callbacks; changed
 authority or publication faults refuse without erasing the cold receipt. Its
-renewed required gate passed with exit0 in an isolated checkout; that exact commit
-is tracked with exact source and publication receipts in PR260. Independent review also found that
-SourcePlacement must relinquish authority after successful native pose publication
-so later dialogue-facing changes survive queries and saves. The new acknowledgement
+required gate passed with exit0; exact source and publication receipts are tracked
+in ready PR260. SourcePlacement now relinquishes authority after successful native
+pose publication so later dialogue-facing changes survive queries and saves. This acknowledgement
 repair passes focused/default managed contracts and bounded source review. The
 actual Godot fixture now passes for all four genuine saved NPCs: twelve before-
 event/after-configure/stale-publication failure, discard and retry cases, plus
