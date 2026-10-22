@@ -4,6 +4,18 @@ using System.Text.Json;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.World.Cells;
 
+if (args is ["--faction-relation-contracts"])
+{
+    FactionRelationContracts.Run();
+    return;
+}
+
+if (args is ["--owned-faction-arbitration", var factionData, var factionSave, var factionCandidate, var factionVictim])
+{
+    OwnedFactionArbitrationProbe.Run(factionData, factionSave, factionCandidate, factionVictim);
+    return;
+}
+
 if (args is ["--else-payload-contracts"])
 {
     ElsePayloadContracts.Run();
