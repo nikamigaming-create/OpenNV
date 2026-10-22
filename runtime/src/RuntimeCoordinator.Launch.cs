@@ -14,6 +14,10 @@ public partial class RuntimeCoordinator
     {
         if (launch.Is(RuntimeLaunchRoute.LiveRetailFiles))
         {
+            if (_options.TryGetValue("post-screenshots", out var screenshots))
+            {
+                RunNativePostScreenshots(screenshots); return true;
+            }
             if (_options.TryGetValue("development-gallery", out var gallery))
             {
                 RunNativeDevelopmentGallery(gallery);

@@ -2,10 +2,25 @@
 
 The user-directed next work is a matched retail/OpenNV pass through every cell,
 with failures repaired in shared source readers and runtime owners. Start with
-the saved Goodsprings exterior, its adjoining cells and connected interiors,
-then follow the source world and door graph toward Novac and the Strip. Keep all
+the confirmed Strip missing-shell/material and camera-validity defects, then
+sample varied exterior/interior spaces and revisit them after relevant shared
+fixes. Follow the source world and door graph through the full inventory. Keep all
 winning installed cells in the queue, including empty cells, persistent-reference
 storage cells and DLC. The wider NV/FO3/TTW objective remains open.
+
+The owned location inventory probe emits the actual winning CELL, map-marker
+and directed XTEL denominator, source hashes, plugin/worldspace partitions and
+unresolved edges. Its graph reachability is not player reachability; all visits
+and comparisons start unverified. Select the exact plugin graph explicitly when
+matching a capture. Record unvisited, blocked, unmatched, repaired and retested
+separately. Do not infer a match from native frame existence or input delivery.
+
+The initial Strip images are before evidence, not accepted post images. The
+static shader contract distinguishes NoFade's decal distance suppression from
+explicit reference/BSFadeNode opacity. Camera placement needs native floor,
+capsule and near-plane clearance plus visual inspection. The current retail
+bridge has D3D9 Present readback, but a joint world-camera/FOV/time/weather
+observation receipt remains required for a matched pair.
 
 ## Comparison and repair loop
 
@@ -23,6 +38,10 @@ storage cells and DLC. The wider NV/FO3/TTW objective remains open.
    retail player and create comparison saves. Start from a copied checkpoint,
    use distinct save names, verify original save hashes and release held input
    before leaving a paused session. Manual user loading is no longer a dependency.
+   The user additionally approved a bounded normal-profile comparison with
+   verified backups of saves/settings and restoration of test changes. Preserve
+   original identities, use a distinct copied checkpoint, retain a write journal,
+   exit cleanly and verify originals afterward. Preserve unrelated new files.
 3. Capture the actual resident source set and runtime failures. Preserve source
    ancestry: an exterior reference can reside in the nearby grid while belonging
    to the world's persistent storage cell. Group repeated failures by the owner

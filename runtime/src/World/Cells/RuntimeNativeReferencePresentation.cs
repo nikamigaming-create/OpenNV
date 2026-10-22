@@ -168,9 +168,7 @@ internal partial class RuntimeNativeReferencePresentation : Node
     {
         UnbindObjectAnimation(key);
         BindObjectAnimation(key, node);
-        _fadeGeometry[key] = NodeTraversal.SelfAndDescendants<Node3D>(node)
-            .Where(child => child.GetMeta("opennv_nif_fade_node", false).AsBool())
-            .SelectMany(NodeTraversal.SelfAndDescendants<GeometryInstance3D>).Distinct().ToArray();
+        _fadeGeometry[key] = RuntimeNativeReferenceOpacity.Collect(node);
         _publishedOpacity.Remove(key);
         PublishOpacity(key);
     }
@@ -266,7 +264,7 @@ internal partial class RuntimeNativeReferencePresentation : Node
         if (!_fadeGeometry.TryGetValue(key, out var geometry)) return;
         var opacity = _world.Get(key).Opacity;
         if (_publishedOpacity.TryGetValue(key, out var previous) && previous == opacity) return;
-        foreach (var instance in geometry) instance.Transparency = 1 - opacity;
+        RuntimeNativeReferenceOpacity.Publish(geometry, opacity);
         _publishedOpacity[key] = opacity;
     }
 

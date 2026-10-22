@@ -10,6 +10,7 @@ internal partial class RuntimeNativeNpc
 
     private void BeginSandbox(FalloutPluginRecord package, bool initializing)
     {
+        ClearSandboxAdmissionFailure();
         var source = FalloutSandboxPackage.Read(package);
         var retained = initializing && Combat!.PackageMotion?.Package == package.FormKey
             ? Combat.PackageMotion.Wander : null;
@@ -31,6 +32,7 @@ internal partial class RuntimeNativeNpc
         try { _sandboxWander = Combat.AdvanceSandboxWander(_aiPackage!, source, _sandboxWander, delta); }
         catch (Exception error) when (error is InvalidDataException or NotSupportedException or InvalidOperationException or IOException)
         {
+            _sandboxAdmissionFailure = error as FalloutSandboxAdmissionException;
             Combat.StopPackageMotion(); _aiError = error.Message; _failedPackage = _aiPackage?.FormKey;
             _aiReferenceState!.ProcedureCaptureBlocker = FalloutSandboxPackage.CaptureBlockerPrefix + error.Message;
             Godot.GD.PushError($"OPENNV_NATIVE_SANDBOX_DIVERGENCE reference={Appearance.Reference}: {_aiError}");

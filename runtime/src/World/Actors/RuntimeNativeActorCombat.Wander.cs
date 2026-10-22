@@ -67,7 +67,8 @@ internal sealed partial class RuntimeNativeActorCombat
         {
             if (candidate.Activity == FalloutSandboxActivity.Wander) { admitted.Add(candidate); continue; }
             if (candidate.Activity != FalloutSandboxActivity.Dialogue)
-                throw new NotSupportedException($"Sandbox candidate admission requires its activity owner: {candidate.Activity} " +
+                throw new FalloutSandboxAdmissionException(source.Form,
+                    $"{FalloutActorSandboxAdmissionFailure.AdmissionErrorPrefix}{candidate.Activity} " +
                     $"reference={candidate.Reference} base={candidate.Base} inventory={candidate.Inventory}");
             if (_state.ConversationSuppressionSeconds is > 0 || busy(_state.Reference) || _world.BlocksAmbientConversation(_state.Reference)) continue;
             var target = candidate.Reference ?? throw new InvalidDataException("Sandbox dialogue candidate has no reference.");

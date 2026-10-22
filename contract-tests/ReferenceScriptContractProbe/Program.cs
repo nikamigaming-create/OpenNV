@@ -9,6 +9,19 @@ if (args is ["--audit-owned-sandbox-equipment", var sandboxEquipmentData])
     OwnedSandboxEquipmentProbe.Run(sandboxEquipmentData);
     return;
 }
+if (args is ["--audit-owned-location-inventory", var locationData, var locationOutput])
+{
+    OwnedLocationInventoryProbe.Run(locationData, locationOutput);
+    return;
+}
+if (args is ["--audit-owned-location-inventory-vanilla", var vanillaLocationData, var vanillaLocationOutput])
+{
+    RuntimeLiveContentSource.Configure(vanillaLocationData, RuntimeLiveContentSource.FalloutNewVegasGame,
+        activePlugins: RuntimeLiveContentSource.ResolveVanillaPlugins(vanillaLocationData), includeImplicitPlugins: false);
+    using var locationContent = RuntimeLiveContentSource.Current!;
+    OwnedLocationInventoryProbe.Run(vanillaLocationData, vanillaLocationOutput);
+    return;
+}
 
 if (args is ["--audit-linked-door-source-lock", var lockData, var firstDoor, var secondDoor])
 {
@@ -237,6 +250,21 @@ if (args is ["--stopped-pose-contracts"])
     StoppedPoseContracts.Run();
     return;
 }
+if (args is ["--sandbox-admission-contracts"])
+{
+    SandboxAdmissionFailureContracts.Run();
+    return;
+}
+if (args is ["--reference-event-host-contracts"])
+{
+    ReferenceEventHostContracts.Run();
+    return;
+}
+if (args is ["--hacking-contracts"])
+{
+    HackingContracts.Run();
+    return;
+}
 if (args is ["--package-data-contracts"])
 {
     IdleCollectionSourceContracts.Run();
@@ -315,9 +343,14 @@ if (args.Length >= 6 && args[0] == "--inspect-owned-stage")
         if (begin < 0) throw new InvalidDataException("Requested source stage is absent.");
         var end = begin + 1;
         while (end < fields.Length && fields[end].Signature is not ("INDX" or "QOBJ")) ++end;
-        Console.WriteLine(JsonSerializer.Serialize(new { quest = quest.FormKey, winner = quest.Plugin.Name, stage,
+        Console.WriteLine(JsonSerializer.Serialize(new
+        {
+            quest = quest.FormKey,
+            winner = quest.Plugin.Name,
+            stage,
             sources = fields[(begin + 1)..end].Where(field => field.Signature == "SCTX")
-                .Select(field => FalloutDialogueTopic.ScriptText(field.Data.Span)).ToArray() }));
+                .Select(field => FalloutDialogueTopic.ScriptText(field.Data.Span)).ToArray()
+        }));
     }
     finally { RuntimeLiveContentSource.Clear(); }
     return;
@@ -1041,6 +1074,9 @@ FurnitureContracts.Run();
 AuthoredRagdollContracts.Run();
 ActorDamageContracts.Run();
 StoppedPoseContracts.Run();
+SandboxAdmissionFailureContracts.Run();
+ReferenceEventHostContracts.Run();
+HackingContracts.Run();
 TerminalContracts.Run();
 ScriptDeathContracts.Run();
 ActivationParentContracts.Run();

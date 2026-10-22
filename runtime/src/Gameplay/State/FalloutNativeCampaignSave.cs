@@ -66,7 +66,8 @@ internal sealed record FalloutNativeCampaignRestore(
 
 internal static class FalloutNativeCampaignSave
 {
-    internal const string ExpectedSchema = "opennv-native-fnv-campaign-save/v55";
+    internal const string ExpectedSchema = "opennv-native-fnv-campaign-save/v56";
+    internal const string BeforeSandboxAdmissionSchema = "opennv-native-fnv-campaign-save/v55";
     internal const string BeforeObjectPhysicsSchema = "opennv-native-fnv-campaign-save/v54";
     internal const string BeforeIdleObjectsSchema = "opennv-native-fnv-campaign-save/v53";
     internal const string BeforeGrabEventsSchema = "opennv-native-fnv-campaign-save/v52";
@@ -500,6 +501,9 @@ internal static class FalloutNativeCampaignSave
 
     internal static FalloutNativeCampaignState AdmitPreviousOwnerSchema(FalloutNativeCampaignState state)
     {
+        if (state.Schema != ExpectedSchema && state.References?.Any(reference => reference.SandboxAdmissionFailure is not null) == true)
+            throw new InvalidDataException("Earlier campaign schemas cannot own stopped Sandbox admission.");
+        if (state.Schema == BeforeSandboxAdmissionSchema) state = state with { Schema = ExpectedSchema };
         ValidateObjectPhysicsSchema(state);
         if (state.Schema == BeforeObjectPhysicsSchema) state = state with { Schema = ExpectedSchema };
         ValidateIdleObjectSchema(state);
@@ -524,6 +528,8 @@ internal static class FalloutNativeCampaignSave
         string expectedSaveCompatibilityId,
         FalloutPlayerAbilitySaveAdmission? originalAbilityAdmission)
     {
+        if (state.Schema != ExpectedSchema && state.References?.Any(reference => reference.SandboxAdmissionFailure is not null) == true)
+            throw new InvalidDataException("Earlier campaign schemas cannot own stopped Sandbox admission.");
         ValidateObjectPhysicsSchema(state);
         ValidateIdleObjectSchema(state);
         if (state.Schema != ExpectedSchema && state.References?.Any(reference => reference.GrabEvents is not null) == true)

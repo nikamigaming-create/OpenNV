@@ -156,6 +156,8 @@ internal partial class RuntimeNativeNpc
             error = _packageIdleError,
         },
         error = _aiError,
+        stoppedSandboxAdmissionCaptureReady = CanCaptureSandboxAdmissionFailure(),
+        stoppedSandboxAdmissionStage = _sandboxAdmissionFailure is null ? null : "candidate-admission-before-first-activity",
         stoppedBindingCaptureReady = CanCaptureBindingFailure(),
         stoppedBindingCapture = _selectionCaptureBlocker is null ? null : new
         {
@@ -207,8 +209,10 @@ internal partial class RuntimeNativeNpc
         {
             world.InitializeSourceCorpse(Appearance.Reference!.Value);
             _aiReferenceState = world.Get(Appearance.Reference!.Value);
+            if (_aiReferenceState.SandboxAdmissionFailure is not null)
+                _sandboxAdmissionStaging = new(_aiReferenceState);
             world.BindActorAlert(Appearance.Reference!.Value, Activity);
-            _baseClock = _aiReferenceState.Animation;
+            _baseClock = _sandboxAdmissionStaging?.Clock ?? _aiReferenceState.Animation;
             _aiReferenceState.QueryCurrentPackage = _currentPackageQuery = () => CurrentPackage;
             _aiReferenceState.QuerySitting = _sittingQuery = () => SittingState;
         }
@@ -218,12 +222,14 @@ internal partial class RuntimeNativeNpc
             unloaded.BindNative(Appearance.Reference!.Value, _packageEvents);
         else if (_aiReferenceState?.DeferredPackageContinuation is { } deferred)
             deferred.BindNative(stack, _aiReferenceState, _packageEvents);
-        else if (_aiReferenceState?.PackageAssignment is { } retained && _aiReferenceState.PackageMotion?.Package != retained.Package)
+        else if (_aiReferenceState?.SandboxAdmissionFailure is null &&
+            _aiReferenceState?.PackageAssignment is { } retained && _aiReferenceState.PackageMotion?.Package != retained.Package)
             retained.Bind(stack, _packageEvents);
         RestoreMarkerTravelLifecycleBeforeSelection();
         if (_aiReferenceState is { } packageState)
             packageState.CapturePackageAssignment = _packageAssignmentCapture = () => FalloutActorPackageAssignment.Capture(stack, _packageEvents);
         BindFailureCapture();
+        BindSandboxAdmissionCapture();
         BindSelectionFailureCapture();
         BindPendingSelectionCapture();
         BindFurnitureCapture();
@@ -233,7 +239,12 @@ internal partial class RuntimeNativeNpc
         // A stationary, unarmed actor owns its source movement-group idle
         // independently of package selection. An unsupported package must not
         // erase that motion owner and leave the skeleton in its bind pose.
-        if (_aiReferenceState?.PendingPackageSelection is { } pendingSelection)
+        if (_aiReferenceState?.SandboxAdmissionFailure is { } sandboxAdmission)
+        {
+            PlayLocomotion(false);
+            RestoreSandboxAdmissionFailure(sandboxAdmission);
+        }
+        else if (_aiReferenceState?.PendingPackageSelection is { } pendingSelection)
         {
             PlayLocomotion(false);
             RestorePendingSelection(pendingSelection);
@@ -267,6 +278,7 @@ internal partial class RuntimeNativeNpc
             RuntimeNativeNifAnimation.ApplyLayers((baseAnimation, _baseAnimationSeconds), (overlay, _animationSeconds));
         if (bindingFailure is not null) PublishFace();
         BindHeadTrackingPersistence();
+        CompleteSandboxAdmissionStaging();
     }
 
     private void RestoreMarkerTravelLifecycleBeforeSelection()
@@ -385,6 +397,7 @@ internal partial class RuntimeNativeNpc
             _selectedSourcePackage = selected?.FormKey; _sourceSelectionKnown = true;
             if (!forced && _aiError is not null && selected is not null && _failedPackage == selected.FormKey) return;
             if (_aiReferenceState is not null) ClearBindingFailure();
+            ClearSandboxAdmissionFailure();
             // A failed procedure cannot freeze a later eligible package. Event
             // errors retain their separate exactly-once failure latch.
             _aiError = null; _failedPackage = null;

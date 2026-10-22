@@ -6,6 +6,13 @@ namespace OpenNV.Runtime;
 
 public partial class RuntimeCoordinator
 {
+    internal static void RequireNativeActorPublication(Node root)
+    {
+        if (!root.IsInsideTree()) throw new InvalidDataException("Native actor publication has no live tree owner.");
+        foreach (var npc in SceneGraph.NodeTraversal.SelfAndDescendants<RuntimeNativeNpc>(root))
+            npc.RequireSourcePublication();
+    }
+
     internal static void RetireNativeActorBindings(Node root)
     {
         // Capture while transforms, physical bodies and attachment nodes still

@@ -1930,7 +1930,11 @@ internal static partial class RuntimeNativeNifMeshBuilder
             // billboarding. Keep rejecting that selector and shared-bit-only
             // environment variants whose lighting behavior remains unowned.
             var environmentLightFade = (shader.ShaderFlags2 & ShaderFlagEnvironmentMapLightFade) != 0;
-            var supportedLightingFlags2 = SupportedShaderFlags2 |
+            // NoFade disables decal distance fading only. Non-decal draws
+            // retain their ordinary material alpha; explicit reference and
+            // BSFadeNode opacity still belongs to the shared geometry owner.
+            // Ordinary decal distance fading remains a separate unbound lane.
+            var supportedLightingFlags2 = SupportedShaderFlags2 | ShaderFlagNoFade |
                 (!environment || environmentLightFade ? ShaderFlagBillboardAndEnvironmentMapLightFade : 0U);
             if (shader.Controller != -1 && !IsManagedRefractionController(shader) &&
                 !NativeNifRefractionMaterial.HasDirectController(_source, shader) || shader.ExtraData.Any(reference => reference != -1) ||

@@ -20,6 +20,11 @@ public partial class NativeReferenceEventsAudit : Node
         RuntimeNativePlayer? player = null;
         try
         {
+            if (OS.GetCmdlineUserArgs() is ["--owned-clock-light-reference", var clockLightDataRoot, var clockLightReceipt])
+            {
+                ExerciseOwnedClockLightReference(clockLightDataRoot, clockLightReceipt);
+                GetTree().Quit(); return;
+            }
             if (OS.GetCmdlineUserArgs() is ["--image-space-clock"])
             {
                 ExerciseImageSpaceClock(); GetTree().Quit(); return;

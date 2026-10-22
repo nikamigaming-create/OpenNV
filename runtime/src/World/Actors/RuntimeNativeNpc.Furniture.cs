@@ -302,19 +302,29 @@ internal partial class RuntimeNativeNpc
         var retainedFurniture = false;
         try
         {
-            RetainHeadTracking();
-            RetainPendingSelection();
-            RetainBindingFailure();
-            RetainSelectionFailure();
-            RetainDialogueContinuation();
-            retainedFurniture = RetainFurnitureContinuation();
-            if (_aiReferenceState is { } state && ReferenceEquals(state.QueryCurrentPackage, _currentPackageQuery) && _packageEvents is not null)
-                _aiWorld?.UnloadedPackages?.Retain(Appearance.Reference!.Value, _packageEvents);
+            if (_sandboxAdmissionStaging is { } staging)
+            {
+                if (!staging.Retire(RetainLiveSources)) ReleaseDetachedSandboxAdmission();
+            }
+            else RetainLiveSources();
         }
         finally
         {
             ReleaseSourceBindings();
             ClearFurniture(retire: ownsFurniture && !retainedFurniture);
+        }
+
+        void RetainLiveSources()
+        {
+            RetainHeadTracking();
+            RetainPendingSelection();
+            RetainBindingFailure();
+            RetainSandboxAdmissionFailure();
+            RetainSelectionFailure();
+            RetainDialogueContinuation();
+            retainedFurniture = RetainFurnitureContinuation();
+            if (_aiReferenceState is { } state && ReferenceEquals(state.QueryCurrentPackage, _currentPackageQuery) && _packageEvents is not null)
+                _aiWorld?.UnloadedPackages?.Retain(Appearance.Reference!.Value, _packageEvents);
         }
     }
 }

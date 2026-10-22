@@ -1,4 +1,6 @@
 using Godot;
+using OpenNV.Runtime.Campaigns.NewVegas.Opening;
+using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.World.Cells;
 using OpenNV.Runtime.World.Actors;
@@ -37,7 +39,10 @@ public partial class RuntimeCoordinator
                 if (_nativeReferencePresentation.Nodes.GetValueOrDefault(instance.Reference) is { } node ||
                     world.IsEnabled(instance.Reference) && (node = _nativeReferencePresentation.Resolve(instance.Reference)) is not null)
                 {
+                    var pendingSandboxPlacement = instance.SandboxAdmissionFailure is { SourcePlacement: not null } pending ? pending : null;
                     node.Transform = ReferenceTransform(reference);
+                    if (pendingSandboxPlacement is not null && node is RuntimeNativeNpc npc)
+                        npc.AcknowledgeSandboxPlacement(pendingSandboxPlacement);
                     if (node is CharacterBody3D body) body.Velocity = Vector3.Zero;
                 }
             }
@@ -60,19 +65,19 @@ public partial class RuntimeCoordinator
         foreach (var actor in root.GetChildren().OfType<RuntimeNativeNpc>())
         {
             actor.PackageSpeechBusy = () => (_nativeOpeningStageDriver ??
-                throw new InvalidOperationException("Package speech has no gameplay owner.")).IsDialogueBusy(actor.Appearance.Reference!.Value);
+                throw new NotSupportedException("Package speech has no gameplay owner.")).IsDialogueBusy(actor.Appearance.Reference!.Value);
             actor.NpcDialogueActive = () => (_nativeOpeningStageDriver ??
-                throw new InvalidOperationException("Package speech has no gameplay owner.")).IsNpcDialogueActive(actor.Appearance.Reference!.Value);
+                throw new NotSupportedException("Package speech has no gameplay owner.")).IsNpcDialogueActive(actor.Appearance.Reference!.Value);
             actor.BeginPackageDialogue = (package, completed) => (_nativeOpeningStageDriver ??
-                throw new InvalidOperationException("Package dialogue has no gameplay owner."))
+                throw new NotSupportedException("Package dialogue has no gameplay owner."))
                 .RequestPackageDialogue(actor.Appearance.Reference!.Value, package, completed);
             actor.ExecutePackageEvent = (program, caller) => (_nativeOpeningStageDriver ??
-                throw new InvalidOperationException("Package results have no gameplay owner."))
+                throw new NotSupportedException("Package results have no gameplay owner."))
                 .ExecutePackageEvent(program, caller);
         }
         foreach (var actor in root.GetChildren().OfType<RuntimeNativeCreature>())
             actor.ExecutePackageEvent = (program, caller) => (_nativeOpeningStageDriver ??
-                throw new InvalidOperationException("Creature package results have no gameplay owner."))
+                throw new NotSupportedException("Creature package results have no gameplay owner."))
                 .ExecutePackageEvent(program, caller);
         _nativeReferencePresentation = root.GetChildren().OfType<RuntimeNativeReferencePresentation>().Single();
         _nativeReferencePresentation.SynchronizeActorAppearance = actor => SynchronizeNativeNpcAppearance(actor, _nativeActiveCell!);
@@ -80,7 +85,7 @@ public partial class RuntimeCoordinator
         {
             _nativeReferenceEvents = existing;
             existing.Player = _nativePlayer;
-            _nativePlayer!.BindGrabEvents = existing.BindPlayerGrab;
+            if (_nativePlayer is { } player) player.BindGrabEvents = existing.BindPlayerGrab;
             existing.ActivateHitCallbacks();
             existing.SetProcess(true);
             return;
@@ -94,37 +99,65 @@ public partial class RuntimeCoordinator
             ObservePlayerActivationFinished = (reference, successful) => _botInteractions.Finish(reference.ToString(), successful)
         };
         events.Configure(_nativePluginStack!, _nativeReferences!, _nativeQuestState!, cell, root,
-            new(events.IsCurrentFurniture, effect =>
+            CreateNativeReferenceEventHost(new((actor, furniture) =>
             {
-                if (effect.Kind == FalloutReferenceEffectKind.DefaultActivate)
-                {
-                    events.DefaultActivate(effect.Target ?? effect.Source, effect.Argument);
-                }
-                else (_nativeOpeningStageDriver ?? throw new InvalidOperationException("Native event effects have no gameplay host."))
-                    .ApplyReferenceEffect(effect);
-            }, caller => _nativeOpeningStageDriver!.TakeMessageButton(caller), actor => _nativeOpeningStageDriver!.IsTalking(actor),
-                (actor, name) => _nativeOpeningStageDriver!.ActorValue(actor, name), name => _nativeOpeningStageDriver!.IsPlayerTagSkill(name), _nativeGlobals,
-                (source, bindings, command, arguments) => _nativeOpeningStageDriver!.ApplyNativeSourceCommand(source, bindings, command, arguments),
-                actor => _nativeOpeningStageDriver!.IsInCombat(actor),
-                (caller, target) => _nativeOpeningStageDriver!.IsInSameCell(caller, target), _nativeQuestScripts?.Scripts.Events,
-                (caller, target) => _nativeOpeningStageDriver!.ReferenceDistance(caller, target),
-                actor => _nativeOpeningStageDriver!.IsInInterior(actor),
-                (reference, group, initialization) => _nativeReferencePresentation!.PlayGroup(reference, group, initialization),
-                (reference, group) => _nativeReferencePresentation!.IsAnimPlaying(reference, group),
-                () => _nativeOpeningStageDriver!.Vitals.Level,
-                ReadActorValue: (actor, name, kind) => _nativeOpeningStageDriver!.ReadActorValue(actor, name, kind),
-                ChangeActorValue: (actor, name, operation, value) => _nativeOpeningStageDriver!.ChangeActorValue(actor, name, operation, value),
-                Inventory: _nativeOpeningStageDriver!.InventoryCommands, Challenges: _nativeQuestScripts!.Scripts.Challenges,
-                HeadingAngle: (caller, target) => _nativeOpeningStageDriver!.ReferenceHeadingAngle(caller, target),
-                TagSkills: _nativeOpeningStageDriver!.PlayerTagSkills),
+                if (_nativePluginStack!.RuntimeFormId(actor) == 0x14 && _nativePlayer is null)
+                    throw new NotSupportedException("Player furniture query requires an actual resident player.");
+                return events.IsCurrentFurniture(actor, furniture);
+            }, effect =>
+            {
+                if (effect.Kind != FalloutReferenceEffectKind.DefaultActivate)
+                    throw new NotSupportedException("Native event effect has no gameplay host.");
+                events.DefaultActivate(effect.Target ?? effect.Source, effect.Argument);
+            }, Globals: _nativeGlobals, Events: _nativeQuestScripts?.Scripts.Events,
+                PlayGroup: (reference, group, initialization) => _nativeReferencePresentation!.PlayGroup(reference, group, initialization),
+                IsAnimPlaying: (reference, group) => _nativeReferencePresentation!.IsAnimPlaying(reference, group),
+                GameTime: _nativeGameTime), _nativeOpeningStageDriver, _nativeQuestScripts?.Scripts.Challenges),
             ReferenceTransform, _configuration.World.GameUnitsToMeters, _configuration.Player.CollisionLayer);
         root.AddChild(events);
         _nativeReferenceEvents = events;
-        _nativePlayer!.BindGrabEvents = events.BindPlayerGrab;
+        if (_nativePlayer is { } playerOwner) playerOwner.BindGrabEvents = events.BindPlayerGrab;
         foreach (var reference in events.BoundTriggers)
             _parityObservations.Observe("world/active-cell", $"{cell.Cell.FormKey}/{reference.FormKey}",
                 NativeReferenceState(reference, cell.BaseObjects[reference.Base], "source-primitive-contact-owner"));
         GD.Print($"OPENNV_NATIVE_REFERENCE_EVENTS_READY cell={cell.Cell.FormKey} source=winning-reference-scripts");
+    }
+
+    // Reference/world/clock/presentation owners do not require a player. Reached
+    // gameplay operations still require their real owner; absence is a source fault.
+    internal static FalloutReferenceScriptHost CreateNativeReferenceEventHost(FalloutReferenceScriptHost source,
+        RuntimeNativeOpeningStageDriver? driver, FalloutChallenges? challenges = null)
+    {
+        RuntimeNativeOpeningStageDriver Gameplay() => driver ??
+            throw new NotSupportedException("Native reference command requires an actual gameplay/player host.");
+        return source with
+        {
+            Apply = effect =>
+            {
+                if (effect.Kind == FalloutReferenceEffectKind.DefaultActivate)
+                {
+                    _ = Gameplay();
+                    source.Apply(effect);
+                }
+                else Gameplay().ApplyReferenceEffect(effect);
+            },
+            GetButtonPressed = caller => Gameplay().TakeMessageButton(caller),
+            IsTalking = actor => Gameplay().IsTalking(actor),
+            ActorValue = (actor, name) => Gameplay().ActorValue(actor, name),
+            IsPlayerTagSkill = name => Gameplay().IsPlayerTagSkill(name),
+            Command = (caller, bindings, command, arguments) => Gameplay().ApplyNativeSourceCommand(caller, bindings, command, arguments),
+            IsInCombat = actor => Gameplay().IsInCombat(actor),
+            IsInSameCell = (caller, target) => Gameplay().IsInSameCell(caller, target),
+            Distance = (caller, target) => Gameplay().ReferenceDistance(caller, target),
+            IsInInterior = actor => Gameplay().IsInInterior(actor),
+            PlayerLevel = () => Gameplay().Vitals.Level,
+            ReadActorValue = (actor, name, kind) => Gameplay().ReadActorValue(actor, name, kind),
+            ChangeActorValue = (actor, name, operation, value) => Gameplay().ChangeActorValue(actor, name, operation, value),
+            Inventory = driver?.InventoryCommands,
+            Challenges = driver is null ? null : challenges,
+            HeadingAngle = (caller, target) => Gameplay().ReferenceHeadingAngle(caller, target),
+            TagSkills = driver?.PlayerTagSkills,
+        };
     }
 
     private void DiscoverNativeCellReferences(FalloutCellScene cell) =>

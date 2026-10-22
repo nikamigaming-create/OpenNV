@@ -60,7 +60,19 @@ internal sealed partial class FalloutReferenceWorld
         placement.Validate();
         if (instance.Deleted || instance.DeletePending || records.GetEffective(placement.Cell).Signature != "CELL")
             throw new InvalidDataException("Reference placement target is unavailable.");
-        instance.Placement = placement.Copy();
+        var next = placement.Copy();
+        var stopped = instance.SandboxAdmissionFailure;
+        if (instance.CanCaptureSandboxAdmissionFailure?.Invoke() == true)
+            stopped = instance.CaptureSandboxAdmissionFailure?.Invoke() ??
+                throw new InvalidDataException("Stopped Sandbox relocation has no capture owner.");
+        else if ((stopped is not null && instance.CaptureSandboxAdmissionFailure is not null) ||
+            (stopped is null && instance.ProcedureCaptureBlocker?.StartsWith(FalloutSandboxPackage.CaptureBlockerPrefix, StringComparison.Ordinal) == true))
+            throw new NotSupportedException("Stopped Sandbox relocation cannot capture its current continuation.");
+        stopped?.Validate(records, instance);
+        var relocated = stopped?.Relocate(next);
+        // All admission and copies precede the authoritative placement commit.
+        instance.Placement = next;
+        instance.SandboxAdmissionFailure = relocated;
         instance.PackageMotion = null;
         instance.Engagement = null;
         instance.AggroWarning = null;
