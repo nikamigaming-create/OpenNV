@@ -9,42 +9,43 @@ lockpicking, hacking and all 13 skills. No campaign or parity completion is clai
 
 ## Active block
 
-Checked baseline: PR265 merged as 538b8ee45b81e113b08d19c99b6b92ba3ed2ea57
-after all five checks passed on c914378d and independent review found no concrete
-default-LAND regression. Local main and origin/main were verified equal and clean,
-with no outstanding task PR. The active branch is codex/fnv-tutorial-wells-resume-20261022.
-The coordinator owns builds, native execution and Git. One scoped writer owns
-the pending-publication phase/history diagnostics and their existing contract probe.
+Checked baseline: PR266 merged as 4b5fe4a27c8ec1cc971df3283df735e670c676ba.
+The active branch is codex/fnv-remaining-wells-combat-continuation. The coordinator
+owns builds, native execution and Git; the two-file diagnostic writer is frozen.
+The current lock-ownership correction is ready for checked publication.
 
-Current bounded milestone: diagnose publication 155, which exceeded the harness's
-250 ms deadline during whole-save Continue before combat input. The worker started
-in 0.027 ms, but the retained receipt cannot distinguish text writing, atomic commit
-or completion delay. Add same-clock phase timestamps and a bounded last-failed
-receipt that survives later healthy writes; preserve loss and marker semantics.
-This is diagnostic instrumentation, not an established latency repair.
+Observe captures immutable timing, receipt and exactly-once loss state under the
+publication lock, then formats diagnostics outside it. A blocked virtual exception
+Message no longer blocks independent Timing/IsCompleted/Wait access. The 250 ms
+cutoff, counters, original error, atomic file ownership and marker policy remain
+unchanged. Debug builds have zero warnings/errors, telemetry contracts pass and
+independent bounded review is clean. The full runtime gate exits 0 with all 2,185
+frozen source/configuration hashes unchanged and a clean whitespace check.
 
-The four-file implementation passes a zero-warning/error Debug build and the
-telemetry contracts: actual atomic-file ordering/failure, deterministic text/
-commit/receipt delays, exact deadline/loss, eventual failed-write completion and
-healthy-successor retention. Independent bounded source review is clean. One
-instrumented ordinary whole-save Continue reaches gameplay with zero publication
-losses and exits normally; source and copied checkpoints remain byte-identical.
-Its final observed text/commit/receipt durations are 0.747/11.603/0.0025 ms. No
-movement, combat or save command is sent. The original delay remains unexplained;
-do not infer a cause or latency improvement from this healthy repeat. The required
-full runtime gate passes with exit 0, all 2,185 frozen source/configuration hashes
-unchanged and a clean whitespace check. Checked publication is next; keep this
-head frozen through hosted acceptance. Remaining-wells combat then resumes from
-the complete pre-death F5 with 110 HP and five loaded rounds.
+The prior publication 539 took 1,275.7 ms with one attempt and no writer error.
+Its atomic duration is 941.7 ms, followed by roughly 334 ms before phase observation.
+These are wall-time intervals, not a proven disk-service or lock-wait cause. The
+ownership correction does not establish a latency fix. A private 32-case actual
+atomic-file probe preserves exact old/new snapshots with delete-sharing readers
+(maximum successful atomic write 16.9 ms) and visibly refuses all eight deny-delete
+cases. It does not reproduce 539. The older publication 155 remains unexplained.
 
-One controlled repeat changed only the harness directory to Temp. It stayed healthy
-through ordinary forward input, reload and F5, retaining the complete campaign at
-110 HP with five loaded rounds. The player subsequently died through shared vitals;
-the attacker is not yet qualified. Ordinary Quit exited with code 0. The original
-post-impact checkpoint remains byte-identical. A healthy repeat does not explain
-the earlier loss. After phase validation, make one bounded Continue observation,
-then resume remaining-wells combat from the pre-death F5. Do not clear failures,
-relax the cutoff, seed quests or place actors.
+A genuine separate-process whole-save Continue from the post-kill F5 completes
+with zero publication losses and normal exit 0. Ordinary unpaused time reaches the
+winning fDyingTimer of two seconds, consumes the retained OnDeath event and runs
+the actual well-2 script: QUST 104c66 slot 12 advances from 0 to 1 and stays 1 across
+repeated observations. The corpse retains health -2.4183674 and death count 1.
+No quest state is seeded or event replayed. Objective 50 remains incomplete at
+stage 50; one kill is not well or campaign completion. The player takes damage to
+5 HP before pausing. F5 while paused does not dispatch, so no new save is claimed.
+The original and copied 110-HP post-kill saves remain byte-identical.
+
+Next gameplay owner: continue the preserved 110-HP checkpoint with bounded input
+and immediate pause/readback, reload and fight actual remaining well-2 actors
+10a20f/10a210, then verify delayed death counters and objective transition through
+ordinary play. Preserve all real actors and shared state. Do not seed counters,
+teleport actors, relax telemetry guards or mistake paused F5 for a committed save.
+Retail startup remains separately held after two failed attempts; no third launch.
 
 Completed default-LAND milestone: an ordinary second-well rifle miss consumed one round and
 resolved its terrain hit, but impact effects failed at LAND 0e25c7 quadrant 1

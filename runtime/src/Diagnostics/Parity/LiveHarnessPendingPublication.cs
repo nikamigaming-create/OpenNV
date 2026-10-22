@@ -147,21 +147,30 @@ internal sealed class LiveHarnessPendingPublication
 
     internal LiveHarnessPublicationObservation Observe()
     {
+        LiveHarnessPublicationTiming timing;
+        LiveHarnessPublicationReceipt? receipt;
+        double now;
+        bool late, lost, newlyLost;
         lock (_gate)
         {
-            var now = ReadClock();
-            var elapsed = (_receipt?.Timing.CompletedMilliseconds ?? now) - _timing.EnqueuedMilliseconds;
-            var late = elapsed >= LiveHarnessPublicationCadence.IntervalMilliseconds;
-            var lost = _receipt?.Error is not null || late || _lossReported;
-            var newlyLost = lost && !_lossReported;
+            now = ReadClock();
+            timing = _timing;
+            receipt = _receipt;
+            var elapsed = (receipt?.Timing.CompletedMilliseconds ?? now) - timing.EnqueuedMilliseconds;
+            late = elapsed >= LiveHarnessPublicationCadence.IntervalMilliseconds;
+            lost = receipt?.Error is not null || late || _lossReported;
+            newlyLost = lost && !_lossReported;
             if (newlyLost) _lossReported = true;
-            Exception? failure = null;
-            if (_receipt?.Error is { } error)
-                failure = new IOException(FormattableString.Invariant($"Live-state publication writer failed: type={error.GetType().FullName} hresult=0x{error.HResult:X8} {error.Message}; ") + Describe(_timing, now), error);
-            else if (late)
-                failure = new IOException("Live-state publication exceeded its 250 ms interval; " + Describe(_timing, now));
-            return new(_receipt is not null, newlyLost, lost, failure, _receipt, _timing);
         }
+        // Formatting and virtual exception metadata do not own publication
+        // state. Keep them outside the worker's phase/completion gate and use
+        // only this immutable observation, even if the worker advances later.
+        Exception? failure = null;
+        if (receipt?.Error is { } error)
+            failure = new IOException(FormattableString.Invariant($"Live-state publication writer failed: type={error.GetType().FullName} hresult=0x{error.HResult:X8} {error.Message}; ") + Describe(timing, now), error);
+        else if (late)
+            failure = new IOException("Live-state publication exceeded its 250 ms interval; " + Describe(timing, now));
+        return new(receipt is not null, newlyLost, lost, failure, receipt, timing);
     }
 
     internal bool CanClearFailureMarker(long currentFailureGeneration)
