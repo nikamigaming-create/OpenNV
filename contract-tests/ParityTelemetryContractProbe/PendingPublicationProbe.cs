@@ -15,10 +15,12 @@ internal static class PendingPublicationProbe
         AtomicFilePhasesAndSnapshots();
         PhaseTimingAndHistory();
         PhaseFaults();
+        DiagnosticFormattingDoesNotOwnCompletion();
         Console.WriteLine("OPENNV_PENDING_PUBLICATION_PASS deadlineMilliseconds=250 queueIncluded=true completionTimestamp=true " +
             "pendingAndCompletedLate=true oncePerWriteLoss=true queueAndWorkerSeparated=true ownerNotBlockedByWriter=true " +
             "originalFaultRetained=true markerGeneration=true cumulativeLossRetained=true injectedClockAndWriter=true " +
-            "actualAtomicPhases=true durableSnapshots=true phaseTiming=true completedLossHistory=true boundedErrors=true");
+            "actualAtomicPhases=true durableSnapshots=true phaseTiming=true completedLossHistory=true boundedErrors=true " +
+            "diagnosticFormattingOutsideCompletionGate=true");
     }
 
     private static void TimelyCompletionObservedLate()
@@ -380,6 +382,95 @@ internal static class PendingPublicationProbe
             Timing.FilePhase: LiveHarnessFilePhase.TextWriteStarted, Timing.TextWriteCompletedMilliseconds: null
         },
             "File phase accepted a regressed clock or hid its failure.");
+    }
+
+    private static void DiagnosticFormattingDoesNotOwnCompletion()
+    {
+        var limit = TimeSpan.FromSeconds(5);
+        using var formatting = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        using var accessed = new ManualResetEventSlim();
+        var sourceError = new BlockingMessageIOException(formatting, release, limit + limit);
+        var fixture = new Fixture();
+        var pending = fixture.Start(phase =>
+        {
+            phase(LiveHarnessFilePhase.TextWriteStarted);
+            phase(LiveHarnessFilePhase.TextWriteCompleted);
+            phase(LiveHarnessFilePhase.CommitStarted);
+            phase(LiveHarnessFilePhase.CommitCompleted);
+            throw sourceError;
+        }, publication: 539);
+        fixture.Now = 1; fixture.Run();
+        LiveHarnessPublicationObservation? observation = null;
+        LiveHarnessPublicationTiming? terminalTiming = null;
+        Exception? observerFailure = null, accessorFailure = null;
+        var observer = new Thread(() =>
+        {
+            try { observation = pending.Observe(); }
+            catch (Exception error) { observerFailure = error; }
+        })
+        { IsBackground = true };
+        var accessor = new Thread(() =>
+        {
+            try
+            {
+                terminalTiming = pending.Timing;
+                Require(pending.IsCompleted && terminalTiming is { FilePhase: LiveHarnessFilePhase.CommitCompleted, CompletedMilliseconds: 1 } &&
+                    !pending.CanClearFailureMarker(0), "Diagnostic formatting concealed terminal publication or its actual file phase.");
+                pending.Wait();
+            }
+            catch (Exception error) { accessorFailure = error; }
+            finally { accessed.Set(); }
+        })
+        { IsBackground = true };
+        var accessorStarted = false;
+        observer.Start();
+        try
+        {
+            Require(formatting.Wait(limit), "The controlled exception formatter was not entered.");
+            accessor.Start(); accessorStarted = true;
+            Require(accessed.Wait(limit), "Virtual diagnostic formatting held the worker phase/completion gate.");
+        }
+        finally
+        {
+            // Also release and join on the old implementation's failure: the
+            // negative control must not strand either controlled thread.
+            release.Set();
+            var observerJoined = observer.Join(limit + limit);
+            var accessorJoined = !accessorStarted || accessor.Join(limit + limit);
+            Require(observerJoined && accessorJoined, "Controlled diagnostic threads did not retire after release.");
+        }
+        if (observerFailure is not null) throw new InvalidDataException("Controlled diagnostic observer failed.", observerFailure);
+        if (accessorFailure is not null) throw new InvalidDataException("Independent terminal publication accessor failed.", accessorFailure);
+        Require(observation is { Completed: true, Lost: true, NewLoss: true } &&
+            ReferenceEquals(observation.Receipt?.Error, sourceError) && ReferenceEquals(observation.Failure?.InnerException, sourceError) &&
+            ReferenceEquals(observation.Timing, terminalTiming) && !pending.Observe().NewLoss,
+            "Diagnostic formatting changed its immutable receipt, original error identity or exactly-once loss admission.");
+        var history = new LiveHarnessPublicationHistory(); history.Observe(observation!);
+        var retained = history.LastFailed;
+        Require(retained is { Completed: true, WriterError: not null } &&
+            retained.WriterError.Type == sourceError.GetType().FullName && retained.WriterError.HResult == sourceError.HResult &&
+            retained.WriterError.Message == "Controlled writer error.", "Formatting lost the actual terminal writer error from retained history.");
+        var healthy = new Fixture { Now = 10 };
+        var successor = healthy.Start(Success, generation: 1);
+        healthy.Now = 11; healthy.Run(); history.Observe(successor.Observe());
+        Require(ReferenceEquals(history.LastFailed, retained) && successor.CanClearFailureMarker(1) && !pending.CanClearFailureMarker(1),
+            "A healthy successor erased diagnostic failure history or cleared the failed publication's marker capability.");
+        _ = JsonSerializer.Serialize(history.LastFailed);
+    }
+
+    private sealed class BlockingMessageIOException(ManualResetEventSlim entered, ManualResetEventSlim release, TimeSpan limit)
+        : IOException("Controlled writer error.")
+    {
+        public override string Message
+        {
+            get
+            {
+                entered.Set();
+                if (!release.Wait(limit)) throw new TimeoutException("Controlled diagnostic formatter was not released.");
+                return base.Message;
+            }
+        }
     }
 
     private static LiveHarnessFileWrite Success() => new(1, 1, null, null);
