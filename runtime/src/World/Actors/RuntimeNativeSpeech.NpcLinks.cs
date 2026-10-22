@@ -54,8 +54,18 @@ internal partial class RuntimeNativeSpeech
         if (!FalloutDialogueSpeaker.HasConversationVoice(_stack, source.Base, source.Templates)) return false;
         var opening = SelectNpcConversationOpening(speaker, target, topic);
         if (opening is not { } selected) return false;
-        StartCore(new(speaker.ToString(), target.ToString(), selected.Topic.ToString()), _stack.GetEffective(speaker),
-            selected.Topic, target, selectedInfo: selected.Info, forceNpcConversation: true, ambientConversation: true);
+        try
+        {
+            StartCore(new(speaker.ToString(), target.ToString(), selected.Topic.ToString()), _stack.GetEffective(speaker),
+                selected.Topic, target, selectedInfo: selected.Info, forceNpcConversation: true, ambientConversation: true);
+        }
+        catch (Exception error)
+        {
+            // StartCore reserves both actors before binding, results and playback.
+            // Keep the failed result prefix visible and stop the shared voices;
+            // an AI caller must not leave an apparently healthy partial exchange.
+            Fail(error); throw;
+        }
         return true;
     }
 

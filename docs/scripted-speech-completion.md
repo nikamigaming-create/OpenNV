@@ -38,7 +38,22 @@ started command cannot inherit an outgoing command's frame completion.
 
 Same-actor replacement and empty interruption still fail visibly. A failed result
 prefix stops audible playback, retains a failure and blocks saving; another
-request does not replay that prefix. Channel identity, source binding, playback,
+request does not replay that prefix. Ambient NPC startup uses the same failure
+owner after its selected INFO enters binding/results/playback. Failure releases
+both exchange reservations while retaining the unresolved voice and error; it
+does not turn a partially executed request into a saveable refusal. The owned
+ambient failure audit checks both busy refusals, retirement, save denial and
+ticks/retry without restart. Its selected HELLO has no result script, so that
+fixture does not establish nonempty committed-result continuation. A separate
+original synthetic INFO/quest/script fixture mounts through the complete owned
+content graph and uses the same actual bodies. Its compiled SCRO binds a Counter
+quest local; the real interpreter increments it to one before the injected
+post-result failure. The callback count and authoritative counter both remain one
+through ticks and retry, while saving remains refused. All input plugins and the
+original synthetic bytes are hash checked; the disposable original plugin is
+removed after the audit. This is a startup-failure contract, not live voiced
+exchange or cold conversation acceptance.
+Channel identity, source binding, playback,
 lip/face state, completion counts and every subtitle candidate remain visible in
 telemetry. Competing HUD subtitle selection is unbound: the single-caption
 adapter declines an ambiguous candidate set and resumes when one remains. It

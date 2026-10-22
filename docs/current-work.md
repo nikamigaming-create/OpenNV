@@ -1,7 +1,8 @@
 # Current work
 
-Updated 2026-10-21. Priority: fully playable vanilla Fallout: New Vegas flat mode.
-Root owns implementation, builds, input and Git without delegated agents. This
+Updated 2026-10-22. Priority: fully playable vanilla Fallout: New Vegas flat mode.
+The local integration coordinator owns builds, input and Git; user-authorized
+writers have separate file scopes and do not run competing builds or tests. This
 is greenfield development; old-save compatibility is not a priority. Owned retail
 inputs remain read-only. Follow docs/implementation-plan.md, including terminals,
 lockpicking, hacking and all 13 skills. No campaign or parity completion is claimed.
@@ -10,10 +11,24 @@ lockpicking, hacking and all 13 skills. No campaign or parity completion is clai
 
 Branch codex/fnv-shared-sandbox, based on synchronized main
 1901d2fa99e5ab84dd14d1141b8b4b4ff4a8f84f. The task PR uses this branch; preserve
-unrelated PR #242. No game, build or watcher is running. Frame recording remains
-off. Full runtime gate passes (sandbox-runtime-gate.log, session44635 exit0),
-as does the selected owned10a210/074fe6 four-request navigation audit
-(sandbox-final-owned-wander.log, exit0). git diff --check passes. Hosted checks,
+unrelated PR #242. Ambient speech startup now retires participant reservations
+through the shared failure owner while retaining unresolved voice/results and
+save refusal. The owned Trudy/Sunny HELLO failure fixture passes and fails its
+negative control with cleanup disabled; both busy refusals and ticks/retry are
+covered. Its selected INFO has no result script. A separate original synthetic
+INFO/quest/script source proves one compiled-bound interpreter counter increment
+before failure, retained at one through ticks/retry, with both save APIs refused.
+The counted negative control detects the original reservation leak after that
+result commits. All ten owned plugins and original synthetic bytes remain hash
+identical. The final full gate passes (integration-final-runtime-gate.log, exit0),
+including retained-window and timing contracts. Both speech audits pass against
+that build (speech-final-counted.log and speech-final-hello.log); the counted
+negative control is speech-ambient-counted-negative.log.
+Scoped telemetry and publication
+timing corrections are prepared separately for the next fresh branch.
+The previous gameplay owner confirmed it is idle and holds competing edits/tests.
+No game, build or watcher is running. Frame recording remains off. The final selected owned10a210/074fe6 four-request
+navigation audit passes (integration-owned-wander.log, exit0). git diff --check passes. Hosted checks,
 review and main publication remain pending. Main has not been updated.
 
 The shared NPC/creature Sandbox owner now moves actors along source NAVM requests

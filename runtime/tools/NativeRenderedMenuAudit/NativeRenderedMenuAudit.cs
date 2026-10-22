@@ -37,10 +37,12 @@ public partial class NativeRenderedMenuAudit : Control
                 GetTree().Quit();
                 return;
             }
-            if (args.Length >= 9 && args[1] is "--npc-speech-settled" or "--npc-speech-failure")
+            if (args.Length >= 9 && args[1] is "--npc-speech-settled" or "--npc-speech-failure" or "--npc-speech-ambient-failure" or "--npc-speech-ambient-result-failure")
             {
                 await NpcSpeechSettled(args[0], args[2], args[3], args[4], args[5], args[6], args[7],
-                    short.Parse(args[8], System.Globalization.CultureInfo.InvariantCulture), args[9..], args[1] == "--npc-speech-failure");
+                    short.Parse(args[8], System.Globalization.CultureInfo.InvariantCulture), args[9..], args[1] == "--npc-speech-failure",
+                    ambientFailure: args[1] is "--npc-speech-ambient-failure" or "--npc-speech-ambient-result-failure",
+                    ambientResultFailure: args[1] == "--npc-speech-ambient-result-failure");
                 GetTree().Quit();
                 return;
             }

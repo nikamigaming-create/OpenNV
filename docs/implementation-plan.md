@@ -7,7 +7,8 @@ shooting, creature combat and campfire cooking, then Primm/ED-E and the Strip.
 Repair shared runtime behavior from owned records and actual gameplay. Continue
 to remaining campaign behavior; a selected successful route is not full game
 support. The active owner is in [current-work.md](current-work.md).
-Root works alone and owns code, builds, live input and Git.
+The user authorizes coordinated writers. The local integration coordinator owns
+builds, live input and Git; writers use separate scopes and serialize native tests.
 
 The user explicitly includes terminals, lockpicking, hacking and all 13 NV skills:
 Barter, Energy Weapons, Explosives, Lockpick, Medicine, Melee Weapons, Repair,
