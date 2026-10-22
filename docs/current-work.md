@@ -56,8 +56,17 @@ remain unaccepted. No position scan was used. The day original is in Library as
 libfile_07071c411b9c8191b764403944e43ae9. The capture process exited normally.
 The final required runtime gate passed with exit0 (visual-final-runtime-gate.log).
 All 1,938 source/script hashes match its frozen snapshot; whitespace checks pass.
-All runtime writers remain frozen for publication. The approved retail fallback
-then entered once with verified backups and a distinct copied checkpoint. Retail
+PR260 contains the tested checkpoint afb3bdf26f9ff3bb39c8c89e4685e534c8484a11.
+It remains draft: independent review found stopped receipts stale after relocation
+or shared alert changes, and failed detached staging could erase retained history.
+Those follow-up repairs now pass the managed Debug build and focused regressions
+(sandbox-revisions-build.log and sandbox-revisions-focused.log). They retain
+authoritative relocation and alert changes, private staging clocks, and consumed
+package history; tree entry refuses a receipt replaced during staging. The earlier
+full gate does not cover these follow-up edits. Actual Godot staging fault injection,
+renewed full native validation and ordinary F5/cold proof remain pending. Do not
+merge or push the new runtime changes before the required gate.
+The approved retail fallback then entered once with verified backups and a distinct copied checkpoint. Retail
 currently stops at a Steam Error modal before core/private bridge initialization;
 no gameplay command or capture was sent. Normal exit, profile postdiff and any
 required restoration remain pending. Do not relaunch or overlap native jobs.

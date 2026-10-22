@@ -682,6 +682,7 @@ public partial class RuntimeCoordinator
             }
             if (grid is not null) await AddExteriorLandscapeResponsive(root, grid);
             MeasureNativeLoadStep("publish-cell-tree", () => AddChild(root));
+            RequireNativeActorPublication(root);
             await YieldNativeLoadingFrame();
             foreach (var sounds in root.FindChildren("*", "", true, false).OfType<NativeOwnedAnimationSoundPlayer>())
                 sounds.RequirePcmRestored();
@@ -988,6 +989,7 @@ public partial class RuntimeCoordinator
                     () => _nativeReferences!.ActorFactions(reference.FormKey), _nativeGameTime, _nativeGlobals, _nativeReferences,
                     NativeActorItemCount);
                 root.AddChild(actor);
+                if (root.IsInsideTree()) RequireNativeActorPublication(actor);
                 AddNativeReferenceEmittance(actor, reference);
                 _nativeActorDivergences[reference.FormKey.ToString()] =
                     "animation-selection-blending, face-pose, gameplay, material-lighting-output parity unbound";
@@ -1217,6 +1219,7 @@ public partial class RuntimeCoordinator
             targetRoot.ProcessMode = ProcessModeEnum.Disabled;
             if (grid is not null) await AddExteriorLandscapeResponsive(targetRoot, grid);
             AddChild(targetRoot);
+            RequireNativeActorPublication(targetRoot);
             if (targetScene.Cell.Lighting is not null) AddNativeCellEnvironment(targetRoot, targetScene);
             else AddExteriorEnvironment(targetRoot, targetScene.Cell);
             var arrival = TeleportTransform(entry);
@@ -1259,6 +1262,7 @@ public partial class RuntimeCoordinator
 
     private void SetNativeActiveCell(Node3D root, FalloutCellScene cell)
     {
+        RequireNativeActorPublication(root);
         ArgumentNullException.ThrowIfNull(root);
         ArgumentNullException.ThrowIfNull(cell);
         if (_nativeReferences is { } references)

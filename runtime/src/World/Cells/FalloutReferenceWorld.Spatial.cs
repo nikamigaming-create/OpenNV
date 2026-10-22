@@ -92,6 +92,11 @@ internal sealed partial class FalloutReferenceWorld
         }
         var placement = Placement(reference);
         var state = Get(reference);
+        if (state.SandboxAdmissionFailure is { SourcePlacement: { } relocated } relocation)
+        {
+            relocation.Validate(records, state);
+            return relocated.Copy();
+        }
         if (state.QuerySpatialPlacement is { } live)
         {
             var observed = live();

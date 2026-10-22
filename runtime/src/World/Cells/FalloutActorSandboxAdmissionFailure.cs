@@ -11,7 +11,8 @@ internal sealed record FalloutActorSandboxAdmissionFailure(FalloutFormKey Packag
     string Error, float[] Position, float[] Basis, ulong AiRandomState, double PollRemaining,
     FalloutScheduleTime? ScheduleTime, long QuestRevision, long ActivityRevision,
     FalloutActorActivitySnapshot Activity, long EventRevision, string LastEvent,
-    FalloutFormKey LastPackage, string LastPackageSha256, FalloutFaceBlinkSnapshot? Blink = null)
+    FalloutFormKey LastPackage, string LastPackageSha256, FalloutFaceBlinkSnapshot? Blink = null,
+    FalloutReferencePlacement? SourcePlacement = null)
 {
     internal const string AdmissionErrorPrefix = "Sandbox candidate admission requires its activity owner: ";
 
@@ -40,11 +41,17 @@ internal sealed record FalloutActorSandboxAdmissionFailure(FalloutFormKey Packag
             throw new InvalidDataException("Saved Sandbox admission pose has an invalid basis.");
         Activity.Validate();
         Blink?.Validate();
+        SourcePlacement?.Validate();
     }
 
     internal void Validate(FalloutPluginStack records, FalloutReferenceInstance actor)
     {
         Validate();
+        if (SourcePlacement is { } placement && (records.GetEffective(placement.Cell).Signature != "CELL" ||
+            actor.Placement is not { } authoritative || placement.Cell != authoritative.Cell ||
+            !placement.Position.SequenceEqual(authoritative.Position) ||
+            !placement.RotationRadians.SequenceEqual(authoritative.RotationRadians)))
+            throw new InvalidDataException("Stopped Sandbox relocation differs from authoritative placement.");
         if (records.GetEffective(actor.Base).Signature != "NPC_" || actor.PackageMotion is not null ||
             actor.PackageAssignment is { } assignment && (assignment.Package != Package || assignment.Done ||
                 !string.Equals(assignment.Sha256, PackageSha256, StringComparison.OrdinalIgnoreCase)) ||
@@ -79,6 +86,111 @@ internal sealed record FalloutActorSandboxAdmissionFailure(FalloutFormKey Packag
         events.RestoreHistory(EventRevision, LastEvent, LastPackage);
     }
 
+    internal void RestoreActivity(FalloutPluginStack records, FalloutReferenceInstance actor, FalloutActorActivityState activity)
+    {
+        Validate(records, actor);
+        activity.Restore(Activity);
+    }
+
+    internal FalloutActorSandboxAdmissionFailure Relocate(FalloutReferencePlacement placement)
+    {
+        Validate(); placement.Validate();
+        return Copy() with { SourcePlacement = placement.Copy() };
+    }
+
+    // Source placement is local to the resident cell root, like ordinary
+    // reference materialization. The retained global pose is only the fallback
+    // when no later authoritative relocation has superseded it.
+    internal Godot.Transform3D ResolveTransform(Godot.Transform3D sourceParent, float unitsToMetres, float referenceScale)
+    {
+        Validate();
+        if (!float.IsFinite(unitsToMetres) || unitsToMetres <= 0 ||
+            !float.IsFinite(referenceScale) || referenceScale <= 0 ||
+            !sourceParent.IsFinite() || !float.IsFinite(sourceParent.Basis.Determinant()) || sourceParent.Basis.Determinant() <= 0)
+            throw new InvalidDataException("Stopped Sandbox relocation has no valid source transform owner.");
+        if (SourcePlacement is { } placement)
+        {
+            var transformed = sourceParent * new Godot.Transform3D(
+                OpenNV.Runtime.Formats.Gamebryo.GamebryoCoordinate.ConvertReferenceEuler(
+                    new(placement.RotationRadians[0], placement.RotationRadians[1], placement.RotationRadians[2]), referenceScale),
+                OpenNV.Runtime.Formats.Gamebryo.GamebryoCoordinate.ConvertVector(
+                    new(placement.Position[0], placement.Position[1], placement.Position[2])) * unitsToMetres);
+            if (!transformed.IsFinite()) throw new InvalidDataException("Stopped Sandbox source transform overflowed.");
+            return transformed;
+        }
+        return new(new Godot.Basis(new(Basis[0], Basis[1], Basis[2]), new(Basis[3], Basis[4], Basis[5]),
+            new(Basis[6], Basis[7], Basis[8])), new(Position[0], Position[1], Position[2]));
+    }
+
     internal FalloutActorSandboxAdmissionFailure Copy() => this with
-    { Position = (float[])Position.Clone(), Basis = (float[])Basis.Clone(), Blink = Blink?.Copy() };
+    { Position = (float[])Position.Clone(), Basis = (float[])Basis.Clone(), Blink = Blink?.Copy(), SourcePlacement = SourcePlacement?.Copy() };
+}
+
+// Restoring a cold actor is preparation until it actually enters the tree.
+// A failed detached candidate must never publish an empty native lifecycle.
+internal sealed class FalloutSandboxAdmissionStaging
+{
+    private readonly FalloutReferenceInstance _actor;
+    private readonly FalloutActorSandboxAdmissionFailure _initialReceipt;
+    private readonly FalloutActorAnimationSnapshot _initialClock;
+    internal FalloutActorAnimationState Clock { get; } = new();
+    internal bool HeadTrackingRequired { get; }
+    internal string? HeadTrackingCaptureBlocker { get; }
+    private bool _live;
+    internal bool IsLive => _live && PublicationError is null;
+    internal string? PublicationError { get; private set; }
+
+    internal FalloutSandboxAdmissionStaging(FalloutReferenceInstance actor)
+    {
+        _initialReceipt = actor.SandboxAdmissionFailure ?? throw new InvalidDataException("Sandbox staging requires a retained stopped owner.");
+        _initialReceipt.Validate();
+        _actor = actor;
+        _initialClock = actor.Animation.Capture() ?? throw new InvalidDataException("Stopped Sandbox staging has no base clock.");
+        Clock.Restore(_initialClock);
+        HeadTrackingRequired = actor.HeadTrackingRequired;
+        HeadTrackingCaptureBlocker = actor.HeadTrackingCaptureBlocker;
+    }
+
+    internal void EnterLive() => EnterLive(static () => { });
+
+    internal void EnterLive(Action publish)
+    {
+        if (_live) return;
+        if (PublicationError is not null)
+            throw new InvalidDataException("Stopped Sandbox publication already failed: " + PublicationError);
+        try
+        {
+            ValidateAuthority();
+            publish();
+            ValidateAuthority();
+            _actor.Animation.Restore(Clock.Capture()!);
+            _live = true;
+        }
+        catch (Exception error)
+        {
+            PublicationError = error.Message;
+            throw;
+        }
+    }
+
+    private void ValidateAuthority()
+    {
+        if (!ReferenceEquals(_actor.SandboxAdmissionFailure, _initialReceipt))
+            throw new InvalidDataException("Stopped Sandbox authority changed during detached staging.");
+        if (_actor.Animation.Capture() != _initialClock)
+            throw new InvalidDataException("Stopped Sandbox source clock changed during detached staging.");
+    }
+
+    internal void RequirePublished()
+    {
+        if (!IsLive)
+            throw new InvalidDataException("Stopped Sandbox publication did not commit: " + (PublicationError ?? "still staged"));
+    }
+
+    internal bool Retire(Action liveRetirement)
+    {
+        if (!IsLive) return false;
+        liveRetirement();
+        return true;
+    }
 }

@@ -209,8 +209,10 @@ internal partial class RuntimeNativeNpc
         {
             world.InitializeSourceCorpse(Appearance.Reference!.Value);
             _aiReferenceState = world.Get(Appearance.Reference!.Value);
+            if (_aiReferenceState.SandboxAdmissionFailure is not null)
+                _sandboxAdmissionStaging = new(_aiReferenceState);
             world.BindActorAlert(Appearance.Reference!.Value, Activity);
-            _baseClock = _aiReferenceState.Animation;
+            _baseClock = _sandboxAdmissionStaging?.Clock ?? _aiReferenceState.Animation;
             _aiReferenceState.QueryCurrentPackage = _currentPackageQuery = () => CurrentPackage;
             _aiReferenceState.QuerySitting = _sittingQuery = () => SittingState;
         }
@@ -276,6 +278,7 @@ internal partial class RuntimeNativeNpc
             RuntimeNativeNifAnimation.ApplyLayers((baseAnimation, _baseAnimationSeconds), (overlay, _animationSeconds));
         if (bindingFailure is not null) PublishFace();
         BindHeadTrackingPersistence();
+        CompleteSandboxAdmissionStaging();
     }
 
     private void RestoreMarkerTravelLifecycleBeforeSelection()

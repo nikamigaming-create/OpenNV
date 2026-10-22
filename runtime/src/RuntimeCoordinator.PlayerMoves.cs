@@ -77,6 +77,7 @@ public partial class RuntimeCoordinator
             root.ProcessMode = ProcessModeEnum.Disabled;
             if (grid is not null) await AddExteriorLandscapeResponsive(root, grid);
             AddChild(root);
+            RequireNativeActorPublication(root);
             if (scene.Cell.Lighting is not null) AddNativeCellEnvironment(root, scene);
             else AddExteriorEnvironment(root, scene.Cell);
             arrivalCollision = await PrepareFollowerArrival(current, root, scene, grid?.Cells, placement, transform, followers);

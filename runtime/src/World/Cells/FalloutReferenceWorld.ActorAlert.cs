@@ -37,8 +37,25 @@ internal sealed partial class FalloutReferenceWorld
         RequireAlertActor(actor);
         var previous = Overrides(actor);
         if (previous.Alerted == value) return;
+        var nextRevision = checked(_alertRevisions.GetValueOrDefault(actor) + 1);
+        var state = records.RuntimeFormId(actor) == 0x14 ? null : Get(actor);
+        var stopped = state?.SandboxAdmissionFailure;
+        if (state is { } liveState && liveState.CanCaptureSandboxAdmissionFailure?.Invoke() == true)
+            stopped = liveState.CaptureSandboxAdmissionFailure?.Invoke() ??
+                throw new InvalidDataException("Stopped Sandbox alert update has no capture owner.");
+        FalloutActorSandboxAdmissionFailure? updated = null;
+        if (stopped is not null)
+        {
+            stopped.Validate(records, state!);
+            updated = stopped.Copy() with
+            {
+                Activity = stopped.Activity with { Alerted = value, Revision = checked(stopped.Activity.Revision + 1) }
+            };
+            updated.Validate(records, state!);
+        }
         _actorOverrides[actor] = previous with { Alerted = value };
-        _alertRevisions[actor] = checked(_alertRevisions.GetValueOrDefault(actor) + 1);
+        _alertRevisions[actor] = nextRevision;
+        if (state is not null) state.SandboxAdmissionFailure = updated;
     }
 
     internal void SetActorAlert(FalloutFormKey actor, double value)
