@@ -17,8 +17,9 @@ internal sealed partial class RuntimeLiveHarness : Node
     private Func<(string StateKey, ulong EventOrdinal)> _captureIdentity = null!;
     private double _lastStateWriteMilliseconds;
     private double _lastSnapshotMilliseconds, _lastSerializeMilliseconds, _lastFileMilliseconds;
-    private Task<LiveHarnessFileWrite>? _stateWrite;
-    private ulong _stateWriteStartedMilliseconds;
+    private LiveHarnessPendingPublication? _stateWrite;
+    private long _statePublicationSequence;
+    private LiveHarnessPublicationTiming? _lastStatePublicationTiming;
     private bool _statePublicationRequested;
     private long _statePublicationDeferredRequests;
     private LiveHarnessFileWrite? _lastFileWrite;
@@ -400,49 +401,73 @@ internal sealed partial class RuntimeLiveHarness : Node
             // atomic replacement. Keep ordinary input/lease expiry running and
             // report every failed publication in the next successful snapshot.
             ReportPublicationFailure(error);
-            // Publish a separate failure marker even when the gameplay object
-            // itself cannot be serialized. A stale last-good frame is not proof.
-            try
-            {
-                AtomicWrite(Path.Combine(_directory, "state-error.json"), JsonSerializer.Serialize(new
-                { drawCount = Engine.GetFramesDrawn(), error = error.Message, failures = _statePublicationFailures }, Json));
-            }
-            catch (IOException markerError)
-            {
-                GD.PushWarning("OPENNV_STATE_FAILURE_MARKER_LOSS " + markerError.Message);
-            }
+            PublishFailureMarker(error);
         }
     }
 
-    private void ReportPublicationFailure(Exception error)
+    private void PublishFailureMarker(Exception error)
     {
-        _statePublicationFailures++;
+        // Only the engine owner creates/clears this marker. A pending worker
+        // cannot erase a newer timeout with its older serialized snapshot.
+        try
+        {
+            AtomicWrite(Path.Combine(_directory, "state-error.json"), JsonSerializer.Serialize(new
+            {
+                drawCount = Engine.GetFramesDrawn(),
+                error = error.Message,
+                failures = _statePublicationFailures,
+                publicationTiming = _lastStatePublicationTiming,
+            }, Json));
+        }
+        catch (Exception markerError) when (markerError is IOException or UnauthorizedAccessException)
+        {
+            GD.PushWarning("OPENNV_STATE_FAILURE_MARKER_LOSS " + markerError.Message);
+        }
+    }
+
+    private void ReportPublicationFailure(Exception error, bool increment = true)
+    {
+        if (increment) _statePublicationFailures++;
         if (_lastStatePublicationFailure != error.Message) GD.PushWarning("OPENNV_STATE_PUBLICATION_LOSS " + error.Message);
         _lastStatePublicationFailure = error.Message;
     }
 
-    private void CompleteStateWrite()
+    private void CompleteStateWrite(bool wait = false)
     {
         var pending = _stateWrite;
-        _stateWrite = null;
         if (pending is null) return;
-        var result = pending.GetAwaiter().GetResult();
+        if (wait) pending.Wait();
+        var observation = pending.Observe();
+        _lastStatePublicationTiming = observation.Timing;
+        if (observation.Completed) _stateWrite = null;
+        if (observation.NewLoss || observation is { Completed: true, Receipt.Error: not null })
+        {
+            var failure = observation.Failure ?? throw new InvalidOperationException("Publication loss has no failure source.");
+            // A terminal I/O fault remains visible even if this same write
+            // already reported its deadline. Its loss is counted only once.
+            ReportPublicationFailure(failure, observation.NewLoss);
+            PublishFailureMarker(failure);
+        }
+        if (observation.Receipt?.Write is not { } result) return;
         _lastFileWrite = result;
         _lastFileMilliseconds = result.Milliseconds;
         _statePublicationSharingRetries += result.Attempts - 1;
+        if (pending.CanClearFailureMarker(_statePublicationFailures))
+        {
+            var cleared = LiveHarnessAtomicFile.Delete(Path.Combine(_directory, "state-error.json"));
+            _statePublicationSharingRetries += cleared.Attempts - 1;
+        }
     }
 
     private void WriteState()
     {
-        if (_stateWrite is { IsCompleted: false })
+        CompleteStateWrite();
+        if (_stateWrite is not null)
         {
-            if (!LiveHarnessPublicationCadence.WithinPendingDeadline(Time.GetTicksMsec(), _stateWriteStartedMilliseconds))
-                throw new IOException("Live-state publication exceeded its interval; one pending snapshot is retained.");
             _statePublicationRequested = true;
             _statePublicationDeferredRequests++;
             return;
         }
-        CompleteStateWrite();
         var started = Stopwatch.GetTimestamp();
         var renderTiming = SampleRenderTiming();
         var identity = _captureIdentity();
@@ -470,9 +495,11 @@ internal sealed partial class RuntimeLiveHarness : Node
             stateKey = identity.StateKey,
             semanticEventOrdinal = identity.EventOrdinal,
             statePublicationFailures = _statePublicationFailures,
+            statePublicationSequence = checked(_statePublicationSequence + 1),
             lastStatePublicationFailure = _lastStatePublicationFailure,
             statePublicationSharingRetries = _statePublicationSharingRetries,
             statePublicationDeferredRequests = _statePublicationDeferredRequests,
+            previousStatePublicationTiming = _lastStatePublicationTiming,
             nextCommandRequest = _nextRequest,
             commandReadFailure = _commandReadFailure,
             gameplay = _captureSummary(),
@@ -531,25 +558,14 @@ internal sealed partial class RuntimeLiveHarness : Node
         var phase = Stopwatch.GetTimestamp();
         var json = JsonSerializer.Serialize(snapshot, Json);
         _lastSerializeMilliseconds = Stopwatch.GetElapsedTime(phase).TotalMilliseconds;
-        var errorPath = Path.Combine(_directory, "state-error.json");
         var path = Path.Combine(_directory, "live-state.json");
         // Freeze all engine/gameplay reads and serialization on their owner
         // thread. Only immutable text and file IO cross to this single writer.
-        _stateWrite = Task.Run(() =>
-        {
-            var writeStarted = Stopwatch.GetTimestamp();
-            var written = LiveHarnessAtomicFile.Write(path, json);
-            var cleared = LiveHarnessAtomicFile.Delete(errorPath);
-            return written with
-            {
-                Attempts = written.Attempts + cleared.Attempts - 1,
-                Milliseconds = Stopwatch.GetElapsedTime(writeStarted).TotalMilliseconds,
-                LastRetryError = cleared.LastRetryError ?? written.LastRetryError,
-                LastRetryFailure = cleared.LastRetryFailure ?? written.LastRetryFailure
-            };
-        });
-        _stateWriteStartedMilliseconds = Time.GetTicksMsec();
-        _statePublicationCadence.Scheduled(_stateWriteStartedMilliseconds);
+        _stateWrite = LiveHarnessPendingPublication.Start(checked(++_statePublicationSequence), _statePublicationFailures,
+            static () => Stopwatch.GetTimestamp() * (1000.0 / Stopwatch.Frequency),
+            () => LiveHarnessAtomicFile.Write(path, json),
+            static work => { _ = Task.Run(work); });
+        _statePublicationCadence.Scheduled(Time.GetTicksMsec());
         _statePublicationRequested = false;
         _lastStateWriteMilliseconds = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
     }
@@ -621,8 +637,9 @@ internal sealed partial class RuntimeLiveHarness : Node
         _inputPlayback?.Stop("Playback ended with its runtime owner.", ReleaseAll);
         FinishReplayDeliveryJournal("Playback ended with its runtime owner.");
         FinishInputRecording("Recording ended with its runtime owner.");
-        try { CompleteStateWrite(); }
-        catch (Exception error) when (error is IOException or UnauthorizedAccessException) { ReportPublicationFailure(error); }
+        try { CompleteStateWrite(wait: true); }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        { ReportPublicationFailure(error); PublishFailureMarker(error); }
         GD.Print("OPENNV_LIVE_HARNESS_RETIRE phase=state-write-settled");
         GetTree().NodeAdded -= TrackNode;
         GetTree().NodeRemoved -= UntrackNode;

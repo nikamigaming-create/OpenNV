@@ -71,7 +71,17 @@ and later native basis/heading survive. The fixture admits the selected genuine
 actor and actual shared lanes; it is not a full-campaign save-admission test.
 No compiled POBA result program was exercised. The final full gate passed with
 exit0; all 2,030 tracked source/configuration hashes match the frozen snapshot.
-The audit handoff did not change product code.
+The actor-audit handoff did not change product code.
+Live-state publication now retains managed monotonic queue, worker-start and
+completion timing. The exact 250 ms deadline includes queue delay and applies
+to completed writes as well as pending writes; each write reports loss once.
+Only the owner may clear an error marker after a timely snapshot carrying the
+current failure generation. Deterministic boundary, cross-thread progress and
+fault/generation contracts pass. The unchanged native recorded-input audit and
+renewed full required gate pass; all 2,032 source/configuration hashes match
+the frozen snapshot. The original hosted deadline failure does not establish
+whether queueing or file I/O caused its delay. No deadline or loss assertion
+was relaxed, and hosted acceptance is required on the published correction.
 The diagnostic reference-event host now has a managed-tested correction:
 clock/presentation scripts can bind without a fabricated player, while reached
 gameplay commands still require their real owner. This targets the authored Strip
