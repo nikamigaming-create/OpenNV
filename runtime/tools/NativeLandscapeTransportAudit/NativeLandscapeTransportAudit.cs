@@ -14,6 +14,12 @@ public partial class NativeLandscapeTransportAudit : Node3D
         try
         {
             var args = OS.GetCmdlineUserArgs();
+            if (args.Length != 0 && args[0] == "--impact-point")
+            {
+                await RunImpactPointAsync(args);
+                GetTree().Quit();
+                return;
+            }
             if (args.Length != 0 && args[0] == "--portal-capsule")
             {
                 await RunPortalCapsuleAsync(args);

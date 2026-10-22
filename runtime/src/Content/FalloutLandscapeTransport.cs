@@ -235,7 +235,10 @@ internal static class FalloutLandscapeTransportResolver
         }
         return new(null, string.Empty, null, string.Empty,
             Path(settings.Require("Landscape", "SDefaultLandDiffuseTexture")),
-            Path(settings.Require("Landscape", "SDefaultLandNormalTexture")));
+            Path(settings.Require("Landscape", "SDefaultLandNormalTexture")),
+            // The initialized default LAND texture owns these physical bytes
+            // independently of its installation-selected visual paths.
+            Physics: new(2, 30, 30));
     }
 
     private static IReadOnlyList<FalloutLandscapeOpacity> ReadOpacities(

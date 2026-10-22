@@ -7,6 +7,12 @@ using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.World.Cells;
 
+if (args is ["--test-default-landscape-physics"])
+{
+    DefaultLandscapePhysicsContracts.Run();
+    return;
+}
+
 if (args.Length >= 7 && args[0] == "--audit-model-less-headpart")
 {
     ModelLessHeadPartOwnedProbe.Run(args[1], args[2], args[3], args[4], args[5], args[6], args[7..]);
@@ -2134,6 +2140,7 @@ try
         "Native XTEL/CELL/WRLD reciprocal door transition differs.");
     var syntheticLandscape = FalloutLandscapeTransportResolver.Resolve(cellStack, syntheticDoor);
     LandscapeMaterialProbe.Run();
+    DefaultLandscapePhysicsContracts.Run();
     Require(
         syntheticLandscape.ActiveCell == new FalloutFormKey("Cell.esm", 0x101) &&
         syntheticLandscape.Landscape == new FalloutFormKey("Cell.esm", 0x170) &&

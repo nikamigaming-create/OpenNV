@@ -9,19 +9,40 @@ lockpicking, hacking and all 13 skills. No campaign or parity completion is clai
 
 ## Active block
 
-Checked baseline: PR263 merged as 63a0e1ab56bc76ef87ccfdfb4c05ad3aa6b09fa0
-after all five checks passed on 48fb8987 and independent review confirmed the
-direct-importer repair. Local main and origin/main were verified equal and clean,
-with no outstanding task PR. The active branch is codex/fnv-tutorial-continuation-20261022.
+Checked baseline: PR264 merged as 25d737c109fbed5ab77ca1fc327f1ee6dc292fc3
+after all five checks passed on 73a6975d and independent review found no concrete
+headless-input regression. Local main and origin/main were verified equal and clean,
+with no outstanding task PR. The active branch is codex/fnv-default-land-impact-material.
 The coordinator owns builds, native execution and Git; scoped writers have no
 active file assignment until the next reached failure is identified.
 
-Current bounded milestone: ordinary Continue from the genuine complete v56
-post-F5/cold checkpoint, then continue Sunny's second-well tutorial toward the
-remaining wells, ingredients and campfire. Use a verified fresh whole-save copy,
-all real actors/shared state and ordinary input owners. Preserve the original;
-do not seed quest variables, bypass dialogue or teleport to fabricate progression.
+Current bounded milestone: repair the default LAND base's missing physics input
+reached by an ordinary second-well rifle miss. The shot consumed one round and
+resolved its terrain hit, but impact effects failed at LAND 0e25c7 quadrant 1
+vertex 115. The selected default base has weight 0.536605; this is not a real LTEX
+missing HNAM or an alpha-slot-limit failure. Qualified static initialization and
+selection support default physics bytes material 2, friction 30, restitution 30,
+independently of visual INI paths. Add that value only to default texture transport,
+then verify synthetic ownership, the actual recorded native LAND hit and ordinary
+shot effects. Do not infer malformed BTXT behavior or silently skip effects.
+Continue the genuine remaining-wells objective afterward, preserving all real
+actors/shared state and original saves; no quest seeding or teleporting.
 Headless gameplay is state/behavior proof only, with no rendered-frame claim.
+
+The default transport now carries only the qualified (2,30,30) physical triplet;
+real LTEX decoding, blend selection and missing-real-physics refusal are unchanged.
+Debug builds have zero warnings/errors, focused default-reader/material contracts
+pass and bounded independent review is clean. The actual owned collision point
+reproduces LAND 0e25c7 quadrant 1 vertex 115, base weight 0.53660536 and material 2
+through both native hit lookup and direct selection. An ordinary whole-save
+Continue and repeated rifle input hit within a millimetre of the prior point:
+source dirt impact, projected decal and sound dispatch complete with no effect
+error. One round is consumed; no actor hit or quest progress is claimed. F5 writes
+a v56 slot and the session exits normally. Recording and measured drawn frames
+remain zero. The required full gate passes with exit 0, all 2,183 frozen source/
+configuration hashes unchanged and a clean whitespace check. Checked publication
+is next. Malformed BTXT,
+active-effect cold retention, matched retail effects and pixels remain unverified.
 
 The reached headless mouse-look blocker is repaired: only actual headless mouse
 motion carrying the harness's boolean-true tag may use the existing look owner
@@ -35,8 +56,9 @@ off throughout. Tutorial objectives 30/40 are complete, 50 is active and 60/70
 are not displayed: remaining wells were already accepted, so Sunny's generic
 greeting does not justify a dialogue change. Remaining-well combat is next.
 The required full runtime gate passes with exit 0, all 2,181 frozen source and
-configuration hashes unchanged and a clean whitespace check. Checked publication
-is next. The coordinator owns validation/Git; writer source is frozen. No campaign, rendered
+configuration hashes unchanged and a clean whitespace check. PR264 is accepted.
+The coordinator owns validation/Git; scoped source work follows the current
+default-LAND milestone. No campaign, rendered
 frame, retail parity or complete tutorial claim follows from these receipts.
 
 Established gravity capability: Debug builds pass with zero warnings/errors. Synthetic native gravity tests
