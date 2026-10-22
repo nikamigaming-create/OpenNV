@@ -1025,8 +1025,7 @@ internal static partial class RuntimeNativeNifMeshBuilder
                     value => value.Name, value => value.Object, StringComparer.Ordinal);
                 var sequences = manager.Sequences.Select(reference => BuildControllerSequence(
                     manager,
-                    (FalloutNifMultiTargetTransformController)_source.ReadObject(
-                        manager.Time.NextController),
+                    _managerTargets[manager.Block.Index],
                     paletteByName,
                     _source.ReadControllerSequence(reference))).ToArray();
                 var player = new RuntimeNifControllerPlayer

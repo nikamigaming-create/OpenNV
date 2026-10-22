@@ -26,7 +26,12 @@ public partial class NativeNifInstanceAudit : Node
             }
             if (OS.GetCmdlineUserArgs() is ["--source-controller-chains"])
             {
-                await ExerciseSourceControllerChains(); GetTree().Quit(); return;
+                await ExerciseSourceControllerChains();
+                await ExerciseManagerControllerChains(); GetTree().Quit(); return;
+            }
+            if (OS.GetCmdlineUserArgs() is ["--manager-controller-chains", var managerGame, .. var managerModels])
+            {
+                await ExerciseManagerControllerChains(managerGame, managerModels); GetTree().Quit(); return;
             }
             if (OS.GetCmdlineUserArgs() is ["--convex-list-sources", var sourceRoot, .. var sourceOptions])
             {
@@ -190,6 +195,7 @@ public partial class NativeNifInstanceAudit : Node
             ExerciseObjectAnimation();
             ExerciseEmptyManagedSequences();
             ExerciseRepeatedManagedSequences();
+            await ExerciseManagerControllerChains();
             Exercise(Synthetic(), 0.02f, "synthetic");
             ExercisePlaced(Synthetic(false), 0.02f);
             ExerciseExternalAnimationTargets();
