@@ -19,10 +19,13 @@ and the actual owned Strip fountain whole-model audit pass: five exact source
 scalar samples, managed cold clock/channel reconstruction, independent prototype/
 clones, reset/retirement, signed acceleration and both turbulent/non-turbulent
 force terms. The direct-clock fixture was corrected to use a separately decoded
-unmanaged declaration; no product clock guard was relaxed. Direct importer
-discovery, particle-population persistence, ordinary activation and matched retail
-particle/RNG/pixel behavior remain unverified. The required full gate passes with
-exit0 and all 2,039 frozen source/configuration hashes unchanged. The same source
+unmanaged declaration; no product clock guard was relaxed. Actual whole-model
+direct-chain fixtures now verify float and supported spline publication plus
+explicit Bool refusal through the real importer, rather than only a manual player.
+Particle-population persistence, ordinary activation and matched retail particle/
+RNG/pixel behavior remain unverified. The renewed full gate passes with exit0 and
+all 2,039 frozen source/configuration hashes unchanged, including the direct
+importer correction and actual prototype regressions. The same source
 stack and manifest whole-cell check now binds placed fountain 16566e and its real
 Idle controller, reducing reference divergences from ten to nine across 1,695
 source references. It writes no image or save; other reference, actor/package and
@@ -182,10 +185,15 @@ still requires recovered retail startup and actual state/camera joins. Historica
 FNVVR receipts prove conventional installed nvse_loader startup with no arguments
 and game-root working directory reached gameplay; today's isolated loader/core/
 plugin route differs. No duplicate launch is admitted while the current retail
-process remains alive; the failed process is now absent. The next bounded startup
-check must isolate the unqualified restored FNVXR and local XInput modules under
-verified reversible backups, while leaving the proven loader/JIP/ShowOff unchanged.
-No replacement hooks or input producer are admitted. Existing July/October telemetry logs are historical and
+process remains alive. A second bounded startup check used that installed no-args
+route with verified reversible holds of the unqualified restored FNVXR/local
+XInput modules, leaving loader/JIP/ShowOff unchanged. It also stopped at Steam
+Error before core initialization; fresh module/log evidence proves no core or
+bridge readiness. It exited through a verified normal close, both held modules
+were restored with exact bytes/metadata, and all 149 profile originals remain
+unchanged. No retail process or module hold remains. Neither route is retried
+without new diagnosis; the exact dialog body is still unobserved. No replacement
+hooks, host or input producer were used. Existing July/October telemetry logs are historical and
 lack receipt-bound run/source/load-order/save/camera joins; they do not establish
 today's matched state. No current retail observation or parity pass is claimed.
 All originals, provenance and selected active framing diagnostics are local;

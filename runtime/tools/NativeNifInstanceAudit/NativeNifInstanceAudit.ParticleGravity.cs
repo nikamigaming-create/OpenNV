@@ -10,6 +10,7 @@ public partial class NativeNifInstanceAudit
     private Task ExerciseParticleGravity(string? game = null, string? model = null)
     {
         ExerciseSyntheticParticleGravity();
+        ExerciseDirectParticleGravityImport();
         if (game is not null && model is not null) ExerciseOwnedParticleGravity(game, model);
         else if (game is not null || model is not null) throw new ArgumentException("Owned gravity audit requires installation and model.");
         return Task.CompletedTask;
@@ -213,6 +214,100 @@ public partial class NativeNifInstanceAudit
     {
         var bytes = Convert.FromBase64String(JsonSerializer.SerializeToElement(runtime.Observation).GetProperty("state").GetString()!);
         return new(BitConverter.ToSingle(bytes, 12), BitConverter.ToSingle(bytes, 16), BitConverter.ToSingle(bytes, 20));
+    }
+
+    private void ExerciseDirectParticleGravityImport()
+    {
+        foreach (var spline in new[] { false, true })
+        {
+            var bytes = DirectParticleGravityFixture(spline ? "spline" : "float");
+            var hash = SHA256.HashData(bytes); var source = FalloutNifFile.Read(bytes);
+            var declaration = (FalloutNifParticleController)source.ReadObject(17);
+            if (((FalloutNifParticleSystem)source.ReadObject(0)).Geometry.Controller != 17 ||
+                declaration.Time.NextController != 24 || (declaration.Time.Flags & 0x20) != 0 ||
+                source.Blocks[24].TypeName != "NiPSysUpdateCtlr")
+                throw new InvalidDataException("Direct gravity importer fixture lost its source controller chain.");
+            var prototype = new RuntimeNativeNifPrototype(source, 1);
+            Node3D? first = null, sibling = null;
+            try
+            {
+                first = prototype.Instantiate(); sibling = prototype.Instantiate();
+                first.ProcessMode = sibling.ProcessMode = ProcessModeEnum.Disabled;
+                AddChild(first); AddChild(sibling);
+                var player = first.FindChildren("*", "", true, false).OfType<RuntimeNifControllerPlayer>()
+                    .Single(value => value.HasSequence("DirectEmitter17"));
+                var particle = first.FindChildren("*", "", true, false).OfType<RuntimeNifParticleSystem>().Single();
+                var untouched = GravityState(sibling); var original = GravityState(prototype.Scene.Root);
+                player.PlaySourceSequence("DirectEmitter17");
+                foreach (var time in new[] { .25, .625 })
+                {
+                    player.SeekSourceTime(time);
+                    var expected = new FalloutNifFloatAnimation(source, declaration.Interpolator).Sample((float)time);
+                    var actual = GravityStrength(particle, declaration.Modifier);
+                    if (!float.IsFinite(actual) || actual != expected || actual == 6 ||
+                        GravityState(sibling) != untouched || GravityState(prototype.Scene.Root) != original)
+                        throw new InvalidDataException("Imported direct gravity clock failed scalar publication or instance isolation.");
+                }
+                first.Free(); first = null;
+                if (GravityState(sibling) != untouched || !SHA256.HashData(bytes).SequenceEqual(hash))
+                    throw new InvalidDataException("Direct gravity importer retirement changed sibling/source state.");
+            }
+            finally { first?.Free(); sibling?.Free(); prototype.Scene.Root.Free(); }
+        }
+        try
+        {
+            var invalid = new RuntimeNativeNifPrototype(FalloutNifFile.Read(DirectParticleGravityFixture("bool")), 1);
+            invalid.Scene.Root.Free();
+            throw new InvalidOperationException("Direct gravity importer silently admitted a bool interpolator.");
+        }
+        catch (NotSupportedException error) when (error.Message.Contains("Source float interpolator is unsupported.", StringComparison.Ordinal)) { }
+        GD.Print("OPENNV_DIRECT_PARTICLE_GRAVITY_IMPORT_PASS actualControllerChain=true wholeModel=true floatCurve=true supportedSplineScalar=true boolInterpolatorRefused=true prototypeAndSiblingIsolation=true retirement=true sourceUnchanged=true pixels=unverified");
+    }
+
+    private static byte[] DirectParticleGravityFixture(string mode)
+    {
+        var bytes = ParticleGravityFixture(mode: "direct"); var source = FalloutNifFile.Read(bytes);
+        var blocks = source.Blocks.Select(block => (block.TypeName, Bytes: bytes.AsSpan(block.Offset, block.Size).ToArray())).ToList();
+        var names = source.Strings.Concat(new[] { "GravityRoot" }).ToArray();
+        // Particle AV object: controller at 8, property count at 68. Insert a
+        // real shader property while retaining all subsequent geometry fields.
+        var body = blocks[0].Bytes;
+        BinaryPrimitives.WriteInt32LittleEndian(body.AsSpan(8), 17);
+        blocks[0] = ("NiParticleSystem", Bytes(writer =>
+        {
+            writer.Write(body.AsSpan(0, 68)); writer.Write(1); writer.Write(25); writer.Write(body.AsSpan(72));
+        }));
+        var controller = blocks[17].Bytes;
+        BinaryPrimitives.WriteInt32LittleEndian(controller, 24);
+        BinaryPrimitives.WriteInt32LittleEndian(controller.AsSpan(26), mode == "bool" ? 8 : mode == "spline" ? 26 : 21);
+        blocks[17] = ("NiPSysGravityStrengthCtlr", controller);
+        var root = blocks[10].Bytes;
+        blocks.Add(("NiNode", Bytes(writer =>
+        {
+            writer.Write(names.Length - 1); writer.Write(root.AsSpan(4, root.Length - 12));
+            writer.Write(2); writer.Write(0); writer.Write(10); writer.Write(0);
+        })));
+        blocks.Add(("NiPSysUpdateCtlr", Bytes(writer =>
+        {
+            writer.Write(-1); writer.Write((ushort)76);
+            foreach (var value in new[] { 1f, 0f, 0f, 1f }) writer.Write(value);
+            writer.Write(0);
+        })));
+        blocks.Add(("BSShaderNoLightingProperty", Bytes(writer =>
+        {
+            writer.Write(0); writer.Write(0); writer.Write(-1); writer.Write((ushort)1);
+            writer.Write(33U); writer.Write(0x82000000U); writer.Write(1U); writer.Write(1f);
+            writer.Write(3U); writer.Write(0); // Empty authored shader texture.
+            writer.Write(1f); writer.Write(0f); writer.Write(1f); writer.Write(0f);
+        })));
+        blocks.Add(("NiBSplineFloatInterpolator", Bytes(writer =>
+        {
+            writer.Write(0f); writer.Write(1f); writer.Write(-1); writer.Write(-1);
+            writer.Write(5f); writer.Write((uint)ushort.MaxValue);
+        })));
+        var result = WriteParticleShapeColorNif(blocks, names);
+        BinaryPrimitives.WriteInt32LittleEndian(result.AsSpan(result.Length - 4), 23);
+        return result;
     }
 
     private static byte[] ParticleGravityFixture(float turbulence = 0, string mode = "valid")
