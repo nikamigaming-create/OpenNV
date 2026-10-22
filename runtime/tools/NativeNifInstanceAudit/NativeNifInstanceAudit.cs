@@ -24,6 +24,14 @@ public partial class NativeNifInstanceAudit : Node
             {
                 ExerciseParticleShapesColors(); GetTree().Quit(); return;
             }
+            if (OS.GetCmdlineUserArgs() is ["--particle-gravity"])
+            {
+                await ExerciseParticleGravity(); GetTree().Quit(); return;
+            }
+            if (OS.GetCmdlineUserArgs() is ["--owned-particle-gravity", var gravityGame, var gravityModel])
+            {
+                await ExerciseParticleGravity(gravityGame, gravityModel); GetTree().Quit(); return;
+            }
             if (OS.GetCmdlineUserArgs() is ["--source-controller-chains"])
             {
                 await ExerciseSourceControllerChains();
@@ -204,6 +212,7 @@ public partial class NativeNifInstanceAudit : Node
             ExerciseManagedMorph();
             ExerciseParticleChannels();
             ExerciseParticleShapesColors();
+            await ExerciseParticleGravity();
             ExerciseDdsImages();
             ExerciseTextureReuse();
             ExerciseTextureAddressing();

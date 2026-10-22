@@ -16,6 +16,7 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
     private readonly Dictionary<string, float> _rates = new(StringComparer.Ordinal);
     private readonly Dictionary<string, float> _speeds = new(StringComparer.Ordinal);
     private readonly Dictionary<string, float> _lifespans = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, float> _gravityStrengths = new(StringComparer.Ordinal);
     private readonly Dictionary<string, double> _remainders = new(StringComparer.Ordinal);
     private readonly Dictionary<int, FalloutNifMeshData> _meshes = [];
     private IReadOnlyDictionary<int, Node3D> _nodes = null!;
@@ -75,6 +76,7 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
             { _speeds[modifier.Name] = volume.Emitter.Speed; _lifespans[modifier.Name] = volume.Emitter.Life; }
             else if (modifier is FalloutNifParticleMeshEmitter mesh)
             { _speeds[modifier.Name] = mesh.Emitter.Speed; _lifespans[modifier.Name] = mesh.Emitter.Life; }
+            else if (modifier is FalloutNifParticleGravity gravity) _gravityStrengths[modifier.Name] = gravity.Strength;
         }
         foreach (var name in _rates.Keys) { _rates[name] = 0; _remainders[name] = 0; }
         ResetLifecycle();
@@ -101,6 +103,7 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
             rate = _rates.GetValueOrDefault(modifier.Name),
             speed = _speeds.GetValueOrDefault(modifier.Name),
             lifespan = _lifespans.GetValueOrDefault(modifier.Name),
+            gravityStrength = modifier is FalloutNifParticleGravity ? (float?)_gravityStrengths[modifier.Name] : null,
             remainder = _remainders.GetValueOrDefault(modifier.Name)
         }).ToArray(),
         // Packed fields preserve float32 values, including signed zero; the
@@ -215,6 +218,7 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
                 case FalloutNifParticleGrowFade grow when grow.Grow < 0 || grow.Fade < 0 || grow.Scale < 0:
                     throw new InvalidDataException("Particle growth contains a negative duration or scale.");
                 case FalloutNifParticleGravity gravity:
+                    _gravityStrengths.Add(modifier.Name, gravity.Strength);
                     RequireNode(gravity.Object);
                     if (gravity.ForceType > 1 || gravity.Decay < 0 || gravity.Turbulence < 0 || gravity.TurbulenceScale < 0)
                         throw new NotSupportedException("Particle gravity has an invalid force, decay or turbulence declaration.");
@@ -270,6 +274,23 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
     internal RuntimeNifControllerChannel Bind(FalloutNifFile file, FalloutNifControllerLink link)
     {
         RequireConfigured();
+        if (link.ControllerType == "NiPSysGravityStrengthCtlr")
+        {
+            if (!ReferenceEquals(file, _sourceFile) || link.PropertyType.Length != 0 || link.Variable2.Length != 0 ||
+                link.Priority != 0 || !_gravityStrengths.ContainsKey(link.Variable1) ||
+                file.ReadObject(link.Controller) is not FalloutNifParticleController controller ||
+                controller.Block.TypeName != link.ControllerType || controller.Time.Target != _source.Block.Index ||
+                controller.Modifier != link.Variable1 || (controller.Time.Flags & 0x40) == 0)
+                throw new NotSupportedException("Particle gravity-strength channel has no declared gravity owner.");
+            var sampler = new FalloutNifFloatAnimation(file, link.Interpolator);
+            return new(time =>
+            {
+                RequireConfigured();
+                var strength = sampler.Sample(time);
+                if (!float.IsFinite(strength)) throw new InvalidDataException("Particle gravity strength is not finite.");
+                _gravityStrengths[link.Variable1] = strength;
+            });
+        }
         if (link.ControllerType == "NiPSysEmitterLifeSpanCtlr" && link.Variable2.Length == 0 && _lifespans.ContainsKey(link.Variable1))
         {
             var sampler = new FalloutNifFloatAnimation(file, link.Interpolator);
@@ -379,7 +400,8 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
                     var offset = transform.Origin - _particles[i].Position;
                     var direction = gravity.ForceType == 1 ? offset.Normalized() : axis.Normalized();
                     var decay = gravity.Decay == 0 ? 1 : MathF.Exp(-gravity.Decay * offset.Length() / _units);
-                    var acceleration = direction * gravity.Strength;
+                    var strength = _gravityStrengths[gravity.Name];
+                    var acceleration = direction * strength;
                     if (gravity.Turbulence > 0)
                     {
                         var position = _particles[i].Position / _units;
@@ -387,7 +409,7 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
                         var noise = new Vector3(_turbulence!.GetNoise3D(position.X + time, position.Y, position.Z),
                             _turbulence.GetNoise3D(position.Y + time, position.Z + 137, position.X),
                             _turbulence.GetNoise3D(position.Z + time, position.X + 271, position.Y));
-                        acceleration += noise * (gravity.Strength * gravity.Turbulence * gravity.TurbulenceScale);
+                        acceleration += noise * (strength * gravity.Turbulence * gravity.TurbulenceScale);
                     }
                     _particles[i].Velocity += acceleration * (decay * _units * delta);
                 }

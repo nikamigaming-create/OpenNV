@@ -9,11 +9,27 @@ lockpicking, hacking and all 13 skills. No campaign or parity completion is clai
 
 ## Active block
 
-Checked baseline: PR261 merged as a77ce1f00326c6b81b80b945bfc981fdfc7e198b
-after all five checks passed on ee82ecef. Local main and origin/main were verified
-equal and clean. The active branch is codex/fnv-forcefield-reference-admission.
+Checked baseline: PR262 merged as bcee71cb9d09f53dfe928c5b7caff9e607048aa0
+after all five checks passed on 936cce7e. Local main and origin/main were verified
+equal and clean. The active branch is codex/fnv-fountain-gravity-strength.
 The coordinator owns builds, native execution and Git. The scoped writer owns
-the reached source-control-flow repair and its regressions.
+the qualified particle gravity-strength channel and its synthetic/owned audits.
+Its Debug build passes with zero warnings/errors. Synthetic native gravity tests
+and the actual owned Strip fountain whole-model audit pass: five exact source
+scalar samples, managed cold clock/channel reconstruction, independent prototype/
+clones, reset/retirement, signed acceleration and both turbulent/non-turbulent
+force terms. The direct-clock fixture was corrected to use a separately decoded
+unmanaged declaration; no product clock guard was relaxed. Actual whole-model
+direct-chain fixtures now verify float and supported spline publication plus
+explicit Bool refusal through the real importer, rather than only a manual player.
+Particle-population persistence, ordinary activation and matched retail particle/
+RNG/pixel behavior remain unverified. The renewed full gate passes with exit0 and
+all 2,039 frozen source/configuration hashes unchanged, including the direct
+importer correction and actual prototype regressions. The same source
+stack and manifest whole-cell check now binds placed fountain 16566e and its real
+Idle controller, reducing reference divergences from ten to nine across 1,695
+source references. It writes no image or save; other reference, actor/package and
+LOD failures remain visible. Headless assembly is not a rendered-scene pass.
 
 Whole-cell assembly now uses the existing screenshot builders, event bindings,
 camera queries and distant-world preparation in an explicit headless assembly-only
@@ -42,9 +58,17 @@ unchanged. Headless screenshot requests without the explicit assembly-only flag
 refuse before creating output. The probe
 supplies explicit fixture inputs, not ordinary gameplay or portal-stream proof.
 
-Safe offscreen rendered capture remains blocked: this engine clamps an off-monitor
-startup window onto a monitor before showing it. No-focus does not suppress mouse
-input. No GPU process or temporary project override was launched over retail.
+An actual windowed no-focus native capture now completes through the existing
+renderer and screenshot path, with no tool input or retail interaction. The
+optional capture guard checks no-focus/windowed/visible-mouse state each process
+frame and refuses incompatible headless requests before output. The inspected
+1920x1080 Strip road image is in Library as libfile_c81dd14fe7bc81919fa138ab19b4b03b.
+Its building shells render; excessive orange emission/bloom remains unaccepted.
+The process exited normally with code0, the temporary exact-hash project override
+was removed and project/config/save inputs were unchanged. This is a diagnostic
+native scene, not ordinary gameplay, matched retail evidence or an FPS result.
+No-focus does not suppress physical mouse input; the receipt covers monitored
+window state, not a startup-wide focus history or click protection.
 
 The finite Vault21 investigation stopped after two approaches: null runtime
 shader state is handled without drawing or aborting siblings, but the selected
@@ -54,10 +78,11 @@ deferred request consumer are qualified; native outgoing/queued animation,
 deactivation acknowledgement and physical occupancy remain missing owners.
 Marker execution is parked while the independent rendering repair advances.
 
-Current immediate user priority: repair visible Strip material omissions and
-camera validity, then deliver corrected native images and progress a systematic
-matched retail/OpenNV location sweep. Preserve the written gameplay work below;
-do not start another scripting milestone ahead of this visual correction.
+Current immediate user priority: semantic telemetry/data comparison first,
+repairing concrete shared visual and gameplay divergences. Independent matched
+video review follows instrumented scenario acceptance. Requested native images
+remain deliverables. Preserve complete-game playability as the product goal;
+selected scene/controller audits do not replace ordinary gameplay acceptance.
 The finite location denominator must come from loaded winning map markers and
 CELL/worldspace/door graph, separated by plugin/DLC and interior/exterior.
 The selected ten-plugin inventory now reports 44,517 winning CELLs (44,025
@@ -68,8 +93,8 @@ hashes and source-graph reachability separately from actual visits.
 Unvisited, blocked, unmatched, repaired and retested are independent statuses.
 No matched retail pair exists yet. The user approved a bounded normal-retail-
 profile comparison with verified backups and restoration of test changes.
-The verified backup transaction is prepared; its one launch is held at the
-Steam error described below. Camera/environment observation and frame joining
+The verified backup transaction's first launch failed before core initialization
+and has now exited normally with originals verified unchanged. Camera/environment observation and frame joining
 remain separate acceptance checks. Recorded input delivery alone is not state
 or event alignment.
 
@@ -146,14 +171,31 @@ stable and the scriptless AlwaysOn object is unchanged. No brightness override
 was added. Actual pixels remain unverified. Full-campaign/cross-reference fidelity,
 ordinary dialogue and matched retail presentation remain separate acceptance
 checks; the selected native fixture does not certify them.
-The approved retail fallback then entered once with verified backups and a distinct copied checkpoint. Retail
-currently stops at a Steam Error modal before core/private bridge initialization;
-no gameplay command or capture was sent. Normal exit, profile postdiff and any
-required restoration remain pending. Do not relaunch or take retail input. A passive
-exit watcher will compare the backed-up profile after the actual process exits.
-The measured idle modal does not prevent isolated noninteractive headless fixtures;
-these run serially with separate output and no retail input or capture. Physical
-capture and matched retail evidence remain blocked on normal dialog dismissal.
+The approved retail fallback entered once with verified backups and a distinct
+copied checkpoint, then failed at a Steam Error modal before core/private bridge
+initialization. No gameplay command or capture was sent. A normal CloseMainWindow
+request to the hash/start-time-verified failed process succeeded; actual exit was
+observed. Post-exit comparison verifies all 149 originals unchanged in bytes and
+metadata, with only the two journaled test-save copies new and preserved. No
+restoration writes were needed. The watcher completed. The measured idle modal
+did not prevent isolated noninteractive headless fixtures;
+these run serially with separate output and no retail input or capture. A separate
+windowed no-focus OpenNV capture has also completed safely. Matched retail evidence
+still requires recovered retail startup and actual state/camera joins. Historical
+FNVVR receipts prove conventional installed nvse_loader startup with no arguments
+and game-root working directory reached gameplay; today's isolated loader/core/
+plugin route differs. No duplicate launch is admitted while the current retail
+process remains alive. A second bounded startup check used that installed no-args
+route with verified reversible holds of the unqualified restored FNVXR/local
+XInput modules, leaving loader/JIP/ShowOff unchanged. It also stopped at Steam
+Error before core initialization; fresh module/log evidence proves no core or
+bridge readiness. It exited through a verified normal close, both held modules
+were restored with exact bytes/metadata, and all 149 profile originals remain
+unchanged. No retail process or module hold remains. Neither route is retried
+without new diagnosis; the exact dialog body is still unobserved. No replacement
+hooks, host or input producer were used. Existing July/October telemetry logs are historical and
+lack receipt-bound run/source/load-order/save/camera joins; they do not establish
+today's matched state. No current retail observation or parity pass is claimed.
 All originals, provenance and selected active framing diagnostics are local;
 six Library images comprise five diagnostic compositions and the prior genuine
 Goodsprings gameplay fallback. They are not six accepted polished scenes.

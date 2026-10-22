@@ -226,7 +226,7 @@ internal sealed partial class FalloutNifFile
                 "NiPSysRotationModifier" or "NiPSysBombModifier" or "NiPSysGravityModifier" or "NiPSysDragModifier" or
                 "NiPSysPositionModifier" or "NiPSysBoundUpdateModifier" or "BSParentVelocityModifier" or "BSWindModifier" => ReadParticleModifier(block, ref cursor),
             "NiPSysEmitterCtlr" or "BSPSysMultiTargetEmitterCtlr" or "NiPSysEmitterSpeedCtlr" or "NiPSysEmitterLifeSpanCtlr" or
-                "NiPSysModifierActiveCtlr" or "NiPSysUpdateCtlr" => ReadParticleController(block, ref cursor),
+                "NiPSysModifierActiveCtlr" or "NiPSysGravityStrengthCtlr" or "NiPSysUpdateCtlr" => ReadParticleController(block, ref cursor),
             "NiPSysPlanarCollider" => ReadParticlePlanarCollider(block, ref cursor),
             "NiPSysSphericalCollider" => ReadParticleSphericalCollider(block, ref cursor),
             "NiColorData" => ReadColorData(block, ref cursor),
