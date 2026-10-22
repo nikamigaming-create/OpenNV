@@ -1082,7 +1082,7 @@ internal static partial class RuntimeNativeNifMeshBuilder
                     "BSRefractionStrengthController" or "BSRefractionFirePeriodController" => BuildRefractionChannel(sequence, link, targetBlock),
                     "NiGeomMorpherController" => BuildManagedMorphChannel(sequence, link, targetBlock),
                     "NiPSysEmitterCtlr" or "NiPSysEmitterSpeedCtlr" or "NiPSysEmitterLifeSpanCtlr" or
-                        "NiPSysModifierActiveCtlr" => BuildParticleChannel(sequence, link, targetBlock),
+                        "NiPSysModifierActiveCtlr" or "NiPSysGravityStrengthCtlr" => BuildParticleChannel(sequence, link, targetBlock),
                     _ => throw new NotSupportedException(
                         $"NIF sequence {sequence.Block.Index} controller {link.ControllerType} is unsupported."),
                 });

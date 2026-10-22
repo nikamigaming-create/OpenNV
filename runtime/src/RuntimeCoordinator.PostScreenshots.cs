@@ -15,6 +15,31 @@ public partial class RuntimeCoordinator
     {
         var rows = new List<Dictionary<string, object?>>();
         string? output = null;
+        var noFocusRequired = _options.ContainsKey("post-screenshots-no-focus");
+        var window = GetWindow();
+        var tree = GetTree();
+        var focusViolation = false;
+        long focusObservations = 0;
+        void RejectFocus()
+        {
+            focusViolation = true;
+            GD.PushError("OPENNV_POST_SCREENSHOT_FOCUS_REFUSED");
+            tree.Quit(1);
+        }
+        void ObserveFocus()
+        {
+            ++focusObservations;
+            if (!window.Unfocusable || window.HasFocus() ||
+                !DisplayServer.WindowGetFlag(DisplayServer.WindowFlags.NoFocus) ||
+                window.Mode != Window.ModeEnum.Windowed || Input.MouseMode != Input.MouseModeEnum.Visible)
+                RejectFocus();
+        }
+        void RequireNoFocus()
+        {
+            if (!noFocusRequired) return;
+            ObserveFocus();
+            if (focusViolation) throw new InvalidOperationException("Native capture requires an unfocused, no-focus, windowed surface and uncaptured mouse.");
+        }
         try
         {
             var assemblyOnly = _options.ContainsKey("post-screenshots-assembly-only");
@@ -22,6 +47,13 @@ public partial class RuntimeCoordinator
             if ((assemblyOnly && !headless) || (headless && !assemblyOnly &&
                 !_options.ContainsKey("post-screenshot-camera-contracts")))
                 throw new InvalidOperationException("Headless post-screenshot requests require explicit --post-screenshots-assembly-only; assembly-only mode requires headless rendering.");
+            if (noFocusRequired)
+            {
+                if (headless || assemblyOnly) throw new InvalidOperationException("No-focus rendered capture requires a native display.");
+                RequireNoFocus();
+                window.FocusEntered += RejectFocus;
+                tree.ProcessFrame += ObserveFocus;
+            }
             var content = RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("Screenshots need an owned installation.");
             using var manifest = JsonDocument.Parse(File.ReadAllText(manifestPath));
             if (manifest.RootElement.GetProperty("schema").GetString() != "opennv-post-screenshots/v1")
@@ -268,6 +300,7 @@ public partial class RuntimeCoordinator
                     }
                     else
                     {
+                        RequireNoFocus();
                         png = Path.Combine(output, $"{index + 1:D2}-{ids[index]}{(cameraCheck.Passed ? "" : ".invalid-camera")}.png");
                         using var image = GetViewport().GetTexture().GetImage();
                         if (image.IsEmpty() || image.SavePng(png) != Error.Ok) throw new IOException("Native viewport PNG could not be saved.");
@@ -277,6 +310,18 @@ public partial class RuntimeCoordinator
                         row["pngSha256"] = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(png)));
                     }
                     row["assemblyOnly"] = assemblyOnly;
+                    row["windowEvidence"] = new
+                    {
+                        noFocusRequired,
+                        focusViolation,
+                        focusObservations,
+                        noFocus = window.Unfocusable,
+                        focused = window.HasFocus(),
+                        mode = window.Mode.ToString(),
+                        width = window.Size.X,
+                        height = window.Size.Y,
+                        mouseMode = Input.MouseMode.ToString(),
+                    };
                     row["capturedUtc"] = DateTime.UtcNow; row["drawCount"] = Engine.GetFramesDrawn();
                     row["requestedCell"] = cellKey.ToString(); row["requestedCellEditorId"] = GalleryRecordText(cellRecord, "EDID");
                     row["requestedCellSha256"] = FalloutActorRecordHash(cellRecord);
@@ -333,6 +378,9 @@ public partial class RuntimeCoordinator
                     sourceSaveWritten = File.Exists(savePath),
                     recording = false,
                     assemblyOnly,
+                    noFocusRequired,
+                    focusViolation,
+                    focusObservations,
                     imagesWritten = rows.Count(row => row.TryGetValue("image", out var image) && image is string),
                     generatedImages = false,
                     retailCaptureUsed = false,
@@ -349,6 +397,14 @@ public partial class RuntimeCoordinator
         {
             GD.PushError($"OPENNV_POST_SCREENSHOTS_FAILED output={output} error={error}");
             GetTree().Quit(1);
+        }
+        finally
+        {
+            if (noFocusRequired)
+            {
+                if (GodotObject.IsInstanceValid(window)) window.FocusEntered -= RejectFocus;
+                if (GodotObject.IsInstanceValid(tree)) tree.ProcessFrame -= ObserveFocus;
+            }
         }
     }
 

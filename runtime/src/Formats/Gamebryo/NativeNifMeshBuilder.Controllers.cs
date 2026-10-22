@@ -137,7 +137,7 @@ internal static partial class RuntimeNativeNifMeshBuilder
                             "NiTextureTransformController" or "NiMaterialColorController" or "NiAlphaController" or
                             "BSMaterialEmittanceMultController" or "BSRefractionStrengthController" or "BSRefractionFirePeriodController" or
                             "NiGeomMorpherController" or "NiPSysEmitterCtlr" or "NiPSysEmitterSpeedCtlr" or
-                            "NiPSysEmitterLifeSpanCtlr" or "NiPSysModifierActiveCtlr")))
+                            "NiPSysEmitterLifeSpanCtlr" or "NiPSysModifierActiveCtlr" or "NiPSysGravityStrengthCtlr")))
                     throw new NotSupportedException(
                         $"NIF controller manager {manager.Block.Index} has an unsupported sequence chain.");
             }
