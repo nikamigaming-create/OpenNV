@@ -351,9 +351,11 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
             GetViewport().SetInputAsHandled();
             return;
         }
-        if (_modalInput || !_lookingEnabled || Input.MouseMode != Input.MouseModeEnum.Captured ||
+        if (_modalInput || !_lookingEnabled ||
             inputEvent is not InputEventMouseMotion motion)
             return;
+        if (Input.MouseMode != Input.MouseModeEnum.Captured &&
+            !OpenNV.Runtime.Diagnostics.Parity.RuntimeLiveHarness.IsHeadlessLookInput(motion)) return;
         if (_furniturePhase is 1 or 2 or 4) return;
         if (_furniturePhase == 3) _furnitureLookYaw -= motion.Relative.X * _configuration.Player.MouseSensitivityRadiansPerPixel;
         else RotateY(-motion.Relative.X * _configuration.Player.MouseSensitivityRadiansPerPixel);

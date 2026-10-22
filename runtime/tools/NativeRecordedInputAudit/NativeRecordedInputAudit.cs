@@ -128,6 +128,7 @@ public partial class NativeRecordedInputAudit : Node
             Require(playback.GetProperty("complete").GetBoolean() && _clicks == 2 &&
                 !Input.IsPhysicalKeyPressed(Key.W) && !Input.IsPhysicalKeyPressed(Key.A),
                 "Native playback failed its delivered segment or left a held key: " + playback);
+            await ExercisePlayerLook(command => Send(command));
             await Send(new { op = "input.record.start", path = Path.Combine(directory, "abandoned.jsonl") });
             await Send(new { op = "key", key = "W", pressed = true, leaseMilliseconds = 1000 });
             harness.Free(); harness = null;

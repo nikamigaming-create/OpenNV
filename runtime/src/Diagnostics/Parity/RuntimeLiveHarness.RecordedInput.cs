@@ -22,6 +22,14 @@ internal sealed partial class RuntimeLiveHarness
     private readonly Dictionary<MouseButton, ulong> _heldMouse = [];
     private readonly Dictionary<Key, ulong> _recordedHumanKeys = [];
     private const string HarnessInputMetadata = "opennv_harness_input";
+
+    internal static bool IsHeadlessLookInput(InputEvent input)
+    {
+        if (DisplayServer.GetName() != "headless" || input is not InputEventMouseMotion) return false;
+        var tag = input.GetMeta(HarnessInputMetadata, false);
+        return tag.VariantType == Variant.Type.Bool && tag.AsBool();
+    }
+
     private long InputMicroseconds => checked((long)((decimal)(Stopwatch.GetTimestamp() - _inputStarted) * 1_000_000 / Stopwatch.Frequency));
 
     private RecordedInputBinding InputBinding(string checkpoint)

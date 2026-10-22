@@ -9,12 +9,37 @@ lockpicking, hacking and all 13 skills. No campaign or parity completion is clai
 
 ## Active block
 
-Checked baseline: PR262 merged as bcee71cb9d09f53dfe928c5b7caff9e607048aa0
-after all five checks passed on 936cce7e. Local main and origin/main were verified
-equal and clean. The active branch is codex/fnv-fountain-gravity-strength.
-The coordinator owns builds, native execution and Git. The scoped writer owns
-the qualified particle gravity-strength channel and its synthetic/owned audits.
-Its Debug build passes with zero warnings/errors. Synthetic native gravity tests
+Checked baseline: PR263 merged as 63a0e1ab56bc76ef87ccfdfb4c05ad3aa6b09fa0
+after all five checks passed on 48fb8987 and independent review confirmed the
+direct-importer repair. Local main and origin/main were verified equal and clean,
+with no outstanding task PR. The active branch is codex/fnv-tutorial-continuation-20261022.
+The coordinator owns builds, native execution and Git; scoped writers have no
+active file assignment until the next reached failure is identified.
+
+Current bounded milestone: ordinary Continue from the genuine complete v56
+post-F5/cold checkpoint, then continue Sunny's second-well tutorial toward the
+remaining wells, ingredients and campfire. Use a verified fresh whole-save copy,
+all real actors/shared state and ordinary input owners. Preserve the original;
+do not seed quest variables, bypass dialogue or teleport to fabricate progression.
+Headless gameplay is state/behavior proof only, with no rendered-frame claim.
+
+The reached headless mouse-look blocker is repaired: only actual headless mouse
+motion carrying the harness's boolean-true tag may use the existing look owner
+without system mouse capture. Modal, source control, furniture and XR guards are
+unchanged. Debug builds have zero warnings/errors, the actual-player harness audit
+passes and independent bounded source review found no concrete defect. Genuine
+whole-save Continue, bounded looking/walking, aimed Talk / Sunny Smiles, E dialogue,
+Goodbye and ordinary F5 pass. Separate-process Continue restores position/pitch;
+another bounded look and F5 pass, and both sessions exit normally. Recording is
+off throughout. Tutorial objectives 30/40 are complete, 50 is active and 60/70
+are not displayed: remaining wells were already accepted, so Sunny's generic
+greeting does not justify a dialogue change. Remaining-well combat is next.
+The required full runtime gate passes with exit 0, all 2,181 frozen source and
+configuration hashes unchanged and a clean whitespace check. Checked publication
+is next. The coordinator owns validation/Git; writer source is frozen. No campaign, rendered
+frame, retail parity or complete tutorial claim follows from these receipts.
+
+Established gravity capability: Debug builds pass with zero warnings/errors. Synthetic native gravity tests
 and the actual owned Strip fountain whole-model audit pass: five exact source
 scalar samples, managed cold clock/channel reconstruction, independent prototype/
 clones, reset/retirement, signed acceleration and both turbulent/non-turbulent
