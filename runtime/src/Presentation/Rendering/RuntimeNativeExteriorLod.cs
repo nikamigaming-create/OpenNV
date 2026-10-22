@@ -28,6 +28,7 @@ internal partial class RuntimeNativeExteriorLod : Node3D
     private Vector2 _forward;
     private ChannelReader<Payload>? _uploads;
     private IEnumerator<bool>? _upload;
+    private string? _uploadSource;
     private readonly CancellationTokenSource _readCancellation = new();
     private ImageTexture _mask = null!;
     private Vector4 _detailBounds;
@@ -54,11 +55,20 @@ internal partial class RuntimeNativeExteriorLod : Node3D
         preparationWorkers = FalloutContentWorkers.Concurrency,
         preparedQueueLimit = FalloutContentWorkers.Concurrency * 2,
         errors = _errors.ToArray(),
-        lastUploadMilliseconds = _lastUploadMilliseconds,
-        maximumUploadMilliseconds = _maximumUploadMilliseconds
+        lastUploadMilliseconds = _uploadTiming.LastBatchMilliseconds,
+        maximumUploadMilliseconds = _uploadTiming.MaximumBatchMilliseconds,
+        maximumUploadSource = _uploadTiming.MaximumStepSource,
+        lastUploadBatchMilliseconds = _uploadTiming.LastBatchMilliseconds,
+        maximumUploadBatchMilliseconds = _uploadTiming.MaximumBatchMilliseconds,
+        lastUploadStepMilliseconds = _uploadTiming.LastStepMilliseconds,
+        lastUploadStepSource = _uploadTiming.LastStepSource,
+        maximumUploadStepMilliseconds = _uploadTiming.MaximumStepMilliseconds,
+        maximumUploadStepSource = _uploadTiming.MaximumStepSource,
+        uploadSteps = _uploadTiming.Steps,
+        faultedUploadSteps = _uploadTiming.FaultedSteps,
+        uploadBatches = _uploadTiming.Batches
     };
-    private double _lastUploadMilliseconds;
-    private double _maximumUploadMilliseconds;
+    private readonly NativePublicationTiming _uploadTiming = new();
 
     internal void Configure(FalloutPluginStack records, RuntimeLiveContentSource source, FalloutExteriorGridScene grid, float units)
     {
@@ -157,22 +167,37 @@ internal partial class RuntimeNativeExteriorLod : Node3D
         {
             var started = Stopwatch.GetTimestamp();
             var changed = false;
-            while ((_upload is not null || uploads.Count != 0) && NativePublicationBudget.TryBegin(true, out var operationStarted))
+            try
             {
-                if (_upload is null && uploads.TryRead(out var result) &&
-                    _selected.Any(block => result.Block.Contains(block) || block.Contains(result.Block)))
-                    _upload = Upload(result).GetEnumerator();
-                try
+                while ((_upload is not null || uploads.Count != 0) && NativePublicationBudget.TryBegin(true, out var operationStarted))
                 {
-                    if (_upload is not null && !_upload.MoveNext())
-                    { _upload.Dispose(); _upload = null; changed = true; }
+                    if (_upload is null && uploads.TryRead(out var result) &&
+                        _selected.Any(block => result.Block.Contains(block) || block.Contains(result.Block)))
+                    {
+                        _uploadSource = UploadSource(result);
+                        _upload = Upload(result).GetEnumerator();
+                    }
+                    var faulted = true;
+                    var advanced = false;
+                    try
+                    {
+                        if (_upload is not null)
+                        {
+                            advanced = true;
+                            if (!_upload.MoveNext()) { _upload.Dispose(); _upload = null; changed = true; }
+                        }
+                        faulted = false;
+                    }
+                    catch (Exception error)
+                    { _upload?.Dispose(); _upload = null; Report("tile-publication", error); changed = true; }
+                    finally
+                    {
+                        var elapsed = NativePublicationBudget.Complete(operationStarted);
+                        if (advanced) _uploadTiming.RecordStep(_uploadSource!, elapsed, faulted);
+                    }
                 }
-                catch (Exception error)
-                { _upload?.Dispose(); _upload = null; Report("tile-publication", error); changed = true; }
-                finally { NativePublicationBudget.Complete(operationStarted); }
-                _lastUploadMilliseconds = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
-                _maximumUploadMilliseconds = Math.Max(_maximumUploadMilliseconds, _lastUploadMilliseconds);
             }
+            finally { _uploadTiming.RecordBatch(Stopwatch.GetElapsedTime(started).TotalMilliseconds); }
             if (changed) Commit();
             if (uploads.Count == 0 && _upload is null && _read is null) _uploads = null;
         }
@@ -309,6 +334,9 @@ internal partial class RuntimeNativeExteriorLod : Node3D
         }
         finally { if (!published) root.Free(); }
     }
+
+    private static string UploadSource(Payload payload) =>
+        $"LOD:{payload.Block.Level}:{payload.Block.X}:{payload.Block.Y}:{payload.Terrain.Path}|{payload.Objects.Path}";
 
     private void BindDetail(IEnumerable<ShaderMaterial> materials)
     {

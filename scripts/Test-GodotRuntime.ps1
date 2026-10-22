@@ -78,6 +78,7 @@ if ($LASTEXITCODE -ne 0) { throw "OpenNV live harness build failed." }
 
 $probes = @(
     "ReactiveSteeringContractProbe",
+    "NativePublicationTimingContractProbe",
     "RuntimeLaunchContractProbe",
     "ClassicFrameContractProbe",
     "ClassicCharacterContractProbe",

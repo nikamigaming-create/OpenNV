@@ -266,6 +266,45 @@ try
 catch (InvalidDataException)
 {
 }
+void RequireSequenceRefusal(Action request)
+{
+    try
+    {
+        request();
+        throw new InvalidOperationException("Live parity join concealed a producer sequence error.");
+    }
+    catch (InvalidDataException) { }
+}
+RequireSequenceRefusal(() => new ParityLiveJoiner().Push(openNv with { Sequence = 2 }));
+var retainedJoiner = new ParityLiveJoiner();
+retainedJoiner.BeginRetainedWindow(ParityEngine.Retail, 42);
+retainedJoiner.BeginRetainedWindow(ParityEngine.OpenNv, 70);
+RequireSequenceRefusal(() => retainedJoiner.Push(retail with { Sequence = 43 }));
+_ = retainedJoiner.Push(retail with { Sequence = 42 });
+var retainedJoined = retainedJoiner.Push(openNv with { Sequence = 70 });
+if (retainedJoined is null || retainedJoined.Retail.Sequence - 1 != 41 ||
+    retainedJoined.OpenNv.Sequence - 1 != 69 || !retainedJoined.Comparison.ExactStateMatch)
+    throw new InvalidOperationException("Retained parity attachment lost either initial producer prefix.");
+_ = retainedJoiner.Push(retail with { Sequence = 43 });
+if (retainedJoiner.Push(openNv with { Sequence = 71 }) is null)
+    throw new InvalidOperationException("Retained parity attachment did not continue contiguously.");
+try
+{
+    retainedJoiner.BeginRetainedWindow(ParityEngine.Retail, 45);
+    throw new InvalidOperationException("Retained parity attachment allowed a later rebaseline.");
+}
+catch (InvalidOperationException error) when (error.Message == "Live parity producer already has an initial sequence.") { }
+foreach (var frame in new[] { retail, openNv })
+{
+    foreach (var invalid in new ulong[] { 41, 42, 44 })
+    {
+        var attached = new ParityLiveJoiner();
+        attached.BeginRetainedWindow(frame.Engine, 42);
+        _ = attached.Push(frame with { Sequence = 42 });
+        RequireSequenceRefusal(() => attached.Push(frame with { Sequence = invalid }));
+    }
+}
+Console.WriteLine("OPENNV_PARITY_RETAINED_WINDOW_CONTRACT_OK strictDefault=true explicitBaseline=true bothPrefixes=true laterGapsRefused=true");
 var boundedJoiner = new ParityLiveJoiner(2);
 _ = boundedJoiner.Push(retail with { Sequence = 1, StateKey = "retail:one" });
 _ = boundedJoiner.Push(retail with { Sequence = 2, StateKey = "retail:two" });
@@ -417,6 +456,35 @@ if (OperatingSystem.IsWindows())
     var ringJoined = ringJoiner.Push(ParityTelemetryCodec.Decode(openNvPacket));
     if (ringJoined is null || !ringJoined.Comparison.ExactStateMatch)
         throw new InvalidOperationException("Distinct live parity channels did not join exact state.");
+
+    for (ulong index = 2; index <= 8; ++index)
+    {
+        retailWriter.Publish(ParityTelemetryCodec.Encode(retail with { Sequence = index + 100 }));
+        openNvWriter.Publish(ParityTelemetryCodec.Encode(openNv with { Sequence = index + 200 }));
+    }
+    var initialRetailRing = retailReader.EarliestAvailableSequence;
+    var initialOpenNvRing = openNvReader.EarliestAvailableSequence;
+    if (initialRetailRing != 5 || initialOpenNvRing != 5 ||
+        !retailReader.TryRead(initialRetailRing, out var lateRetailPacket) ||
+        !openNvReader.TryRead(initialOpenNvRing, out var lateOpenNvPacket))
+        throw new InvalidOperationException("Retained parity fixture did not overwrite both initial ring windows.");
+    var lateRetail = ParityTelemetryCodec.Decode(lateRetailPacket);
+    var lateOpenNv = ParityTelemetryCodec.Decode(lateOpenNvPacket);
+    var attachedRingJoiner = new ParityLiveJoiner();
+    attachedRingJoiner.BeginRetainedWindow(ParityEngine.Retail, lateRetail.Sequence);
+    attachedRingJoiner.BeginRetainedWindow(ParityEngine.OpenNv, lateOpenNv.Sequence);
+    _ = attachedRingJoiner.Push(lateRetail);
+    if (lateRetail.Sequence != 105 || lateOpenNv.Sequence != 205 ||
+        attachedRingJoiner.Push(lateOpenNv) is not { Comparison.ExactStateMatch: true })
+        throw new InvalidOperationException("Retained parity join confused ring and producer sequence identities.");
+    for (ulong index = 9; index <= 13; ++index)
+    {
+        retailWriter.Publish(ParityTelemetryCodec.Encode(retail with { Sequence = index + 100 }));
+        openNvWriter.Publish(ParityTelemetryCodec.Encode(openNv with { Sequence = index + 200 }));
+    }
+    RequireSequenceRefusal(() => retailReader.TryRead(initialRetailRing + 1, out _));
+    RequireSequenceRefusal(() => openNvReader.TryRead(initialOpenNvRing + 1, out _));
+    Console.WriteLine("OPENNV_PARITY_RETAINED_RING_CONTRACT_OK bothLateWindows=true producerAndRingDistinct=true postAttachmentOverrunRefused=true");
 
 }
 

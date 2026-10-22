@@ -10,6 +10,17 @@ complete gameplay fields and final-frame identity remain unconnected. A separate
 live drive harness now sends ordinary input to each engine and presents native
 frames; matched simulation and draw correspondence remain unestablished.
 
+The current retail observer publishes engine milliseconds in `simulationTick`,
+while OpenNV publishes physics-frame counts. Their difference is not a shared
+simulation-clock measurement. Retail event ordinal zero has no event identity;
+it must not be treated as aligned gameplay. Canonical packets also include
+different engine-local provenance fields. A shared required semantic schema,
+separate provenance and typed clock domains remain necessary before a gameplay
+parity score is meaningful. Do not drop unmatched required fields to improve it.
+Audio voice/A-V joins, particle identity/RNG/lifecycle joins and native-frame
+joins remain incomplete. Input delivery receipts do not establish equivalent
+starting gameplay state or equivalent outcomes.
+
 ## Safety boundary
 
 The retail producer is an observe-only private tool. It may publish neutral
@@ -86,10 +97,19 @@ Windows mapping is `Local\OpenNV.Parity.<name>`. It uses 128 one-megabyte slots
 by default, keeps a monotonically increasing ring sequence, and commits the
 payload before publishing the new sequence. Ring version 2 splits a large scene
 across slots and reassembles its complete original packet. The live comparator
-starts at each ring's oldest retained frame and reports those starting sequences;
-it does not require attachment before the games start. Readers then request every
+reads from each ring's oldest retained frame. Its default `--start-mode strict`
+requires producer sequence 1. Use `--start-mode retained` to attach after the games
+start: each engine gets an explicit baseline from its first retained packet.
+The console and v4 join report disclose each channel's initial ring sequence,
+initial producer sequence and both omitted prefix counts. Ring slots and producer
+frames have independent sequence identities. Omitted prefixes are outside the
+observed comparison window and cannot support a parity claim. A channel that
+never supplies a frame has a null attachment rather than an invented zero prefix.
+Readers then request every
 sequence in order. If a requested sequence has already been overwritten, the read fails;
-telemetry loss is never reported as parity.
+telemetry loss is never reported as parity. Retained mode only admits the initial
+prefix: subsequent skipped, duplicated or out-of-order producer frames and ring
+overwrites still fail, and an attached engine cannot be rebased.
 
 Adding `--parity-capture <new-private-directory>` samples at the render
 boundaries instead. Each native viewport readback is saved as unchanged

@@ -15,12 +15,35 @@ binding until the weapon attachment changes.
 Distant NIF source workers decode mesh declarations and warm referenced texture
 payloads. Native publication advances one static source node at a time and
 retains the preceding complete cover until the replacement is assembled. Its
-3 ms scheduling check cannot interrupt a single native surface/texture upload;
+shared 2 ms admission allowance cannot interrupt a single native surface/texture upload;
 it is not a guaranteed frame-time ceiling. Distant textures check their live
 cache before reading source bytes and share the existing source DDS cache.
 Owned terrain and object fixtures compare complete surface array bytes and
 transforms between immediate and incremental assembly. Missing property-free
 terrain material ownership remains a reported divergence.
+
+Near exterior and distant LOD telemetry now separates individual admitted upload
+steps from each process call's upload-batch wall time. `lastUploadStepMilliseconds`
+and `maximumUploadStepMilliseconds` use exactly the elapsed host time charged by
+the shared allowance, including a faulting step. Their source fields identify
+the queued near callback or distant tile payload (terrain and object paths);
+a LOD `MoveNext` may traverse both paths, so it is not attributed to one texture.
+These intervals include the admitted operation's queue and retirement bookkeeping,
+not measured GPU execution. `uploadSteps` and `faultedUploadSteps` count executed
+callbacks/iterator advances; discarded obsolete LOD payloads still consume their
+existing admission time but do not invent an iterator step.
+
+`lastUploadBatchMilliseconds` and `maximumUploadBatchMilliseconds` measure the
+whole queue-processing interval separately, including admission and timing
+bookkeeping. Empty or denied batches update batch wall time without adding a
+source step. `uploadBatches` counts these intervals. The legacy
+`lastUploadMilliseconds` and `maximumUploadMilliseconds` remain batch aliases.
+`maximumUploadSource` now aliases `maximumUploadStepSource`; pair it with the
+explicit step duration, never the legacy cumulative batch duration. Previously
+the source named the final callback in the slowest cumulative prefix, which did
+not identify the slowest operation. Maxima remain local to each near/LOD owner
+and survive later smaller batches. This corrects evidence attribution and does
+not establish a frame-time improvement or the 144 FPS (6.94 ms) rendered budget.
 
 Perspective fog uses view-space radial distance, so camera projection, yaw and
 pitch do not change fog at equal range. This is a VR comfort/rendering policy,

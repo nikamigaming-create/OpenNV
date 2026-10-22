@@ -14,6 +14,9 @@ if (retailChannel.Equals(openNvChannel, StringComparison.Ordinal))
 var pairCount = PositiveInteger(options, "pairs", 1, 100000);
 var timeoutSeconds = PositiveInteger(options, "timeout-seconds", 15, 3600);
 var maximumPending = PositiveInteger(options, "maximum-pending", 256, 65536);
+var startMode = options.GetValueOrDefault("start-mode", "strict");
+if (startMode is not ("strict" or "retained"))
+    throw new ArgumentException("--start-mode must be strict or retained.");
 var outputRoot = options.GetValueOrDefault("output");
 var toleranceRules = options.TryGetValue("tolerances", out var tolerancePath)
     ? JsonSerializer.Deserialize<ParityNumericTolerance[]>(File.ReadAllText(tolerancePath), new JsonSerializerOptions
@@ -41,6 +44,7 @@ var rows = new List<JoinReport>(pairCount);
 var joiner = new ParityLiveJoiner(maximumPending);
 string? failure = null;
 long? firstRetailSequence = null, firstOpenNvSequence = null;
+ChannelAttachment? retailAttachment = null, openNvAttachment = null;
 try
 {
     using var retailRing = ParitySharedMemoryRing.CreateOrOpen(retailChannel);
@@ -60,7 +64,9 @@ try
             joiner,
             rows,
             pairCount,
-            tolerancePolicy);
+            tolerancePolicy,
+            startMode,
+            ref retailAttachment);
         progressed |= Drain(
             openNvRing,
             ParityEngine.OpenNv,
@@ -69,7 +75,9 @@ try
             joiner,
             rows,
             pairCount,
-            tolerancePolicy);
+            tolerancePolicy,
+            startMode,
+            ref openNvAttachment);
         if (!progressed)
             Thread.Sleep(2);
     }
@@ -94,12 +102,15 @@ finally
         JsonSerializer.Serialize(
             new
             {
-                schema = "opennv-parity-live-join-report/v3",
+                schema = "opennv-parity-live-join-report/v4",
                 retailChannel,
                 openNvChannel,
+                startMode,
                 failure,
                 firstRetailSequence,
                 firstOpenNvSequence,
+                retailAttachment,
+                openNvAttachment,
                 pendingRetail = joiner.PendingRetailFrames,
                 pendingOpenNv = joiner.PendingOpenNvFrames,
                 finalFrames = "unobserved",
@@ -126,7 +137,9 @@ static bool Drain(
     ParityLiveJoiner joiner,
     ICollection<JoinReport> rows,
     int requestedPairs,
-    ParityTolerancePolicy tolerancePolicy)
+    ParityTolerancePolicy tolerancePolicy,
+    string startMode,
+    ref ChannelAttachment? attachment)
 {
     var progressed = false;
     while (rows.Count < requestedPairs && ring.TryRead(nextRingSequence, out var packet))
@@ -137,6 +150,17 @@ static bool Drain(
         if (frame.Engine != expectedEngine)
             throw new InvalidDataException(
                 $"Parity channel expected {expectedEngine}, received {frame.Engine}.");
+        if (attachment is null)
+        {
+            if (frame.Sequence == 0)
+                throw new InvalidDataException("Parity producer initial sequence must be positive.");
+            attachment = new(nextRingSequence, frame.Sequence, nextRingSequence - 1, frame.Sequence - 1);
+            Console.WriteLine(
+                $"OPENNV_PARITY_ATTACH engine={expectedEngine} mode={startMode} " +
+                $"ring={attachment.FirstRingSequence} producer={attachment.FirstProducerSequence} " +
+                $"omittedRing={attachment.OmittedRingPrefix} omittedProducer={attachment.OmittedProducerPrefix}");
+            if (startMode == "retained") joiner.BeginRetainedWindow(expectedEngine, frame.Sequence);
+        }
         var joined = joiner.Push(frame);
         if (joined is not null)
         {
@@ -173,7 +197,8 @@ static Dictionary<string, string> ParseOptions(string[] arguments)
         throw new ArgumentException(
             "Usage: OpenNV.ParityLiveComparator --retail-channel <name> " +
             "--opennv-channel <name> [--pairs <count>] [--timeout-seconds <seconds>] " +
-            "[--maximum-pending <count>] [--output <new-directory>] [--tolerances <private-json>]");
+            "[--maximum-pending <count>] [--start-mode <strict|retained>] " +
+            "[--output <new-directory>] [--tolerances <private-json>]");
     var result = new Dictionary<string, string>(StringComparer.Ordinal);
     for (var index = 0; index < arguments.Length; index += 2)
     {
@@ -183,7 +208,7 @@ static Dictionary<string, string> ParseOptions(string[] arguments)
             throw new ArgumentException("Parity live comparator options are invalid or duplicated.");
     }
     var allowed = new HashSet<string>(
-        ["retail-channel", "opennv-channel", "pairs", "timeout-seconds", "maximum-pending", "output", "tolerances"],
+        ["retail-channel", "opennv-channel", "pairs", "timeout-seconds", "maximum-pending", "start-mode", "output", "tolerances"],
         StringComparer.Ordinal);
     if (result.Keys.Any(key => !allowed.Contains(key)))
         throw new ArgumentException("Parity live comparator received an unknown option.");
@@ -205,6 +230,9 @@ static int PositiveInteger(
             ? parsed
             : throw new ArgumentException($"--{name} must be between 1 and {maximum}.")
         : fallback;
+
+internal sealed record ChannelAttachment(long FirstRingSequence, ulong FirstProducerSequence,
+    long OmittedRingPrefix, ulong OmittedProducerPrefix);
 
 internal sealed record JoinReport(
     ulong RetailSequence,

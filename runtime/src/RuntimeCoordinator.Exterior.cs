@@ -26,9 +26,7 @@ public partial class RuntimeCoordinator
     private readonly Dictionary<FalloutFormKey, Node3D> _nativeGridModels = [];
     private readonly Dictionary<FalloutFormKey, RuntimeNativeNpc> _nativeGridNpcModels = [];
     private (int X, int Y)? _nativeGridFailed;
-    private double _nativeGridUploadMilliseconds;
-    private double _nativeGridMaximumUploadMilliseconds;
-    private string? _nativeGridMaximumUploadSource;
+    private readonly NativePublicationTiming _nativeGridUploadTiming = new();
     private double _nativeGridCommitMilliseconds;
     private IReadOnlyDictionary<string, double>? _nativeGridCommitPhases;
     private (int X, int Y)? _nativeGridTarget;
@@ -57,9 +55,18 @@ public partial class RuntimeCoordinator
         terrainCacheCells = _nativeCurrentCellRoot?.GetChildren().OfType<RuntimeNativeLandscapeTransport>().Count() ?? 0,
         target = _nativeGridTarget is { } target ? new[] { target.X, target.Y } : null,
         preparedAhead = _nativeGridUploads?.Count == 0 && _nativeGridPending is not null,
-        lastUploadMilliseconds = _nativeGridUploadMilliseconds,
-        maximumUploadMilliseconds = _nativeGridMaximumUploadMilliseconds,
-        maximumUploadSource = _nativeGridMaximumUploadSource,
+        lastUploadMilliseconds = _nativeGridUploadTiming.LastBatchMilliseconds,
+        maximumUploadMilliseconds = _nativeGridUploadTiming.MaximumBatchMilliseconds,
+        maximumUploadSource = _nativeGridUploadTiming.MaximumStepSource,
+        lastUploadBatchMilliseconds = _nativeGridUploadTiming.LastBatchMilliseconds,
+        maximumUploadBatchMilliseconds = _nativeGridUploadTiming.MaximumBatchMilliseconds,
+        lastUploadStepMilliseconds = _nativeGridUploadTiming.LastStepMilliseconds,
+        lastUploadStepSource = _nativeGridUploadTiming.LastStepSource,
+        maximumUploadStepMilliseconds = _nativeGridUploadTiming.MaximumStepMilliseconds,
+        maximumUploadStepSource = _nativeGridUploadTiming.MaximumStepSource,
+        uploadSteps = _nativeGridUploadTiming.Steps,
+        faultedUploadSteps = _nativeGridUploadTiming.FaultedSteps,
+        uploadBatches = _nativeGridUploadTiming.Batches,
         preparingNpcs = _nativeGridNpcPreparations.Count,
         preparedNpcBodies = _nativeGridNpcModels.Count,
         lastCommitMilliseconds = _nativeGridCommitMilliseconds,
@@ -100,15 +107,17 @@ public partial class RuntimeCoordinator
                 var started = Stopwatch.GetTimestamp();
                 // A pending decode or partial body yields. Visit each queued
                 // item at most once this frame, without waiting on a worker.
-                var remaining = uploads.Count;
-                while (remaining-- > 0 && NativePublicationBudget.TryBegin(false, out var operationStarted) && uploads.TryDequeue(out var upload))
+                try
                 {
-                    try { if (!upload.Upload()) uploads.Enqueue(upload); }
-                    finally { NativePublicationBudget.Complete(operationStarted); }
-                    _nativeGridUploadMilliseconds = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
-                    if (_nativeGridUploadMilliseconds > _nativeGridMaximumUploadMilliseconds)
-                    { _nativeGridMaximumUploadMilliseconds = _nativeGridUploadMilliseconds; _nativeGridMaximumUploadSource = upload.Source; }
+                    var remaining = uploads.Count;
+                    while (remaining-- > 0 && NativePublicationBudget.TryBegin(false, out var operationStarted) && uploads.TryDequeue(out var upload))
+                    {
+                        var faulted = true;
+                        try { if (!upload.Upload()) uploads.Enqueue(upload); faulted = false; }
+                        finally { _nativeGridUploadTiming.RecordStep(upload.Source, NativePublicationBudget.Complete(operationStarted), faulted); }
+                    }
                 }
+                finally { _nativeGridUploadTiming.RecordBatch(Stopwatch.GetElapsedTime(started).TotalMilliseconds); }
                 if (uploads.Count == 0 && coordinates == _nativeGridPending!.Scene.Cell.Coordinates) CommitNativeExteriorGrid();
                 return;
             }
