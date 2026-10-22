@@ -9,9 +9,7 @@ lockpicking, hacking and all 13 skills. No campaign or parity completion is clai
 
 ## Active block
 
-Branch codex/fnv-shared-sandbox, based on synchronized main
-1901d2fa99e5ab84dd14d1141b8b4b4ff4a8f84f. The task PR uses this branch; preserve
-unrelated PR #242. Ambient speech startup now retires participant reservations
+Preserve unrelated PR #242. Ambient speech startup now retires participant reservations
 through the shared failure owner while retaining unresolved voice/results and
 save refusal. The owned Trudy/Sunny HELLO failure fixture passes and fails its
 negative control with cleanup disabled; both busy refusals and ticks/retry are
@@ -24,12 +22,17 @@ identical. The final full gate passes (integration-final-runtime-gate.log, exit0
 including retained-window and timing contracts. Both speech audits pass against
 that build (speech-final-counted.log and speech-final-hello.log); the counted
 negative control is speech-ambient-counted-negative.log.
-Scoped telemetry and publication
-timing corrections are prepared separately for the next fresh branch.
-The previous gameplay owner confirmed it is idle and holds competing edits/tests.
-No game, build or watcher is running. Frame recording remains off. The final selected owned10a210/074fe6 four-request
-navigation audit passes (integration-owned-wander.log, exit0). git diff --check passes. Hosted checks,
-review and main publication remain pending. Main has not been updated.
+The comparator has explicit retained-window attachment with both channels' omitted
+prefixes exposed; strict defaults and all subsequent loss checks remain intact.
+Near/LOD publication diagnostics now separate exact charged step/source duration
+and faults from batch wall time. Admission remains 2 ms; no rendered performance
+improvement is established. Typed clocks, shared semantic fields/provenance,
+event/audio/particle and final-frame joins remain required for retail comparison.
+No local game or build is running. Frame recording remains off. The selected owned
+10a210/074fe6 four-request navigation audit passes (integration-owned-wander.log,
+exit0). git diff --check passes. The integration coordinator retains Git and
+execution ownership; the previous gameplay owner is qualifying source cadence
+read-only without competing edits or native jobs.
 
 The shared NPC/creature Sandbox owner now moves actors along source NAVM requests
 and retains the selected activity separately from individual destinations. Its
@@ -100,10 +103,14 @@ query was a fixture, not its live selected package.
 
 ## Next work
 
-Complete branch review and hosted checks. The next implementation work is remaining
-admission, activity execution and the independent movement request clock; do not revert unrestricted packages to
+The next implementation work is remaining admission, activity execution and the
+independent movement request clock; do not revert unrestricted packages to
 wander-only behavior. Exercise ordinary population, combat and quest transitions,
 then save/cold continuation and selected owned checks before the full runtime gate.
+Refusal suppression/history updates are source-supported per admitted attempt;
+two process timers precede that admission and still need complete qualification
+and runtime ownership. Do not infer retail cadence from OpenNV's per-tick retry or
+deduplicate histories without binding those gates.
 
 Private source analysis, scripts and unresolved semantics are in Ghidrust
 workspace/evidence/fnv-1.4.0.525/sandbox-20261021/notes.md. Owned declarations are

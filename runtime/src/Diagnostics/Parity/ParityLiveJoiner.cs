@@ -14,6 +14,8 @@ internal sealed class ParityLiveJoiner
     private readonly Dictionary<ParityJoinKey, Queue<ParityTelemetryFrame>> _openNv = [];
     private ulong _lastRetailSequence;
     private ulong _lastOpenNvSequence;
+    private ulong? _initialRetailSequence;
+    private ulong? _initialOpenNvSequence;
 
     internal ParityLiveJoiner(int maximumPendingFrames = 256)
     {
@@ -25,6 +27,22 @@ internal sealed class ParityLiveJoiner
     internal int PendingRetailFrames => Count(_retail);
 
     internal int PendingOpenNvFrames => Count(_openNv);
+
+    // A live reader may explicitly attach to the oldest retained producer frame.
+    // Only that initial prefix is omitted; all later frames remain contiguous.
+    internal void BeginRetainedWindow(ParityEngine engine, ulong firstProducerSequence)
+    {
+        if (engine is not (ParityEngine.Retail or ParityEngine.OpenNv) || firstProducerSequence == 0)
+            throw new ArgumentOutOfRangeException(nameof(firstProducerSequence));
+        ref var initial = ref engine == ParityEngine.Retail
+            ? ref _initialRetailSequence : ref _initialOpenNvSequence;
+        if (initial is not null)
+            throw new InvalidOperationException("Live parity producer already has an initial sequence.");
+        ref var prior = ref engine == ParityEngine.Retail
+            ? ref _lastRetailSequence : ref _lastOpenNvSequence;
+        initial = firstProducerSequence;
+        prior = firstProducerSequence - 1;
+    }
 
     internal ParityJoinedFrame? Push(ParityTelemetryFrame frame)
     {
@@ -74,6 +92,8 @@ internal sealed class ParityLiveJoiner
                 $"{frame.Engine} parity producer sequence gap: expected {expected}, " +
                 $"received {frame.Sequence}.");
         prior = frame.Sequence;
+        if (frame.Engine == ParityEngine.Retail) _initialRetailSequence ??= frame.Sequence;
+        else _initialOpenNvSequence ??= frame.Sequence;
     }
 
     private static int Count(

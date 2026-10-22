@@ -33,5 +33,10 @@ internal static class NativePublicationBudget
         return true;
     }
 
-    internal static void Complete(long started) => _spent += Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+    internal static double Complete(long started)
+    {
+        var elapsed = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+        _spent += elapsed;
+        return elapsed;
+    }
 }
