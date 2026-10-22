@@ -150,7 +150,7 @@ internal static class QuestScriptExecutionProbe
         var state = new FalloutQuestState(records);
         state.SetVariable(quest, 2, 123.5);
         state.SetRunning(quest, true);
-        FalloutQuestScripts Scripts() => new(records, state, new HashSet<FalloutFormKey>(),
+        FalloutQuestScripts Scripts(FalloutQuestState? owner = null) => new(records, owner ?? state, new HashSet<FalloutFormKey>(),
             new FalloutPlayerInventory(), defaultProcessingDelay: 1);
         var initial = Scripts().Capture();
         var legacy = initial with { ParserVersion = 1 };
@@ -166,11 +166,48 @@ internal static class QuestScriptExecutionProbe
         }
         Reject(() => Scripts().Restore(initial with { Instances = [] }));
         restored.Advance(1);
-        Require(state.Variable(quest, 3) == 7 && restored.Capture().Instances.Single().Error is not null,
-            "Unbound trailing branch text silently executed or discarded the preceding effects.");
-        var cold = Scripts(); cold.Restore(restored.Capture()); cold.Advance(10);
-        Require(cold.Capture().Instances.SequenceEqual(restored.Capture().Instances) && state.Variable(quest, 3) == 7,
-            "Failed branch syntax replayed its prefix after cold restoration.");
+        Require(state.Variable(quest, 3) == 7 && restored.Capture().Instances.Single() is { Error: null, Executions: 1 },
+            "Recognized Else parameter text rejected a completed earlier branch or became a condition.");
+        state.SetVariable(quest, 1, 1);
+        restored.Advance(1);
+        Require(state.Variable(quest, 3) == 9 && restored.Capture().Instances.Single() is { Error: null, Executions: 2 },
+            "Quest recurrence failed to select the unconditional Else after its original condition changed.");
+        var coldState = new FalloutQuestState(records);
+        coldState.Restore(JsonSerializer.Deserialize<FalloutQuestSnapshot[]>(JsonSerializer.Serialize(state.Capture()))!);
+        var cold = Scripts(coldState);
+        cold.Restore(JsonSerializer.Deserialize<FalloutQuestScriptsSnapshot>(JsonSerializer.Serialize(restored.Capture()))!);
+        for (var frame = 0; frame < 8; ++frame)
+        {
+            restored.Advance(.25); cold.Advance(.25);
+        }
+        Require(restored.Capture().Instances.Single().Executions > 2 &&
+            JsonSerializer.Serialize(cold.Capture()) == JsonSerializer.Serialize(restored.Capture()) &&
+            JsonSerializer.Serialize(coldState.Capture()) == JsonSerializer.Serialize(state.Capture()),
+            "Recognized Else quest recurrence changed its source clock, execution count or values across cold restoration.");
+
+        // Explicit synthetic legacy failure state: admitting the new Else
+        // semantics must not restart a previously faulted invocation. The
+        // retained result is a prefix witness; a restart would overwrite it.
+        var stoppedState = new FalloutQuestState(records);
+        stoppedState.Restore(JsonSerializer.Deserialize<FalloutQuestSnapshot[]>(JsonSerializer.Serialize(state.Capture()))!);
+        stoppedState.SetVariable(quest, 3, 7);
+        var successful = restored.Capture();
+        var legacyFault = successful with
+        {
+            Instances = successful.Instances.Select(instance => instance with { Error = "Invalid script else.", PendingCommand = null }).ToArray()
+        };
+        var stopped = Scripts(stoppedState);
+        stopped.Restore(JsonSerializer.Deserialize<FalloutQuestScriptsSnapshot>(JsonSerializer.Serialize(legacyFault))!);
+        var retainedInstances = stopped.Capture().Instances;
+        var retainedValues = JsonSerializer.Serialize(stoppedState.Capture());
+        stopped.Advance(10);
+        var after = stopped.Capture().Instances.Single();
+        var before = retainedInstances.Single();
+        Require(after.Error == "Invalid script else." && after.Executions == before.Executions &&
+            after.PendingCommand is null && after.Clock!.HasSameBits(before.Clock!) &&
+            JsonSerializer.Serialize(stopped.Capture().Instances) == JsonSerializer.Serialize(retainedInstances) &&
+            JsonSerializer.Serialize(stoppedState.Capture()) == retainedValues && stoppedState.Variable(quest, 3) == 7,
+            "Cold legacy Else failure was cleared, advanced or replayed its retained quest prefix.");
     }
 
     private static void NumericColdState(string directory)

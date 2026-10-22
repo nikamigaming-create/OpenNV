@@ -9,21 +9,42 @@ lockpicking, hacking and all 13 skills. No campaign or parity completion is clai
 
 ## Active block
 
-Checked baseline: PR260 merged as cf541f16cdb2ac58b33108093813b84b27645e5a
-after all five checks passed on 721fdc7a. Local main and origin/main were verified
-equal and clean, with no outstanding task PR. The next feature branch is
-codex/fnv-vault21-render-admission. The checked repair resolves shared controller
-manager binding across a validated node-controller chain. The owned Strip
-forcefield declares manager -> deferred visibility -> multi-target companion;
-the importer currently assumes the companion is the immediate next block.
-Synthetic refusal controls and the owned forcefield's four source groups now pass
-native sequence, clock, material-value, cold and independent-instance checks.
-The owned model has 64 checked material samples. The serial Debug build passes
-with zero warnings/errors; the full required gate passes with exit0 and all
-2,033 frozen source/configuration hashes unchanged. These checks do not establish ordinary door Open/Close,
-visibility-animation support or final pixels.
-The coordinator owns checked publication, builds, native execution and Git;
-the implementation writer is frozen.
+Checked baseline: PR261 merged as a77ce1f00326c6b81b80b945bfc981fdfc7e198b
+after all five checks passed on ee82ecef. Local main and origin/main were verified
+equal and clean. The active branch is codex/fnv-forcefield-reference-admission.
+The coordinator owns builds, native execution and Git. The scoped writer owns
+the reached source-control-flow repair and its regressions.
+
+Whole-cell assembly now uses the existing screenshot builders, event bindings,
+camera queries and distant-world preparation in an explicit headless assembly-only
+mode. The final day and night runs each publish 1,334 references. All five formerly rejected
+forcefields have two native geometry nodes, the correct source controller and
+their actual XTEL portals. All five are loading doors, so no Open/Close policy
+change is justified. No activation, transition, images or rendered frames were
+produced. Ten reference and nineteen actor divergences per view remain, alongside
+LOD material failures and repeated missing package-speech gameplay-owner errors.
+This is partial assembly evidence, not a complete-scene or rendering pass.
+
+The controlled owned gate-script probe distinguishes a null actor local from
+the missing MoveToMarkerWithFade command owner, preserving each latched fault
+across cold reconstruction. The no-population-move branch now completes its
+authored writes and one default activation effect: recognized Else ignores its
+trailing source text, matching the qualified compiler/runtime contract. ElseIf
+conditions and structural guards remain enforced. Focused synthetic contracts
+and all twelve controlled cases across four owned gate references pass, including
+cold retention without replay of committed activation prefixes or old Invalid
+script else faults. Debug builds
+have zero warnings/errors. The quest probe also verifies recurrence and exact
+cold clock/value continuity; an obsolete refusal expectation was replaced with
+the qualified behavior while keeping a separate legacy-fault no-replay test.
+The required full runtime gate passes with all 2,035 source/config hashes
+unchanged. Headless screenshot requests without the explicit assembly-only flag
+refuse before creating output. The probe
+supplies explicit fixture inputs, not ordinary gameplay or portal-stream proof.
+
+Safe offscreen rendered capture remains blocked: this engine clamps an off-monitor
+startup window onto a monitor before showing it. No-focus does not suppress mouse
+input. No GPU process or temporary project override was launched over retail.
 
 The finite Vault21 investigation stopped after two approaches: null runtime
 shader state is handled without drawing or aborting siblings, but the selected

@@ -194,9 +194,8 @@ internal sealed partial class FalloutGameModeProgram
             {
                 if (!nesting.TryPop(out var parent) || parent.Kind != "if" || parent.Else)
                     throw new InvalidDataException("Unmatched or repeated script branch.");
-                // Owned scripts contain text after Else. Preserve the program
-                // and its saved owner; the executor still rejects that syntax
-                // when reached until its compiled behavior is understood.
+                // Else keeps its original line tokens for source identity,
+                // but its trailing text has no condition semantics.
                 nesting.Push(("if", command == "else"));
             }
             if (command is "break" or "continue" && (tokens.Length != 1 || !nesting.Any(frame => frame.Kind == "while")))
@@ -293,7 +292,9 @@ internal sealed partial class FalloutGameModeProgram
                     break;
                 case "else":
                     var other = branches.Pop();
-                    if (other.Else || tokens.Length != 1) throw new InvalidDataException("Invalid script else.");
+                    if (other.Else) throw new InvalidDataException("Invalid script else.");
+                    // The source compiler ignores Else parameter text. Only
+                    // If/ElseIf evaluate conditions; this tail is never read.
                     active = other.Parent && !other.Taken;
                     branches.Push((other.Parent, true, true));
                     break;
