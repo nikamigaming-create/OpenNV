@@ -794,7 +794,8 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
         {
             var parts = command.Split('.');
             var operation = parts[^1].ToLowerInvariant();
-            var target = parts.Length == 1 ? source : parts.Length == 2 ? Reference(parts[0]) :
+            var target = parts.Length == 1 ? source : parts.Length == 2 ?
+                operation == "addnote" ? bindings.Reference(parts[0]) : Reference(parts[0]) :
                 throw new NotSupportedException("Script command target path is unbound.");
             if (operation == "forcesave")
             {
@@ -1240,7 +1241,9 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                     (host.Inventory ?? throw new NotSupportedException("ResetInventory has no shared inventory owner."))
                         .Execute(new(FalloutInventoryCommandKind.Reset, target));
                     break;
-                case "addnote" when parts.Length == 1 && arguments.Count == 1:
+                // AddNote always mutates player membership. A static qualifier
+                // still requires its actual compiled reference binding above.
+                case "addnote" when arguments.Count == 1:
                     var note = bindings.Form(arguments[0]);
                     if (note.Signature != "NOTE") throw new InvalidDataException("AddNote target is not NOTE.");
                     host.Apply(new(FalloutReferenceEffectKind.AddNote, source, note.FormKey));
