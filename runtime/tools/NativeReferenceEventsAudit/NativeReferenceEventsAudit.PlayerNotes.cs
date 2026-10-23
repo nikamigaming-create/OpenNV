@@ -25,6 +25,14 @@ public partial class NativeReferenceEventsAudit
         try
         {
             var bytes = new byte[28];
+            byte[] RemovalScript(uint id, string command, bool bindPlayer = true)
+            {
+                var header = new byte[20]; header[16] = 1;
+                return Record("SCPT", id, Field("SCHR", header),
+                    Field("SCRO", BitConverter.GetBytes(bindPlayer ? 0x14u : 4u)),
+                    Field("SCRO", BitConverter.GetBytes(4u)), Field("SCRO", BitConverter.GetBytes(2u)),
+                    Field("SCTX", Encoding.ASCII.GetBytes("begin GameMode\n" + command + "\nend\0")));
+            }
             BitConverter.GetBytes((ushort)382).CopyTo(bytes, 8);
             BitConverter.GetBytes(1u).CopyTo(bytes, 12);
             File.WriteAllBytes(Path.Combine(directory.FullName, "Contact.esm"),
@@ -36,7 +44,12 @@ public partial class NativeReferenceEventsAudit
                     .Concat(Record("ARMO", 5, Field("EDID", Encoding.ASCII.GetBytes("PipBoy\0"))))
                     .Concat(Record("GLOB", 2, Field("EDID", Encoding.ASCII.GetBytes("FixtureGlobal\0")),
                         Field("FNAM", [(byte)'f']), Field("FLTV", BitConverter.GetBytes(7f))))
-                    .Concat(Record("INFO", 3, Field("CTDA", bytes))).ToArray());
+                    .Concat(Record("INFO", 3, Field("CTDA", bytes)))
+                    .Concat(Record("QUST", 8, Field("EDID", Encoding.ASCII.GetBytes("NoteCommandOwner\0")), Field("DATA", [0, 0])))
+                    .Concat(RemovalScript(9, "player.RemoveNote OtherNote"))
+                    .Concat(RemovalScript(10, "FixtureGlobal.RemoveNote OtherNote"))
+                    .Concat(RemovalScript(11, "player.RemoveNote FixtureGlobal"))
+                    .Concat(RemovalScript(12, "player.RemoveNote OtherNote", bindPlayer: false)).ToArray());
             using var records = FalloutPluginStack.Load(directory.FullName, ["Contact.esm"]);
             using var world = new FalloutReferenceWorld(records);
             var quests = new FalloutQuestState(records);
@@ -122,6 +135,16 @@ public partial class NativeReferenceEventsAudit
                 inventory.Notifications.Capture().Pending.Count == 1,
                 "Acquisition counted NOTE items or failed identical-text feedback deduplication.");
             var notifications = JsonSerializer.Serialize(inventory.Notifications.Capture());
+            void ExecuteQualifiedRemoval(uint scriptId)
+            {
+                var script = records.GetEffective(Key(scriptId));
+                var program = FalloutGameModeProgram.Read(FalloutDialogueTopic.ScriptText(
+                    script.ReadSubrecords().Single(field => field.Signature == "SCTX").Data.Span));
+                var executor = new FalloutReferenceScripts(records, world, quests,
+                    RuntimeCoordinator.CreateNativeReferenceEventHost(new((_, _) => false,
+                        _ => throw new InvalidOperationException("Unexpected default effect in note removal.")), driver));
+                executor.ExecuteProgram(records.GetEffective(Key(8)), script, program, 0);
+            }
             // Retain an existing Node identity in the playback-owner slot. This
             // tests noninterference, not actual voice playback or audio parity.
             Bind("_pipBoyNoteOwner", speech);
@@ -131,7 +154,7 @@ public partial class NativeReferenceEventsAudit
             Require(pipBoyState.SelectedNote == Key(4) && pipBoyState.Revision == revision &&
                 !world.PlayerNotes.Contains(Key(1)), "Unrelated removal invalidated the selected note.");
             world.PlayerNotes.Restore(new([Key(4), Key(6), Key(4)]));
-            driver.ApplyReferenceEffect(new(FalloutReferenceEffectKind.RemoveNote, Key(0x14), Key(4)));
+            ExecuteQualifiedRemoval(9);
             Require(pipBoyState.SelectedNote is null && pipBoyState.NoteSelectionInitialized &&
                 pipBoyState.Revision == revision + 1 && world.PlayerNotes.Notes.SequenceEqual(new[] { Key(6), Key(4) }) &&
                 UiNotes().SequenceEqual(world.PlayerNotes.Notes), "Native removal did not clear selection before first-entry removal.");
@@ -158,6 +181,11 @@ public partial class NativeReferenceEventsAudit
                 () => throw new InvalidOperationException("Unexpected SPECIAL query."), "fixture", [], [], [], null, Vector3.Zero, 0);
             pipBoyState.SelectNote(Key(4)); replaced.Free();
             Require(pipBoyState.SelectedNote == Key(4), "Retiring a previous menu cleared the replacement owner's selection.");
+            foreach (var invalidScript in new uint[] { 10, 11, 12 })
+            {
+                RejectReputationAdapter(() => ExecuteQualifiedRemoval(invalidScript));
+                Require(pipBoyState.SelectedNote == Key(4), "Bad compiled receiver/NOTE cleared actual menu selection.");
+            }
             RejectReputationAdapter(() => driver.ApplyReferenceEffect(new(FalloutReferenceEffectKind.RemoveNote, Key(0x14), Key(2))));
             Require(pipBoyState.SelectedNote == Key(4), "Invalid NOTE type cleared UI state before admission.");
             pipBoyState.Reset();
@@ -167,7 +195,7 @@ public partial class NativeReferenceEventsAudit
             Require(pipBoyState.SelectedNote == Key(6), "Unknown history partially cleared selected-note state.");
             Console.WriteLine("OPENNV_PLAYER_NOTE_ADAPTER_PASS conversation=true speech=true recipe=true npc=true creature=true " +
                 "unloaded=true pipBoyMembership=true cold=true unknownRefused=true addNoteAndAddItem=true duplicateFeedbackSuppressed=true " +
-                "removeNote=true exactSelectionInvalidation=true retiredAndReopened=true playbackOwnerUnchanged=true placedPickup=unadmitted pixels=unverified campaign=false");
+                "removeNote=true qualifiedRemovalThroughNativeHost=true invalidReceiverAndNote=true exactSelectionInvalidation=true retiredAndReopened=true playbackOwnerUnchanged=true placedPickup=unadmitted pixels=unverified campaign=false");
         }
         finally
         {

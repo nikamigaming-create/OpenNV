@@ -20,6 +20,7 @@ internal static partial class QuestStateQueryContracts
             RunNotes();
             RunNoteRemoval();
             RunNoteReceivers();
+            RunRemoveNoteReceivers();
             foreach (var shared in new[] { false, true })
             {
                 ShortCircuit(shared);

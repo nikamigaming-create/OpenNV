@@ -4,6 +4,24 @@ using System.Text.Json;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.World.Cells;
 
+if (args is ["--remove-note-receiver-contracts", .. var removalReceiverExecutor])
+{
+    QuestStateQueryContracts.RunRemoveNoteReceivers(removalReceiverExecutor.SingleOrDefault());
+    return;
+}
+
+if (args is ["--note-query-receiver-contracts", .. var queryReceiverExecutor])
+{
+    QuestStateQueryContracts.RunNoteQueryReceivers(queryReceiverExecutor.SingleOrDefault());
+    return;
+}
+
+if (args is ["--owned-prefixed-remove-note", var prefixedRemovalGame])
+{
+    OwnedPrefixedRemoveNoteActivationProbe.Run(prefixedRemovalGame);
+    return;
+}
+
 if (args is ["--note-receiver-contracts", .. var receiverExecutor])
 {
     QuestStateQueryContracts.RunNoteReceivers(receiverExecutor.SingleOrDefault());
