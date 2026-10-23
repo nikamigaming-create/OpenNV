@@ -116,6 +116,11 @@ internal sealed partial class ReactiveReferenceBot
         failureKind = _failureKind,
         combatTakeover = _combatTakeover,
         pauseAfter = _pauseAfter,
+        minimumCombatHitPoints = _minimumCombatHitPoints,
+        maximumCombatSimulationSeconds = _maximumCombatSimulationSeconds,
+        combatSimulationSeconds = _combatSimulationSeconds,
+        combatPhysicsSample = _combatPhysicsSample,
+        combatPolicyStop = _combatPolicyStop,
         combat = _combat?.State,
         combatObservation = _combatObservation?.State,
         skills = _combatSkills.State,
@@ -131,8 +136,10 @@ internal sealed partial class ReactiveReferenceBot
         _combatSkills = skills ?? new(); _persistSkills = persistSkills;
     }
 
-    internal void Start(string? reference, string mode, float distance, bool combatTakeover = true, bool pauseAfter = true)
+    internal void Start(string? reference, string mode, float distance, bool combatTakeover = true, bool pauseAfter = true,
+        float? minimumCombatHitPoints = null, float? maximumCombatSimulationSeconds = null)
     {
+        ValidateCombatLimits(mode, minimumCombatHitPoints, maximumCombatSimulationSeconds);
         if ((mode != "combat" && string.IsNullOrWhiteSpace(reference)) || mode is not ("interact" or "approach" or "follow" or "travel" or "combat") ||
             !float.IsFinite(distance) || distance is < .5f or > 5)
             throw new ArgumentException("Bot goal requires interact/approach/follow/travel with a source reference, or combat with an optional source threat; distance is 0.5-5 metres.");
@@ -141,6 +148,9 @@ internal sealed partial class ReactiveReferenceBot
         _distance = _approachDistance = distance; _phase = "observing";
         _combat = null; _combatFeedbackPublished = false; _combatCount = 0; _phaseBeforeCombat = null;
         _combatTakeover = combatTakeover; _pauseAfter = pauseAfter; _combatObservation = null; _failureKind = null;
+        _minimumCombatHitPoints = minimumCombatHitPoints; _maximumCombatSimulationSeconds = maximumCombatSimulationSeconds;
+        _combatSimulationSeconds = 0; _combatPolicySample = _combatPhysicsSample = -1; _combatPolicyStop = null;
+        _combatSessionBinding = null; _combatSessionScene = null; _terminalInputReleased = false;
         _elapsed = _stalled = _waiting = _endpointAiming = 0;
         _replans = _obstructionReplans = _endpointReplans = _movingTargetReplans = 0; _error = null;
         _navigation = null; _observation = null; _projectionRadius = 2; _progressWaypoint = -1;
@@ -412,20 +422,20 @@ internal sealed partial class ReactiveReferenceBot
     {
         _error = error; _failureKind = kind;
         _combat?.Abort(kind, error);
+        _reference = null; _path = null; _steering.Reset(); _phase = "blocked";
+        try { ReleaseTerminalInput(_pauseAfter && (_combat is not null || _mode == "combat")); }
+        catch (Exception release) when (release is IOException or InvalidOperationException or NotSupportedException or System.Text.Json.JsonException)
+        { _error += "; input release failed (device lease expires): " + release.Message; }
         try { PublishCombatFeedback(); }
         catch (Exception persistence) when (persistence is IOException or UnauthorizedAccessException or InvalidOperationException or InvalidDataException or System.Text.Json.JsonException)
         { _error += "; skill evidence persistence failed: " + persistence.Message; }
         try { CancelRoute(); }
         catch (Exception cancellation) when (cancellation is IOException or InvalidOperationException or NotSupportedException or ArgumentException)
         { _error += "; route cancellation failed: " + cancellation.Message; }
-        _reference = null; _path = null; _steering.Reset(); _phase = "blocked";
-        try { ReleaseBotControls(_pauseAfter && (_combat is not null || _mode == "combat")); }
-        catch (Exception release) when (release is IOException or InvalidOperationException or NotSupportedException or System.Text.Json.JsonException)
-        { _error += "; input release failed (device lease expires): " + release.Message; }
     }
 
     private void CancelRoute() { _request = null; _cancelRoute?.Invoke(); }
-    private void Complete(string phase) { CancelRoute(); ReleaseBotControls(_pauseAfter); _reference = null; _path = null; _steering.Reset(); _phase = phase; }
+    private void Complete(string phase) { CancelRoute(); ReleaseTerminalInput(_pauseAfter); _reference = null; _path = null; _steering.Reset(); _phase = phase; }
     private void Replan(string phase)
     { CancelRoute(); _path = null; _input(default, false); _steering.Reset(); _stalled = _endpointAiming = 0; _phase = phase; }
     private void ReplanEndpoint(bool closer)
