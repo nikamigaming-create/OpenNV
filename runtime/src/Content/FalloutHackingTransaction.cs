@@ -5,6 +5,7 @@ internal enum FalloutHackingSelection { WrongWord, CorrectWord, DudRemoved, Atte
 internal sealed record FalloutHackingOutcome(FalloutHackingSelection Selection, int Likeness,
     uint RemainingAttempts, int? RemovedPosition = null);
 internal sealed record FalloutHackingPlacement(FalloutHackingWord Word, int Position);
+internal sealed record FalloutHackingDisplayTarget(int Position, int SegmentEnd, int? WordIndex);
 
 // Pure player transaction. Success/lockout is published to its real caller;
 // world access, XP, crime, saves and terminal result scripts are NOT committed here.
@@ -25,6 +26,31 @@ internal sealed class FalloutHackingTransaction
     internal IReadOnlyList<FalloutHackingPlacement> Words => _words.AsReadOnly();
     internal IReadOnlySet<int> UsedBonuses => new HashSet<int>(_usedBonuses);
     internal byte[] DisplayBytes() => _display.ToArray();
+
+    // The source file has two columns of seventeen twelve-byte payload rows.
+    // rowCharacter includes the seven-character address prefix/separator. Word
+    // spans are global; bracket segments end at the selected payload row.
+    internal FalloutHackingDisplayTarget DisplayTarget(int column, int row, int rowCharacter)
+    {
+        if (_display.Length != 408)
+            throw new InvalidDataException("Hacking row input requires the complete source display extent.");
+        if ((uint)column >= 2 || (uint)row >= 17 || rowCharacter < 7 || rowCharacter >= 19)
+            throw new ArgumentOutOfRangeException(nameof(rowCharacter), "Hacking input is outside a payload character.");
+        var rowStart = (column * 17 + row) * 12;
+        var position = rowStart + rowCharacter - 7;
+        for (var index = 0; index < _words.Count; ++index)
+            if (position >= _words[index].Position && position < _words[index].Position + _words[index].Word.Length)
+                return new(position, rowStart + 12, index);
+        return new(position, rowStart + 12, null);
+    }
+
+    internal FalloutHackingOutcome SelectDisplay(int column, int row, int rowCharacter)
+    {
+        RequireChoosing();
+        // Resolve on each input, never retain a candidate index across dud removal.
+        var target = DisplayTarget(column, row, rowCharacter);
+        return target.WordIndex is { } index ? Guess(index) : Bonus(target.Position, target.SegmentEnd);
+    }
 
     // Display positions/segments come from the source presentation adapter. They
     // are not candidate indices, and must be supplied before ordinary input starts.
