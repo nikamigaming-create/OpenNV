@@ -167,6 +167,20 @@ internal sealed partial class RuntimeNifControllerPlayer : Node
         Apply(ResolveSourceTime(_active, _elapsedSeconds));
     }
 
+    // Explicit pose ownership, independent of the asset's playback cycle. UI
+    // owners can sample the inclusive stop pose of a normally looping clip.
+    // Ordinary Play/Seek and their serialized clocks retain their semantics.
+    internal void SampleClampedSourcePose(float sourceSeconds)
+    {
+        if (_active is null || _active.DirectClock is not null)
+            throw new InvalidOperationException("Clamped pose sampling requires an active managed sequence.");
+        if (!float.IsFinite(sourceSeconds)) throw new ArgumentOutOfRangeException(nameof(sourceSeconds));
+        var sample = Math.Clamp(sourceSeconds, _active.StartTime, _active.StopTime);
+        _elapsedSeconds = ((double)sample - _active.StartTime) / _active.Frequency;
+        _includeStart = false; _generation++;
+        Apply(sample); SetProcess(false);
+    }
+
     public override void _Process(double delta)
     {
         using var frameWork = OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Measure(OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Owner.ObjectAnimation);

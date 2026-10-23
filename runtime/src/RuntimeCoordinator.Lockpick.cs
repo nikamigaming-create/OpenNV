@@ -44,45 +44,55 @@ public partial class RuntimeCoordinator
             _nativeInventory.Remove(pin, 1, silent: true);
             return _nativeInventory.Item(pin)?.Count ?? 0;
         }
-        // Prepare every deterministic geometry/setting refusal before capturing
-        // player actions. CreateManual validates before its shared layout draw.
-        var session = FalloutLockpickSession.CreateManual(
-            () => FalloutLockpickSession.ForceChance(records, admission.Class, driver.PlayerSkillValue("Lockpick")),
-            FalloutSharedUnsignedRandom.Process.NextBounded,
-            () => world.CompletePickLock(reference.FormKey, state, () => driver.RewardExperience(admission.Reward)),
-            () => world.FailForceLock(reference.FormKey, state),
-            geometry.Width, geometry.Position, settings.Length, settings.Concentric, settings.Health, settings.BreakSeconds,
-            BreakPin, () => Sound("UILockpickingPickMovement"));
-        var tree = GetTree();
-        var wasPaused = tree.Paused;
-        var mouse = Input.MouseMode;
-        var release = player.AcquireModalInput();
-        var layer = new CanvasLayer { Name = "ForceLockLayer", Layer = 110, ProcessMode = ProcessModeEnum.Always };
-        var released = false;
-        void Close(bool success)
-        {
-            if (released) return;
-            released = true;
-            _nativeLockpickLayer = null;
-            try { if (GodotObject.IsInstanceValid(layer)) layer.QueueFree(); }
-            finally
-            {
-                try { if (GodotObject.IsInstanceValid(tree)) tree.Paused = wasPaused; Input.MouseMode = mouse; }
-                finally { release(); }
-            }
-            if (success)
-                events.DefaultActivate(reference.FormKey, records.RuntimeFormKey(0x14));
-        }
+        // Resource/controller failures also belong to admission, before either
+        // the shared layout draw or destructive modal-input acquisition.
+        var models = new NativeOwnedLockpickModels();
         try
         {
-            var menu = new NativeLockpickMenu(session, Close,
-                error => GD.PushError($"OPENNV_LOCKPICK_FORCE_FAIL {error.Message}"))
-            { MouseScale = geometry.MouseScale };
-            _nativeLockpickLayer = layer;
-            AddChild(layer); layer.AddChild(menu);
-            GetTree().Paused = true; Input.MouseMode = Input.MouseModeEnum.Captured;
-            GD.Print($"OPENNV_LOCKPICK_OPEN reference={reference.FormKey} chance={admission.Chance} manual=mouse-rebound-controls presentation=first-party");
+            // Prepare every deterministic geometry/setting refusal before capturing
+            // player actions. CreateManual validates before its shared layout draw.
+            var session = FalloutLockpickSession.CreateManual(
+                () => FalloutLockpickSession.ForceChance(records, admission.Class, driver.PlayerSkillValue("Lockpick")),
+                FalloutSharedUnsignedRandom.Process.NextBounded,
+                () => world.CompletePickLock(reference.FormKey, state, () => driver.RewardExperience(admission.Reward)),
+                () => world.FailForceLock(reference.FormKey, state),
+                geometry.Width, geometry.Position, settings.Length, settings.Concentric, settings.Health, settings.BreakSeconds,
+                BreakPin, () => Sound("UILockpickingPickMovement"));
+            var tree = GetTree();
+            var wasPaused = tree.Paused;
+            var mouse = Input.MouseMode;
+            var release = player.AcquireModalInput();
+            var layer = new CanvasLayer { Name = "ForceLockLayer", Layer = 110, ProcessMode = ProcessModeEnum.Always };
+            var released = false;
+            void Close(bool success)
+            {
+                if (released) return;
+                released = true;
+                _nativeLockpickLayer = null;
+                try { if (GodotObject.IsInstanceValid(layer)) layer.QueueFree(); }
+                finally
+                {
+                    try { if (GodotObject.IsInstanceValid(tree)) tree.Paused = wasPaused; Input.MouseMode = mouse; }
+                    finally { release(); }
+                }
+                if (success)
+                    events.DefaultActivate(reference.FormKey, records.RuntimeFormKey(0x14));
+            }
+            try
+            {
+                var menu = new NativeLockpickMenu(session, Close,
+                    error => GD.PushError($"OPENNV_LOCKPICK_FORCE_FAIL {error.Message}"), models)
+                { MouseScale = geometry.MouseScale };
+                _nativeLockpickLayer = layer;
+                AddChild(layer); layer.AddChild(menu);
+                GetTree().Paused = true; Input.MouseMode = Input.MouseModeEnum.Captured;
+                GD.Print($"OPENNV_LOCKPICK_OPEN reference={reference.FormKey} chance={admission.Chance} manual=mouse-rebound-controls presentation=first-party");
+            }
+            catch { Close(false); throw; }
         }
-        catch { Close(false); throw; }
+        finally
+        {
+            if (GodotObject.IsInstanceValid(models) && models.GetParent() is null) models.Free();
+        }
     }
 }

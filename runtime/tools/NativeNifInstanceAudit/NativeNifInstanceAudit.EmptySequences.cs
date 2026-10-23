@@ -60,6 +60,22 @@ public partial class NativeNifInstanceAudit
                 mesh.Mesh.SurfaceGetArrays(0)[(int)Mesh.ArrayType.Vertex].AsVector3Array().SequenceEqual(vertices) &&
                 mesh.Mesh.SurfaceGetMaterial(0) == material && original.TextKeyCount == 0,
                 "An empty sequence or rejected cold state changed its geometry, material or another clock.");
+            player.PlaySourceSequence("Loop");
+            var keyCount = player.TextKeyCount;
+            var range = player.SequenceRange("Loop");
+            player.SampleClampedSourcePose(range.StopTime);
+            RequireEmptySequence(player.SourceTimeSeconds == range.StopTime && !player.IsProcessing() &&
+                player.TextKeyCount == keyCount, "Explicit stop-pose sampling looped or dispatched playback events.");
+            player.SampleClampedSourcePose(float.MaxValue);
+            RequireEmptySequence(player.SourceTimeSeconds == range.StopTime, "Pose sampling failed to clamp above the clip.");
+            player.SampleClampedSourcePose(-1);
+            RequireEmptySequence(player.SourceTimeSeconds == range.StartTime, "Pose sampling failed to clamp below the clip.");
+            try { player.SampleClampedSourcePose(float.NaN); throw new InvalidDataException("Nonfinite pose sample was accepted."); }
+            catch (ArgumentOutOfRangeException) { }
+            RequireEmptySequence(player.SourceTimeSeconds == range.StartTime, "Rejected pose sample changed the source clock.");
+            player.SeekSourceTime(range.StopTime);
+            RequireEmptySequence(player.SourceTimeSeconds == range.StartTime,
+                "Explicit pose sampling changed ordinary looping Seek semantics.");
             foreach (var invalid in new[] { "manager", "palette", "keys", "cycle", "range", "frequency", "name", "channel" })
                 RejectEmptySequence(() =>
                 {

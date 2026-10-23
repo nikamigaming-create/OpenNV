@@ -6,8 +6,8 @@ using System.Xml.Linq;
 
 namespace OpenNV.Runtime.Presentation.Ui;
 
-// Deliberately minimal first-party presentation of the shared picking owner.
-// Retail 3D model, animation, haptics and complete audio remain separate.
+// Shared picking input with optional owned-model presentation. Retail camera,
+// animation blends, haptics and complete audio remain separate acceptance lanes.
 internal sealed partial class NativeLockpickMenu : Control
 {
     private static readonly string[] TurnActions =
@@ -20,6 +20,7 @@ internal sealed partial class NativeLockpickMenu : Control
     private float _mouseDelta;
     private readonly Label _status;
     private Viewport? _viewport;
+    private readonly NativeOwnedLockpickModels? _models;
 
     internal static (float Width, float Position, float MouseScale) ReadGeometry(Vector2 display)
     {
@@ -37,27 +38,38 @@ internal sealed partial class NativeLockpickMenu : Control
         return (tiles.Number(meter, "width"), tiles.Number(arrow, "_x"), scale);
     }
 
-    internal NativeLockpickMenu(FalloutLockpickSession session, Action<bool> closed, Action<Exception> failed)
+    internal NativeLockpickMenu(FalloutLockpickSession session, Action<bool> closed, Action<Exception> failed,
+        NativeOwnedLockpickModels? models = null)
     {
-        _session = session; _closed = closed; _failed = failed;
-        ProcessMode = ProcessModeEnum.Always;
-        SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
-        var background = new ColorRect { Color = new(0, 0, 0, .95f), MouseFilter = MouseFilterEnum.Stop };
-        background.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect); AddChild(background);
-        var panel = new VBoxContainer { Position = new(80, 80), Size = new(640, 240) };
-        AddChild(panel);
-        panel.AddChild(new Label { Text = $"Pick lock — Force chance {session.Chance}%" });
-        panel.AddChild(new Label
+        try
         {
-            Text = session.ManualReady ?
-            "Move the mouse to position the pick. Hold a movement control to turn.\nF forces the lock; E / Escape exits." :
-            "Manual picking is not available in this session.\nA failed force attempt breaks the lock."
-        });
-        _status = new Label(); panel.AddChild(_status);
-        var force = new Button { Text = "Force [F]" };
-        var cancel = new Button { Text = "Exit [E / Esc]" };
-        panel.AddChild(force); panel.AddChild(cancel);
-        force.Pressed += Force; cancel.Pressed += Cancel;
+            _session = session; _closed = closed; _failed = failed;
+            ProcessMode = ProcessModeEnum.Always;
+            SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
+            var background = new ColorRect { Color = new(0, 0, 0, .95f), MouseFilter = MouseFilterEnum.Stop };
+            background.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect); AddChild(background);
+            _models = models;
+            if (models is not null)
+            {
+                AddChild(models); models.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
+                models.Publish(session.Position, session.Width, session.CylinderAngle);
+            }
+            var panel = new VBoxContainer { Position = new(80, 80), Size = new(640, 240) };
+            AddChild(panel);
+            panel.AddChild(new Label { Text = $"Pick lock — Force chance {session.Chance}%" });
+            panel.AddChild(new Label
+            {
+                Text = session.ManualReady ?
+                "Move the mouse to position the pick. Hold a movement control to turn.\nF forces the lock; E / Escape exits." :
+                "Manual picking is not available in this session.\nA failed force attempt breaks the lock."
+            });
+            _status = new Label(); panel.AddChild(_status);
+            var force = new Button { Text = "Force [F]" };
+            var cancel = new Button { Text = "Exit [E / Esc]" };
+            panel.AddChild(force); panel.AddChild(cancel);
+            force.Pressed += Force; cancel.Pressed += Cancel;
+        }
+        catch { Free(); throw; }
     }
 
     private void Force()
@@ -95,12 +107,14 @@ internal sealed partial class NativeLockpickMenu : Control
                 var pressure = TurnActions.Any(action => Input.IsActionPressed(action));
                 _session.AdvanceManual(FalloutSourceMilliseconds.Read(), _mouseDelta * MouseScale, pressure);
                 _mouseDelta = 0;
+                _models?.Publish(_session.Position, _session.Width, _session.CylinderAngle);
                 _status.Text = $"Pick position: {_session.Position:F1} / {_session.Width:F1}\nTurn: {_session.CylinderAngle:F1}°    Pin health: {_session.PinHealth:F2}";
                 if (_session.Finished) Retire(_session.Won);
             }
             else if (_session.Turning)
             {
                 _session.Advance(FalloutSourceMilliseconds.Read());
+                _models?.Publish(_session.Position, _session.Width, _session.CylinderAngle);
                 if (_session.Finished) Retire(true);
             }
         }
