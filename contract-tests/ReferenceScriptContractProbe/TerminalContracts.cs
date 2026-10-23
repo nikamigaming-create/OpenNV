@@ -25,6 +25,7 @@ internal static partial class TerminalContracts
             VerifyAdmissionAndConditions(records);
             VerifyMasterContext(directory);
             VerifyOutputGuard(directory);
+            VerifyEnginePlayerReference(directory);
             var brightness = System.Xml.Linq.XElement.Parse("<value><copy>11</copy><onlyif>entity_HighDef</onlyif>" +
                 "<add><copy>7</copy><onlyifnot>entity_highdef</onlyifnot></add></value>");
             Require(FalloutMenuXml.Number(brightness, (_, _) => throw new InvalidOperationException()) == 11,
@@ -299,6 +300,27 @@ internal static partial class TerminalContracts
         Reject(() => OwnedTerminalProbe.OutputPath(Path.ChangeExtension(sibling, ".esm"), directory, directory, []));
         Require(File.ReadAllText(existing) == "synthetic-marker" && !File.Exists(sibling),
             "Output validation overwrote a selected input or wrote an unrequested result.");
+    }
+
+    private static void VerifyEnginePlayerReference(string directory)
+    {
+        File.WriteAllBytes(Path.Combine(directory, "EngineBase.esm"), Join(Header(),
+            Terminal(0x20, Entry("Player reference", "", 0, Program("player.MoveTo player", 0x14))),
+            Terminal(0x21, Entry("Missing reference", "", 0, Program("", 0x999)))));
+        File.WriteAllBytes(Path.Combine(directory, "EngineForeign.esp"), Join(Header("EngineBase.esm"),
+            Terminal(0x01000020, Entry("Foreign player-shaped ID", "", 0, Program("", 0x01000014)))));
+        using var records = FalloutPluginStack.Load(directory, ["EngineBase.esm", "EngineForeign.esp"]);
+        var player = records.RuntimeFormKey(0x14);
+        Reject(() => records.GetEffective(player));
+        var terminal = FalloutTerminal.Read(records, records.RuntimeFormKey(0x20));
+        var program = terminal.Entries.Single().Program;
+        var bindings = new FalloutScriptBindings(records, terminal.Record, terminal.Record, program.Fields);
+        Require(program.References.Single().Form == player && bindings.HasPlayerReference,
+            "Terminal source validation lost the canonical engine-player reference.");
+        Reject(() => FalloutTerminal.Read(records, records.RuntimeFormKey(0x21)));
+        Reject(() => FalloutTerminal.Read(records, records.RuntimeFormKey(0x01000020)));
+        Console.WriteLine("OPENNV_TERMINAL_ENGINE_PLAYER_REFERENCE_PASS missingPluginRecord=true " +
+            "canonicalPlayerBound=true missingAndForeignRefused=true execution=unverified");
     }
 
     private static byte[] Base() => Join(Header(),

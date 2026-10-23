@@ -8,46 +8,55 @@ input and Git; existing writers have disjoint scopes and run no competing jobs.
 
 ## Active block
 
-Baseline main/origin-main is 621bb7e7f1b095bc773fa464598a4dac8026e1da (PR271).
-All five hosted checks and independent review passed; local main matched origin.
-The coordinator is on codex/fnv-terminal-hacking-admission. PR269 remains draft
-at e7a459b5 with native/merge acceptance held. No third encounter admission,
-retail attempt or denied writer contact is permitted.
+Baseline main/origin-main is 3528ad6428ebb780cac25255de6b26e7f72bfd94 (PR272).
+All five checks and independent review passed; local main matched origin with
+all 2,189 gated hashes unchanged. The coordinator is on
+codex/fnv-hacking-native-session. PR269 remains draft/native-and-merge-held.
+No third bot encounter, retail attempt or denied writer contact is permitted.
 
-The active implementation closes two hacking-generation prerequisites. The owned
-dictionary is space-delimited with no newlines; the old newline-only decoder
-refused the actual resource. The source file reader uses a space delimiter and a
-32-byte buffer, retaining at most 31 bytes per call. Decoding now preserves byte
-case, delimiter consumption, empty spans, partial final tokens and long-token
-chunks. It does not use arbitrary whitespace splitting or invent replacement words.
-The source candidate-derived attempt calculator now runs inside production
-candidate generation instead of an arbitrary caller callback. It uses positional
-likeness groups and recursive retained subsets, then the existing four-attempt
-floor. Requested and retained candidate counts remain distinct.
+The active implementation adopts the qualified unsigned stream for hacking
+preparation through GenerateFromProcess. One static process owner is retained
+across content-source retirement; it lazily seeds on its first positive draw
+from the actual Win32 GetTickCount boundary, uses the qualified raw 624-word
+recurrence and mask/modulo rules, and supplies the source 100 ms retry window.
+Zero bounds consume no draw or clock read. There is no per-menu seed, arbitrary
+clock fallback, restore API, or conversion of existing saved RNG fields. Other
+script/sound/actor streams remain unchanged; complete cross-system RNG routing,
+save/load equivalence and retail stream parity are not claimed. Unqualified
+platform clocks refuse explicitly.
 
-The native terminal opener still refuses locked access without a password.
-Ordinary hacking requires remaining shared RNG/clock lifetime, reference-aware
-admission/retained outcomes, native presentation/input, success followups and
-persistence. This block does not unlock access, grant XP, acknowledge success or
-claim ordinary hacking. Terminal-specific retained difficulty is distinct from
-placed XLOC; no XLOC refusal was removed on unrelated evidence. Formatting and focused synthetic/owned-dictionary checks pass. Nine real
-word-length sets pass, including calculated allowances of five for the controlled
-four- and five-letter sets. The source recursion retains its candidate-count
-outcome-index limit even when longer words have higher likeness classes.
-The renewed full runtime gate passes at 02:31:47 UTC: exit 0, all 2,189 frozen
-source/configuration hashes unchanged, and git diff --check clean. Release/Debug
-builds have zero warnings/errors; native locomotion, render-trace and recorded-input
-audits pass with recording off. Hosted checks and independent review remain pending. Builds and native checks remain serialized, recording off.
+The selected owned preparation audit exposed a genuine terminal source-reader
+refusal: compiled references to engine-created player14 required a nonexistent
+plugin record. Terminal results now use the existing script binder's exact
+canonical runtime identity rule; other missing and foreign player-shaped forms
+still require winning records. This repairs source binding, not a fabricated
+player entity or a demonstrated native terminal interaction.
 
-The accepted campfire event proof uses actual shared OnTrigger admission,
-compiled bindings, quest state and canonical saved inventory. Powder paths reach
-an explicitly refused native conversation boundary; production StartConversation
-already has a command and host. This is not a missing product command. Existing
-normal Restore clears the exact retained Parse-prefixed fault after source checks;
-no new recovery policy or real save mutation was added. The probe's cold retry
-checks post-restore versus post-retry state; broader prefix restoration relies on
-existing restore contracts. Physical contact, conversation, crafting and campaign
-progress remain unverified.
+Deterministic contracts pass lazy seeding, zero/normal/mask bounds, raw block
+transitions, process-factory identity, cancelled generation with no draw, clock
+faults and preservation of existing saved-script RNG behavior. The complete
+reference-script probe passes, including engine-player reference controls. Two
+generations using the actual owned TERM/dictionary and native process clock pass
+across content retirement with unchanged source hashes and one retained seed.
+Their Science/perk inputs are explicitly controlled; they are not ordinary
+player access. Observation-only counters report a timed pair of 1,523.975 ms /
+15 windows / 2,631 attempts / 19,392,479 draws, then 1,572.670 ms / 15 windows /
+2,443 attempts / 18,060,569 draws. Windows include the initial window; this is
+consistent with timed adaptive search, not retail performance proof. Retry policy
+and RNG ordering are unchanged. The renewed final runtime gate passes at
+03:39:03 UTC: exit 0, all 2,191 source/configuration hashes unchanged, and diff
+check clean. Release/Debug and native audits pass; recording remains off. Hosted
+checks and independent review are pending; the source is frozen.
+
+Native locked-terminal admission remains closed at both existing gates. Actual
+session display/input, placement fallback and reference outcome/reward/statistic
+handoff must be qualified before access or XP is committed. No native hacking,
+campaign completion or retail parity is claimed. Recording remains off.
+
+The campfire source/restore and event proofs remain accepted component evidence.
+Production StartConversation exists; the controlled fixture's conversation
+refusal is not a missing command. No physical contact, conversation, crafting or
+new campaign progress is claimed from those proofs.
 
 ## Gameplay and test-control checkpoint
 
