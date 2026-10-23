@@ -63,7 +63,7 @@ internal static class ReputationConditionContracts
             Reject(() => dialogue.Evaluate(condition with { RunOn = 3 }));
             Reject(() => new FalloutDialogueConditions(records, new(records), new("Repu.esm", 0x30), identity).Evaluate(condition));
             Reject(() => FalloutCondition.AllPass([condition with { Flags = 4 }], Query));
-            Check(world.EvaluateReputationCondition(condition with { Function = 574 }) is null &&
+            Check(world.EvaluateReputationCondition(condition with { Function = 575 }) is null &&
                 JsonSerializer.Serialize(world.CaptureReputations()) == before, "Refusal/query mutated state or admitted another reputation query.");
             cold.RestoreReputations(null);
             Reject(() => cold.EvaluateReputationCondition(condition));
@@ -72,13 +72,78 @@ internal static class ReputationConditionContracts
             Reject(() => cold.EvaluateReputationCondition(condition with { Argument2 = 0 }));
             Console.WriteLine("OPENNV_REPUTATION_CONDITION_PASS sourceMasters=true rawSelector=true sharedDialogueAndMessage=true comparisons=true live=true cold=true legacyUnknown=true refusals=true noMutation=true ordinaryAndRetail=unverified");
         }
-        finally { directory.Delete(true); }
+        finally
+        {
+            foreach (var name in new[] { "Repu.esm", "Other.esm", "Query.esp" }) File.Delete(Path.Combine(directory.FullName, name));
+            directory.Delete();
+        }
     }
-    private static byte[] Condition(uint selector, byte comparison, float value = 0)
+    internal static void RunPercentage()
+    {
+        var directory = Directory.CreateTempSubdirectory("opennv-reputation-percentage-");
+        try
+        {
+            File.WriteAllBytes(Path.Combine(directory.FullName, "Repu.esm"), Join(Header(),
+                Record("REPU", 1, Field("DATA", BitConverter.GetBytes(10f))),
+                Record("REPU", 2, Field("DATA", BitConverter.GetBytes(0f))),
+                Record("REPU", 3, Field("DATA", BitConverter.GetBytes(-10f))),
+                Record("REPU", 4, Field("DATA", BitConverter.GetBytes(float.Epsilon))),
+                Record("FACT", 5), Record("REPU", 6, Field("DATA", BitConverter.GetBytes(float.NaN)))));
+            File.WriteAllBytes(Path.Combine(directory.FullName, "Other.esm"), Header());
+            File.WriteAllBytes(Path.Combine(directory.FullName, "Query.esp"), Join(Header("Other.esm", "Repu.esm"),
+                Record("INFO", 0x02000010, Field("CTDA", Condition(1, 0, function: 574)))));
+            using var records = FalloutPluginStack.Load(directory.FullName, ["Repu.esm", "Other.esm", "Query.esp"]);
+            using var world = new FalloutReferenceWorld(records);
+            FalloutFormKey Form(uint id) => new("Repu.esm", id);
+            var condition = FalloutCondition.Read(records.GetEffective(new("Query.esp", 0x10))).Single();
+            float Query(FalloutCondition value) => world.EvaluateReputationCondition(value) ?? throw new NotSupportedException("Unowned query.");
+            Check(Query(condition) == 0, "Fresh percentage invented nonzero reputation.");
+            world.SetReputation(Form(1), 1, 125); world.SetReputation(Form(1), 0, -20);
+            foreach (var runOn in new uint[] { 0, 1, 2 })
+                foreach (var selector in new uint[] { 0, 1, 2, uint.MaxValue })
+                    Check(Query(condition with { RunOn = runOn, Argument2 = selector }) == (selector == 1 ? 12.5f : -2f),
+                        "Percentage changed raw selector, subject independence, fraction scale or unclamped range.");
+            world.SetReputation(Form(1), 1, 1.1);
+            Check(BitConverter.SingleToInt32Bits(Query(condition)) == BitConverter.SingleToInt32Bits(.11f),
+                "Percentage did not retain source float32 quotient precision.");
+            Check(FalloutCondition.AllPass([condition with { Flags = 0x60, Comparison = .11f }], Query),
+                "Percentage did not use shared CTDA comparison.");
+            world.SetReputation(Form(3), 1, 1.5);
+            Check(Query(condition with { Argument1 = 0x01000003 }) == -.15f, "Finite signed capacity was replaced or clamped.");
+            world.SetReputation(Form(4), 1, float.MaxValue);
+            var before = JsonSerializer.Serialize(world.CaptureReputations());
+            Reject(() => Query(condition with { Argument1 = 0x01000002 })); // 0/0 must not become fresh zero.
+            Reject(() => Query(condition with { Argument1 = 0x01000004 }));
+            Reject(() => Query(condition with { Argument1 = 0x01000005 }));
+            Reject(() => Query(condition with { Argument1 = 0x01000006 }));
+            Reject(() => Query(condition with { RunOn = 3 }));
+            Reject(() => Query(condition with { RunOn = 2, Reference = 0x0100ffff }));
+            Reject(() => FalloutCondition.AllPass([condition with { Flags = 4 }], Query));
+            Check(JsonSerializer.Serialize(world.CaptureReputations()) == before, "Percentage refusal mutated reputation.");
+            using var cold = new FalloutReferenceWorld(records);
+            cold.RestoreReputations(JsonSerializer.Deserialize<FalloutReputationsSnapshot>(before));
+            Check(cold.EvaluateReputationCondition(condition) == .11f, "Cold percentage lost its source quotient.");
+            cold.RestoreReputations(null);
+            Reject(() => cold.EvaluateReputationCondition(condition));
+            cold.SetReputation(Form(1), 1, 12.5);
+            Check(cold.EvaluateReputationCondition(condition) == 1.25f, "Explicit legacy axis was unavailable to percentage.");
+            Reject(() => cold.EvaluateReputationCondition(condition with { Argument2 = 2 }));
+            Check(world.EvaluateReputationCondition(condition with { Function = 575 }) is null, "Percentage admitted unqualified rank semantics.");
+            Console.WriteLine("OPENNV_REPUTATION_PERCENTAGE_PASS sourceMasters=true fractionScale=true noClamp=true rawSelector=true float32=true " +
+                "signedCapacity=true finiteResultRequired=true knownUnknown=true cold=true contextRefusals=true noMutation=true ordinaryAndRetail=unverified");
+        }
+        finally
+        {
+            foreach (var name in new[] { "Repu.esm", "Other.esm", "Query.esp" }) File.Delete(Path.Combine(directory.FullName, name));
+            directory.Delete();
+        }
+    }
+
+    private static byte[] Condition(uint selector, byte comparison, float value = 0, ushort function = 573)
     {
         var bytes = new byte[28]; bytes[0] = (byte)(comparison << 5);
         BinaryPrimitives.WriteSingleLittleEndian(bytes.AsSpan(4), value);
-        BinaryPrimitives.WriteUInt16LittleEndian(bytes.AsSpan(8), 573);
+        BinaryPrimitives.WriteUInt16LittleEndian(bytes.AsSpan(8), function);
         BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(12), 0x01000001);
         BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(16), selector); return bytes;
     }

@@ -13,14 +13,14 @@ internal sealed partial class FalloutReferenceWorld
     private bool _freshReputationBaseline = true;
     private readonly Dictionary<FalloutFormKey, FalloutReputationValueSnapshot> _reputations = new(FalloutFormKeyComparer.Instance);
 
-    private (FalloutFormKey Form, string Sha256) ReputationSource(FalloutFormKey form)
+    private (FalloutFormKey Form, string Sha256, float Capacity) ReputationSource(FalloutFormKey form)
     {
         var source = records.GetEffective(form);
         var data = source.ReadSubrecords().Where(field => field.Signature == "DATA").ToArray();
         if (source.Signature != "REPU" || data.Length != 1 || data[0].Data.Length != 4 ||
             !float.IsFinite(BinaryPrimitives.ReadSingleLittleEndian(data[0].Data.Span)))
             throw new InvalidDataException("Reputation requires a winning REPU with finite four-byte DATA.");
-        return (source.FormKey, RecordHash(source));
+        return (source.FormKey, RecordHash(source), BinaryPrimitives.ReadSingleLittleEndian(data[0].Data.Span));
     }
 
     private static bool ReputationAxis(double axis) => axis switch
@@ -41,7 +41,7 @@ internal sealed partial class FalloutReferenceWorld
 
     internal float? EvaluateReputationCondition(FalloutCondition condition)
     {
-        if (condition.Function != 573) return null;
+        if (condition.Function is not (573 or 574)) return null;
         if (condition.RunOn > 2)
             throw new NotSupportedException("Reputation condition run-on context is unbound.");
         if (condition.RunOn == 2 && condition.Reference != 0)
@@ -53,7 +53,13 @@ internal sealed partial class FalloutReferenceWorld
         }
         // CTDA uses the raw getter, unlike the script command's validated selector.
         // Its explicit REPU argument is independent of speaker/listener identity.
-        return Reputation(condition.FormArgument1, condition.Argument2 == 1 ? 1 : 0);
+        var value = Reputation(condition.FormArgument1, condition.Argument2 == 1 ? 1 : 0);
+        if (condition.Function == 573) return value;
+        // The source percentage getter stores the axis/capacity ratio as float32.
+        // It neither scales by 100 nor clamps values written by SetReputation.
+        var ratio = value / ReputationSource(condition.FormArgument1).Capacity;
+        return float.IsFinite(ratio) ? ratio :
+            throw new InvalidDataException("Reputation percentage has no finite source ratio.");
     }
 
     internal void SetReputation(FalloutFormKey form, double axis, double amount)

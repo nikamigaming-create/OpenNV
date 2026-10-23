@@ -6,7 +6,7 @@ using OpenNV.Runtime.World.Cells;
 
 internal static class OwnedReputationProbe
 {
-    internal static void Run(string game, string savePath)
+    internal static void Run(string game, string savePath, bool percentage = false)
     {
         var bytes = File.ReadAllBytes(savePath);
         var original = JsonSerializer.Deserialize<FalloutNativeCampaignState>(bytes)!;
@@ -14,7 +14,7 @@ internal static class OwnedReputationProbe
             activePlugins: RuntimeLiveContentSource.ResolveVanillaPlugins(game), includeImplicitPlugins: false);
         using var content = RuntimeLiveContentSource.Current!;
         using var records = FalloutPluginStack.Load(content.PluginSources);
-        RunConditions(records);
+        RunConditions(records, percentage ? (ushort)574 : (ushort)573);
         var controls = FalloutOpeningPlayerControlResolver.Resolve(records, ["VCG00", "VCG01"]);
         var cell = FalloutCellSceneReader.Read(records, new("FalloutNV.esm", 0x103df9));
         FalloutNativeCampaignRestore Read(string path) => FalloutNativeCampaignSave.Read(path,
@@ -67,7 +67,7 @@ internal static class OwnedReputationProbe
             "addRemoveCrimeNotificationOrdinaryAndRetail=unverified");
     }
 
-    private static void RunConditions(FalloutPluginStack records)
+    private static void RunConditions(FalloutPluginStack records, ushort function)
     {
         using var world = new FalloutReferenceWorld(records);
         var count = 0;
@@ -78,7 +78,7 @@ internal static class OwnedReputationProbe
             foreach (var owner in records.EffectiveRecords(kind))
             {
                 var conditions = owner.ReadSubrecords().Where(field => field.Signature == "CTDA")
-                    .Select(field => FalloutCondition.Read(owner, field.Data.Span)).Where(value => value.Function == 573).ToArray();
+                    .Select(field => FalloutCondition.Read(owner, field.Data.Span)).Where(value => value.Function == function).ToArray();
                 if (conditions.Length == 0) continue;
                 var hash = SHA256.HashData(owner.ReadData());
                 recordsWithConditions++;
@@ -90,6 +90,16 @@ internal static class OwnedReputationProbe
                     world.SetReputation(form, 0, 83.25);
                     var before = JsonSerializer.Serialize(world.CaptureReputations());
                     var expected = condition.Argument2 == 1 ? -17.125f : 83.25f;
+                    if (function == 574)
+                    {
+                        var capacity = System.Buffers.Binary.BinaryPrimitives.ReadSingleLittleEndian(
+                            records.GetEffective(form).ReadSubrecords().Single(field => field.Signature == "DATA").Data.Span);
+                        expected = (float)((double)expected / capacity);
+                        Require(float.IsFinite(expected), "Owned percentage declaration requires a finite result.");
+                        Console.WriteLine($"OPENNV_OWNED_REPUTATION_PERCENTAGE_SOURCE owner={owner.FormKey} reputation={form} " +
+                            $"selector={condition.Argument2} runOn={condition.RunOn} capacity={capacity} " +
+                            $"sourceHash={Convert.ToHexString(hash)}");
+                    }
                     Require(world.EvaluateReputationCondition(condition) == expected,
                         "Actual owned CTDA did not query its explicit REPU/selector.");
                     using var cold = new FalloutReferenceWorld(records);
@@ -101,8 +111,9 @@ internal static class OwnedReputationProbe
                 }
                 Require(SHA256.HashData(owner.ReadData()).SequenceEqual(hash), "Owned condition record changed.");
             }
+        Console.WriteLine($"OPENNV_OWNED_REPUTATION_CONDITION_DISCOVERED function={function} conditions={count} records={recordsWithConditions}");
         Require(count > 0, "No actual owned reputation conditions were exercised.");
-        Console.WriteLine($"OPENNV_OWNED_REPUTATION_CONDITION_PASS conditions={count} records={recordsWithConditions} " +
+        Console.WriteLine($"OPENNV_OWNED_REPUTATION_CONDITION_PASS function={function} conditions={count} records={recordsWithConditions} " +
             $"kinds={string.Join(',', kinds.Order())} selectors={string.Join(',', selectors.Order())} " +
             "actualWinningCTDA=true controlledKnownAxes=true cold=true noMutation=true " +
             "fullRecordEligibilityOrdinaryDialogueQuestAndRetail=unverified");

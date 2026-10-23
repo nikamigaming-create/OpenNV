@@ -10,15 +10,28 @@ if (args is ["--reputation-case-contracts", var reputationCase] && reputationCas
     return;
 }
 
+if (args is ["--owned-reputation-percentage", var percentageGame, var percentageSave])
+{
+    OwnedReputationProbe.Run(percentageGame, percentageSave, percentage: true);
+    return;
+}
+
 if (args is ["--owned-reputation-state", var reputationGame, var reputationSave])
 {
     OwnedReputationProbe.Run(reputationGame, reputationSave);
     return;
 }
 
+if (args is ["--reputation-percentage-contracts"])
+{
+    ReputationConditionContracts.RunPercentage();
+    return;
+}
+
 if (args is ["--reputation-condition-contracts"])
 {
     ReputationConditionContracts.Run();
+    ReputationConditionContracts.RunPercentage();
     return;
 }
 
@@ -26,6 +39,7 @@ if (args is ["--reputation-contracts"])
 {
     ReputationContracts.Run();
     ReputationConditionContracts.Run();
+    ReputationConditionContracts.RunPercentage();
     return;
 }
 
@@ -1134,6 +1148,7 @@ ActorSourceContracts.Run();
 FactionRelationContracts.Run();
 ReputationContracts.Run();
 ReputationConditionContracts.Run();
+ReputationConditionContracts.RunPercentage();
 EncounterZoneContracts.Run();
 FollowPackageContracts.Run();
 DialoguePackageContracts.Run();
