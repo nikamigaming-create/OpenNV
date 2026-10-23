@@ -22,6 +22,12 @@ if (args is ["--owned-quest-state-queries", var questQueryGame])
     return;
 }
 
+if (args is ["--owned-quest-state-query-prefix", var questQueryPrefixGame])
+{
+    QuestStateQueryContracts.RunOwned(questQueryPrefixGame, expectPrefixFailure: true);
+    return;
+}
+
 if (args is ["--reputation-case-contracts", var reputationCase] && reputationCase is "restore" or "duplicates")
 {
     ReputationContracts.RunCaseIdentity(reputationCase == "duplicates");

@@ -84,7 +84,7 @@ internal static class QuestStateQueryContracts
             "Cold retry cleared a quest-query failure or replayed effects.");
     }
 
-    internal static void RunOwned(string game)
+    internal static void RunOwned(string game, bool expectPrefixFailure = false)
     {
         RuntimeLiveContentSource.Configure(game, RuntimeLiveContentSource.FalloutNewVegasGame,
             activePlugins: RuntimeLiveContentSource.ResolveVanillaPlugins(game), includeImplicitPlugins: false);
@@ -114,7 +114,71 @@ internal static class QuestStateQueryContracts
         quests.EnterStage(quest.FormKey, 100);
         quests.Complete(quest.FormKey);
         var counter = quests.Variable(quest.FormKey, locals["iCounter"]);
-        scripts.AdvanceClaimed(quest.FormKey, 0, new((_, _) => throw new InvalidDataException("Unexpected owned stage effect."), _ => 0));
+        try
+        {
+            scripts.AdvanceClaimed(quest.FormKey, 0, new((_, _) => throw new InvalidDataException("Unexpected owned stage effect."), _ => 0));
+        }
+        catch (Exception error) when (error is InvalidDataException or NotSupportedException)
+        {
+            // Failure-location observation only: retain the original failure and
+            // do not retry, replace the source program or skip an operation.
+            var instances = (System.Collections.IEnumerable)typeof(FalloutQuestScripts)
+                .GetField("_instances", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+                .GetValue(scripts)!;
+            var owner = instances.Cast<object>().Single(value =>
+                ((FalloutPluginRecord)value.GetType().GetField("Quest", System.Reflection.BindingFlags.Instance |
+                    System.Reflection.BindingFlags.NonPublic)!.GetValue(value)!).FormKey == quest.FormKey);
+            var program = (FalloutGameModeProgram)owner.GetType().GetField("Program", System.Reflection.BindingFlags.Instance |
+                System.Reflection.BindingFlags.NonPublic)!.GetValue(owner)!;
+            var statements = (IReadOnlyList<string[]>)typeof(FalloutGameModeProgram)
+                .GetField("_lines", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.GetValue(program)!;
+            Console.Error.WriteLine(JsonSerializer.Serialize(new
+            {
+                diagnostic = "owned-full-script-refusal",
+                quest = quest.FormKey.ToString(),
+                script = source.FormKey.ToString(),
+                sourceSha256 = Convert.ToHexString(hash),
+                statement = program.LastStatement,
+                tokens = statements[program.LastStatement],
+                counterBefore = counter,
+                counterAfter = quests.Variable(quest.FormKey, locals["iCounter"]),
+                error = error.Message,
+                fullScriptSuccess = false
+            }));
+            if (expectPrefixFailure)
+            {
+                var tokens = statements[program.LastStatement];
+                Require(error.Message == "NVSE expression has an unbound operation." &&
+                    tokens[0] == "if" && tokens.Contains("GetObjectiveCompleted") &&
+                    tokens.Contains("gethasnote") && quests.Variable(quest.FormKey, locals["iCounter"]) == counter + 1,
+                    "Owned query prefix did not reach the diagnosed independent condition refusal.");
+                var questState = JsonSerializer.Serialize(quests.Capture());
+                var scriptState = JsonSerializer.Serialize(scripts.Capture());
+                try { scripts.AdvanceClaimed(quest.FormKey, 10, new((_, _) => throw new InvalidDataException("Unexpected stage replay."), _ => 0)); }
+                catch (NotSupportedException retained) when (retained.Message == error.Message) { }
+                Require(JsonSerializer.Serialize(quests.Capture()) == questState && JsonSerializer.Serialize(scripts.Capture()) == scriptState,
+                    "Retry changed the consumed owned prefix or cleared its refusal.");
+                using var coldWorld = new FalloutReferenceWorld(records);
+                var coldQuests = new FalloutQuestState(records);
+                var coldScripts = new FalloutQuestScripts(records, coldQuests, claims, new FalloutPlayerInventory(), globals,
+                    defaultProcessingDelay: 0, references: coldWorld);
+                coldQuests.Restore(RoundTrip(quests.Capture().ToArray()));
+                coldScripts.Restore(RoundTrip(scripts.Capture()));
+                Require(JsonSerializer.Serialize(coldQuests.Capture()) == questState && JsonSerializer.Serialize(coldScripts.Capture()) == scriptState,
+                    "Cold restore changed the owned query prefix or retained error.");
+                try { coldScripts.AdvanceClaimed(quest.FormKey, 10, new((_, _) => throw new InvalidDataException("Unexpected cold stage replay."), _ => 0)); }
+                catch (NotSupportedException retained) when (retained.Message == error.Message) { }
+                Require(JsonSerializer.Serialize(coldQuests.Capture()) == questState && JsonSerializer.Serialize(coldScripts.Capture()) == scriptState,
+                    "Cold retry changed the consumed owned prefix or cleared its refusal.");
+                Require(SHA256.HashData(source.ReadData()).SequenceEqual(hash), "Owned script bytes changed.");
+                Console.WriteLine("OPENNV_OWNED_QUEST_QUERY_PREFIX_PASS completionGuardsReached=true counterIncrement=1 " +
+                    "independentUnsupportedConditionRetained=true coldExact=true noPrefixReplay=true fullScriptSuccess=false " +
+                    "runningQueryOwnedCoverage=false ordinaryRecruitment=false campaign=false retailParity=unverified");
+                return;
+            }
+            throw;
+        }
+        Require(!expectPrefixFailure, "The diagnosed independent owned refusal disappeared; review this audit boundary.");
         var instance = scripts.Capture().Instances.Single(value => value.Quest == quest.FormKey);
         Require(instance.Error is null && quests.Variable(quest.FormKey, locals["iCounter"]) == counter + 1 &&
             quests.IsCompleted(quest.FormKey) && quests.Stage(quest.FormKey) == 100,
