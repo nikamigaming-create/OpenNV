@@ -8,43 +8,40 @@ input and Git; no competing jobs or denied writer contact are permitted.
 
 ## Active block
 
-Accepted main/origin-main is b59a9b2afad4562fb265f7a465125e200544f902 (PR289),
-merged 16:39:46 UTC after independent review and all five exact-head checks.
-Local main matched origin/main, clean. Completed refs were removed after exact
+Accepted main/origin-main is e6a1b26965670a77186a8c5ea83e1edcd7ac62ed (PR290),
+merged 17:17:06 UTC after independent review and all five exact-head checks.
+Local main matched origin/main, clean. Its completed branch was removed after
 squash-tree equality and independent bundle recovery/integrity verification.
 Three persistent branches remain: main, unique classic audio PR242 and held
 combat-control PR269. Original saves are unchanged.
 
-Accepted NOTE state, acquisition/feedback, queries, CTDA382, native adapters,
-Pip-Boy and schema59 share known/unknown membership. Static compiled AddNote
-qualifiers are now admitted by both executors. RemoveNote's shared state and
-exact live-menu selection invalidation are already owned, without playback stop,
-menu close, inventory mutation or ItemRemoved HUD feedback.
+Accepted NOTE state, acquisition/feedback, query, CTDA382, UI and schema59 share
+known/unknown membership. Both script frontends admit static compiled AddNote,
+GetHasNote and RemoveNote qualifiers without redirecting global player ownership.
+Deferred query binding preserves short circuit; dynamic reference variables are
+not admitted. RemoveNote retains exact live-menu selection invalidation without
+playback stop, menu close, inventory mutation or ItemRemoved HUD feedback.
 
-Active slice: codex/fnv-prefixed-remove-note. The actually placed Old World Blues
-Sink jukebox script uses Player.GetHasNote guards followed by Player.RemoveNote.
-Both qualified query frontends previously reported a misleading unclosed-expression
-failure because raw-name lookup lacked that global query spelling. After the
-query-only repair, the unchanged owned script reached its independent qualified
-RemoveNote refusal. Both frontends now validate static compiled receiver and NOTE
-identities while retaining the global player's membership owner. Deferred query
-validation preserves short circuiting. Dynamic reference variables remain unbound.
+Active slice: codex/fnv-owned-jukebox-composition. The prior owned jukebox audit's
+message boundary was deliberately absent from that fixture. A real production
+route exists through native driver, source message queue, NativeOwnedMessageMenu
+and consumptive button result; the boundary is not an implementation defect.
+The new isolated native audit retains the unchanged complete authored OnActivate,
+with explicit absent/duplicate membership prerequisites, and tests real production
+message presentation, button ownership and later challenge/reference effects.
+Cold restoration must not replay effects. This is controlled composition, not
+ordinary campaign progress, full-cell presentation, physical input or parity.
+Selected native composition now passes: unknown history refuses with warm/cold
+retained error; absent membership uses the actual modal menu/button owner; the
+unlock branch uses its actual three-second HUD message and completes first-entry
+removal, quest writes, destroyed state, challenge progress, paired-reference
+enable request and script variable. Cold message restoration does not replay
+these effects. The selected owned/native audits and full required gate passed
+2026-10-23 17:33:04 UTC: all 2,221 frozen source/config hashes and the original
+save were unchanged, and git diff check passed. The audit is ready for checked
+publication and exact-head review.
+This tests existing production behavior and adds no new gameplay capability.
 
-The full original owned OnActivate/source/compiled bindings remain unchanged.
-Controlled absent, present, duplicate and non-player cases preserve its guards.
-The selected branch writes two authored quest variables and removes the first
-note identity before reaching the explicitly unavailable fixture message host.
-Every later message, destruction, challenge and paired-reference effect remains
-in the program. Warm/cold retained errors prevent removal replay. This proves no
-complete jukebox restoration, physical interaction, campaign or retail parity.
-
-Frozen validation passed 2026-10-23 17:03:43 UTC: receiver contracts, full quest
-queries, unchanged owned activation and actual native-host/menu adapters all
-passed, followed by the required Release/Debug/format/analyzer/native runtime
-gate. All 2,220 frozen source/config hashes and the original save were unchanged;
-git diff check passed. Invalid receiver/NOTE and missing compiled binding controls
-preserve selection; actual removal retains existing exact selection invalidation.
-The coherent slice is ready for publication and exact-head independent review.
 Static ACTI trap activation remains a separate parked owner. A real production
 DefaultActivate route exists, but the selected controller-free trap cannot supply
 its currently required Open/Close motion. Source default activation deliberately
