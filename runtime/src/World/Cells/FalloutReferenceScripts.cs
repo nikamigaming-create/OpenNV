@@ -746,7 +746,8 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                         : throw new NotSupportedException("Base/permanent actor value query has no source pool owner."));
             if (parts.Length <= 2 && operation == "getdestructionstage")
                 return new([], _ => world.DestructionStage(suppliedTarget ??
-                    (parts.Length == 1 ? CallingReference() : Reference(parts[0])))) { ReadOnly = true };
+                    (parts.Length == 1 ? CallingReference() : Reference(parts[0]))))
+                { ReadOnly = true };
             if (parts.Length <= 2 && operation == "getkiller")
                 return FalloutScriptFunction.Typed([], _ => FalloutScriptValue.Form(
                     world.Get(Target()).Injury?.Killer is { } killer ? records.RuntimeFormId(killer) : 0));

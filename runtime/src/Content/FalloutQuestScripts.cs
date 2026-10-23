@@ -797,7 +797,8 @@ internal sealed partial class FalloutQuestScripts
             if (parts.Length <= 2 && operation == "getdestructionstage")
                 return new([], _ => (References ?? throw new NotSupportedException("Destruction query has no world owner."))
                     .DestructionStage(caller?.FormKey(_records) ?? (parts.Length == 1
-                        ? (FalloutFormKey?)null : instance.Bindings.Reference(parts[0])))) { ReadOnly = true };
+                        ? (FalloutFormKey?)null : instance.Bindings.Reference(parts[0]))))
+                { ReadOnly = true };
             if (parts.Length == 1 && operation is "getreputation" or "getreputationpct")
                 return new([FalloutScriptArgumentKind.Value, FalloutScriptArgumentKind.Number], arguments =>
                 {

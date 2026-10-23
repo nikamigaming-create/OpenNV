@@ -32,8 +32,10 @@ Nonactor results use the source float-narrowed ceiling percentage and first
 strictly lower DSTD threshold ordinal. Queries are deferred/read-only; dead branches
 do not resolve missing receivers. A focused compile/regression passes object and
 quest calls, full/present versus missing health, source threshold equality, cold
-known/unknown and atomic invalid restore. This slice remains local/unpublished;
-no new broad suite, native capture or ordinary trap outcome is claimed.
+known/unknown and atomic invalid restore. Changed-file whitespace formatting and
+diff checks pass. This slice is being published for brief exact-head code review;
+the implementation-first direction limits verification to the changed owner.
+No fresh broad suite, native capture or ordinary trap outcome is claimed.
 DamageObject scheduling, actor health and complete trap activation/effects remain
 outside this query repair. Historical script errors are not cleared or replayed.
 
