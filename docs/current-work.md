@@ -25,10 +25,19 @@ persistence. The optional clock is advanced only by the harness physics callback
 at early physics priority; ordinary process ticks add no time. Duplicate/regressed
 physics samples, process/physics same-sample ordering, excluded states and default
 callbacks have focused checks. Default bot/skill process cadence is unchanged.
-The corrected full runtime gate passes at 00:38:21 UTC: exit 0, all 2,186 frozen
-source/configuration hashes unchanged, and git diff --check clean. The earlier
-process-clock snapshot did not satisfy this owner. Hosted checks are pending;
-native claims and merge admission remain held for parent review.
+The first actual-physics snapshot passed the local full gate and all five hosted
+checks at a9264881, but independent source review found two remaining defects.
+The repair shares the skill's nonmutating target/weapon/firing validation with
+optional limits, so safety policy cannot mask source faults. Physics sample IDs
+are not immutable snapshots: process checks must re-evaluate health changed by
+actor physics in the same sample, before admitting a pending-shot completion.
+Time accrual alone remains deduplicated. New regressions exercise both boundary
+faults and physics-first same-sample damage with pending/completed shot evidence.
+Corrected focused tests pass, and an old-code negative control reproduces both
+review findings. The renewed full gate passes at 01:00:40 UTC: exit 0, all 2,186
+source/configuration hashes unchanged, and git diff --check clean. Hosted checks
+and independent review of this repair are pending. PR269 remains draft, with native claims and merge
+admission held for parent review. Earlier green gates do not qualify this repair.
 
 Native acceptance is blocked after two failed private-driver admissions; the bot
 never started in either. The first waited incorrectly for pause after Continue

@@ -133,15 +133,16 @@ internal sealed partial class ReactiveReferenceBot
         Finite(combat.Camera) && Finite(combat.Forward) && Finite(combat.Muzzle) && Finite(combat.MuzzleForward) &&
         combat.Forward.LengthSquared() >= .9f && combat.MuzzleForward.LengthSquared() >= .9f &&
         float.IsFinite(combat.HitPoints) && float.IsFinite(combat.MaximumHitPoints) && combat.MaximumHitPoints > 0 &&
-        combat.HitPoints > Math.Max(1, combat.MaximumHitPoints * .15f);
+        combat.HitPoints > Math.Max(1, combat.MaximumHitPoints * .15f) &&
+        _combat is not null && _combat.SourceOwnersValid(combat);
 
     private bool StopAtCombatLimit(BotCombatObservation combat, bool accountedPhysics = false)
     {
         if (_mode != "combat" || !HasCombatLimits || !CombatLimitSourceReady(combat) ||
-            combat.Sample < _combatPolicySample || combat.Sample == _combatPolicySample && !accountedPhysics)
+            combat.Sample < _combatPolicySample || _combat?.CanApplyLimit(combat, accountedPhysics) != true)
             return false;
-        // Process may already have inspected this frame. A newly accounted physics
-        // callback must still apply its time bound; it never adds process delta.
+        // A physics sample is not an immutable snapshot: actor physics can change
+        // health before process observes the same sample. Only time accrual is deduplicated.
         _combatPolicySample = combat.Sample;
         var reason = _minimumCombatHitPoints is { } floor && combat.HitPoints <= floor ? "minimum-hit-points" :
             _maximumCombatSimulationSeconds is { } limit && _combatSimulationSeconds >= limit ? "simulation-time" : null;
