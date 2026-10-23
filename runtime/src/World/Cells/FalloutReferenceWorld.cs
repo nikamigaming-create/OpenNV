@@ -39,7 +39,8 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
     FalloutReferenceGrabEvents? GrabEvents = null,
     IReadOnlyList<FalloutObjectPhysicsSnapshot>? ObjectPhysics = null,
     float? ConversationSuppressionSeconds = null, FalloutConversationHistory? ConversationHistory = null,
-    FalloutActorSandboxAdmissionFailure? SandboxAdmissionFailure = null)
+    FalloutActorSandboxAdmissionFailure? SandboxAdmissionFailure = null,
+    FalloutTerminalHackState? TerminalHackState = null)
 {
     internal static void Validate(IReadOnlyList<FalloutReferenceSnapshot> snapshots)
     {
@@ -82,6 +83,7 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
             snapshot.ActivationRelay?.Validate();
             snapshot.LockState?.Validate();
             snapshot.OwnershipOverride?.Validate();
+            snapshot.TerminalHackState?.Validate();
             if (snapshot.TalkingActivatorActor is { } dialogueActor && !ValidKey(dialogueActor))
                 throw new InvalidDataException("Saved talking activator actor identity is invalid.");
             snapshot.Placement?.Validate();
@@ -228,6 +230,7 @@ internal sealed partial class FalloutReferenceInstance
     internal bool Unlocked { get; set; }
     internal FalloutReferenceLockState? LockState { get; set; }
     internal FalloutReferenceOwnershipOverride? OwnershipOverride { get; set; }
+    internal FalloutTerminalHackState? TerminalHackState { get; set; }
     internal bool Unconscious { get; set; }
     internal bool KnockedDown { get; set; }
     internal bool Restrained { get; set; }
@@ -446,7 +449,8 @@ internal sealed partial class FalloutReferenceInstance
             ObjectPhysics: CaptureObjectPhysics?.Invoke() ?? ObjectPhysics?.Select(body => body.Copy()).ToArray(),
             ConversationSuppressionSeconds: ConversationSuppressionSeconds, ConversationHistory: ConversationHistory?.Copy(),
             SandboxAdmissionFailure: SandboxAdmissionFailureCaptureReady ? CaptureSandboxAdmissionFailure is { } captureSandbox
-                ? captureSandbox() : SandboxAdmissionFailure?.Copy() : null);
+                ? captureSandbox() : SandboxAdmissionFailure?.Copy() : null,
+            TerminalHackState: TerminalHackState);
     }
 }
 
@@ -583,6 +587,7 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
         if (script is not null && !_definitions.TryGetValue(script.FormKey, out definition))
             _definitions.Add(script.FormKey, definition = new(script));
         instance = new(record, definition, () => IsEnabled(key));
+        instance.TerminalHackState = InitialTerminalHackState(instance);
         _instances.Add(key, instance);
         instance.BindStateChanges(_instances.Count, TrackReferenceWork);
         return instance;
@@ -744,6 +749,7 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
                 instance.ActivationRelay = relay.Copy();
             }
             validated.RestoreAccess(instance, snapshot);
+            validated.RestoreTerminalHackState(instance, snapshot);
             if (snapshot.BroadcastState is { } broadcast)
                 validated.SetBroadcastState(snapshot.Reference, broadcast ? 1 : 0);
             if (snapshot.Placement is { } placement)

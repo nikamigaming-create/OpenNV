@@ -1476,7 +1476,9 @@ try
     var syntheticSavePath = Path.Combine(fixtureRoot, "native-campaign-save.json");
     var centeredState = syntheticCampaignState with
     {
-        Schema = FalloutNativeCampaignSave.CapsuleCenteredSchema, QuestStageResults = null, TerminalResults = null,
+        Schema = FalloutNativeCampaignSave.CapsuleCenteredSchema,
+        QuestStageResults = null,
+        TerminalResults = null,
         PlayerPosition = [1.0f, 2.5f, 3.0f],
         Globals = null,
         GameTime = null,
@@ -1568,6 +1570,18 @@ try
     Require(JsonSerializer.Serialize(playerAudioRestore.State.PlayerPackageAudio) == JsonSerializer.Serialize(playerAudioSave.PlayerPackageAudio),
         "Ended player package lost its persistent sound fault or RNG state cold.");
     Require(playerAudioRestore.State.FastTravel == FalloutFastTravelSnapshot.Initial, "Current campaign lost travel policy.");
+    var beforeTerminalState = playerAudioSave with { Schema = FalloutNativeCampaignSave.BeforeTerminalHackStateSchema };
+    File.WriteAllText(syntheticSavePath, JsonSerializer.Serialize(beforeTerminalState));
+    var terminalStateMigration = FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,
+        cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);
+    Require(terminalStateMigration.State.Schema == FalloutNativeCampaignSave.ExpectedSchema &&
+        JsonSerializer.Serialize(terminalStateMigration.State) == JsonSerializer.Serialize(playerAudioRestore.State),
+        "v56 campaign codec migration changed retained owners instead of only admitting the new header.");
+    FalloutNativeCampaignSave.Write(syntheticSavePath, terminalStateMigration.State);
+    var terminalStateSecondCold = FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,
+        cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);
+    Require(JsonSerializer.Serialize(terminalStateSecondCold.State) == JsonSerializer.Serialize(terminalStateMigration.State),
+        "Current campaign codec changed the admitted legacy state on its next cold read.");
     ExpectFailure(() => FalloutNativeCampaignSave.Write(syntheticSavePath, playerAudioSave with { FastTravel = null }), "missing its travel policy");
     File.WriteAllText(syntheticSavePath, JsonSerializer.Serialize(playerAudioSave with
     { Schema = FalloutNativeCampaignSave.BeforeTransientExplosionsSchema, TransientExplosions = null, FastTravel = null }));
@@ -1689,7 +1703,9 @@ try
         new(0, null, null, null), IdleState: new(new("Cell.esm", 0x20), new string('c', 64), new(1, 1, 0, false), [], null, selectedOverlay));
     ExpectFailure(() => FalloutNativeCampaignSave.Write(syntheticSavePath, referenceSave with
     {
-        Schema = FalloutNativeCampaignSave.FactionRelationSchema, QuestStageResults = null, TerminalResults = null,
+        Schema = FalloutNativeCampaignSave.FactionRelationSchema,
+        QuestStageResults = null,
+        TerminalResults = null,
         References = [new(new("Cell.esm", 1), referenceSave.ActiveCell, new("Cell.esm", 2), null, null,
             new Dictionary<uint, double>(), null, PackageBindingFailure: forwardOnlyFailure)]
     }), "Legacy campaign schema has an active package collection animation");
@@ -1698,7 +1714,9 @@ try
     foreach (var legacySchema in new[] { FalloutNativeCampaignSave.FinishedSpeechSchema, FalloutNativeCampaignSave.OccupiedIdleSchema })
         ExpectFailure(() => FalloutNativeCampaignSave.Write(syntheticSavePath, referenceSave with
         {
-            Schema = legacySchema, QuestStageResults = null, TerminalResults = null,
+            Schema = legacySchema,
+            QuestStageResults = null,
+            TerminalResults = null,
             References = [forwardRandomReference with { HeadTracking = new(null!, null!, null, null, null) }]
         }), "future native head-tracking continuation");
     foreach (var futureRandom in new[]
@@ -1713,7 +1731,9 @@ try
             "Legacy campaign schema has attack selection random state");
     ExpectFailure(() => FalloutNativeCampaignSave.Write(syntheticSavePath, referenceSave with
     {
-        Schema = FalloutNativeCampaignSave.FactionRelationSchema, QuestStageResults = null, TerminalResults = null,
+        Schema = FalloutNativeCampaignSave.FactionRelationSchema,
+        QuestStageResults = null,
+        TerminalResults = null,
         WeaponHandling = new(false, [], AttackRandomState: 1),
     }), "Legacy campaign schema has attack selection random state");
     var indexedTags = new FalloutPlayerTagSkills(cellStack, syntheticTagSkills);
@@ -1722,7 +1742,8 @@ try
     var indexedGrant = FalloutNativeTraitFarewellResolver.ResolveGrant(syntheticTraitFarewell, syntheticOpeningGrant, indexedTags.Selection);
     var indexedSave = referenceSave with
     {
-        TagSkills = indexedTags.Selection, TagSkillSlots = indexedTags.Capture(),
+        TagSkills = indexedTags.Selection,
+        TagSkillSlots = indexedTags.Capture(),
         Inventory = indexedGrant.Inventory.Items.Select(item => new FalloutNativeSavedItem(item.RuntimeFormId, item.EditorId, item.RecordType, item.Count)).ToArray(),
         EquippedRuntimeFormIds = indexedGrant.EquippedRuntimeFormIds
     };
@@ -1744,13 +1765,17 @@ try
     var v34Bytes = File.ReadAllBytes(syntheticSavePath);
     ExpectFailure(() => FalloutNativeCampaignSave.Write(syntheticSavePath, indexedSave with
     {
-        Schema = FalloutNativeCampaignSave.IndexedTagSchema, QuestStageResults = null, TerminalResults = null,
+        Schema = FalloutNativeCampaignSave.IndexedTagSchema,
+        QuestStageResults = null,
+        TerminalResults = null,
         References = [new(new("Cell.esm", 1), referenceSave.ActiveCell, new("Cell.esm", 2), null, null, new Dictionary<uint, double>(), null, BroadcastState: false)]
     }), "Legacy campaign schema has mutable radio broadcast state");
     Require(File.ReadAllBytes(syntheticSavePath).SequenceEqual(v34Bytes), "Rejected legacy broadcast state replaced a valid save.");
     var broadcastSave = referenceSave with
     {
-        Schema = FalloutNativeCampaignSave.BroadcastSchema, QuestStageResults = null, TerminalResults = null,
+        Schema = FalloutNativeCampaignSave.BroadcastSchema,
+        QuestStageResults = null,
+        TerminalResults = null,
         References = [new(new("Cell.esm", 0x7fff24), new("Cell.esm", 0x7fff22), new("Cell.esm", 0x7fff23), null, null,
             new Dictionary<uint, double>(), null, BroadcastState: false)]
     };
@@ -1775,7 +1800,7 @@ try
         "Campaign cold state lost pending source event identity, kind or revision.");
     var pendingEventBytes = File.ReadAllBytes(syntheticSavePath);
     ExpectFailure(() => FalloutNativeCampaignSave.Write(syntheticSavePath, pendingEventSave with
-        { Schema = FalloutNativeCampaignSave.BroadcastSchema, QuestStageResults = null, TerminalResults = null }), "Legacy campaign schema has pending actor package events");
+    { Schema = FalloutNativeCampaignSave.BroadcastSchema, QuestStageResults = null, TerminalResults = null }), "Legacy campaign schema has pending actor package events");
     Require(File.ReadAllBytes(syntheticSavePath).SequenceEqual(pendingEventBytes), "Rejected legacy package events replaced a valid save.");
     FalloutNativeCampaignSave.Write(syntheticSavePath, referenceSave with { Schema = FalloutNativeCampaignSave.UnindexedTagSchema, QuestStageResults = null, TerminalResults = null, TagSkillSlots = null });
     var unindexedRestore = FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,
@@ -1822,7 +1847,8 @@ try
     campaignChallenges.Unlock(challengeForm); campaignChallenges.IncrementScripted(challengeForm);
     var challengeSave = referenceSave with
     {
-        Quests = [], Scripts = new([], [], Challenges: campaignChallenges.Capture()),
+        Quests = [],
+        Scripts = new([], [], Challenges: campaignChallenges.Capture()),
     };
     FalloutNativeCampaignSave.Write(syntheticSavePath, challengeSave);
     var challengeRestore = FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,
@@ -1873,8 +1899,11 @@ try
     ExpectFailure(() => FalloutNativeCampaignSave.Write(syntheticSavePath, heightSave with { Schema = FalloutNativeCampaignSave.ReferenceAccessSchema, QuestStageResults = null, TerminalResults = null }),
         "Legacy campaign save cannot contain stored actor height or race hair state");
     Require(File.ReadAllBytes(syntheticSavePath).SequenceEqual(currentHeightBytes), "Rejected v26 appearance state replaced a valid save.");
-    var alertSave = referenceSave with { ActorOverrides = [new(cellStack.RuntimeFormKey(0x14),
-        Convert.ToHexString(SHA256.HashData(playerBase.ReadData())).ToLowerInvariant(), [], [], Alerted: true)] };
+    var alertSave = referenceSave with
+    {
+        ActorOverrides = [new(cellStack.RuntimeFormKey(0x14),
+        Convert.ToHexString(SHA256.HashData(playerBase.ReadData())).ToLowerInvariant(), [], [], Alerted: true)]
+    };
     FalloutNativeCampaignSave.Write(syntheticSavePath, alertSave);
     var alertRestore = FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,
         cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);
@@ -1919,7 +1948,9 @@ try
         "The preceding race-override save no longer loads and upgrades through the ordinary save owner.");
     var legacyFaceState = referenceSave with
     {
-        Schema = FalloutNativeCampaignSave.RaceOverridesSchema, QuestStageResults = null, TerminalResults = null,
+        Schema = FalloutNativeCampaignSave.RaceOverridesSchema,
+        QuestStageResults = null,
+        TerminalResults = null,
         ActorOverrides = [new(new("SyntheticNPC.esm", 0x100), new string('0', 64), [], [],
             FaceGeometry: new(new("SyntheticNPC.esm", 0x100), new string('0', 64), new("SyntheticNPC.esm", 0x400),
                 new string('0', 64), new string('0', 64), new byte[200], new byte[120]))],
@@ -1940,7 +1971,9 @@ try
         "The preceding script-values save no longer upgrades through the ordinary save owner.");
     ExpectFailure(() => FalloutNativeCampaignSave.Write(syntheticSavePath, referenceSave with
     {
-        Schema = FalloutNativeCampaignSave.ScriptValuesSchema, QuestStageResults = null, TerminalResults = null,
+        Schema = FalloutNativeCampaignSave.ScriptValuesSchema,
+        QuestStageResults = null,
+        TerminalResults = null,
         ActorOverrides = [new(new("SyntheticNPC.esm", 0x100), new string('0', 64), [], [],
             Race: new(new("SyntheticNPC.esm", 0x400), new string('0', 64), 0))],
     }), "Legacy campaign save cannot contain actor race state");
@@ -1952,7 +1985,9 @@ try
         "The preceding object-animation save no longer upgrades through the ordinary save owner.");
     ExpectFailure(() => FalloutNativeCampaignSave.Write(syntheticSavePath, referenceSave with
     {
-        Schema = FalloutNativeCampaignSave.ObjectAnimationSchema, QuestStageResults = null, TerminalResults = null,
+        Schema = FalloutNativeCampaignSave.ObjectAnimationSchema,
+        QuestStageResults = null,
+        TerminalResults = null,
         Scripts = new([], [], Values: new(0, [], LastArrayId: 1, Arrays: [new(1, FalloutScriptArrayKind.Map, [])])),
     }), "Legacy campaign save cannot contain script array state");
     FalloutNativeCampaignSave.Write(syntheticSavePath, referenceSave with { Schema = FalloutNativeCampaignSave.DestructionSchema, QuestStageResults = null, TerminalResults = null });
@@ -1992,7 +2027,9 @@ try
         "Rejected camera state replaced a valid campaign save.");
     var legacyPitchSave = JsonSerializer.SerializeToNode(referenceSave with
     {
-        Schema = FalloutNativeCampaignSave.ReferenceStateSchema, QuestStageResults = null, TerminalResults = null,
+        Schema = FalloutNativeCampaignSave.ReferenceStateSchema,
+        QuestStageResults = null,
+        TerminalResults = null,
     })!.AsObject();
     legacyPitchSave.Remove(nameof(FalloutNativeCampaignState.PlayerViewPitchRadians));
     File.WriteAllText(syntheticSavePath, legacyPitchSave.ToJsonString());

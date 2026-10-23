@@ -66,7 +66,8 @@ internal sealed record FalloutNativeCampaignRestore(
 
 internal static class FalloutNativeCampaignSave
 {
-    internal const string ExpectedSchema = "opennv-native-fnv-campaign-save/v56";
+    internal const string ExpectedSchema = "opennv-native-fnv-campaign-save/v57";
+    internal const string BeforeTerminalHackStateSchema = "opennv-native-fnv-campaign-save/v56";
     internal const string BeforeSandboxAdmissionSchema = "opennv-native-fnv-campaign-save/v55";
     internal const string BeforeObjectPhysicsSchema = "opennv-native-fnv-campaign-save/v54";
     internal const string BeforeIdleObjectsSchema = "opennv-native-fnv-campaign-save/v53";
@@ -499,8 +500,16 @@ internal static class FalloutNativeCampaignSave
             throw new InvalidDataException("Earlier campaign schemas cannot own idle animation object bindings.");
     }
 
+    private static void ValidateTerminalHackStateSchema(FalloutNativeCampaignState state)
+    {
+        if (state.Schema != ExpectedSchema && state.References?.Any(reference => reference.TerminalHackState is not null) == true)
+            throw new InvalidDataException("Earlier campaign schemas cannot own retained terminal hacking results.");
+    }
+
     internal static FalloutNativeCampaignState AdmitPreviousOwnerSchema(FalloutNativeCampaignState state)
     {
+        ValidateTerminalHackStateSchema(state);
+        if (state.Schema == BeforeTerminalHackStateSchema) state = state with { Schema = ExpectedSchema };
         if (state.Schema != ExpectedSchema && state.References?.Any(reference => reference.SandboxAdmissionFailure is not null) == true)
             throw new InvalidDataException("Earlier campaign schemas cannot own stopped Sandbox admission.");
         if (state.Schema == BeforeSandboxAdmissionSchema) state = state with { Schema = ExpectedSchema };
@@ -528,6 +537,7 @@ internal static class FalloutNativeCampaignSave
         string expectedSaveCompatibilityId,
         FalloutPlayerAbilitySaveAdmission? originalAbilityAdmission)
     {
+        ValidateTerminalHackStateSchema(state);
         if (state.Schema != ExpectedSchema && state.References?.Any(reference => reference.SandboxAdmissionFailure is not null) == true)
             throw new InvalidDataException("Earlier campaign schemas cannot own stopped Sandbox admission.");
         ValidateObjectPhysicsSchema(state);

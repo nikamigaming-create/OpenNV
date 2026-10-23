@@ -4,6 +4,12 @@ using System.Text.Json;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.World.Cells;
 
+if (args is ["--owned-terminal-hack-state", var terminalStateGame, var terminalStateSave])
+{
+    OwnedTerminalHackStateProbe.Run(terminalStateGame, terminalStateSave);
+    return;
+}
+
 if (args is ["--owned-hacking-process", var hackingProcessData])
 {
     OwnedHackingProbe.RunProcess(hackingProcessData);
