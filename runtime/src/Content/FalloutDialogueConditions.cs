@@ -24,6 +24,8 @@ internal sealed class FalloutDialogueConditions(FalloutPluginStack records, Fall
 
     internal float Evaluate(FalloutCondition condition)
     {
+        if (condition.Function == 382)
+            return (runtime ?? throw new NotSupportedException("Dialogue has no shared player note owner."))(condition);
         if (condition.Function is 573 or 574 or 575)
         {
             if (condition.RunOn > 2) throw new NotSupportedException("Dialogue reputation query scope is unbound.");

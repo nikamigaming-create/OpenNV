@@ -4,6 +4,30 @@ using System.Text.Json;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.World.Cells;
 
+if (args is ["--owned-player-note-queries", var ownedNoteGame])
+{
+    QuestStateQueryContracts.RunOwnedNotes(ownedNoteGame);
+    return;
+}
+
+if (args is ["--player-note-query-contracts"])
+{
+    QuestStateQueryContracts.RunNotes();
+    return;
+}
+
+if (args is ["--player-note-query-contracts", var noteExecutor] && noteExecutor is "fallback" or "shared")
+{
+    QuestStateQueryContracts.RunNotes(noteExecutor);
+    return;
+}
+
+if (args is ["--player-note-membership-contracts"])
+{
+    PlayerNoteMembershipContracts.Run();
+    return;
+}
+
 if (args is ["--objective-query-contracts"])
 {
     QuestStateQueryContracts.RunObjective();
@@ -1304,6 +1328,7 @@ ScreenBloodContracts.Run();
 QuestMenuContracts.Run();
 QuestUpdateContracts.Run();
 QuestStateQueryContracts.Run();
+PlayerNoteMembershipContracts.Run();
 IngestibleContracts.Run();
 if (args is [var voiceRoot, "--voices"]) OwnedDialogueVoiceProbe.Run(voiceRoot);
 if (args is [var aidRoot, "--ingestibles"]) OwnedIngestibleProbe.Run(aidRoot);

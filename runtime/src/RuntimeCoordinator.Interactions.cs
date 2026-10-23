@@ -27,7 +27,7 @@ public partial class RuntimeCoordinator
         layer.AddChild(_nativeGameplayHud);
         _nativeHudMessages = new(_nativePluginStack!, _nativeInventory.Notifications,
             () => _nativeXr is null && _nativePlayer is { ModalInput: false } && !_nativeDoorLoading && !GetTree().Paused, _nativeQuestState,
-            () => _nativeLoadingScreens is not null || _nativeLoadingLayer is not null);
+            () => _nativeLoadingScreens is not null || _nativeLoadingLayer is not null, _nativeQuestScripts!.Scripts.Sounds);
         layer.AddChild(_nativeHudMessages);
         layer.AddChild(_nativeSubtitles ?? throw new InvalidOperationException("Source subtitles were not prepared with the player.")); AddChild(layer);
         _nativePlayer!.OpenPipBoy += OpenNativePipBoy;

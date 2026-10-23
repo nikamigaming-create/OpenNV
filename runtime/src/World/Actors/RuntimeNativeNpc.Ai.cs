@@ -517,6 +517,9 @@ internal partial class RuntimeNativeNpc
 
     internal float EvaluateAiCondition(FalloutCondition condition)
     {
+        if (condition.Function == 382)
+            return (_aiWorld ?? throw new NotSupportedException("AI note query has no shared world owner."))
+                .EvaluatePlayerNoteCondition(condition)!.Value;
         if (condition.Function is 573 or 574 or 575)
             return (_aiWorld ?? throw new NotSupportedException("AI reputation query has no shared world owner."))
                 .EvaluateReputationCondition(condition)!.Value;

@@ -2,13 +2,13 @@ using OpenNV.Runtime.Content;
 
 namespace OpenNV.Runtime.Gameplay.State;
 
-internal enum FalloutHudEventKind { ItemAdded, Message, ItemRemoved, ObjectiveDisplayed, ObjectiveCompleted, ChallengeProgress, ChallengeCompleted, RadioDiscovered }
+internal enum FalloutHudEventKind { ItemAdded, Message, ItemRemoved, ObjectiveDisplayed, ObjectiveCompleted, ChallengeProgress, ChallengeCompleted, RadioDiscovered, NoteAdded }
 
 // The event retains source identity and command order. Text, icons and timing
 // are resolved from the winning graph when presented, never baked into saves.
 internal sealed record FalloutHudEvent(FalloutHudEventKind Kind, FalloutFormKey Source, int Count,
-    FalloutFormKey? Quest = null, FalloutFormKey? Script = null, uint? ObjectiveIndex = null);
-internal sealed record FalloutHudNotice(long Ordinal, FalloutHudEvent Event);
+    FalloutFormKey? Quest = null, FalloutFormKey? Script = null, uint? ObjectiveIndex = null, string? Text = null);
+internal sealed record FalloutHudNotice(long Ordinal, FalloutHudEvent Event, bool Presented = false);
 internal sealed record FalloutHudNotificationsSnapshot(long LastOrdinal, FalloutHudNotice? Current,
     double Elapsed, IReadOnlyList<FalloutHudNotice> Pending, bool QuestUpdateCancellationRequested = false);
 
@@ -51,6 +51,7 @@ internal sealed class FalloutHudNotifications
             {
                 FalloutHudEventKind.ItemAdded or FalloutHudEventKind.ItemRemoved => value.Count <= 0 || value.ObjectiveIndex is not null,
                 FalloutHudEventKind.ChallengeProgress or FalloutHudEventKind.ChallengeCompleted => value.Count <= 0 || value.ObjectiveIndex is not null,
+                FalloutHudEventKind.NoteAdded => value.Count != 0 || value.ObjectiveIndex is not null || value.Text is null,
                 FalloutHudEventKind.Message or FalloutHudEventKind.RadioDiscovered => value.Count != 0 || value.ObjectiveIndex is not null,
                 FalloutHudEventKind.ObjectiveDisplayed or FalloutHudEventKind.ObjectiveCompleted => value.Count != 0 || value.ObjectiveIndex is null,
                 _ => true,
@@ -64,10 +65,31 @@ internal sealed class FalloutHudNotifications
         foreach (var value in events) _pending.Enqueue(new(++_ordinal, value));
     }
 
+    // Note producers copy their formatted text. Equal consecutive note text
+    // shares the source tail-dedup rule; unrelated HUD event formatting remains
+    // owned by the presenter and is reported separately as an alignment gap.
+    internal void PublishNote(FalloutHudEvent value)
+    {
+        RequirePublish([value]);
+        if (value.Kind != FalloutHudEventKind.NoteAdded) throw new InvalidDataException("Not a note notice.");
+        var tail = _pending.LastOrDefault() ?? Current;
+        if (tail?.Event.Text == value.Text) return;
+        _pending.Enqueue(new(++_ordinal, value));
+    }
+
     internal void RequirePublish(IReadOnlyList<FalloutHudEvent> events)
     {
         Validate(events);
         _ = checked(_ordinal + events.Count);
+    }
+
+    internal bool MarkPresented(long ordinal)
+    {
+        if (Current is not { } current || current.Ordinal != ordinal)
+            throw new InvalidOperationException("HUD presentation does not own the current notice.");
+        if (current.Presented) return false;
+        Current = current with { Presented = true };
+        return true;
     }
 
     internal void Advance(double seconds, Func<FalloutHudEvent, double> duration)

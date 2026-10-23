@@ -759,6 +759,13 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                 { ReadOnly = true },
                 "getstage" => new([FalloutScriptArgumentKind.Identifier], arguments => quests.Stage(Quest(arguments[0].Identifier!))),
                 "getquestrunning" => new([FalloutScriptArgumentKind.Identifier], arguments => quests.IsRunning(Quest(arguments[0].Identifier!)) ? 1 : 0),
+                "gethasnote" => new([FalloutScriptArgumentKind.Identifier], arguments =>
+                {
+                    var note = bindings.Form(arguments[0].Identifier!);
+                    if (note.Signature != "NOTE") throw new InvalidDataException("GetHasNote argument is not NOTE.");
+                    return world.PlayerNotes.Contains(note.FormKey) ? 1 : 0;
+                })
+                { ReadOnly = true },
                 "getquestcompleted" => new([FalloutScriptArgumentKind.Identifier], arguments => quests.IsCompleted(Quest(arguments[0].Identifier!)) ? 1 : 0),
                 "getstagedone" => new([FalloutScriptArgumentKind.Identifier, FalloutScriptArgumentKind.Number], arguments =>
                     quests.StageDone(Quest(arguments[0].Identifier!), checked((short)Index(arguments[1].Number))) ? 1 : 0),
@@ -1196,8 +1203,10 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                     break;
                 case "additem" when arguments.Count is 2 or 3:
                     var quantity = Number(arguments[1]);
+                    var addition = bindings.Form(arguments[0]);
+                    if (quantity == 0 && addition.Signature == "NOTE" && target == records.RuntimeFormKey(0x14)) break;
                     if (quantity <= 0 || quantity > int.MaxValue || quantity != Math.Truncate(quantity)) throw new InvalidDataException("AddItem count must be a positive integer.");
-                    var addedItem = bindings.Form(arguments[0]).FormKey;
+                    var addedItem = addition.FormKey;
                     var hideAddition = arguments.Count == 3 && Boolean(arguments[2]);
                     if (host.Inventory is { } additionOwner)
                         additionOwner.Execute(new(FalloutInventoryCommandKind.Add, target, Item: addedItem, Count: (int)quantity, Silent: hideAddition));

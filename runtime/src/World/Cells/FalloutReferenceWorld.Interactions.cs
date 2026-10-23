@@ -56,6 +56,7 @@ internal sealed partial class FalloutReferenceWorld
         var instance = Get(reference);
         if (!CanActivate(reference)) throw new InvalidOperationException("Item is no longer available.");
         if (!IsInventoryItem(records.GetEffective(instance.Base).Signature)) throw new InvalidDataException("Reference is not an inventory item.");
+        RequirePlayerItemAcquisition(records.GetEffective(instance.Base));
         var source = records.GetEffective(reference);
         var fields = source.ReadSubrecords().ToArray();
         var countField = fields.SingleOrDefault(field => field.Signature == "XCNT").Data;

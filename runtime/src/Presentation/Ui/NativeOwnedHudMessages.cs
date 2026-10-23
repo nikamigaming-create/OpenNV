@@ -11,6 +11,7 @@ internal sealed partial class NativeOwnedHudMessages : Control
 {
     private readonly FalloutPluginStack _records;
     private readonly FalloutHudNotifications _queue;
+    private readonly FalloutScriptSounds? _noteSounds;
     private readonly Func<bool> _shown;
     private readonly Func<bool> _loading;
     private readonly FalloutHudMessageLayout _declaration;
@@ -30,23 +31,25 @@ internal sealed partial class NativeOwnedHudMessages : Control
     internal object State => new
     {
         current = _queue.Current,
+        noteSound = _noteSounds?.LastRequest,
         visible = Visible,
         elapsed = _queue.Elapsed,
         text = _tiles.String(IsObjective(_queue.Current?.Event) ? _objective : _text),
         icon = _displayIcon,
         error = Error,
         source = "owned-HUDMainMenu-templates-fonts-declarations",
-        unbound = "native-fade-clock,glow,event-alignment"
+        unbound = "native-fade-clock,glow,event-alignment,note-feedback-readiness,cross-kind-tail-dedup"
     };
 
     internal NativeOwnedHudMessages(FalloutPluginStack records, FalloutHudNotifications queue, Func<bool>? shown = null,
-        FalloutQuestState? quests = null, Func<bool>? loading = null)
+        FalloutQuestState? quests = null, Func<bool>? loading = null, FalloutScriptSounds? noteSounds = null)
     {
         Name = "HUDMainMenuMessages";
         MouseFilter = MouseFilterEnum.Ignore;
         ProcessMode = ProcessModeEnum.Always;
         _records = records;
         _queue = queue;
+        _noteSounds = noteSounds;
         _quests = quests ?? new(records);
         _shown = shown ?? (() => true);
         _loading = loading ?? (() => false);
@@ -181,6 +184,15 @@ internal sealed partial class NativeOwnedHudMessages : Control
                 _tiles.Bind(_icon, "alpha", value.Icon is null ? 0 : 255);
                 if (value.Icon is not null) _tiles.SetFilename(_icon, value.Icon);
                 _tiles.ValidateDrawing();
+                if (current.Event.Kind == FalloutHudEventKind.NoteAdded && !current.Presented)
+                {
+                    var sound = FalloutSoundRecordReader.Find(_records, "UIItemGenericUp");
+                    // Reuse the existing world sound selector/finite voice owner,
+                    // including folder variants and its retained random stream.
+                    (_noteSounds ?? throw new NotSupportedException("Note HUD sound has no world voice owner."))
+                        .Play(_records.RuntimeFormKey(0x14), sound.FormKey, systemSound: true);
+                    _queue.MarkPresented(current.Ordinal);
+                }
                 GD.Print($"OPENNV_HUD_NOTICE ordinal={current.Ordinal} source={current.Event.Source} kind={current.Event.Kind} seconds={value.Seconds:R} presentation=owned-tiles parity=unverified");
             }
             QueueRedraw();
@@ -201,7 +213,12 @@ internal sealed partial class NativeOwnedHudMessages : Control
     {
         if (_resolved.TryGetValue(value, out var result)) return result;
         var record = _records.GetEffective(value.Source);
-        if (value.Kind is FalloutHudEventKind.ItemAdded or FalloutHudEventKind.ItemRemoved)
+        if (value.Kind == FalloutHudEventKind.NoteAdded)
+        {
+            if (record.Signature != "NOTE" || value.Text is null) throw new InvalidDataException("Note HUD event has no NOTE text.");
+            result = (value.Text, "Interface/Icons/Message Icons/glow_message_vaultboy_very_happy.dds", 2);
+        }
+        else if (value.Kind is FalloutHudEventKind.ItemAdded or FalloutHudEventKind.ItemRemoved)
         {
             // Bind a reached notice independently of the common HUD layout.
             // An unsupported item consumer remains a visible HUD failure; it

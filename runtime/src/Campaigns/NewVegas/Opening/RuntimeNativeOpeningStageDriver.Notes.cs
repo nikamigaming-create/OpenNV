@@ -12,8 +12,8 @@ internal partial class RuntimeNativeOpeningStageDriver
 
     internal void PlayPipBoyNote(FalloutNote note)
     {
-        if (_inventory.Item(note.Record.FormKey) is not { Count: > 0 })
-            throw new InvalidOperationException("This note is not in your inventory.");
+        if (!_scripts.References!.PlayerNotes.Contains(note.Record.FormKey))
+            throw new InvalidOperationException("This note has not been collected.");
         var source = RuntimeLiveContentSource.Current!;
         var prepared = new Queue<AudioStreamPlayer>();
         Node? owner = null;

@@ -160,6 +160,7 @@ internal sealed class FalloutUnloadedActorPackages(FalloutPluginStack records, F
 
     private float Evaluate(FalloutFormKey caller, FalloutCondition condition)
     {
+        if (condition.Function == 382) return world.EvaluatePlayerNoteCondition(condition)!.Value;
         if (condition.Function is 573 or 574 or 575)
             return world.EvaluateReputationCondition(condition)!.Value;
         if (condition.Function == 159)

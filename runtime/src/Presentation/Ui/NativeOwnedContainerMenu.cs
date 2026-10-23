@@ -2,6 +2,7 @@ using System.Xml.Linq;
 using Godot;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Gameplay.State;
+using OpenNV.Runtime.World.Cells;
 
 namespace OpenNV.Runtime.Presentation.Ui;
 
@@ -98,6 +99,7 @@ internal partial class NativeOwnedContainerMenu : Control
         if ((_inventories[side].Item(form)?.Count ?? 0) < count) { Refresh(); return; }
         ApplyTransfer(() =>
         {
+            FalloutReferenceWorld.RequirePlayerItemAcquisition(_records.GetEffective(form));
             var notice = new FalloutHudEvent(side == 1 ? FalloutHudEventKind.ItemAdded : FalloutHudEventKind.ItemRemoved, form, count);
             _inventories[0].Notifications.RequirePublish([notice]);
             _inventories[side].TransferTo(_inventories[1 - side], form, count);
@@ -110,6 +112,7 @@ internal partial class NativeOwnedContainerMenu : Control
         ApplyTransfer(() =>
         {
             var items = TransferableItems(1);
+            foreach (var item in items) FalloutReferenceWorld.RequirePlayerItemAcquisition(_records.GetEffective(item.FormKey));
             var notices = items.Select(item => new FalloutHudEvent(FalloutHudEventKind.ItemAdded, item.FormKey, item.Count)).ToArray();
             _inventories[0].Notifications.RequirePublish(notices);
             _inventories[1].TransferItemsTo(_inventories[0], items.Select(item => new FalloutInventoryTransfer(item.FormKey, item.Count)).ToArray());
