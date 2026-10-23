@@ -4,59 +4,43 @@ Updated 2026-10-23. Priority: fully playable vanilla Fallout: New Vegas flat mod
 before repeated deep optimization. Follow docs/implementation-plan.md, including
 terminals, lockpicking, hacking and all 13 skills. Owned retail inputs stay read-only;
 no campaign or parity completion is claimed. The coordinator owns builds, native
-input and Git; existing writers have disjoint scopes and run no competing jobs.
+input and Git; no competing jobs or denied writer contact are permitted.
 
 ## Active block
 
-Baseline main/origin-main is 3528ad6428ebb780cac25255de6b26e7f72bfd94 (PR272).
-All five checks and independent review passed; local main matched origin with
-all 2,189 gated hashes unchanged. The coordinator is on
-codex/fnv-hacking-native-session. PR269 remains draft/native-and-merge-held.
-No third bot encounter, retail attempt or denied writer contact is permitted.
+Baseline main/origin-main is a43441c3a6db22d962148e49ff8798f648928766 (PR273),
+accepted after independent review and all five checks. The active branch is
+codex/fnv-hacking-selection-mapping. PR269 remains draft/native-and-merge-held.
+No third bot encounter or retail attempt is permitted.
 
-The active implementation adopts the qualified unsigned stream for hacking
-preparation through GenerateFromProcess. One static process owner is retained
-across content-source retirement; it lazily seeds on its first positive draw
-from the actual Win32 GetTickCount boundary, uses the qualified raw 624-word
-recurrence and mask/modulo rules, and supplies the source 100 ms retry window.
-Zero bounds consume no draw or clock read. There is no per-menu seed, arbitrary
-clock fallback, restore API, or conversion of existing saved RNG fields. Other
-script/sound/actor streams remain unchanged; complete cross-system RNG routing,
-save/load equivalence and retail stream parity are not claimed. Unqualified
-platform clocks refuse explicitly.
+The current change connects qualified display coordinates to the existing hacking
+transaction: two columns, seventeen rows each, twelve payload characters per row,
+and the seven-character address prefix/separator excluded from input. Word spans
+use the complete backing display and can cross rows/columns. Bracket scans stop
+at the selected payload row boundary. Each click resolves the current word map
+again after dud removal; it cannot execute a retained stale candidate index.
+Invalid coordinates and incomplete display extents refuse before mutation.
 
-The selected owned preparation audit exposed a genuine terminal source-reader
-refusal: compiled references to engine-created player14 required a nonexistent
-plugin record. Terminal results now use the existing script binder's exact
-canonical runtime identity rule; other missing and foreign player-shaped forms
-still require winning records. This repairs source binding, not a fabricated
-player entity or a demonstrated native terminal interaction.
+Focused contracts pass cross-row/cross-column words, both display endpoints,
+clipped brackets, repeated wrong guesses, reset/dud consumption, shifted candidate
+indices, lockout and post-success refusal. Two actual owned candidate generations
+pass every word-character mapping and select their genuine retained answers through
+the transaction. Their placements are explicitly controlled source-shaped layouts;
+this is not a captured retail layout or native mouse/controller proof. Source
+resources remain unchanged. The required runtime gate passes at 04:11:44 UTC,
+including Release/Debug, contracts and native audits with recording off. The fresh
+checkout regenerates defaults in twenty-two tracked import metadata files; those
+generated changes were restored after both runs. All 2,192 canonical input hashes
+match after cleanup, all C# hashes stayed unchanged during validation, and diff
+check is clean. This is post-cleanup closure, not an unchanged-tree-during-run claim.
 
-Deterministic contracts pass lazy seeding, zero/normal/mask bounds, raw block
-transitions, process-factory identity, cancelled generation with no draw, clock
-faults and preservation of existing saved-script RNG behavior. The complete
-reference-script probe passes, including engine-player reference controls. Two
-generations using the actual owned TERM/dictionary and native process clock pass
-across content retirement with unchanged source hashes and one retained seed.
-Their Science/perk inputs are explicitly controlled; they are not ordinary
-player access. Observation-only counters report a timed pair of 1,523.975 ms /
-15 windows / 2,631 attempts / 19,392,479 draws, then 1,572.670 ms / 15 windows /
-2,443 attempts / 18,060,569 draws. Windows include the initial window; this is
-consistent with timed adaptive search, not retail performance proof. Retry policy
-and RNG ordering are unchanged. The renewed final runtime gate passes at
-03:39:03 UTC: exit 0, all 2,191 source/configuration hashes unchanged, and diff
-check clean. Release/Debug and native audits pass; recording remains off. Hosted
-checks and independent review are pending; the source is frozen.
-
-Native locked-terminal admission remains closed at both existing gates. Actual
-session display/input, placement fallback and reference outcome/reward/statistic
-handoff must be qualified before access or XP is committed. No native hacking,
-campaign completion or retail parity is claimed. Recording remains off.
-
-The campfire source/restore and event proofs remain accepted component evidence.
-Production StartConversation exists; the controlled fixture's conversation
-refusal is not a missing command. No physical contact, conversation, crafting or
-new campaign progress is claimed from those proofs.
+The accepted process RNG/clock owner and canonical player14 terminal-result
+binding remain unchanged. Existing saved script/sound/actor streams are not
+reinterpreted. Native locked-terminal admission remains closed at both existing
+gates. Placement-exhaustion lifetime, actual menu hit-testing/navigation and the
+terminal-extra outcome/persistence/reward/statistic/ownership handoff remain
+required. Do not unlock or award XP while omitting a source effect. Recording is
+off; no native hacking, campaign completion or retail parity is claimed.
 
 ## Gameplay and test-control checkpoint
 
@@ -131,8 +115,8 @@ attempts and normal cleanup; no third blind launch.
 
 ## Remaining completion gates
 
-- Current P0: publish and review the qualified campfire branch/save-admission
-  repair, then continue the remaining-wells route only through reliable ordinary
+- Current P0: integrate qualified locked-terminal hacking owners without bypassing
+  missing outcomes, then continue remaining wells only through reliable ordinary
   control. Shared faction arbitration is implemented; actual eligible/ineligible
   assistance remains unverified. Do not repeat the retired encounter admission.
 - Tutorial: complete remaining wells, delayed death counters, loot, ingredients
@@ -143,8 +127,8 @@ attempts and normal cleanup; no third blind launch.
   completion for qualified native readiness.
 - Access: terminal pages/results exist, but missing keys/passwords stop before
   ordinary lockpicking/hacking. Candidate/attempt/bracket primitives are
-  prerequisites; admission, UI/input, retained outcomes, qualified rewards,
-  authoritative generation callbacks and owned tape still need integration.
+  prerequisites; native admission/UI input, source placement, retained outcomes,
+  qualified rewards and persistent outcome ownership still need integration.
 - Combat: extend actual attack families, hit reactions, embedded emitters,
   assistance and survivable encounters. Selected gecko damage/kills do not
   establish complete combat.

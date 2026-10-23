@@ -89,6 +89,7 @@ internal static class OwnedHackingProbe
         var result = FalloutHackingCandidates.GenerateFromProcess(dictionary, request, applyScienceBonus);
         var elapsed = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
         var draws = FalloutSharedUnsignedRandom.Process.Observation.Draws - randomBefore;
+        HackingDisplayContracts.CheckOwned(result);
         if (!SHA256.HashData(terminal.Record.ReadData()).SequenceEqual(terminalHash) ||
             !content.TryRead("menus/falloutdict.txt", null, out var after, out var afterSource) ||
             !bytes.SequenceEqual(after) || source != afterSource)
