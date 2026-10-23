@@ -10,9 +10,15 @@ if (args is ["--reputation-case-contracts", var reputationCase] && reputationCas
     return;
 }
 
+if (args is ["--owned-reputation-threshold", var thresholdGame, var thresholdSave])
+{
+    OwnedReputationProbe.Run(thresholdGame, thresholdSave, conditionFunction: 575);
+    return;
+}
+
 if (args is ["--owned-reputation-percentage", var percentageGame, var percentageSave])
 {
-    OwnedReputationProbe.Run(percentageGame, percentageSave, percentage: true);
+    OwnedReputationProbe.Run(percentageGame, percentageSave, conditionFunction: 574);
     return;
 }
 
@@ -22,9 +28,16 @@ if (args is ["--owned-reputation-state", var reputationGame, var reputationSave]
     return;
 }
 
+if (args is ["--reputation-threshold-contracts"])
+{
+    ReputationConditionContracts.RunThreshold();
+    return;
+}
+
 if (args is ["--reputation-percentage-contracts"])
 {
     ReputationConditionContracts.RunPercentage();
+    ReputationConditionContracts.RunThreshold();
     return;
 }
 
@@ -32,6 +45,7 @@ if (args is ["--reputation-condition-contracts"])
 {
     ReputationConditionContracts.Run();
     ReputationConditionContracts.RunPercentage();
+    ReputationConditionContracts.RunThreshold();
     return;
 }
 
@@ -40,6 +54,7 @@ if (args is ["--reputation-contracts"])
     ReputationContracts.Run();
     ReputationConditionContracts.Run();
     ReputationConditionContracts.RunPercentage();
+    ReputationConditionContracts.RunThreshold();
     return;
 }
 
@@ -1149,6 +1164,7 @@ FactionRelationContracts.Run();
 ReputationContracts.Run();
 ReputationConditionContracts.Run();
 ReputationConditionContracts.RunPercentage();
+ReputationConditionContracts.RunThreshold();
 EncounterZoneContracts.Run();
 FollowPackageContracts.Run();
 DialoguePackageContracts.Run();

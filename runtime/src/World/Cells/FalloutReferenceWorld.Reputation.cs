@@ -41,7 +41,7 @@ internal sealed partial class FalloutReferenceWorld
 
     internal float? EvaluateReputationCondition(FalloutCondition condition)
     {
-        if (condition.Function is not (573 or 574)) return null;
+        if (condition.Function is not (573 or 574 or 575)) return null;
         if (condition.RunOn > 2)
             throw new NotSupportedException("Reputation condition run-on context is unbound.");
         if (condition.RunOn == 2 && condition.Reference != 0)
@@ -53,13 +53,55 @@ internal sealed partial class FalloutReferenceWorld
         }
         // CTDA uses the raw getter, unlike the script command's validated selector.
         // Its explicit REPU argument is independent of speaker/listener identity.
+        if (condition.Function == 575)
+            return ReputationThreshold(condition.FormArgument1, unchecked((byte)condition.Argument2));
         var value = Reputation(condition.FormArgument1, condition.Argument2 == 1 ? 1 : 0);
         if (condition.Function == 573) return value;
+        return ReputationRatio(condition.FormArgument1, value);
+    }
+
+    private float ReputationRatio(FalloutFormKey form, float value)
+    {
         // The source percentage getter stores the axis/capacity ratio as float32.
         // It neither scales by 100 nor clamps values written by SetReputation.
-        var ratio = value / ReputationSource(condition.FormArgument1).Capacity;
+        var ratio = value / ReputationSource(form).Capacity;
         return float.IsFinite(ratio) ? ratio :
             throw new InvalidDataException("Reputation percentage has no finite source ratio.");
+    }
+
+    private int ReputationTier(FalloutFormKey form, int axis)
+    {
+        var ratio = ReputationRatio(form, Reputation(form, axis));
+        float Read(string name) => FalloutGameSettingFloats.Read(records, name);
+        if (ratio >= Read("fReputationThresholdOne") && ratio < Read("fReputationThresholdTwo")) return 1;
+        if (ratio >= Read("fReputationThresholdTwo") && ratio < Read("fReputationThresholdThree")) return 2;
+        return ratio >= Read("fReputationThresholdThree") ? 3 : 0;
+    }
+
+    private int ReputationThreshold(FalloutFormKey form, byte selector)
+    {
+        // Both axes are read in source order, including when history is unknown.
+        var positive = ReputationTier(form, 1);
+        var negative = ReputationTier(form, 0);
+        if (positive == 0 && negative == 0) return 1;
+        return (selector, positive, negative) switch
+        {
+            (0, 1, 1) => 3,
+            (0, 3, 2) or (0, 2, 3) => 2,
+            (0, 3, 3) => 5,
+            (0, 2, 2) => 4,
+            (1, 1, 0) => 4,
+            (1, 2, 0) => 5,
+            (1, 2, 1) => 2,
+            (1, 3, 0) => 6,
+            (1, 3, 1) => 3,
+            (2, 0, 1) => 4,
+            (2, 0, 2) => 5,
+            (2, 1, 2) => 2,
+            (2, 0, 3) => 6,
+            (2, 1, 3) => 3,
+            _ => 0,
+        };
     }
 
     internal void SetReputation(FalloutFormKey form, double axis, double amount)

@@ -63,7 +63,7 @@ internal static class ReputationConditionContracts
             Reject(() => dialogue.Evaluate(condition with { RunOn = 3 }));
             Reject(() => new FalloutDialogueConditions(records, new(records), new("Repu.esm", 0x30), identity).Evaluate(condition));
             Reject(() => FalloutCondition.AllPass([condition with { Flags = 4 }], Query));
-            Check(world.EvaluateReputationCondition(condition with { Function = 575 }) is null &&
+            Check(world.EvaluateReputationCondition(condition with { Function = 576 }) is null &&
                 JsonSerializer.Serialize(world.CaptureReputations()) == before, "Refusal/query mutated state or admitted another reputation query.");
             cold.RestoreReputations(null);
             Reject(() => cold.EvaluateReputationCondition(condition));
@@ -128,7 +128,7 @@ internal static class ReputationConditionContracts
             cold.SetReputation(Form(1), 1, 12.5);
             Check(cold.EvaluateReputationCondition(condition) == 1.25f, "Explicit legacy axis was unavailable to percentage.");
             Reject(() => cold.EvaluateReputationCondition(condition with { Argument2 = 2 }));
-            Check(world.EvaluateReputationCondition(condition with { Function = 575 }) is null, "Percentage admitted unqualified rank semantics.");
+            Check(world.EvaluateReputationCondition(condition with { Function = 576 }) is null, "Percentage admitted unqualified rank semantics.");
             Console.WriteLine("OPENNV_REPUTATION_PERCENTAGE_PASS sourceMasters=true fractionScale=true noClamp=true rawSelector=true float32=true " +
                 "signedCapacity=true finiteResultRequired=true knownUnknown=true cold=true contextRefusals=true noMutation=true ordinaryAndRetail=unverified");
         }
@@ -138,6 +138,92 @@ internal static class ReputationConditionContracts
             directory.Delete();
         }
     }
+
+    internal static void RunThreshold()
+    {
+        var directory = Directory.CreateTempSubdirectory("opennv-reputation-threshold-");
+        try
+        {
+            File.WriteAllBytes(Path.Combine(directory.FullName, "Repu.esm"), Join(Header(),
+                Record("REPU", 1, Field("DATA", BitConverter.GetBytes(4f))),
+                Record("REPU", 2, Field("DATA", BitConverter.GetBytes(0f))),
+                Setting(10, "fReputationThresholdOne", .25f), Setting(11, "fReputationThresholdTwo", .5f),
+                Setting(12, "fReputationThresholdThree", .75f)));
+            File.WriteAllBytes(Path.Combine(directory.FullName, "Other.esm"), Header());
+            File.WriteAllBytes(Path.Combine(directory.FullName, "Query.esp"), Join(Header("Other.esm", "Repu.esm"),
+                Record("INFO", 0x02000010, Field("CTDA", Condition(0, 0, function: 575)))));
+            using var records = FalloutPluginStack.Load(directory.FullName, ["Repu.esm", "Other.esm", "Query.esp"]);
+            using var world = new FalloutReferenceWorld(records);
+            var form = new FalloutFormKey("Repu.esm", 1);
+            var condition = FalloutCondition.Read(records.GetEffective(new("Query.esp", 0x10))).Single();
+            float Query(FalloutCondition value) => world.EvaluateReputationCondition(value) ?? throw new NotSupportedException("Unowned query.");
+            void Axes(float positive, float negative)
+            { world.SetReputation(form, 1, positive * 4); world.SetReputation(form, 0, negative * 4); }
+            // Independent literal oracle reduced from the qualified numeric decision contract.
+            int[][] tables = [
+                [1,0,0,0, 0,3,0,0, 0,0,4,2, 0,0,2,5],
+                [1,0,0,0, 4,0,0,0, 5,2,0,0, 6,3,0,0],
+                [1,4,5,6, 0,0,2,3, 0,0,0,0, 0,0,0,0]];
+            float[] ratios = [0, .375f, .625f, .875f];
+            foreach (var p in Enumerable.Range(0, 4)) foreach (var n in Enumerable.Range(0, 4))
+            {
+                Axes(ratios[p], ratios[n]);
+                var before = JsonSerializer.Serialize(world.CaptureReputations());
+                foreach (var selector in new uint[] { 0, 1, 2, 3, 255, 256, 257, 258, 259, uint.MaxValue })
+                {
+                    var low = selector & 255;
+                    var expected = low <= 2 ? tables[low][p * 4 + n] : p == 0 && n == 0 ? 1 : 0;
+                    Check(Query(condition with { Argument2 = selector }) == expected, "Threshold matrix or low-byte selector changed.");
+                }
+                Check(JsonSerializer.Serialize(world.CaptureReputations()) == before, "Threshold query mutated axes.");
+            }
+            foreach (var (ratio, expected) in new (float, int)[] {
+                (MathF.BitDecrement(.25f),1),(.25f,4),(MathF.BitDecrement(.5f),4),(.5f,5),
+                (MathF.BitDecrement(.75f),5),(.75f,6) })
+            { Axes(ratio, 0); Check(Query(condition with { Argument2 = 1 }) == expected, "Threshold inclusivity or float boundary changed."); }
+            Check(records.NumericSettings.Set("fReputationThresholdOne", .75) &&
+                records.NumericSettings.Set("fReputationThresholdTwo", .25) &&
+                records.NumericSettings.Set("fReputationThresholdThree", .5), "Live threshold setting was not admitted.");
+            Axes(.6f, 0); var revision = records.NumericSettings.Revision;
+            Check(Query(condition with { Argument2 = 1 }) == 6 && records.NumericSettings.Revision == revision,
+                "Thresholds were sorted, cached or mutated while queried.");
+            records.NumericSettings.Set("fReputationThresholdOne", -.1);
+            records.NumericSettings.Set("fReputationThresholdTwo", -.05);
+            records.NumericSettings.Set("fReputationThresholdThree", 0);
+            using (var fresh = new FalloutReferenceWorld(records))
+                Check(fresh.EvaluateReputationCondition(condition) == 5, "Fresh axes bypassed live threshold classification.");
+            records.NumericSettings.Set("fReputationThresholdOne", .5);
+            records.NumericSettings.Set("fReputationThresholdTwo", .5);
+            records.NumericSettings.Set("fReputationThresholdThree", .5);
+            Axes(.5f, 0); Check(Query(condition with { Argument2 = 1 }) == 6, "Equal thresholds acquired an invented ordering refusal.");
+            records.NumericSettings.Set("fReputationThresholdOne", .25);
+            records.NumericSettings.Set("fReputationThresholdThree", .75);
+            Axes(.875f, .375f);
+            var capture = JsonSerializer.Serialize(world.CaptureReputations());
+            using var cold = new FalloutReferenceWorld(records);
+            cold.RestoreReputations(JsonSerializer.Deserialize<FalloutReputationsSnapshot>(capture));
+            Check(cold.EvaluateReputationCondition(condition with { Argument2 = 1 }) == 3, "Cold threshold changed its source inputs.");
+            cold.RestoreReputations(null); cold.SetReputation(form, 1, 0);
+            Reject(() => cold.EvaluateReputationCondition(condition with { Argument2 = 1 }));
+            cold.SetReputation(form, 0, 0);
+            Check(cold.EvaluateReputationCondition(condition with { Argument2 = uint.MaxValue }) == 1,
+                "Both-zero result was not applied before selector dispatch.");
+            Reject(() => Query(condition with { Argument1 = 0x01000002 }));
+            Reject(() => Query(condition with { RunOn = 3 }));
+            Reject(() => Query(condition with { RunOn = 2, Reference = 0x0100ffff }));
+            Reject(() => FalloutCondition.AllPass([condition with { Flags = 4 }], Query));
+            Console.WriteLine("OPENNV_REPUTATION_THRESHOLD_PASS matrix48=true rawLowByte=true bothAxesRequired=true sourceOrder=true boundaries=true " +
+                "liveSettings=true noSorting=true freshClassified=true cold=true unknownRefused=true noMutation=true ordinaryAndRetail=unverified");
+        }
+        finally
+        {
+            foreach (var name in new[] { "Repu.esm", "Other.esm", "Query.esp" }) File.Delete(Path.Combine(directory.FullName, name));
+            directory.Delete();
+        }
+    }
+
+    private static byte[] Setting(uint id, string name, float value) =>
+        Record("GMST", id, Field("EDID", Text(name)), Field("DATA", BitConverter.GetBytes(value)));
 
     private static byte[] Condition(uint selector, byte comparison, float value = 0, ushort function = 573)
     {

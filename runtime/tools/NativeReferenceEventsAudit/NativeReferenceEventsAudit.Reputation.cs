@@ -27,6 +27,9 @@ public partial class NativeReferenceEventsAudit
                 Record("TES4", 0, Field("HEDR", new byte[12]))
                     .Concat(Record("REPU", 1, Field("DATA", BitConverter.GetBytes(100f))))
                     .Concat(Record("GLOB", 2, Field("EDID", Encoding.ASCII.GetBytes("FixtureGlobal\0")), Field("FNAM", [(byte)'f']), Field("FLTV", BitConverter.GetBytes(7f))))
+                    .Concat(Record("GMST", 4, Field("EDID", Encoding.ASCII.GetBytes("fReputationThresholdOne\0")), Field("DATA", BitConverter.GetBytes(.25f))))
+                    .Concat(Record("GMST", 5, Field("EDID", Encoding.ASCII.GetBytes("fReputationThresholdTwo\0")), Field("DATA", BitConverter.GetBytes(.5f))))
+                    .Concat(Record("GMST", 6, Field("EDID", Encoding.ASCII.GetBytes("fReputationThresholdThree\0")), Field("DATA", BitConverter.GetBytes(.75f))))
                     .Concat(Record("INFO", 3, Field("CTDA", bytes))).ToArray());
             using var records = FalloutPluginStack.Load(directory.FullName, ["Contact.esm"]);
             using var world = new FalloutReferenceWorld(records);
@@ -61,24 +64,28 @@ public partial class NativeReferenceEventsAudit
                 (Name: "speech", Adapter: (Func<FalloutCondition, float>)typeof(RuntimeNativeSpeech)
                     .GetField("_conditionContext", flags)!.GetValue(speech)!)
             };
-            var positive = function == 573 ? 9.25f : .0925f;
-            var negative = function == 573 ? 4.5f : .045f;
-            var legacy = function == 573 ? -3.5f : -.035f;
+            var positive = function == 575 ? 3f : function == 573 ? 9.25f : .0925f;
+            var negative = function == 575 ? 0f : function == 573 ? 4.5f : .045f;
+            var legacy = function == 575 ? 1f : function == 573 ? -3.5f : -.035f;
             foreach (var (name, adapter) in adapters.Where(value => mode == "all" || value.Name == mode))
             {
                 world.RestoreReputations(new(true, []));
                 var dialogue = new FalloutDialogueConditions(records, quests, Key(0x30), identity, adapter,
                     listener: Key(0x31), listenerIdentity: identity);
-                Require(dialogue.Evaluate(condition) == 0, $"Actual {name} adapter lost fresh source zero.");
-                world.SetReputation(Key(1), 1, 9.25); world.SetReputation(Key(1), 0, 4.5);
+                Require(dialogue.Evaluate(condition) == (function == 575 ? 1 : 0), $"Actual {name} adapter lost fresh source zero.");
+                world.SetReputation(Key(1), 1, function == 575 ? 85 : 9.25); world.SetReputation(Key(1), 0, function == 575 ? 30 : 4.5);
                 foreach (var runOn in new uint[] { 0, 1, 2 })
                     Require(dialogue.Evaluate(condition with { RunOn = runOn }) == positive &&
                         dialogue.Evaluate(condition with { RunOn = runOn, Argument2 = 2 }) == negative,
                         $"Actual {name} adapter failed the shared query/selector through speaker/listener composition.");
+                if (function == 575)
+                    Require(dialogue.Evaluate(condition with { Argument2 = 257 }) == positive &&
+                        dialogue.Evaluate(condition with { Argument2 = 256 }) == 0,
+                        "Actual native threshold adapter changed low-byte selector semantics.");
                 Require(adapter(condition with { Function = 74, Argument1 = 2 }) == 7,
                     $"Actual {name} adapter changed its existing global owner.");
                 var before = JsonSerializer.Serialize(world.CaptureReputations());
-                RejectReputationAdapter(() => adapter(condition with { Function = 575 }));
+                RejectReputationAdapter(() => adapter(condition with { Function = 576 }));
                 RejectReputationAdapter(() => dialogue.Evaluate(condition with { RunOn = 3 }));
                 RejectReputationAdapter(() => dialogue.Evaluate(condition with { RunOn = 2, Reference = 0xffff }));
                 RejectReputationAdapter(() => dialogue.Evaluate(condition with { RunOn = 2, Reference = 2 }));
@@ -86,8 +93,13 @@ public partial class NativeReferenceEventsAudit
                 world.RestoreReputations(null);
                 RejectReputationAdapter(() => dialogue.Evaluate(condition));
                 world.SetReputation(Key(1), 1, -3.5);
+                if (function == 575)
+                {
+                    RejectReputationAdapter(() => dialogue.Evaluate(condition));
+                    world.SetReputation(Key(1), 0, 0);
+                }
                 Require(dialogue.Evaluate(condition) == legacy, "Actual native adapter lost an explicit legacy axis.");
-                RejectReputationAdapter(() => dialogue.Evaluate(condition with { Argument2 = 0 }));
+                if (function != 575) RejectReputationAdapter(() => dialogue.Evaluate(condition with { Argument2 = 0 }));
                 world.RestoreReputations(JsonSerializer.Deserialize<FalloutReputationsSnapshot>(before));
                 Require(dialogue.Evaluate(condition) == positive, "Actual native adapter lost cold-restored values.");
                 GD.Print($"OPENNV_NATIVE_REPUTATION_ADAPTER_PASS function={function} kind={name} productionFactory=true actualInstalledDelegate=true " +

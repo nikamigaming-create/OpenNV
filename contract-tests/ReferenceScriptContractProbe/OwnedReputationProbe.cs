@@ -6,7 +6,7 @@ using OpenNV.Runtime.World.Cells;
 
 internal static class OwnedReputationProbe
 {
-    internal static void Run(string game, string savePath, bool percentage = false)
+    internal static void Run(string game, string savePath, ushort conditionFunction = 573)
     {
         var bytes = File.ReadAllBytes(savePath);
         var original = JsonSerializer.Deserialize<FalloutNativeCampaignState>(bytes)!;
@@ -14,7 +14,7 @@ internal static class OwnedReputationProbe
             activePlugins: RuntimeLiveContentSource.ResolveVanillaPlugins(game), includeImplicitPlugins: false);
         using var content = RuntimeLiveContentSource.Current!;
         using var records = FalloutPluginStack.Load(content.PluginSources);
-        RunConditions(records, percentage ? (ushort)574 : (ushort)573);
+        RunConditions(records, conditionFunction);
         var controls = FalloutOpeningPlayerControlResolver.Resolve(records, ["VCG00", "VCG01"]);
         var cell = FalloutCellSceneReader.Read(records, new("FalloutNV.esm", 0x103df9));
         FalloutNativeCampaignRestore Read(string path) => FalloutNativeCampaignSave.Read(path,
@@ -88,7 +88,6 @@ internal static class OwnedReputationProbe
                     var form = condition.FormArgument1;
                     world.SetReputation(form, 1, -17.125);
                     world.SetReputation(form, 0, 83.25);
-                    var before = JsonSerializer.Serialize(world.CaptureReputations());
                     var expected = condition.Argument2 == 1 ? -17.125f : 83.25f;
                     if (function == 574)
                     {
@@ -100,6 +99,13 @@ internal static class OwnedReputationProbe
                             $"selector={condition.Argument2} runOn={condition.RunOn} capacity={capacity} " +
                             $"sourceHash={Convert.ToHexString(hash)}");
                     }
+                    if (function == 575)
+                    {
+                        expected = PrepareThreshold(records, world, form, condition.Argument2);
+                        if (count < 3) Console.WriteLine($"OPENNV_OWNED_REPUTATION_THRESHOLD_SOURCE owner={owner.FormKey} reputation={form} " +
+                            $"selector={condition.Argument2} runOn={condition.RunOn} sourceHash={Convert.ToHexString(hash)}");
+                    }
+                    var before = JsonSerializer.Serialize(world.CaptureReputations());
                     Require(world.EvaluateReputationCondition(condition) == expected,
                         "Actual owned CTDA did not query its explicit REPU/selector.");
                     using var cold = new FalloutReferenceWorld(records);
@@ -117,6 +123,25 @@ internal static class OwnedReputationProbe
             $"kinds={string.Join(',', kinds.Order())} selectors={string.Join(',', selectors.Order())} " +
             "actualWinningCTDA=true controlledKnownAxes=true cold=true noMutation=true " +
             "fullRecordEligibilityOrdinaryDialogueQuestAndRetail=unverified");
+    }
+
+    private static float PrepareThreshold(FalloutPluginStack records, FalloutReferenceWorld world, FalloutFormKey form, uint selector)
+    {
+        var one = FalloutGameSettingFloats.Read(records, "fReputationThresholdOne");
+        var two = FalloutGameSettingFloats.Read(records, "fReputationThresholdTwo");
+        var three = FalloutGameSettingFloats.Read(records, "fReputationThresholdThree");
+        Require(one < two && two < three, "Owned audit cannot select interior tier points for this threshold profile.");
+        var capacity = System.Buffers.Binary.BinaryPrimitives.ReadSingleLittleEndian(
+            records.GetEffective(form).ReadSubrecords().Single(field => field.Signature == "DATA").Data.Span);
+        float[] ratios = [one - Math.Max(1, Math.Abs(one)), (one + two) / 2, (two + three) / 2];
+        var mode = selector & 255;
+        var positive = mode == 1 ? 2 : mode is 0 or 2 ? 1 : 0;
+        var negative = mode == 2 ? 2 : mode is 0 or 1 ? 1 : 0;
+        world.SetReputation(form, 1, ratios[positive] * capacity);
+        world.SetReputation(form, 0, ratios[negative] * capacity);
+        // This independent controlled-input oracle uses the source contract's
+        // (1,1)->3, (2,1)/(1,2)->2, and prior both-zero->1 cases.
+        return mode == 0 ? 3 : mode is 1 or 2 ? 2 : 1;
     }
 
     private static void Require(bool value, string message) { if (!value) throw new InvalidDataException(message); }
