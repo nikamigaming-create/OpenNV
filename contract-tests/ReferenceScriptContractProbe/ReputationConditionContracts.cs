@@ -13,7 +13,8 @@ internal static class ReputationConditionContracts
         {
             File.WriteAllBytes(Path.Combine(directory.FullName, "Repu.esm"), Join(Header(),
                 Record("REPU", 1, Field("DATA", BitConverter.GetBytes(100f))),
-                Record("FACT", 2)));
+                Record("FACT", 2), Record("ACTI", 3), Record("CELL", 0x80, Field("DATA", [1])),
+                Group(0x80, Record("REFR", 0x30, Field("NAME", BitConverter.GetBytes(3u)), Field("DATA", new byte[24])))));
             File.WriteAllBytes(Path.Combine(directory.FullName, "Other.esm"), Header());
             File.WriteAllBytes(Path.Combine(directory.FullName, "Query.esp"), Join(Header("Other.esm", "Repu.esm"),
                 Record("INFO", 0x02000010, Field("CTDA", Condition(1, 0))),
@@ -55,6 +56,10 @@ internal static class ReputationConditionContracts
             Check(cold.EvaluateReputationCondition(condition) == -2 && cold.EvaluateReputationCondition(condition with { Argument2 = 0 }) == 8.5f,
                 "Cold condition lost known axes.");
             Reject(() => dialogue.Evaluate(condition with { Argument1 = 0x01000002 }));
+            Check(dialogue.Evaluate(condition with { RunOn = 2, Reference = 0 }) == -2,
+                "Subject-independent query rejected source-permitted null explicit context.");
+            Reject(() => dialogue.Evaluate(condition with { RunOn = 2, Reference = 0x0100ffff }));
+            Reject(() => dialogue.Evaluate(condition with { RunOn = 2, Reference = 0x01000002 }));
             Reject(() => dialogue.Evaluate(condition with { RunOn = 3 }));
             Reject(() => new FalloutDialogueConditions(records, new(records), new("Repu.esm", 0x30), identity).Evaluate(condition));
             Reject(() => FalloutCondition.AllPass([condition with { Flags = 4 }], Query));
@@ -79,6 +84,13 @@ internal static class ReputationConditionContracts
     }
     private static byte[] Header(params string[] masters) => Record("TES4", 0,
         Join(new[] { Field("HEDR", new byte[12]) }.Concat(masters.Select(name => Join(Field("MAST", Text(name)), Field("DATA", new byte[8])))).ToArray()));
+    private static byte[] Group(uint cell, params byte[][] records)
+    {
+        var data = Join(records); var bytes = new byte[24 + data.Length]; Encoding.ASCII.GetBytes("GRUP").CopyTo(bytes, 0);
+        BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(4), (uint)bytes.Length);
+        BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(8), cell);
+        BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(12), 6); data.CopyTo(bytes, 24); return bytes;
+    }
     private static byte[] Text(string value) => Encoding.ASCII.GetBytes(value + '\0');
     private static byte[] Join(params byte[][] values) => values.SelectMany(value => value).ToArray();
     private static byte[] Record(string signature, uint id, params byte[][] fields)

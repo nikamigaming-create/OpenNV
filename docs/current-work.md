@@ -58,8 +58,26 @@ exit0, all2203 source/config files unchanged, diff check0, recording off. Merge
 is held for independent review of the checked published head.
 Evidence: local/fnv-wells-fixed/reputation-state-20261023/condition-focused.log,
 condition-owned.log, condition-old-result.json and condition-final-result.json.
+Independent review found that ordinary conversation and scripted speech had
+separate production callbacks which still refused573. Their unchanged callbacks
+reproduce the exact refusals through native installed-delegate negative controls.
+Both callbacks now reach the shared owner. New native component tests obtain the
+production factories used by ordinary Configure, read back installed conversation
+and speech delegates, and verify dialogue composition, non-player listeners,
+raw selectors, existing global queries, cold state and unknown-axis refusals.
+The repaired Debug build, focused native/contracts and owned audit pass. The
+renewed full gate passes at08:27:19UTC: exit0, all2204 source/config files unchanged,
+diff check0 and recording off. This repair awaits replacement-head independent
+re-review and hosted checks; the earlier2203-file gate does not qualify it.
+Evidence: local/fnv-wells-fixed/reputation-state-20261023/adapter-qualified-negative-result.json,
+adapter-repair-native.log, adapter-repair-owned.log and adapter-final-result.json.
+
+Primary CTDA dispatch permits a null subject for this subject-independent command,
+including null run-on2 context. Nonzero missing/wrongly typed explicit references
+now refuse: their malformed load/fixup behavior remains unqualified. Run-on3+
+stays unbound. No ordinary conversation, speech or radio playback is claimed.
 Neutral condition contract SHA256:
-89E70EAC09BABF287BCE033A971B8E8C18A003F7BD212C3903D9395C6E0C5253.
+B4676FCC6F2C43C7146B336AEAA59DB3D131DB3ECDE4D310A1BC27A34018E85D.
 
 AddReputation/RemoveReputation, crime-triggered reputation and notification remain
 unbound. Notification qualification is parked after two finite approaches. The bounded notification qualification distinguishes

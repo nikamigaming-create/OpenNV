@@ -35,6 +35,11 @@ public partial class NativeReferenceEventsAudit : Node
                 ExerciseOwnedImageSpaceClock(imageGame, imageMod, imageRoot, imageForm, imageDependencies);
                 GetTree().Quit(); return;
             }
+            if (OS.GetCmdlineUserArgs() is ["--reputation-dialogue-adapters", var adapterMode] &&
+                adapterMode is "all" or "conversation" or "speech")
+            {
+                ReputationDialogueAdapters(adapterMode); GetTree().Quit(); return;
+            }
             if (OS.GetCmdlineUserArgs() is ["--save-input"])
             {
                 await SaveInputReceipts(); GetTree().Quit(); return;
@@ -264,6 +269,7 @@ public partial class NativeReferenceEventsAudit : Node
             await SaveInputReceipts();
             PlayerMoves(records);
             SaveDeferral();
+            ReputationDialogueAdapters();
             ExerciseImageSpaceClock();
             DoorActivation(records);
             AnimatedActivators(records);
