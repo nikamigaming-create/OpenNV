@@ -4,6 +4,18 @@ using System.Text.Json;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.World.Cells;
 
+if (args is ["--owned-reputation-state", var reputationGame, var reputationSave])
+{
+    OwnedReputationProbe.Run(reputationGame, reputationSave);
+    return;
+}
+
+if (args is ["--reputation-contracts"])
+{
+    ReputationContracts.Run();
+    return;
+}
+
 if (args is ["--owned-terminal-hack-state", var terminalStateGame, var terminalStateSave])
 {
     OwnedTerminalHackStateProbe.Run(terminalStateGame, terminalStateSave);
@@ -1107,6 +1119,7 @@ ConversationContracts.Run();
 ConversationSpeakerAdmissionContracts.Run();
 ActorSourceContracts.Run();
 FactionRelationContracts.Run();
+ReputationContracts.Run();
 EncounterZoneContracts.Run();
 FollowPackageContracts.Run();
 DialoguePackageContracts.Run();
