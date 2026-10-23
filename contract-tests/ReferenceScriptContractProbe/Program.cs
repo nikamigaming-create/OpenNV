@@ -16,6 +16,12 @@ if (args is ["--owned-faction-arbitration", var factionData, var factionSave, va
     return;
 }
 
+if (args is ["--owned-campfire-events", var campfireEventData, var campfireEventSave])
+{
+    OwnedCampfireBranchProbe.RunEvents(campfireEventData, campfireEventSave);
+    return;
+}
+
 if (args is ["--owned-campfire-branches", var campfireData])
 {
     OwnedCampfireBranchProbe.Run(campfireData);

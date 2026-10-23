@@ -8,38 +8,43 @@ input and Git; existing writers have disjoint scopes and run no competing jobs.
 
 ## Active block
 
-Baseline main/origin-main is 5a7b14b893f95dc651f18156bc5bd80b68abc464 (PR268).
-The coordinator is on codex/fnv-campfire-branch in the existing checkout. PR269's
-independent optional-combat-control repair remains frozen at e7a459b5, with local
-and hosted checks passing and both source-review findings closed. It stays draft;
-merge/native acceptance remain held. No third encounter admission is permitted.
-No denied writer contact is retried or relayed.
+Baseline main/origin-main is ddbe1bd3275b8b9a764166acce38814a676c8bba (merged
+PR270; all five checks and independent review passed). Current work is on
+codex/fnv-campfire-event-path. PR269 remains draft at e7a459b5 with native/merge
+acceptance held. No third encounter admission, retail attempt or denied writer
+contact is permitted.
 
-The reached campfire trigger reference failed while parsing its authored If /
-Else / ElseIf chain. Static qualification binds the exact winning reference,
-activator, source script and compiled control instructions. A recognized Else
-ignores its tail, selects the chain unconditionally when reached, and makes a
-later same-chain ElseIf expression/body unreachable. Nested If/EndIf retains the
-parent selection. The parser now admits that ordering while preserving Else-seen
-state, duplicate-Else/unmatched-nesting refusals, original tokens and source hash.
-It does not reinterpret spaced `else if` as a conditional alias. Parser version
-10 recognizes missing older quest owners only by reproducing the old structural
-rejection and validating the same source today; existing faulted owners remain
-latched. Missing current-version owners and unrelated legacy omissions refuse.
+PR270 admits the source campfire script's unconditional Else followed by a dead
+ElseIf tail. A subsequent source/restore audit corrects the earlier handoff:
+normal FalloutReferenceWorld.Restore already clears Parse-prefixed faults after
+validating saved reference/base/script/hash/locals against winning data. This
+predates PR270. The exact real campfire snapshot restores with only ScriptError
+changing to null; no events or save writes occur. The saved parser is version 9,
+and its historical grammar reproduces the exact pre-execution rejection. The
+existing broad Parse-prefix policy is not evidence that arbitrary errors are safe
+to reset; no recovery rule was added or broadened.
 
-Focused branch/no-replay contracts and the controlled owned-script probe pass.
-The latter uses the original source and compiled bindings with explicit numeric
-function inputs; callbacks check command order without applying campaign effects.
-Physical trigger delivery, ordinary gathering/cooking, quest progression and
-retail parity remain unverified. Existing retained invocation faults are not
-cleared or replayed. Old-code negative controls reproduce the exact parse refusal on both synthetic
-and original owned source. Formatting, Debug compilation (zero warnings/errors), the complete reference-script
-probe and the selected owned audit pass. The first grammar-only full gate passes (01:17:28 UTC, 2,187 hashes unchanged),
-but does not qualify the subsequent save-compatibility amendment. The amendment passes formatting, zero-warning Debug compilation, complete
-plugin/reference contract probes and the selected owned script audit. Its renewed full gate passes at 01:26:07 UTC: exit 0, all 2,187 source/configuration
-hashes unchanged, and git diff --check clean. Hosted checks and independent
-review are pending;
-source/Git/native jobs remain serialized under the coordinator.
+The controlled owned event fixture now uses actual shared OnTrigger admission,
+compiled bindings, quest state, canonical saved inventory and item-count owners.
+The no-powder branch completes without effects. Outer/nested powder branches
+commit their real objective prefix, then explicitly refuse at native conversation
+publication. StartConversation has an existing command and native owner; this is
+a fixture boundary, not a demonstrated missing product command. No native effect
+is falsely acknowledged, so later Disable/MarkForDelete commands are not claimed.
+Wrong contacts and duplicate event frames refuse; cold retry preserves the reached
+fault/objective prefix without replay. Original source/save hashes remain unchanged.
+Physical contact, conversation, crafting and campaign progress are unverified.
+
+The selected next gameplay capability is ordinary locked-terminal hacking
+admission: the native opener still explicitly refuses without a password, while
+shared generation/transaction primitives already exist. Required RNG/clock,
+candidate allowance, reference-aware difficulty/admission and UI/outcome owners
+must be source-qualified and bound; no guessed attempt budget or direct unlock.
+The event proof passes formatting, Debug compilation with zero warnings/errors,
+the complete reference-script contracts and its selected owned audit. The full
+runtime gate passes at 02:01:11 UTC: exit 0, all 2,187 source/configuration hashes
+unchanged, and git diff --check clean. Hosted checks and independent review of
+this proof/claim change are pending. Builds/native checks remain serialized.
 
 ## Gameplay and test-control checkpoint
 
