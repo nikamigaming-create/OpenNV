@@ -496,6 +496,16 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                     throw new NotSupportedException("Character-generation query has no session owner."))() ? 1 : 0)
                 { ReadOnly = true };
             if (parts.Length == 1 && valueStore.Arrays.Function(name) is { } arrayFunction) return arrayFunction;
+            if (parts.Length <= 2 && operation == "gethasnote")
+                return new([FalloutScriptArgumentKind.Identifier], arguments =>
+                {
+                    if (caller is not null) throw new NotSupportedException("Dynamic GetHasNote receivers are not admitted.");
+                    if (parts.Length == 2) _ = bindings.Reference(parts[0]);
+                    var note = bindings.Form(arguments[0].Identifier!);
+                    if (note.Signature != "NOTE") throw new InvalidDataException("GetHasNote argument is not NOTE.");
+                    return world.PlayerNotes.Contains(note.FormKey) ? 1 : 0;
+                })
+                { ReadOnly = true };
             FalloutFormKey Target() => suppliedTarget ?? (parts.Length == 1 ? source : Reference(parts[0]));
             if (parts.Length <= 2 && operation == "placeatme")
                 return world.TransientExplosions.Function(Target);
@@ -759,13 +769,6 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                 { ReadOnly = true },
                 "getstage" => new([FalloutScriptArgumentKind.Identifier], arguments => quests.Stage(Quest(arguments[0].Identifier!))),
                 "getquestrunning" => new([FalloutScriptArgumentKind.Identifier], arguments => quests.IsRunning(Quest(arguments[0].Identifier!)) ? 1 : 0),
-                "gethasnote" => new([FalloutScriptArgumentKind.Identifier], arguments =>
-                {
-                    var note = bindings.Form(arguments[0].Identifier!);
-                    if (note.Signature != "NOTE") throw new InvalidDataException("GetHasNote argument is not NOTE.");
-                    return world.PlayerNotes.Contains(note.FormKey) ? 1 : 0;
-                })
-                { ReadOnly = true },
                 "getquestcompleted" => new([FalloutScriptArgumentKind.Identifier], arguments => quests.IsCompleted(Quest(arguments[0].Identifier!)) ? 1 : 0),
                 "getstagedone" => new([FalloutScriptArgumentKind.Identifier, FalloutScriptArgumentKind.Number], arguments =>
                     quests.StageDone(Quest(arguments[0].Identifier!), checked((short)Index(arguments[1].Number))) ? 1 : 0),
@@ -795,7 +798,7 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
             var parts = command.Split('.');
             var operation = parts[^1].ToLowerInvariant();
             var target = parts.Length == 1 ? source : parts.Length == 2 ?
-                operation == "addnote" ? bindings.Reference(parts[0]) : Reference(parts[0]) :
+                operation is "addnote" or "removenote" ? bindings.Reference(parts[0]) : Reference(parts[0]) :
                 throw new NotSupportedException("Script command target path is unbound.");
             if (operation == "forcesave")
             {
@@ -1248,7 +1251,7 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                     if (note.Signature != "NOTE") throw new InvalidDataException("AddNote target is not NOTE.");
                     host.Apply(new(FalloutReferenceEffectKind.AddNote, source, note.FormKey));
                     break;
-                case "removenote" when parts.Length == 1 && arguments.Count == 1:
+                case "removenote" when arguments.Count == 1:
                     var removedNote = bindings.Form(arguments[0]);
                     if (removedNote.Signature != "NOTE") throw new InvalidDataException("RemoveNote target is not NOTE.");
                     host.Apply(new(FalloutReferenceEffectKind.RemoveNote, source, removedNote.FormKey));

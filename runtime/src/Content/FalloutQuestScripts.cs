@@ -723,6 +723,17 @@ internal sealed partial class FalloutQuestScripts
                 })
                 { ReadOnly = true };
             if (parts.Length == 1 && ScriptValues.Arrays.Function(name) is { } arrayFunction) return arrayFunction;
+            if (parts.Length <= 2 && operation == "gethasnote")
+                return new([FalloutScriptArgumentKind.Identifier], arguments =>
+                {
+                    if (caller is not null) throw new NotSupportedException("Dynamic GetHasNote receivers are not admitted.");
+                    if (parts.Length == 2) _ = instance.Bindings.Reference(parts[0]);
+                    var note = Form(arguments[0].Identifier!);
+                    if (note.Signature != "NOTE") throw new InvalidDataException("GetHasNote argument is not NOTE.");
+                    return (References ?? throw new NotSupportedException("GetHasNote has no shared player note owner."))
+                        .PlayerNotes.Contains(note.FormKey) ? 1 : 0;
+                })
+                { ReadOnly = true };
             if (parts.Length <= 2 && operation == "playsound3d")
                 return new([FalloutScriptArgumentKind.Value], arguments =>
                 {
@@ -866,14 +877,6 @@ internal sealed partial class FalloutQuestScripts
                 }),
                 "getquestrunning" => new([FalloutScriptArgumentKind.Identifier], arguments =>
                     _quests.IsRunning(Quest(arguments[0].Identifier!).FormKey) ? 1 : 0),
-                "gethasnote" => new([FalloutScriptArgumentKind.Identifier], arguments =>
-                {
-                    var note = Form(arguments[0].Identifier!);
-                    if (note.Signature != "NOTE") throw new InvalidDataException("GetHasNote argument is not NOTE.");
-                    return (References ?? throw new NotSupportedException("GetHasNote has no shared player note owner."))
-                        .PlayerNotes.Contains(note.FormKey) ? 1 : 0;
-                })
-                { ReadOnly = true },
                 "getquestcompleted" => new([FalloutScriptArgumentKind.Identifier], arguments =>
                     _quests.IsCompleted(Quest(arguments[0].Identifier!).FormKey) ? 1 : 0),
                 "getstagedone" => new([FalloutScriptArgumentKind.Identifier, FalloutScriptArgumentKind.Number], arguments =>
@@ -939,17 +942,18 @@ internal sealed partial class FalloutQuestScripts
                 return;
             }
             var arguments = FalloutGameModeProgram.ResolveCommandArguments(rawArguments, values, Function);
-            if (operation == "addnote")
+            if (operation is "addnote" or "removenote")
             {
                 if (parts.Length > 2 || arguments.Count != 1)
-                    throw new InvalidDataException("AddNote requires one NOTE and at most one reference qualifier.");
+                    throw new InvalidDataException("Player-note commands require one NOTE and at most one reference qualifier.");
                 // The receiver is admitted, but the global effect belongs to
                 // player membership rather than that reference's inventory.
                 if (parts.Length == 2) _ = instance.Bindings.Reference(parts[0]);
                 var note = Form(arguments[0]);
-                if (note.Signature != "NOTE") throw new InvalidDataException("AddNote target is not NOTE.");
-                (References ?? throw new NotSupportedException("Note acquisition has no shared world owner."))
-                    .AcquirePlayerNote(note.FormKey, _inventory.Notifications);
+                if (note.Signature != "NOTE") throw new InvalidDataException("Player-note command target is not NOTE.");
+                var world = References ?? throw new NotSupportedException("Player-note command has no shared world owner.");
+                if (operation == "addnote") world.AcquirePlayerNote(note.FormKey, _inventory.Notifications);
+                else world.RemovePlayerNote(note.FormKey);
                 return;
             }
             if (operation == "forcesave")
@@ -1269,12 +1273,6 @@ internal sealed partial class FalloutQuestScripts
                     break;
                 case "killquestupdates" or "kqu" when arguments.Count == 0:
                     _quests.KillQuestUpdates();
-                    break;
-                case "removenote" when arguments.Count == 1:
-                    var removedNote = Form(arguments[0]);
-                    if (removedNote.Signature != "NOTE") throw new InvalidDataException("RemoveNote target is not NOTE.");
-                    (References ?? throw new NotSupportedException("Note removal has no shared world owner."))
-                        .RemovePlayerNote(removedNote.FormKey);
                     break;
                 case "player.additem" when arguments.Count is 2 or 3:
                     if (!instance.Bindings.HasPlayerReference)

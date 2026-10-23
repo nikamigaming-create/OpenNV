@@ -8,52 +8,56 @@ input and Git; no competing jobs or denied writer contact are permitted.
 
 ## Active block
 
-Accepted main/origin-main is ea4d463ee4097bddf8f1eb974cc48bf771dc713f (PR288),
-merged 16:09:40 UTC after independent source review and all five exact-head
-checks. Local main matched origin/main and was clean. Completed refs were removed
-only after squash-tree equality and independent Git-bundle recovery verification.
+Accepted main/origin-main is b59a9b2afad4562fb265f7a465125e200544f902 (PR289),
+merged 16:39:46 UTC after independent review and all five exact-head checks.
+Local main matched origin/main, clean. Completed refs were removed after exact
+squash-tree equality and independent bundle recovery/integrity verification.
 Three persistent branches remain: main, unique classic audio PR242 and held
-combat-control PR269. Original campaign saves remain unchanged.
+combat-control PR269. Original saves are unchanged.
 
-Accepted NOTE membership, acquisition feedback, both script queries, CTDA382,
-native adapters, Pip-Boy and schema59 share authoritative known/unknown state.
-RemoveNote now removes only the first identity after exact live-menu selection
-invalidation. Selection follows actual menu lifetime; no playback stop, menu close,
-inventory mutation or ItemRemoved HUD notice is introduced. These component proofs
-are not ordinary campaign, acquisition or retail presentation parity.
+Accepted NOTE state, acquisition/feedback, queries, CTDA382, native adapters,
+Pip-Boy and schema59 share known/unknown membership. Static compiled AddNote
+qualifiers are now admitted by both executors. RemoveNote's shared state and
+exact live-menu selection invalidation are already owned, without playback stop,
+menu close, inventory mutation or ItemRemoved HUD feedback.
 
-Active slice: codex/fnv-prefixed-note-command. Actual vanilla authored OnActivate
-uses a compiled player-qualified AddNote before trap activations and retirement.
-Both executors previously refused the qualifier. The repair admits a static
-compiled placed-reference/player qualifier while preserving global player-note
-ownership and typed compiled NOTE identity. Missing/wrong-type receiver and NOTE
-bindings still refuse. Dynamic/null receiver semantics remain outside this slice.
-No source/location special case or owned-program replacement is introduced.
+Active slice: codex/fnv-prefixed-remove-note. The actually placed Old World Blues
+Sink jukebox script uses Player.GetHasNote guards followed by Player.RemoveNote.
+Both qualified query frontends previously reported a misleading unclosed-expression
+failure because raw-name lookup lacked that global query spelling. After the
+query-only repair, the unchanged owned script reached its independent qualified
+RemoveNote refusal. Both frontends now validate static compiled receiver and NOTE
+identities while retaining the global player's membership owner. Deferred query
+validation preserves short circuiting. Dynamic reference variables remain unbound.
 
-The unchanged complete owned activation is tested in a controlled resident-source
-fixture. Its note prefix must execute before the first trap request reaches the
-fixture's unavailable native activation host. All later trap activations, Disable
-and MarkForDelete remain in the original program. This host boundary is not proof
-of a missing production trap owner or successful complete activation. Warm/cold
-retained failures must prevent replay of the note prefix. Focused and full gate
-validation are complete; no new ordinary pickup or campaign claim is made.
+The full original owned OnActivate/source/compiled bindings remain unchanged.
+Controlled absent, present, duplicate and non-player cases preserve its guards.
+The selected branch writes two authored quest variables and removes the first
+note identity before reaching the explicitly unavailable fixture message host.
+Every later message, destruction, challenge and paired-reference effect remains
+in the program. Warm/cold retained errors prevent removal replay. This proves no
+complete jukebox restoration, physical interaction, campaign or retail parity.
 
-Required full gate PASS at 16:30:14 UTC: Release/Debug, formatting/analyzers,
-contracts, launcher and native Godot checks passed. Selected receiver contracts,
-full quest-query suite and unchanged owned activation audit all pass. All 2218
-frozen source/config hashes and the original campaign save remain unchanged;
-diff check passes. Earlier unchanged-runtime controls reproduced both executor
-refusals and the owned source refusal specifically at player.AddNote. Existing
-latched faults are not cleared or replayed by this patch. The coherent slice is
-ready for checked publication and independent exact-head review.
-Ordinary physical NOTE pickup/transfers remain separately refused before mutation
-where ownership/Karma and immediate reversible reference/relationship lifecycle
-are unqualified. Neither Taken=true nor queued SetEnabled(false) is substituted.
-HUD readiness/drop, fade/glow timing, cross-kind tail deduplication, reverb and
-console presentation remain visible differences. Recording is off. The coordinator
-owns serialized Git/build/runtime work; denied outbound writer contact is neither
-retried nor relayed. Private receipts are under
-local/fnv-wells-fixed/prefixed-note-command-20261023/.
+Frozen validation passed 2026-10-23 17:03:43 UTC: receiver contracts, full quest
+queries, unchanged owned activation and actual native-host/menu adapters all
+passed, followed by the required Release/Debug/format/analyzer/native runtime
+gate. All 2,220 frozen source/config hashes and the original save were unchanged;
+git diff check passed. Invalid receiver/NOTE and missing compiled binding controls
+preserve selection; actual removal retains existing exact selection invalidation.
+The coherent slice is ready for publication and exact-head independent review.
+Static ACTI trap activation remains a separate parked owner. A real production
+DefaultActivate route exists, but the selected controller-free trap cannot supply
+its currently required Open/Close motion. Source default activation deliberately
+can suppress attached-script dispatch; no forced OnActivate, no-op or guessed
+actor propagation substitutes for the unqualified base action/lifetime effects.
+Ordinary physical NOTE pickup/transfers likewise retain their separate reached
+ownership/Karma and immediate reversible reference/relationship requirements.
+Neither Taken=true nor queued SetEnabled(false) is substituted.
+
+The coordinator owns serialized Git/build/native work. No denied outbound writer
+contact, competing job, retail launch or third combat admission is introduced.
+Recording remains off. Private receipts are under
+local/fnv-wells-fixed/prefixed-remove-note-20261023/.
 Shared reputation state retains source-hashed float axes in schema v58. Fresh axes
 are zero; absent legacy history stays unknown per axis. CTDA573/574/575 share that
 owner through native quest/message, conversation, speech and NPC/creature/unloaded
