@@ -4,6 +4,12 @@ using System.Text.Json;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.World.Cells;
 
+if (args is ["--owned-hacking-allowance", var hackingAllowanceData])
+{
+    OwnedHackingProbe.RunAllowance(hackingAllowanceData);
+    return;
+}
+
 if (args is ["--faction-relation-contracts"])
 {
     FactionRelationContracts.Run();

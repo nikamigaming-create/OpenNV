@@ -30,26 +30,23 @@ internal sealed class FalloutHackingDictionary
         Words = Array.AsReadOnly(_words);
     }
 
-    // This admits the canonical byte-line resource only. Other encodings or
-    // source line-reader layouts require their decoder, never a guessed word list.
-    internal static FalloutHackingDictionary ReadCanonical(ReadOnlySpan<byte> source)
+    // The source file reader consumes a space delimiter and retains at most
+    // 31 bytes per buffer. It does not split arbitrary whitespace or fold case.
+    internal static FalloutHackingDictionary ReadSpaceDelimited(ReadOnlySpan<byte> source)
     {
         if (source.StartsWith(new byte[] { 0xef, 0xbb, 0xbf }) || source.Contains((byte)0))
-            throw new NotSupportedException("Hacking dictionary encoding is not the admitted byte-line layout.");
+            throw new NotSupportedException("Hacking dictionary encoding is not the admitted byte-token layout.");
         var words = new List<FalloutHackingWord>();
-        var start = 0;
-        for (var index = 0; index <= source.Length; ++index)
+        var position = 0;
+        while (position < source.Length)
         {
-            if (index != source.Length && source[index] != (byte)'\n') continue;
-            var row = source[start..index];
-            if (!row.IsEmpty && row[^1] == (byte)'\r')
-            {
-                if (index == source.Length)
-                    throw new NotSupportedException("A bare final CR requires its source line-reader contract.");
-                row = row[..^1];
-            }
+            var start = position;
+            while (position < source.Length && position - start < 31 && source[position] != (byte)' ')
+                ++position;
+            var row = source[start..position];
+            if (position < source.Length && source[position] == (byte)' ' && position - start < 31)
+                ++position;
             if (!row.IsEmpty) words.Add(new(row));
-            start = index + 1;
         }
         if (words.Count == 0) throw new InvalidDataException("Owned hacking dictionary has no words.");
         return new(source.ToArray(), words.ToArray());

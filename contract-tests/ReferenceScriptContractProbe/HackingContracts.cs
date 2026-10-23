@@ -5,8 +5,9 @@ internal static class HackingContracts
 {
     internal static void Run()
     {
-        var bytes = Encoding.ASCII.GetBytes("AABB\r\nAABC\nBBBC\n");
-        var dictionary = FalloutHackingDictionary.ReadCanonical(bytes);
+        HackingAllowanceContracts.Run();
+        var bytes = Encoding.ASCII.GetBytes("AABB AABC BBBC ");
+        var dictionary = FalloutHackingDictionary.ReadSpaceDelimited(bytes);
         var original = bytes.ToArray();
         var bonusCalls = 0;
         var request = new FalloutHackingRequest(0x800, 0, 50, 0, 3, 3);
@@ -21,8 +22,13 @@ internal static class HackingContracts
         }
         foreach (var row in new (float Threshold, float Science, int Expected)[]
         { (0, 0, 16), (0, 50, 11), (25, 25, 16), (25, 100, 6), (100, 100, 11) })
-            Require((request with { MaximumWords = 16, MinimumWords = 6, MinimumScience = row.Threshold,
-                CurrentScience = row.Science }).RequestedWords(value => value) == row.Expected,
+            Require((request with
+            {
+                MaximumWords = 16,
+                MinimumWords = 6,
+                MinimumScience = row.Threshold,
+                CurrentScience = row.Science
+            }).RequestedWords(value => value) == row.Expected,
                 "Hacking count interpolation or threshold100 fallback changed.");
         Require(FalloutHackingRules.Likeness("AABA"u8, "ABAA"u8) == 2 &&
             FalloutHackingRules.Likeness("abc"u8, "ABC"u8) == 0 &&
@@ -30,22 +36,21 @@ internal static class HackingContracts
             "Hacking likeness folded case or compared unordered characters.");
         var calls = new List<uint>();
         uint Random(uint bound) { calls.Add(bound); return bound == 2 ? 1u : 0u; }
-        var allowanceCalls = 0;
-        // This injected allowance deliberately exceeds four to prove the callback
-        // result is retained. It is an original boundary fixture, not a claim
-        // that this three-word retail calculator returns seven.
         var generated = FalloutHackingCandidates.Generate(dictionary, request, value => value,
-            new(Random, () => 0, 100, words =>
-            {
-                ++allowanceCalls;
-                Require(words.Count == 3 && words[0].Bytes.SequenceEqual("AABB"u8),
-                    "Allowance observed a different candidate order.");
-                return 7;
-            }, CancellationToken.None));
-        Require(calls.SequenceEqual(Enumerable.Repeat(2u, 16).Append(3u)) && allowanceCalls == 1 &&
-            generated.MaximumAttempts == 7 && generated.Answer.Bytes.SequenceEqual("AABB"u8),
+            new(Random, () => 0, 100, CancellationToken.None));
+        Require(calls.SequenceEqual(Enumerable.Repeat(2u, 16).Append(3u)) &&
+            generated.MaximumAttempts == 4 && generated.Answer.Bytes.SequenceEqual("AABB"u8),
             "Source ordering, answer draw or retained allowance changed.");
         Require(bytes.SequenceEqual(original), "Dictionary source bytes were mutated.");
+        var indistinguishable = FalloutHackingDictionary.ReadSpaceDelimited("AAAA BBBB CCCC DDDD EEEE FFFF GGGG"u8);
+        var tick = 0u;
+        var aboveFloor = FalloutHackingCandidates.Generate(indistinguishable,
+            request with { MaximumWords = 7, MinimumWords = 7 }, value => value,
+            new(bound => bound == 2 ? 1u : 0u, () => tick++, 10, CancellationToken.None));
+        // The final likeness-class restriction cannot retain the seventh
+        // zero-likeness candidate before the source retry relaxation ends.
+        Require(aboveFloor.RequestedCount == 7 && aboveFloor.Words.Count == 6 && aboveFloor.MaximumAttempts == 6,
+            "Actual generation did not use its candidate-derived allowance above four.");
 
         static bool Alphabetic(byte value) => value is >= (byte)'A' and <= (byte)'Z' or >= (byte)'a' and <= (byte)'z';
         var display = Encoding.ASCII.GetBytes("AABB AABC BBBC () [] {} <A> <!!>");
@@ -58,12 +63,12 @@ internal static class HackingContracts
             return next.Value;
         }
         var owner = new FalloutHackingTransaction(generated, [0, 5, 10], display, Queued, Alphabetic);
-        Require(owner.Guess(1).Selection == FalloutHackingSelection.WrongWord && owner.RemainingAttempts == 6,
+        Require(owner.Guess(1).Selection == FalloutHackingSelection.WrongWord && owner.RemainingAttempts == 3,
             "Wrong word did not consume one attempt.");
         queued.Enqueue((4, 0));
         var reset = owner.Bonus(Position("()"), display.Length);
         Require(reset.Selection == FalloutHackingSelection.AttemptsReset && owner.Replenished &&
-            owner.RemainingAttempts == 7 && owner.UsedBonuses.Contains(Position("()")), "Reset lost retained maximum or used span.");
+            owner.RemainingAttempts == 4 && owner.UsedBonuses.Contains(Position("()")), "Reset lost retained maximum or used span.");
         Require(owner.Bonus(Position("()"), display.Length).Selection == FalloutHackingSelection.Denied && queued.Count == 0,
             "Consumed bracket awarded again or took a random draw.");
         queued.Enqueue((3, 0)); queued.Enqueue((3, 1));
@@ -91,18 +96,24 @@ internal static class HackingContracts
             "Owner failure was swallowed or transaction remained retryable.");
         Reject(() => failing.Bonus(Position("[]"), display.Length));
         var locked = new FalloutHackingTransaction(generated, [0, 5, 10], display, Random, Alphabetic);
-        for (var attempt = 0; attempt < 7; ++attempt) _ = locked.Guess(1);
+        for (var attempt = 0; attempt < generated.MaximumAttempts; ++attempt) _ = locked.Guess(1);
         Require(locked.Stage == FalloutHackingStage.LockedOut && locked.RemainingAttempts == 0,
             "Repeated wrong-word attempts did not retain their failure boundary.");
         Reject(() => locked.Guess(0));
         var cancelled = new FalloutHackingTransaction(generated, [0, 5, 10], display, Random, Alphabetic);
         cancelled.Cancel(); Reject(() => cancelled.Guess(0));
         Require(cancelled.Stage == FalloutHackingStage.Cancelled, "Cancellation admitted later input.");
-        Reject(() => FalloutHackingDictionary.ReadCanonical("ABC\0D"u8));
+        Reject(() => FalloutHackingDictionary.ReadSpaceDelimited("ABC\0D"u8));
+        Reject(() => FalloutHackingDictionary.ReadSpaceDelimited("ABC\r\nDEF"u8));
+        var chunked = FalloutHackingDictionary.ReadSpaceDelimited(Encoding.ASCII.GetBytes(
+            "  " + new string('A', 32) + "  AbCd "));
+        Require(chunked.Words.Count == 3 && chunked.Words[0].Length == 31 &&
+            chunked.Words[1].Bytes.SequenceEqual("A"u8) && chunked.Words[2].Bytes.SequenceEqual("AbCd"u8),
+            "Dictionary delimiter consumption, buffer chunks or byte case changed.");
         Reject(() => (request with { EffectiveDifficulty = 5 }).RequestedWords(value => value));
         Reject(() => request.RequestedWords(_ => float.NaN));
         Reject(() => FalloutHackingCandidates.Generate(dictionary, request, value => value,
-            new(_ => 2, () => 0, 100, _ => 4, CancellationToken.None)));
+            new(_ => 2, () => 0, 100, CancellationToken.None)));
         Reject(() => new FalloutHackingTransaction(generated, [0, 5, 11], display, Random, Alphabetic));
         Console.WriteLine("OPENNV_HACKING_TRANSACTION_CONTRACT_PASS sourceWords=true orderingDraws=true " +
             "retainedMaximum=true dudState=true resetOnce=true usedSpans=true stages=true ownerFaultStops=true " +
@@ -118,7 +129,8 @@ internal static class HackingContracts
     {
         try { action(); }
         catch (Exception error) when (error is InvalidDataException or InvalidOperationException or
-            NotSupportedException or ArgumentOutOfRangeException) { return; }
+            NotSupportedException or ArgumentOutOfRangeException)
+        { return; }
         throw new InvalidDataException("Invalid or stopped hacking input was admitted.");
     }
 }

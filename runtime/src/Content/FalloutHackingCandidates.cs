@@ -1,10 +1,8 @@
 namespace OpenNV.Runtime.Content;
 
-// All three owners are mandatory. In particular the allowance calculator has
-// not been replaced by a constant, and source clock units are supplied explicitly.
+// The shared random stream and source clock units remain explicit owners.
 internal sealed record FalloutHackingGenerationOwners(Func<uint, uint> Random, Func<uint> Clock,
-    uint RetryWindowTicks, Func<IReadOnlyList<FalloutHackingWord>, uint> CandidateAllowance,
-    CancellationToken Cancellation);
+    uint RetryWindowTicks, CancellationToken Cancellation);
 
 internal sealed class FalloutHackingCandidates
 {
@@ -30,7 +28,6 @@ internal sealed class FalloutHackingCandidates
         ArgumentNullException.ThrowIfNull(owners);
         ArgumentNullException.ThrowIfNull(owners.Random);
         ArgumentNullException.ThrowIfNull(owners.Clock);
-        ArgumentNullException.ThrowIfNull(owners.CandidateAllowance);
         if (owners.RetryWindowTicks == 0)
             throw new InvalidDataException("Hacking generation requires a qualified positive retry window.");
         owners.Cancellation.ThrowIfCancellationRequested();
@@ -88,7 +85,7 @@ internal sealed class FalloutHackingCandidates
             throw new NotSupportedException("Source candidate generation retained no answer; no fallback puzzle is permitted.");
         for (var pass = 0; pass < 4; ++pass) FalloutHackingRules.Order(selected, owners.Random);
         var answer = selected[(int)FalloutHackingRules.Draw(owners.Random, (uint)selected.Count)];
-        var allowance = owners.CandidateAllowance(Array.AsReadOnly(selected.ToArray()));
+        var allowance = FalloutHackingAllowance.Calculate(selected, owners.Cancellation);
         return new(selected, answer, Math.Max(4u, allowance), requested, dictionary.SourceHash);
     }
 }
