@@ -8,59 +8,64 @@ input and Git; no competing jobs or denied writer contact are permitted.
 
 ## Active block
 
-Accepted main/origin-main is 39b137906bc4282c923d0bc0a098fc0218eeede7 (PR282),
-merged 09:55:39 UTC after explicit release, independent adapter review and all five
-exact-head checks at 91fc72ea406b4590942a60984defa8ce79accf75 passed. Local main
-matched origin/main. PR269 remains draft/native-and-merge-held. No third retail or
-bot/encounter attempt is permitted. Recording is off; original inputs stay read-only.
+Accepted main/origin-main is 305f7514eda820dfabb61fecaa40284f65ce3d72 (PR283),
+merged 12:30:38 UTC after independent review and all five exact-head checks passed.
+The source-qualified baseline EndIf fix preserves nested and generated MenuMode
+control flow, parser-version11 migration guards and existing latched faults.
+Owned generator activation/message proof remains distinct from physical contact,
+MenuMode scheduling and repair/salvage. PR269 stays draft/native-and-merge-held.
+Nick's direct standing direction authorizes checked slices to be published and
+merged; the earlier approval hold is resolved. No third retail or bot/encounter
+attempt is permitted. Recording is off; original inputs and saves are read-only.
+
+Active branch: codex/fnv-empty-results-publication, from accepted main. The reviewed
+INFO and terminal changes are integrated with only CLI registration and this ledger
+resolved. All seven implementation/test bodies match their independently reviewed
+originals; all four focused/owned commands remain, plus PR283's owned generator
+command. Default INFO tests run once; terminal zero tests run once in the existing
+group. Original individual commits and the prior local combined branch remain
+preserved. The independent quest-query regression WIP is isolated on
+codex/fnv-quest-state-script-queries and is not part of this slice.
+
+Explicit zero-byte INFO and TERM results cannot execute retained editor text or
+evaluate unused bindings. Raw fields and source identities remain unchanged.
+INFO keeps its existing absent-header extraction behavior; TERM still requires a
+valid explicit header and matching body extent. Nonzero sibling execution and
+malformed-body/reference/local refusals remain. Terminal result admission still
+checks the actual placed caller, residency/availability and source/fragment identity;
+the menu still owns locks/access, conditions, generations and non-script effects.
+No save schema or latched-fault recovery changes are introduced.
+
+Individual old-code controls and gates passed: INFO at10:56:53 UTC, TERM at11:26:09
+UTC. The prior combined tree passed focused/owned checks and its full gate at
+11:44:37 UTC, with2207 unchanged source/config hashes. Those receipts do not qualify
+the integration with PR283. The current integrated focused/owned/full gate is next;
+source remains frozen through validation. No schema or fault recovery is changed.
+Owned targets remain INFO FalloutNV.esm:15ad0d and terminal entries
+DeadMoney.esm:00923d/0 and OldWorldBlues.esm:004902/2. These are controlled result
+composition and reader proofs, not ordinary conversation, owned placed terminal
+access, hacking, native selection or retail parity. Existing negative controls
+remain valid only while runtime/test bodies match their reviewed commits exactly.
+Combined evidence belongs under local/fnv-wells-fixed/empty-results-combined-20261023/.
 
 Shared reputation state retains source-hashed float axes in schema v58. Fresh axes
-are zero; absent legacy history stays unknown per axis. CTDA573/574/575 use the same
+are zero; absent legacy history stays unknown per axis. CTDA573/574/575 share that
 owner through native quest/message, conversation, speech and NPC/creature/unloaded
-package condition adapters. The package follow-up passed actual component methods
-and existing selector short-circuit/unknown/cold controls. Its full gate passed
-09:40:53 UTC with all 2205 source/config hashes unchanged; owned query evidence
-covers 1642 conditions across 1195 records, not ordinary package execution.
-
-Active branch: codex/fnv-baseline-endif. The reached Sloan generator parse failure
-REFR0e5df9 -> ACTI08d36f -> SCPT08d19b is reproduced with the unchanged owned script.
-Both SCTX and SCDA contain a bare extra EndIf at event depth zero. The qualified
-source compiler emits it; the interpreter clears baseline selection without
-underflow. The shared parser/executor now preserves that instruction as a no-op,
-while retaining nested/loop/alternative and trailing-token guards. Source baseline
-positions survive generated MenuMode guards and stopped-command continuation.
-Parser version 11 admits previously omitted legacy owners only through actual old
-structural rejection plus current successful parsing; existing faults stay latched.
-
-Focused contracts, the complete plugin-script probe, and actual owned OnActivate
-composition pass. The player guard requests exactly the authored generator message;
-nonplayer activation emits no effect. Cold restore preserves reference state and
-source hashes. Old-code synthetic and owned cases reproduce the exact unmatched
-branch refusal. This is controlled activation/message evidence, not physical input,
-MenuMode scheduling, generator repair/salvage, quest completion or retail parity.
-The full runtime gate passes 10:22:18 UTC: exit0, all 2206 source/config hashes
-unchanged, diff check0, recording off. Keep the published head frozen and merge-held
-for independent review and hosted checks. Neutral contract SHA256:
-64218A13FC1602521087FBBD542661D76475978A834E83D69A3138FB4D59DBB8.
-Evidence is retained under
-local/fnv-wells-fixed/generator-endif-20261023/.
-
-Snuffles is parked after the bounded join pass. REFR140c37 -> ACTI140c35 -> SCPT140c33
-first calls SetActorValue LeftMobilityCondition 0 before quest/DoOnce writes. Source
-base storage is separate from damage, defaults through fAVDDefaultBodyPartCondition,
-and restoration preserves base. Mobility notification additionally reaches the
-Locomotion/Hurt/IdleAnims resource transition; current/queued/cold ownership remains
-unqualified. Source damage clamps when applied, while old OpenNV saves retain
-uncapped per-region physical totals. After over-damage/restoration, those totals do
-not uniquely establish the source modifier history. No guessed migration, scalar
-setter bypass, source fault reset or further broad Snuffles research is admitted.
-Private source evidence remains under local/fnv-wells-fixed/limb-value-source-20261023/.
+package adapters. Selection and package lifecycle are unchanged. Component and
+owned query proofs do not establish ordinary campaign or package execution.
 All three getters preserve known/unknown history and canonical source identity.
 Null context is source-permitted; malformed nonzero explicit references refuse
 because raw-ID frontend fixup stays unqualified; run-on3+ stays unbound. Nonfinite
 ratio/setting values fail visibly; exceptional retail/FPU behavior is unclaimed.
 The separate SCTX percentage/threshold commands and broader rank/disguise remain
 unbound. Existing latched errors are neither cleared nor replayed.
+
+Generator reference MenuMode scheduling is parked after two bounded approaches.
+Selection publishes a consumptive button result; source closure has a separate
+transition owner. The common-frame ordering of reference execution, input and
+visibility retirement is unqualified. No synchronous click callback or guessed
+closing timer is substituted. Snuffles remains parked at its distinct base/damage
+history and locomotion-resource transition boundaries; no scalar setter bypass.
 
 Notification/witness qualification remains parked after two approaches. Missing
 owners include retained combat-group membership/counts, UI transition predicates,

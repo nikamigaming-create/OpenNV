@@ -22,6 +22,18 @@ if (args is ["--owned-empty-info-result", var emptyInfoGame])
     return;
 }
 
+if (args is ["--terminal-zero-extent-contracts"])
+{
+    TerminalContracts.RunZeroExtent();
+    return;
+}
+
+if (args is ["--owned-terminal-zero-extent", var zeroTerminalGame])
+{
+    TerminalContracts.RunOwnedZeroExtent(zeroTerminalGame);
+    return;
+}
+
 if (args is ["--reputation-case-contracts", var reputationCase] && reputationCase is "restore" or "duplicates")
 {
     ReputationContracts.RunCaseIdentity(reputationCase == "duplicates");
