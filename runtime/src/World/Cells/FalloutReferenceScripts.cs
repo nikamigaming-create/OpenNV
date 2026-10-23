@@ -9,7 +9,7 @@ internal enum FalloutReferenceEffectKind
     Conversation, PlayerControls, Message, DefaultActivate, SetStage, SpecialMenu, ReferenceEnable, Texture,
     SayTo, HeadTracking, EvaluatePackages, ScriptPackage, ImageSpace, AddItem, EquipItem, AddNote, RemoveItem,
     ScriptActivate, PipBoyReset, Hardcore, AutoDisplayObjectives, Achievement, LoadingScreenPolicy, CharacterGeneration, Say, PlayerYouth,
-    PlayerToddler, PlayerScale, DoorOpenState, PackageEventTopic
+    PlayerToddler, PlayerScale, DoorOpenState, PackageEventTopic, RemoveNote
 }
 internal sealed record FalloutReferenceScriptEffect(FalloutReferenceEffectKind Kind, FalloutFormKey Source,
     FalloutFormKey? Target = null, FalloutFormKey? Argument = null, IReadOnlyList<bool>? Controls = null,
@@ -1244,6 +1244,11 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                     var note = bindings.Form(arguments[0]);
                     if (note.Signature != "NOTE") throw new InvalidDataException("AddNote target is not NOTE.");
                     host.Apply(new(FalloutReferenceEffectKind.AddNote, source, note.FormKey));
+                    break;
+                case "removenote" when parts.Length == 1 && arguments.Count == 1:
+                    var removedNote = bindings.Form(arguments[0]);
+                    if (removedNote.Signature != "NOTE") throw new InvalidDataException("RemoveNote target is not NOTE.");
+                    host.Apply(new(FalloutReferenceEffectKind.RemoveNote, source, removedNote.FormKey));
                     break;
                 case "sayto" when arguments.Count is 2 or 3:
                     var sayTopic = bindings.Form(arguments[1]);

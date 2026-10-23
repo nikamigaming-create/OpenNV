@@ -4,6 +4,12 @@ using System.Text.Json;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.World.Cells;
 
+if (args is ["--remove-note-contracts", .. var removalExecutor])
+{
+    QuestStateQueryContracts.RunNoteRemoval(removalExecutor.SingleOrDefault());
+    return;
+}
+
 if (args is ["--owned-player-note-queries", var ownedNoteGame])
 {
     QuestStateQueryContracts.RunOwnedNotes(ownedNoteGame);

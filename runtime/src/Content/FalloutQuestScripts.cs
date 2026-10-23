@@ -1263,6 +1263,12 @@ internal sealed partial class FalloutQuestScripts
                     (References ?? throw new NotSupportedException("Note acquisition has no shared world owner."))
                         .AcquirePlayerNote(addedNote.FormKey, _inventory.Notifications);
                     break;
+                case "removenote" when arguments.Count == 1:
+                    var removedNote = Form(arguments[0]);
+                    if (removedNote.Signature != "NOTE") throw new InvalidDataException("RemoveNote target is not NOTE.");
+                    (References ?? throw new NotSupportedException("Note removal has no shared world owner."))
+                        .RemovePlayerNote(removedNote.FormKey);
+                    break;
                 case "player.additem" when arguments.Count is 2 or 3:
                     if (!instance.Bindings.HasPlayerReference)
                         throw new InvalidDataException("Player command has no bound engine reference in SCRO.");

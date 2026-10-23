@@ -100,7 +100,9 @@ public partial class NativeReferenceEventsAudit
                 RejectReputationAdapter(() => query(condition));
             }
             world.PlayerNotes.Restore(new([Key(1)]));
-            pipBoy = new(records, new(records, inventory), inventory, quests, world,
+            var pipBoyState = new FalloutPipBoyState(records, inventory);
+            Bind("_pipBoy", pipBoyState);
+            pipBoy = new(records, pipBoyState, inventory, quests, world,
                 () => throw new InvalidOperationException("Unexpected vitals query."),
                 () => throw new InvalidOperationException("Unexpected SPECIAL query."), "fixture", [], [], [], null, Vector3.Zero, 0);
             IReadOnlyList<FalloutFormKey> UiNotes() => (IReadOnlyList<FalloutFormKey>)typeof(NativeOwnedPipBoyMenu)
@@ -119,8 +121,53 @@ public partial class NativeReferenceEventsAudit
             Require(inventory.Items.Count == 0 && world.PlayerNotes.Notes.SequenceEqual(new[] { Key(6), Key(4), Key(1) }) &&
                 inventory.Notifications.Capture().Pending.Count == 1,
                 "Acquisition counted NOTE items or failed identical-text feedback deduplication.");
+            var notifications = JsonSerializer.Serialize(inventory.Notifications.Capture());
+            // Retain an existing Node identity in the playback-owner slot. This
+            // tests noninterference, not actual voice playback or audio parity.
+            Bind("_pipBoyNoteOwner", speech);
+            pipBoyState.SelectNote(Key(4));
+            var revision = pipBoyState.Revision;
+            driver.ApplyReferenceEffect(new(FalloutReferenceEffectKind.RemoveNote, Key(0x14), Key(1)));
+            Require(pipBoyState.SelectedNote == Key(4) && pipBoyState.Revision == revision &&
+                !world.PlayerNotes.Contains(Key(1)), "Unrelated removal invalidated the selected note.");
+            world.PlayerNotes.Restore(new([Key(4), Key(6), Key(4)]));
+            driver.ApplyReferenceEffect(new(FalloutReferenceEffectKind.RemoveNote, Key(0x14), Key(4)));
+            Require(pipBoyState.SelectedNote is null && pipBoyState.NoteSelectionInitialized &&
+                pipBoyState.Revision == revision + 1 && world.PlayerNotes.Notes.SequenceEqual(new[] { Key(6), Key(4) }) &&
+                UiNotes().SequenceEqual(world.PlayerNotes.Notes), "Native removal did not clear selection before first-entry removal.");
+            Require(type.GetField("_pipBoyNoteOwner", flags)!.GetValue(driver) == speech &&
+                JsonSerializer.Serialize(inventory.Notifications.Capture()) == notifications,
+                "Removal touched playback ownership or invented an ItemRemoved HUD notice.");
+            world.PlayerNotes.Restore(new([])); pipBoyState.SelectNote(Key(4));
+            driver.ApplyReferenceEffect(new(FalloutReferenceEffectKind.RemoveNote, Key(0x14), Key(4)));
+            Require(pipBoyState.SelectedNote is null, "Absent membership failed to invalidate its matching selection.");
+            pipBoyState.SelectNote(Key(6));
+            pipBoy.Free(); pipBoy = null;
+            revision = pipBoyState.Revision;
+            driver.ApplyReferenceEffect(new(FalloutReferenceEffectKind.RemoveNote, Key(0x14), Key(6)));
+            Require(pipBoyState.SelectedNote is null && !pipBoyState.NoteSelectionInitialized && pipBoyState.Revision == revision,
+                "Retired menu retained selection or was invalidated as a live owner.");
+            pipBoy = new(records, pipBoyState, inventory, quests, world,
+                () => throw new InvalidOperationException("Unexpected vitals query."),
+                () => throw new InvalidOperationException("Unexpected SPECIAL query."), "fixture", [], [], [], null, Vector3.Zero, 0);
+            Require(!pipBoyState.NoteSelectionInitialized, "A new menu inherited the retired menu's cleared selection.");
+            pipBoyState.SelectNote(Key(6));
+            var replaced = pipBoy;
+            pipBoy = new(records, pipBoyState, inventory, quests, world,
+                () => throw new InvalidOperationException("Unexpected vitals query."),
+                () => throw new InvalidOperationException("Unexpected SPECIAL query."), "fixture", [], [], [], null, Vector3.Zero, 0);
+            pipBoyState.SelectNote(Key(4)); replaced.Free();
+            Require(pipBoyState.SelectedNote == Key(4), "Retiring a previous menu cleared the replacement owner's selection.");
+            RejectReputationAdapter(() => driver.ApplyReferenceEffect(new(FalloutReferenceEffectKind.RemoveNote, Key(0x14), Key(2))));
+            Require(pipBoyState.SelectedNote == Key(4), "Invalid NOTE type cleared UI state before admission.");
+            pipBoyState.Reset();
+            Require(pipBoyState.SelectedNote == Key(4), "Navigation reset changed a live menu's independent note selection.");
+            pipBoyState.SelectNote(Key(6)); world.PlayerNotes.Restore(null);
+            RejectReputationAdapter(() => driver.ApplyReferenceEffect(new(FalloutReferenceEffectKind.RemoveNote, Key(0x14), Key(6))));
+            Require(pipBoyState.SelectedNote == Key(6), "Unknown history partially cleared selected-note state.");
             Console.WriteLine("OPENNV_PLAYER_NOTE_ADAPTER_PASS conversation=true speech=true recipe=true npc=true creature=true " +
-                "unloaded=true pipBoyMembership=true cold=true unknownRefused=true addNoteAndAddItem=true duplicateFeedbackSuppressed=true placedPickup=unadmitted pixels=unverified campaign=false");
+                "unloaded=true pipBoyMembership=true cold=true unknownRefused=true addNoteAndAddItem=true duplicateFeedbackSuppressed=true " +
+                "removeNote=true exactSelectionInvalidation=true retiredAndReopened=true playbackOwnerUnchanged=true placedPickup=unadmitted pixels=unverified campaign=false");
         }
         finally
         {

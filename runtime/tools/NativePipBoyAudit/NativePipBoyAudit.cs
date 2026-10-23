@@ -113,6 +113,7 @@ public partial class NativePipBoyAudit : Node
             }
             if (failures.Count != 0) throw new InvalidOperationException(string.Join("\n", failures));
             await ExerciseNavigation(menu, records, inventory);
+            await ExerciseNoteRemoval(menu, records, references, state, inventory);
         }
         finally
         {

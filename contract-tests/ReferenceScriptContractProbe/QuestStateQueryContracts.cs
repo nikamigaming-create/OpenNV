@@ -18,6 +18,7 @@ internal static partial class QuestStateQueryContracts
         {
             RunObjective();
             RunNotes();
+            RunNoteRemoval();
             foreach (var shared in new[] { false, true })
             {
                 ShortCircuit(shared);
@@ -288,12 +289,14 @@ internal static partial class QuestStateQueryContracts
                 var executor = new FalloutReferenceScripts(_records, _world, Quests,
                     new((_, _) => false, effect =>
                     {
-                        if (!allowNoteEffects || effect.Kind is not (FalloutReferenceEffectKind.AddNote or FalloutReferenceEffectKind.AddItem))
+                        if (!allowNoteEffects || effect.Kind is not (FalloutReferenceEffectKind.AddNote or FalloutReferenceEffectKind.AddItem or FalloutReferenceEffectKind.RemoveNote))
                             throw new InvalidDataException("Unexpected query effect.");
                         // Controlled command composition; the separate Godot
                         // audit exercises the actual native effect adapter.
                         if (effect.Kind == FalloutReferenceEffectKind.AddNote)
                             _world.AcquirePlayerNote(effect.Target!.Value, Inventory.Notifications);
+                        else if (effect.Kind == FalloutReferenceEffectKind.RemoveNote)
+                            _world.RemovePlayerNote(effect.Target!.Value);
                         else new FalloutInventoryCommands(_records, _world, Inventory, () => 1).Execute(
                             new(FalloutInventoryCommandKind.Add, effect.Target!.Value, effect.Argument, Count: effect.Value, Silent: effect.Enable));
                     }));

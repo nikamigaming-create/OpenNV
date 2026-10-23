@@ -22,6 +22,7 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
     private readonly FalloutRadioStations? _radio;
     private long _radioRevision = -1;
     private long _noteRevision = -1;
+    private long _pipBoyRevision = -1;
     private readonly string _playerName;
     private readonly IReadOnlyList<FalloutNativeSkillIdentity> _skills, _tags;
     private readonly IReadOnlyList<FalloutNativeTraitIdentity> _traits;
@@ -42,7 +43,6 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
     private int _statusMode;
     private float _textOffset;
     private long _displayedInventoryRevision = -1;
-    private FalloutFormKey? _selectedNote;
     private IReadOnlyList<FalloutFormKey> CollectedNotes => _references.PlayerNotes.Notes;
     private FalloutMapMarker? _travelTarget;
     internal Func<FalloutFormKey, string?>? FastTravel { get; init; }
@@ -78,7 +78,8 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
         listOffset = _offset,
         refreshMilliseconds = _lastRefreshMilliseconds,
         maximumRefreshMilliseconds = _maximumRefreshMilliseconds,
-        unbound = "limb-movement-and-effect-rules,skill-advancement,constant-ability-effect-list,complete-general-statistics,radio-broadcast-playback,fast-travel-time-and-followers,scripted-and-addictive-aid-effects,item-drop-and-repair"
+        selectedNote = _state.SelectedNote?.ToString(),
+        unbound = "limb-movement-and-effect-rules,skill-advancement,constant-ability-effect-list,complete-general-statistics,radio-broadcast-playback,fast-travel-time-and-followers,scripted-and-addictive-aid-effects,item-drop-and-repair,note-removal-console-output"
     };
 
     internal NativeOwnedPipBoyMenu(FalloutPluginStack records, FalloutPipBoyState state, FalloutPlayerInventory inventory,
@@ -95,11 +96,16 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
         _actorValue = actorValue;
         _useAid = useAid;
         _radio = radio;
+        _state.AttachNoteSelection(this);
+    }
+    public override void _Notification(int what)
+    {
+        if (what == NotificationPredelete) _state.RetireNoteSelection(this);
     }
     public override void _Ready() => Refresh();
     public override void _Process(double delta)
     {
-        if (_tiles is not null && Error is null && _noteRevision != _references.PlayerNotes.Revision)
+        if (_tiles is not null && Error is null && (_noteRevision != _references.PlayerNotes.Revision || _pipBoyRevision != _state.Revision))
         { Refresh(); return; }
         if (_tiles is not null && Error is null && _state.Page == FalloutPipBoyPage.Data && _state.Selection == 4 && _radioRevision != _radio?.Revision)
         { Refresh(); return; }
@@ -136,6 +142,7 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
         RemoveMeta("opennv_pipboy_error");
         _displayedInventoryRevision = _inventory.Revision;
         _noteRevision = _references.PlayerNotes.Revision;
+        _pipBoyRevision = _state.Revision;
         SetMeta("opennv_page", (int)_state.Page);
         foreach (var child in GetChildren()) { RemoveChild(child); child.QueueFree(); }
         _buttons.Clear(); _templates.Clear(); _namedTiles.Clear(); _map = null; _mapForeground = null;
@@ -605,7 +612,7 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
         Hide("MM_LocalMap_ClipWindow", "MM_RadioStationList", "MM_WaveformRect", "MM_TextScrollbar");
         if (!_references.PlayerNotes.Known)
         {
-            _selectedNote = null;
+            _state.SelectNote(null);
             ListRows(Tile("MM_NotesList"), "MM_ListTemplate", []);
             Bind("MM_DataRect", "visible", 1);
             Bind("MM_DataRect", "_ItemType", 1);
@@ -614,13 +621,17 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
         }
         var notes = CollectedNotes.Select(form => FalloutNote.Read(_records, form))
             .OrderBy(note => note.Name, StringComparer.CurrentCultureIgnoreCase).ToArray();
-        var selected = notes.FirstOrDefault(note => note.Record.FormKey == _selectedNote) ?? notes.FirstOrDefault();
-        _selectedNote = selected?.Record.FormKey;
+        var selected = notes.FirstOrDefault(note => note.Record.FormKey == _state.SelectedNote);
+        if (!_state.NoteSelectionInitialized)
+        {
+            selected = notes.FirstOrDefault();
+            _state.SelectNote(selected?.Record.FormKey);
+        }
         Bind("MM_DataRect", "visible", 1);
         Bind("MM_DataRect", "_ItemType", selected?.Kind == FalloutNoteKind.Image ? 2 : 1);
         ListRows(Tile("MM_NotesList"), "MM_ListTemplate", notes.Select(note =>
-            (note.Name, (Action)(() => { _selectedNote = note.Record.FormKey; _textOffset = 0; Refresh(); }), note.Record.FormKey == _selectedNote)).ToArray());
-        Text("MM_DataText", selected?.Kind == FalloutNoteKind.Text ? selected.RequireText() : notes.Length == 0 ? "No notes collected." : selected!.Name);
+            (note.Name, (Action)(() => { _state.SelectNote(note.Record.FormKey); _textOffset = 0; Refresh(); }), note.Record.FormKey == _state.SelectedNote)).ToArray());
+        Text("MM_DataText", selected?.Kind == FalloutNoteKind.Text ? selected.RequireText() : selected?.Name ?? (notes.Length == 0 ? "No notes collected." : ""));
         if (selected?.Kind == FalloutNoteKind.Image && selected.Texture is { } texture)
         {
             _tiles.SetFilename(Tile("MM_DataImage"), texture);

@@ -12,11 +12,49 @@ internal sealed class FalloutPipBoyState(FalloutPluginStack records, FalloutPlay
     private IReadOnlyList<FalloutCampaignItem>? _items;
     private long _inventoryRevision = -1;
     private readonly int[] _selections = [0, 0, 1];
+    private object? _noteSelectionOwner;
     internal bool Available => inventory.Equipped.Contains(records.RuntimeFormId(_device));
     internal bool Open { get; private set; }
     internal FalloutPipBoyPage Page { get; private set; }
     internal int Selection { get; private set; }
     internal long Revision { get; private set; }
+    internal FalloutFormKey? SelectedNote { get; private set; }
+    internal bool NoteSelectionInitialized { get; private set; }
+
+    internal void AttachNoteSelection(object owner)
+    {
+        _noteSelectionOwner = owner;
+        SelectedNote = null; NoteSelectionInitialized = false;
+    }
+
+    internal void RetireNoteSelection(object owner)
+    {
+        if (!ReferenceEquals(_noteSelectionOwner, owner)) return;
+        _noteSelectionOwner = null;
+        SelectedNote = null; NoteSelectionInitialized = false;
+    }
+
+    internal void SelectNote(FalloutFormKey? note)
+    {
+        if (_noteSelectionOwner is null) throw new InvalidOperationException("Note selection has no live menu owner.");
+        if (note is { } key)
+        {
+            var record = records.GetEffective(key);
+            if (record.Signature != "NOTE") throw new InvalidDataException("Selected note identity is not NOTE.");
+            note = record.FormKey;
+        }
+        SelectedNote = note;
+        // An empty/unavailable list has not selected anything yet. Only an
+        // actual selection (or its later removal) suppresses first-row fallback.
+        NoteSelectionInitialized = note is not null;
+    }
+
+    internal void InvalidateNote(FalloutFormKey note)
+    {
+        if (_noteSelectionOwner is null || SelectedNote is not { } selected || !FalloutFormKeyComparer.Instance.Equals(selected, note)) return;
+        SelectedNote = null;
+        ++Revision;
+    }
     internal IReadOnlyList<FalloutCampaignItem> Items
     {
         get
