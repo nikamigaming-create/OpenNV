@@ -160,6 +160,7 @@ internal partial class RuntimeNativeOpeningStageDriver
 
     private Func<FalloutCondition, float> ConversationConditionContext() => condition =>
         {
+            if (condition.Function == 382) return _scripts.References!.EvaluatePlayerNoteCondition(condition)!.Value;
             if (condition.Function is 573 or 574 or 575) return _scripts.References!.EvaluateReputationCondition(condition)!.Value;
             if (FalloutPlatformConditions.Evaluate(condition) is { } platform) return platform;
             if (condition.Function is 56 or 58 or 59 or 79 or 420 or 421 or 546) return _quests.Evaluate(condition);
@@ -331,8 +332,11 @@ internal partial class RuntimeNativeOpeningStageDriver
                     Silent: effect.Kind == FalloutReferenceEffectKind.EquipItem || effect.Enable));
                 break;
             case FalloutReferenceEffectKind.AddNote:
-                if (_inventory.Item(effect.Target!.Value) is null)
-                    _inventory.Add(_pluginStack, effect.Target.Value, 1, SourcePlayerLevel, silent: true, _globals);
+                var note = _pluginStack.GetEffective(effect.Target!.Value);
+                if (note.Signature != "NOTE") throw new InvalidDataException("AddNote target is not NOTE.");
+                // The source duplicate path passes null feedback and has no
+                // acquisition, popup or sound to replay.
+                _scripts.References!.AcquirePlayerNote(note.FormKey, _inventory.Notifications);
                 break;
             case FalloutReferenceEffectKind.SayTo:
                 _speechStage = $"{QuestEditorId}:{Stage}";

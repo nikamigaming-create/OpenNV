@@ -866,6 +866,14 @@ internal sealed partial class FalloutQuestScripts
                 }),
                 "getquestrunning" => new([FalloutScriptArgumentKind.Identifier], arguments =>
                     _quests.IsRunning(Quest(arguments[0].Identifier!).FormKey) ? 1 : 0),
+                "gethasnote" => new([FalloutScriptArgumentKind.Identifier], arguments =>
+                {
+                    var note = Form(arguments[0].Identifier!);
+                    if (note.Signature != "NOTE") throw new InvalidDataException("GetHasNote argument is not NOTE.");
+                    return (References ?? throw new NotSupportedException("GetHasNote has no shared player note owner."))
+                        .PlayerNotes.Contains(note.FormKey) ? 1 : 0;
+                })
+                { ReadOnly = true },
                 "getquestcompleted" => new([FalloutScriptArgumentKind.Identifier], arguments =>
                     _quests.IsCompleted(Quest(arguments[0].Identifier!).FormKey) ? 1 : 0),
                 "getstagedone" => new([FalloutScriptArgumentKind.Identifier, FalloutScriptArgumentKind.Number], arguments =>
@@ -1231,6 +1239,15 @@ internal sealed partial class FalloutQuestScripts
                 case "completeallobjectives" when arguments.Count == 1:
                     _quests.CompleteAllObjectives(Quest(arguments[0]).FormKey);
                     break;
+                case "setobjectivedisplayed" or "setobjectivecompleted" when arguments.Count == 3:
+                    var objectiveQuest = Quest(arguments[0]).FormKey;
+                    var rawObjectiveIndex = NumberArgument(arguments[1]);
+                    var objectiveIndex = rawObjectiveIndex >= 0 && rawObjectiveIndex <= uint.MaxValue && rawObjectiveIndex == Math.Truncate(rawObjectiveIndex)
+                        ? (uint)rawObjectiveIndex : throw new InvalidDataException("Script objective index is invalid.");
+                    var objectiveValue = NumberArgument(arguments[2]);
+                    if (objectiveValue is not (0 or 1)) throw new InvalidDataException("Script boolean is not zero or one.");
+                    _quests.ApplyObjective(objectiveQuest, objectiveIndex, operation == "setobjectivedisplayed", objectiveValue == 1);
+                    break;
                 case "unlockchallenge" when arguments.Count == 1:
                     Challenges.Unlock(Form(arguments[0]).FormKey);
                     break;
@@ -1240,6 +1257,12 @@ internal sealed partial class FalloutQuestScripts
                 case "killquestupdates" or "kqu" when arguments.Count == 0:
                     _quests.KillQuestUpdates();
                     break;
+                case "addnote" when arguments.Count == 1:
+                    var addedNote = Form(arguments[0]);
+                    if (addedNote.Signature != "NOTE") throw new InvalidDataException("AddNote target is not NOTE.");
+                    (References ?? throw new NotSupportedException("Note acquisition has no shared world owner."))
+                        .AcquirePlayerNote(addedNote.FormKey, _inventory.Notifications);
+                    break;
                 case "player.additem" when arguments.Count is 2 or 3:
                     if (!instance.Bindings.HasPlayerReference)
                         throw new InvalidDataException("Player command has no bound engine reference in SCRO.");
@@ -1247,13 +1270,20 @@ internal sealed partial class FalloutQuestScripts
                     var numericCount = FalloutGameModeProgram.Evaluate([arguments[1]], Read);
                     if (numericCount != Math.Truncate(numericCount)) throw new NotSupportedException("Fractional item additions are unbound.");
                     var count = checked((int)numericCount);
+                    if (count == 0 && item.Signature == "NOTE") break;
                     if (count <= 0) throw new NotSupportedException("Non-positive item additions are unbound.");
+                    var silent = arguments.Count == 3 ? FalloutGameModeProgram.Evaluate([arguments[2]], Read) : 0;
+                    if (silent is not (0 or 1)) throw new NotSupportedException("AddItem silent argument is not a boolean.");
+                    if (item.Signature == "NOTE")
+                    {
+                        (References ?? throw new NotSupportedException("Note acquisition has no shared world owner."))
+                            .AcquirePlayerNote(item.FormKey, _inventory.Notifications); break;
+                    }
+                    FalloutReferenceWorld.RequirePlayerItemAcquisition(item);
                     var previous = _inventory.Item(item.FormKey);
                     var request = new FalloutCampaignInventoryRequest(_records.RuntimeFormId(item.FormKey), arguments[0], item.Signature,
                         checked((previous?.Count ?? 0) + count));
                     var addition = FalloutCampaignInventoryResolver.Resolve(_records, [request], null).Items.Single();
-                    var silent = arguments.Count == 3 ? FalloutGameModeProgram.Evaluate([arguments[2]], Read) : 0;
-                    if (silent is not (0 or 1)) throw new NotSupportedException("AddItem silent argument is not a boolean.");
                     _inventory.Publish([addition]);
                     if (silent == 0) _inventory.Notifications.Publish([new(FalloutHudEventKind.ItemAdded, item.FormKey, count, instance.Quest.FormKey, instance.Script.FormKey)]);
                     break;

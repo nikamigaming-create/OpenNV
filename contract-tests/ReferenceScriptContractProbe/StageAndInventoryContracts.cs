@@ -56,14 +56,17 @@ internal static class StageAndInventoryContracts
             Require(inventory.Item(Key(1)) is null && inventory.Item(Key(2))?.Count == 2, "Crafting did not conserve exact aggregated ingredients/output.");
             Reject(() => inventory.Craft(records, recipe, 1, null));
             Require(inventory.Item(Key(2))?.Count == 2, "Stale crafting repeated a consumed transaction.");
+            var notes = new OpenNV.Runtime.Gameplay.State.FalloutPlayerNotes(records);
             float? InventoryCondition(ushort function, uint argument, uint runOn = 0, uint reference = 0) =>
                 OpenNV.Runtime.Gameplay.State.FalloutInventoryConditions.Evaluate(records, inventory, form => form == Key(4),
-                    new(conditionOwner, 0, 1, function, argument, 0, runOn, reference));
+                    new(conditionOwner, 0, 1, function, argument, 0, runOn, reference), notes);
             Require(InventoryCondition(449, 4) == 1 && InventoryCondition(449, 5) == 0 &&
                 InventoryCondition(449, 4, 2, 0x14) == 1 && InventoryCondition(449, 4, 2, 0x99) is null,
                 "Recipe perk queries ignored live ownership or selected another actor.");
             Require(InventoryCondition(382, 3) == 0, "An absent recipe note was owned.");
             inventory.Add(records, Key(3), 1, 1, silent: true);
+            Require(InventoryCondition(382, 3) == 0, "Inventory presence invented collected-note membership.");
+            notes.AddMembership(Key(3));
             Require(InventoryCondition(382, 3, 2, 0x14) == 1 && InventoryCondition(47, 2, 2, 0x14) == 2,
                 "Explicit-player recipe queries lost note or item ownership.");
             Reject(() => InventoryCondition(382, 1));

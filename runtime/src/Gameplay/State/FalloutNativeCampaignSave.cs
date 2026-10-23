@@ -58,7 +58,8 @@ internal sealed record FalloutNativeCampaignState(
     FalloutMusicPlaybackSnapshot? Music = null,
     FalloutTransientExplosionsSnapshot? TransientExplosions = null,
     FalloutFastTravelSnapshot? FastTravel = null,
-    FalloutReputationsSnapshot? Reputations = null);
+    FalloutReputationsSnapshot? Reputations = null,
+    FalloutPlayerNotesSnapshot? PlayerNotes = null);
 
 internal sealed record FalloutNativeCampaignRestore(
     FalloutNativeCampaignState State,
@@ -67,7 +68,8 @@ internal sealed record FalloutNativeCampaignRestore(
 
 internal static class FalloutNativeCampaignSave
 {
-    internal const string ExpectedSchema = "opennv-native-fnv-campaign-save/v58";
+    internal const string ExpectedSchema = "opennv-native-fnv-campaign-save/v59";
+    internal const string BeforePlayerNotesSchema = "opennv-native-fnv-campaign-save/v58";
     internal const string BeforeReputationSchema = "opennv-native-fnv-campaign-save/v57";
     internal const string BeforeTerminalHackStateSchema = "opennv-native-fnv-campaign-save/v56";
     internal const string BeforeSandboxAdmissionSchema = "opennv-native-fnv-campaign-save/v55";
@@ -378,6 +380,7 @@ internal static class FalloutNativeCampaignSave
             references.RestoreActorOverrides(state.ActorOverrides);
             references.RestoreFactionRelations(state.FactionRelations);
             references.RestoreReputations(state.Reputations);
+            references.PlayerNotes.Restore(state.PlayerNotes);
         }
         validatedValues?.Arrays.ValidateRestoredRoots();
         foreach (var form in validatedValues?.Arrays.Forms ?? [])
@@ -518,8 +521,22 @@ internal static class FalloutNativeCampaignSave
         if (state.Reputations is { } reputations) FalloutReferenceWorld.ValidateReputations(reputations);
     }
 
+    private static void ValidatePlayerNotesSchema(FalloutNativeCampaignState state)
+    {
+        if (state.Schema != ExpectedSchema && state.PlayerNotes is not null)
+            throw new InvalidDataException("Earlier campaign schema cannot own collected-note membership.");
+        if (state.PlayerNotes is { } notes)
+        {
+            if (state.References is null || notes.Notes is null || !notes.Known && notes.Notes.Count != 0 ||
+                notes.Notes.Any(note => string.IsNullOrWhiteSpace(note.OwnerPlugin) || note.ObjectId is 0 or > FalloutFormKey.ObjectIdMask))
+                throw new InvalidDataException("Saved collected-note membership has no valid reference world or identity.");
+        }
+    }
+
     internal static FalloutNativeCampaignState AdmitPreviousOwnerSchema(FalloutNativeCampaignState state)
     {
+        ValidatePlayerNotesSchema(state);
+        if (state.Schema == BeforePlayerNotesSchema) state = state with { Schema = ExpectedSchema };
         ValidateReputationSchema(state);
         if (state.Schema == BeforeReputationSchema) state = state with { Schema = ExpectedSchema };
         ValidateTerminalHackStateSchema(state);
@@ -551,6 +568,7 @@ internal static class FalloutNativeCampaignSave
         string expectedSaveCompatibilityId,
         FalloutPlayerAbilitySaveAdmission? originalAbilityAdmission)
     {
+        ValidatePlayerNotesSchema(state);
         ValidateReputationSchema(state);
         ValidateTerminalHackStateSchema(state);
         if (state.Schema != ExpectedSchema && state.References?.Any(reference => reference.SandboxAdmissionFailure is not null) == true)

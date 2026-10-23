@@ -20,6 +20,10 @@ public partial class NativeReferenceEventsAudit : Node
         RuntimeNativePlayer? player = null;
         try
         {
+            if (OS.GetCmdlineUserArgs() is ["--player-note-adapters"])
+            {
+                PlayerNoteAdapters(); GetTree().Quit(); return;
+            }
             if (OS.GetCmdlineUserArgs() is ["--owned-clock-light-reference", var clockLightDataRoot, var clockLightReceipt])
             {
                 ExerciseOwnedClockLightReference(clockLightDataRoot, clockLightReceipt);
@@ -288,6 +292,7 @@ public partial class NativeReferenceEventsAudit : Node
             ReputationDialogueAdapters(function: 574);
             ReputationDialogueAdapters(function: 575);
             ReputationPackageAdapters();
+            PlayerNoteAdapters();
             ExerciseImageSpaceClock();
             DoorActivation(records);
             AnimatedActivators(records);

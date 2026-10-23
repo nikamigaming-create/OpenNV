@@ -8,58 +8,77 @@ input and Git; no competing jobs or denied writer contact are permitted.
 
 ## Active block
 
-Accepted main/origin-main is 4ffc3fd99c86df8de703d55fd7a2cc98f93f11cc (PR285),
-merged 13:31:38 UTC after independent review and all five exact-head checks passed.
-GetQuestRunning/GetQuestCompleted now share compiled QUST state in both executors.
-Native startup already delegates to the shared executor; this closes fallback
-executor consistency, not a demonstrated ED-E native recruitment failure.
+Accepted main/origin-main is 899b73c2c897d5ecc383a1bca0c6005d8333c99b (PR286),
+merged 14:01:20 UTC after independent review and all five exact-head checks passed.
+Fallback GetQuestRunning/GetQuestCompleted/GetObjectiveCompleted now share compiled
+QUST state with the shared executor. Native startup already delegates to that
+executor; this is fallback consistency, not proven ED-E native recruitment.
+The accepted objective slice retained the then-unbound GetHasNote boundary at
+statement83. The active note slice now exercises the unchanged full GameMode in
+a controlled fixture through both executors; this is separate from native play.
 
-Completed branch reconciliation reduced remote branches from37 to3 and local
-branches from45 to3 before this slice. The current objective-query feature branch
-is the one additional active local branch. Main, open classic audio PR242 and
-held combat controls PR269 remain. The41 integrated local tips and completed
-PR285 tip have verified recovery bundles and exact manifests under
-local/fnv-wells-fixed/branch-reconciliation-20261023/ and quest-state-queries-20261023/.
-All preserved tips were independently recovered and integrity checked before ref
-cleanup. No unique work, save or source input was removed. Clean completed feature
-refs after each accepted merge; preserve open, held and writer-owned work.
+Completed refs are cleaned after verified recovery. Remote and local branch counts
+returned to3 after PR286 cleanup at14:02:21 UTC: main, open classic audio PR242 and
+held combat controls PR269. The note feature is the only additional active branch. The41 historical integrated tips and each completed slice have exact
+recovery manifests/bundles; all required tip objects were independently recovered
+and integrity checked before ref deletion. No unique work or save was removed.
 
-Active branch: codex/fnv-objective-completion-query from accepted main.
-The narrow repair binds fallback GetObjectiveCompleted to the existing compiled
-QUST/shared objective owner with the shared executor's finite unsigned integer
-index validation. It changes no quest flags, objective declarations, schema or
-fault recovery. The old-code control passes through the shared executor but fails
-through unchanged fallback with the unbound operation at13:37:36 UTC.
-Focused tests exercise both executors, independent displayed/completed/running
-flags, live changes, unsigned boundaries, compiled-reference/type refusals,
-short circuit, exact cold state and retained failure prefixes. Prior query summary
-reporting now distinguishes selected checks from the full suite; owned-prefix
-checks additionally require statement83 and explicit retained-error throws.
+Active slice: codex/fnv-player-note-membership, based on accepted main. Collected
+NOTE identities now have a dedicated ordered player owner shared by both script
+executors, CTDA382, conversation/speech/recipe/NPC/creature/unloaded adapters,
+Pip-Boy membership and campaign schema v59. Fresh history is known-empty; missing
+legacy history stays unknown through restore/resave. Inventory is never used to
+invent membership, and original saves and latched script errors are preserved.
+The notes pane reports unavailable history instead of showing a false empty list.
 
-The unchanged vDialogueEDE GameMode fixture still has an independent unsupported
-GetHasNote signature in statement83/source line107. No guessed inventory-count
-alias is introduced. Full expression parsing can refuse before evaluating the new
-objective callback, so owned-prefix acceptance does not establish owned objective
-query execution, full-script success, ordinary recruitment or campaign parity.
-The original full-script completion command remains strict. Dedicated note
-membership acquisition/removal/load ownership is separate work; legacy unknown
-membership must not be inferred from inventory. No note implementation is part
-of this objective slice.
+AddNote and positive player AddItem acquire one membership independently of item
+count and the outer AddItem silent flag. Zero-count player NOTE additions emit no
+effect or membership query. Duplicates emit no feedback; equal formatted note text
+shares tail feedback. Text uses winning sComputersAddedNote and NOTE full name
+(empty when absent, never EDID). The HUD requests the qualified icon/two-second
+lifetime and routes UIItemGenericUp through the existing shared variant selector
+and finite world voice owner. No separate note RNG or replay owner was added.
+Terminal AddNote metadata uses that same native effect adapter.
 
-The frozen slice passed its required full gate at13:50:58 UTC: focused and owned-
-prefix checks exit0, all2209 source/config hashes unchanged, diff check0 and the
-original save hash unchanged. Release/Debug builds have zero warnings/errors.
-Independent review and hosted exact-head checks are required before merge.
-The two separate note-owner writer files are preserved outside compile inputs in
-the private objective-completion-query-20261023/note-writer-hold directory, with
-exact hashes and original-path manifest; they are not tested or published here.
+The unchanged owned ED-E GameMode passes controlled absent/present NOTE fixtures
+through both executors: present membership selects six authored objective changes,
+and cold reconstruction preserves the prefix without replaying completed effects.
+This also reached two missing fallback objective command bindings, now joined to
+the existing shared quest owner with its uint/index and boolean checks. This is
+full source-program component execution, not ordinary recruitment or campaign proof.
 
-Original saves remain unchanged. Standing checked-publication direction is active;
-publication requires the selected owned-prefix audit, full local gate, independent
-review and exact-head hosted checks before merge. PR269 stays draft/native-and-
-merge-held. No third retail or bot/encounter attempt is permitted. Recording is
-off; runtime/build work remains serialized. Current evidence is under
-local/fnv-wells-fixed/objective-completion-query-20261023/.
+The owned HUD check selects an actual archived folder WAV, registers/completes one
+finite voice, resolves the actual note text/icon and restores Presented state
+without sound replay. The later verbose receipt has no HUD error or ObjectDB leak.
+Source-bound synthetic tests cover typed/canonical identities, order/duplicates,
+unknown history, atomic replacement, compiled arguments, short circuit, refusal
+prefixes, both command executors, real native adapters and cold state. Removed
+query/native bindings reproduce the respective unbound-operation/conversation382
+failures; temporary controls are restored before accepted validation.
+
+Ordinary placed-note pickup and container/world transfers remain closed before
+mutation: ownership/Karma and general reference retirement are separate owners.
+RemoveNote command feedback remains unbound. Exact HUD readiness/drop behavior,
+fade/glow clocks, cross-kind tail-text deduplication and environment reverb remain
+visible presentation differences. No native acquisition playthrough, final-pixel,
+retail audio/timing or campaign parity completion is claimed.
+
+Corrected full gate PASS at15:17:32 UTC, Release/Debug zero warnings/errors,
+formatting/analyzers/contracts/launcher/native Godot checks passed. Selected owned
+script and HUD checks all exit0; all2214 frozen source/config hashes and original
+save hash are unchanged, diff check0. Only this ledger is finalized afterward.
+A review invariant is also closed: impossible pending notices marked Presented
+refuse atomically, while current Presented and valid pending restoration remain
+admitted. The regression fails on the prior implementation. The corrected slice
+is ready for checked PR publication and independent exact-head review;
+main remains authoritative until review and hosted checks admit the merge.
+
+Coordinator owns serialized builds/runtime/Git; no competing job is active.
+Outbound writer contact was denied by automatic approval review and was neither
+retried nor relayed. Incoming sealed evidence supported coordinator-local work.
+Private receipts: local/fnv-wells-fixed/player-note-membership-20261023/.
+Standing checked-publication direction remains active. PR269 stays draft/native-
+and-merge-held; no third retail or bot/encounter attempt. Recording is off.
 
 Shared reputation state retains source-hashed float axes in schema v58. Fresh axes
 are zero; absent legacy history stays unknown per axis. CTDA573/574/575 share that
@@ -161,8 +180,10 @@ attempts and normal cleanup; no third blind launch.
 
 ## Remaining completion gates
 
-- Current P0: integrate qualified native hacking owners while preserving closed outcome admission, then resume ordinary tutorial progress with reliable control. Shared faction arbitration is implemented; actual eligible/ineligible
-  assistance remains unverified. Do not repeat the retired encounter admission.
+- Current P0: finish the checked collected-note integration, then take the nearest
+  qualified ordinary route blocker. Hacking outcome admission remains closed.
+  Shared faction arbitration is implemented; actual eligible/ineligible assistance
+  remains unverified. Do not repeat the retired encounter admission.
 - Tutorial: complete remaining wells, delayed death counters, loot, ingredients
   and campfire cooking through ordinary input, F5 and separate-process Continue.
 - NPC packages: marker current/queued/outgoing animation and physical occupancy

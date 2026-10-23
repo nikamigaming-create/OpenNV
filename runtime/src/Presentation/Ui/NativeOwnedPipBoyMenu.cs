@@ -21,6 +21,7 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
     private readonly Action<FalloutFormKey>? _useAid;
     private readonly FalloutRadioStations? _radio;
     private long _radioRevision = -1;
+    private long _noteRevision = -1;
     private readonly string _playerName;
     private readonly IReadOnlyList<FalloutNativeSkillIdentity> _skills, _tags;
     private readonly IReadOnlyList<FalloutNativeTraitIdentity> _traits;
@@ -42,6 +43,7 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
     private float _textOffset;
     private long _displayedInventoryRevision = -1;
     private FalloutFormKey? _selectedNote;
+    private IReadOnlyList<FalloutFormKey> CollectedNotes => _references.PlayerNotes.Notes;
     private FalloutMapMarker? _travelTarget;
     internal Func<FalloutFormKey, string?>? FastTravel { get; init; }
     internal Func<Color, Control>? LocalMap { get; init; }
@@ -97,6 +99,8 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
     public override void _Ready() => Refresh();
     public override void _Process(double delta)
     {
+        if (_tiles is not null && Error is null && _noteRevision != _references.PlayerNotes.Revision)
+        { Refresh(); return; }
         if (_tiles is not null && Error is null && _state.Page == FalloutPipBoyPage.Data && _state.Selection == 4 && _radioRevision != _radio?.Revision)
         { Refresh(); return; }
         if (_tiles is null || Error is not null || _state.Page != FalloutPipBoyPage.Items) return;
@@ -131,6 +135,7 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
         Error = null;
         RemoveMeta("opennv_pipboy_error");
         _displayedInventoryRevision = _inventory.Revision;
+        _noteRevision = _references.PlayerNotes.Revision;
         SetMeta("opennv_page", (int)_state.Page);
         foreach (var child in GetChildren()) { RemoveChild(child); child.QueueFree(); }
         _buttons.Clear(); _templates.Clear(); _namedTiles.Clear(); _map = null; _mapForeground = null;
@@ -326,7 +331,7 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
             var markers = FalloutWorldMap.SourceMarkers(_records);
             AddText($"Level  {vitals.Level}\nExperience  {vitals.ExperiencePoints}\nQuests completed  {quests.Count(quest => quest.Completed)}\n" +
                 $"Locations discovered  {markers.Count(marker => _references.MapMarkerState(marker.Marker).CanTravel)}\n" +
-                $"Notes collected  {_state.Items.Count(item => item.RecordType == "NOTE")}\n" +
+                $"Notes collected  {(_references.PlayerNotes.Known ? CollectedNotes.Count.ToString(CultureInfo.InvariantCulture) : "unknown")}\n" +
                 $"Items carried  {_state.Items.Sum(item => item.Count)}", new(100, 155), new(720, 400));
         }
     }
@@ -598,7 +603,16 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
     private void BuildNotes()
     {
         Hide("MM_LocalMap_ClipWindow", "MM_RadioStationList", "MM_WaveformRect", "MM_TextScrollbar");
-        var notes = _state.Items.Where(item => item.RecordType == "NOTE").Select(item => FalloutNote.Read(_records, item.FormKey))
+        if (!_references.PlayerNotes.Known)
+        {
+            _selectedNote = null;
+            ListRows(Tile("MM_NotesList"), "MM_ListTemplate", []);
+            Bind("MM_DataRect", "visible", 1);
+            Bind("MM_DataRect", "_ItemType", 1);
+            Text("MM_DataText", "Collected-note history is unavailable in this save.");
+            return;
+        }
+        var notes = CollectedNotes.Select(form => FalloutNote.Read(_records, form))
             .OrderBy(note => note.Name, StringComparer.CurrentCultureIgnoreCase).ToArray();
         var selected = notes.FirstOrDefault(note => note.Record.FormKey == _selectedNote) ?? notes.FirstOrDefault();
         _selectedNote = selected?.Record.FormKey;

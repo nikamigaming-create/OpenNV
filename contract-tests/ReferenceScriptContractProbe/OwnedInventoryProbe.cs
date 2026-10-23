@@ -28,7 +28,8 @@ internal static class OwnedInventoryProbe
             notices.Add(effect.Kind);
             if (effect.Kind == FalloutReferenceEffectKind.AddNote)
             {
-                if (target.Item(effect.Target!.Value) is null) target.Add(records, effect.Target.Value, 1, 1, true);
+                // Controlled membership fixture; native feedback is not supplied by this host.
+                world.PlayerNotes.AddMembership(effect.Target!.Value);
             }
             else if (effect.Kind == FalloutReferenceEffectKind.AddItem && effect.Target == player)
                 target.Add(records, effect.Argument!.Value, effect.Value, 1, effect.Enable);
@@ -41,7 +42,7 @@ internal static class OwnedInventoryProbe
             inventory.Items.Single(item => item.EditorId == "Stimpak").Count != 4 ||
             inventory.Items.Single(item => item.EditorId == "Caps001").Count != 18 ||
             inventory.Items.Single(item => item.EditorId == "Lockpick").Count != 6 ||
-            inventory.Items.Single(item => item.RecordType == "NOTE").Count != 1 ||
+            world.PlayerNotes.Notes.Count != 1 || inventory.Items.Any(item => item.RecordType == "NOTE") ||
             inventory.Items.Any(item => item.RecordType == "LVLI") || notices[0] != FalloutReferenceEffectKind.AddNote)
             throw new InvalidOperationException("Owned farewell results lost inventory, source condition or execution order.");
         foreach (var name in new[] { "PipBoy", "PipBoyGlove", "VaultSuit21" })
@@ -91,6 +92,6 @@ internal static class OwnedInventoryProbe
         Scripts(cold).ExecuteResult(grant, speaker, true);
         if (JsonSerializer.Serialize(inventory.Capture()) != JsonSerializer.Serialize(cold.Capture()))
             throw new InvalidOperationException("Cold inventory lost item variants, equipment or its next leveled-list draw.");
-        Console.WriteLine("OPENNV_OWNED_INVENTORY_PASS sourceInfo=true tagBranches=true leveledChance=true weaponCondition=true equipmentSlots=true coldRandomContinuation=true retailRandomAndPixels=unverified");
+        Console.WriteLine("OPENNV_OWNED_INVENTORY_PASS sourceInfo=true tagBranches=true leveledChance=true weaponCondition=true equipmentSlots=true coldRandomContinuation=true noteMembershipFixture=true nativeNoteFeedback=unverified retailRandomAndPixels=unverified");
     }
 }

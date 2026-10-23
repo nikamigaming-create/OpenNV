@@ -31,7 +31,7 @@ internal static partial class TerminalContracts
                 "<add><copy>7</copy><onlyifnot>entity_highdef</onlyifnot></add></value>");
             Require(FalloutMenuXml.Number(brightness, (_, _) => throw new InvalidOperationException()) == 11,
                 "The case-insensitive desktop highdef shortcut selected the wrong source brightness arm.");
-            Console.WriteLine("OPENNV_TERMINAL_CONTRACT_PASS orderedSourceEntries=true emptyResults=true " +
+            Console.WriteLine("OPENNV_TERMINAL_CONTRACT_PASS orderedSourceEntries=true emptyResults=true noteMembershipFixture=true nativeNoteFeedback=unverified " +
                 "declaringMasterScope=true actualCaller=true sourceEffects=true conditionScope=true " +
                 "prefixFailureNoReplay=true coldSettledEffects=true textNote=true " +
                 "embeddedLocalsAndCompiledExecution=unbound hackingAndMatchedMenuTiming=unverified");
@@ -110,9 +110,9 @@ internal static partial class TerminalContracts
         Require(menu.CurrentPage.Record.FormKey == B(0x31) && menu.Reference == A(0x90) && menu.CanBack,
             "A source submenu replaced the actual placed calling reference.");
         menu.Select(0, menu.Generation);
-        Require(menu.DisplayNote == B(0x30) && inventory.Item(B(0x30))?.Count == 1 &&
+        Require(menu.DisplayNote == B(0x30) && world.PlayerNotes.Contains(B(0x30)) && inventory.Item(B(0x30)) is null &&
             FalloutNote.Read(records, menu.DisplayNote!.Value).RequireText().Length != 0,
-            "AddNote/display-note metadata did not join the shared player inventory.");
+            "AddNote/display-note metadata did not join the controlled membership fixture.");
         Require(menu.Back() && menu.Back() && menu.CurrentPage.Record.FormKey == A(0x20), "Submenu back stack was lost.");
         menu.Select(5, menu.Generation); Require(menu.Back(), "Repeatable result did not return to its page.");
         menu.Select(5, menu.Generation); Require(menu.Back(), "Second explicit selection did not return to its page.");
@@ -120,7 +120,7 @@ internal static partial class TerminalContracts
         menu.Close(); menu.RequireSaveable();
         var snapshot = world.Capture(); var questSnapshot = quests.Capture(); var inventorySnapshot = inventory.Capture();
         using var cold = new FalloutReferenceWorld(records);
-        cold.Restore(snapshot); cold.LoadCell(FalloutCellSceneReader.Read(records, A(0x80)));
+        cold.Restore(snapshot); cold.PlayerNotes.Restore(world.PlayerNotes.Capture()); cold.LoadCell(FalloutCellSceneReader.Read(records, A(0x80)));
         var restoredQuests = new FalloutQuestState(records); restoredQuests.Restore(questSnapshot);
         var restoredInventory = new FalloutPlayerInventory();
         restoredInventory.Restore(inventorySnapshot.Inventory, inventorySnapshot.EquippedRuntimeFormIds.ToArray(), inventorySnapshot.InventoryRandomState);
@@ -132,7 +132,7 @@ internal static partial class TerminalContracts
             "Cold terminal linked predicate lost the unchanged authored reference binding.");
         var restoredMenu = Menu(records, cold, coldConditions, coldScripts, restoredInventory);
         Require(restoredQuests.Stage(A(0x60)) == 10 && restoredQuests.Variable(A(0x60), 1) == 2 &&
-            restoredInventory.Item(B(0x30))?.Count == 1 && coldEffects.Count == 0 &&
+            cold.PlayerNotes.Contains(B(0x30)) && restoredInventory.Item(B(0x30)) is null && coldEffects.Count == 0 &&
             restoredMenu.VisibleEntries.All(value => value.Entry.Index != 0),
             "Cold settled state lost existing persisted effects or replayed source initialization/results.");
         restoredMenu.Close(); restoredMenu.RequireSaveable();
@@ -265,8 +265,9 @@ internal static partial class TerminalContracts
             selection.Entry.RequireSelectionEffects();
             if (selection.Entry.Note is { } note) _ = FalloutNote.Read(records, note).RequireText();
             scripts.ExecuteTerminalResult(selection);
-            if (selection.Entry.AddNote && selection.Entry.Note is { } added && inventory.Item(added) is null)
-                inventory.Add(records, added, 1, 1, true);
+            // Controlled result metadata host, not native acquisition/feedback admission.
+            if (selection.Entry.AddNote && selection.Entry.Note is { } added)
+                world.PlayerNotes.AddMembership(added);
         });
 
     private static void VerifyMasterContext(string directory)

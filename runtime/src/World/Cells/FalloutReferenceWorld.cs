@@ -477,6 +477,7 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
     internal FalloutUiComponentStore? Ui { get; } = ui;
     internal FalloutInputControls? Controls { get; } = controls;
     internal FalloutPlayerMoves PlayerMoves { get; } = new();
+    internal FalloutPlayerNotes PlayerNotes { get; } = new(records);
     internal FalloutScriptMenus Menus { get; } = new();
     private FalloutReferencePackageEvents? _packageEvents;
     internal FalloutReferencePackageEvents PackageEvents => _packageEvents ??= new(records);

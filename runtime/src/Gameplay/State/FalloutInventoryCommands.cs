@@ -37,6 +37,8 @@ internal sealed class FalloutInventoryCommands(FalloutPluginStack records, Fallo
 
     internal void Execute(FalloutInventoryCommand command)
     {
+        if (command.Kind == FalloutInventoryCommandKind.Add && command.Count == 0 && IsPlayer(command.Target) &&
+            command.Item is { } zeroItem && records.GetEffective(zeroItem).Signature == "NOTE") return;
         if (command.Kind is FalloutInventoryCommandKind.Add or FalloutInventoryCommandKind.Remove && command.Count <= 0)
             throw new InvalidDataException("Inventory command count must be positive.");
         var isPlayer = IsPlayer(command.Target);
@@ -45,6 +47,15 @@ internal sealed class FalloutInventoryCommands(FalloutPluginStack records, Fallo
         {
             case FalloutInventoryCommandKind.Add or FalloutInventoryCommandKind.Remove:
                 var changedItem = command.Item ?? throw new InvalidDataException("Inventory count command has no item.");
+                if (isPlayer && command.Kind == FalloutInventoryCommandKind.Add)
+                {
+                    var source = records.GetEffective(changedItem);
+                    if (source.Signature == "NOTE")
+                    {
+                        world.AcquirePlayerNote(changedItem, player.Notifications); return;
+                    }
+                    FalloutReferenceWorld.RequirePlayerItemAcquisition(source);
+                }
                 var revision = inventory.Revision;
                 if (command.Kind == FalloutInventoryCommandKind.Add)
                     inventory.Add(records, changedItem, command.Count, level(), command.Silent || !isPlayer, globals);
@@ -62,6 +73,9 @@ internal sealed class FalloutInventoryCommands(FalloutPluginStack records, Fallo
                 break;
             case FalloutInventoryCommandKind.RemoveAll:
                 var destination = command.Destination is { } target ? Inventory(target) : null;
+                if (command.Destination is { } noteReceiver && IsPlayer(noteReceiver))
+                    foreach (var transferred in inventory.Items)
+                        FalloutReferenceWorld.RequirePlayerItemAcquisition(records.GetEffective(transferred.FormKey));
                 if (!isPlayer && world.Get(command.Target).Injury?.Dead != true) prepareActorChange?.Invoke(command.Target);
                 inventory.RemoveAll(records, isPlayer, destination, command.RetainOwnership,
                     command.Destination is { } receiver && IsPlayer(receiver) && !command.Silent);

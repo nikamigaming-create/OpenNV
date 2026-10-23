@@ -222,6 +222,7 @@ internal partial class RuntimeNativeOpeningStageDriver
             ActorOverrides = _scripts.References!.CaptureActorOverrides(),
             FactionRelations = _scripts.References.CaptureFactionRelations(),
             Reputations = _scripts.References.CaptureReputations(),
+            PlayerNotes = _scripts.References.PlayerNotes.Capture(),
             EncounterZones = _scripts.References.CaptureEncounterZones(),
             ExplosionExposure = _player.CaptureExplosionExposure(),
             Music = _scriptMusic?.Capture()
@@ -256,6 +257,7 @@ internal partial class RuntimeNativeOpeningStageDriver
     internal float EvaluateRecipeCondition(FalloutCondition condition)
     {
         if (FalloutPlatformConditions.Evaluate(condition) is { } platform) return platform;
+        if (condition.Function == 382) return _scripts.References!.EvaluatePlayerNoteCondition(condition)!.Value;
         if (condition.Function is 573 or 574 or 575) return _scripts.References!.EvaluateReputationCondition(condition)!.Value;
         if (condition.Function is 56 or 58 or 59 or 79 or 420 or 421 or 546) return _quests.Evaluate(condition);
         if (condition.Function == 74)

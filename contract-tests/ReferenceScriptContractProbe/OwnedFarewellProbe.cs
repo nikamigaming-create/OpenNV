@@ -37,7 +37,8 @@ internal static class OwnedFarewellProbe
             switch (effect.Kind)
             {
                 case FalloutReferenceEffectKind.AddNote:
-                    if (inventory.Item(effect.Target!.Value) is null) inventory.Add(records, effect.Target.Value, 1, 1, true, globals);
+                    // Controlled membership fixture; native feedback remains unverified.
+                    world.PlayerNotes.AddMembership(effect.Target!.Value);
                     break;
                 case FalloutReferenceEffectKind.AddItem when effect.Target == player:
                     inventory.Add(records, effect.Argument!.Value, effect.Value, 1, effect.Enable, globals); break;
@@ -103,6 +104,9 @@ internal static class OwnedFarewellProbe
         var scriptSnapshot = System.Text.Json.JsonSerializer.Deserialize<FalloutQuestScriptsSnapshot>(System.Text.Json.JsonSerializer.Serialize(questScripts.Capture()))!;
         var coldQuests = new FalloutQuestState(records); coldQuests.Restore(quests.Capture());
         using var coldWorld = new FalloutReferenceWorld(records); coldWorld.Restore(world.Capture());
+        coldWorld.PlayerNotes.Restore(world.PlayerNotes.Capture());
+        if (!coldWorld.PlayerNotes.Notes.SequenceEqual(world.PlayerNotes.Notes))
+            throw new InvalidDataException("Cold controlled note membership changed.");
         var coldScripts = new FalloutQuestScripts(records, coldQuests, new HashSet<FalloutFormKey>(), new(), globals, references: coldWorld);
         coldScripts.Restore(scriptSnapshot);
         if (!coldScripts.SaidInfos.SetEquals(questScripts.SaidInfos) || !coldScripts.Session.Hardcore || coldQuests.ActiveQuest != quests.ActiveQuest ||
@@ -113,6 +117,6 @@ internal static class OwnedFarewellProbe
         world.LoadCell(FalloutCellSceneReader.Read(records, cell));
         if (!world.Get(hardcore).Deleted || world.Get(hardcore).DeletePending || world.CanActivate(hardcore) || world.IsEnabled(hardcore) ||
             world.SetEnabled(hardcore, true)) throw new InvalidDataException("Deleted reference returned after its cell reloaded.");
-        Console.WriteLine($"OPENNV_OWNED_FAREWELL_PASS sourceInfos={infos.Count} realGrants=true pipBoyState=true doorState=true hardcoreAnswer=true sourceTimer=true subsequentQuests=true coldHistory=true deletedLifetime=true ordinaryInputAndPresentation=unverified");
+        Console.WriteLine($"OPENNV_OWNED_FAREWELL_PASS sourceInfos={infos.Count} realGrants=true pipBoyState=true doorState=true hardcoreAnswer=true sourceTimer=true subsequentQuests=true coldHistory=true deletedLifetime=true noteMembershipFixture=true nativeNoteFeedback=unverified ordinaryInputAndPresentation=unverified");
     }
 }

@@ -82,7 +82,7 @@ internal sealed partial class RuntimeNativeQuestScripts : Node
         {
             var hudLayer = new CanvasLayer { Name = "NativeHudLayer", Layer = 1, ProcessMode = ProcessModeEnum.Always };
             AddChild(hudLayer);
-            _hud = new NativeOwnedHudMessages(_records, _inventory.Notifications);
+            _hud = new NativeOwnedHudMessages(_records, _inventory.Notifications, noteSounds: Scripts.Sounds);
             hudLayer.AddChild(_hud);
         }
         catch (Exception error)

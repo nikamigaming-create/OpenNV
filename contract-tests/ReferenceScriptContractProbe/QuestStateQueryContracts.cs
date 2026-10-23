@@ -6,7 +6,7 @@ using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.World.Cells;
 
-internal static class QuestStateQueryContracts
+internal static partial class QuestStateQueryContracts
 {
     internal static void Run(string? selected = null)
     {
@@ -17,6 +17,7 @@ internal static class QuestStateQueryContracts
         if (selected is null)
         {
             RunObjective();
+            RunNotes();
             foreach (var shared in new[] { false, true })
             {
                 ShortCircuit(shared);
@@ -119,16 +120,16 @@ internal static class QuestStateQueryContracts
             "An unselected quest-query operand was resolved or executed.");
     }
 
-    private static void Refusal(string query, string target, bool shared, bool bindTarget = true)
+    private static void Refusal(string query, string target, bool shared, bool bindTarget = true, bool bindNote = true)
     {
-        using var fixture = new Fixture($"set prefix to prefix + 1\nset result to {query} {target}\nset suffix to 99", shared, bindTarget: bindTarget);
+        using var fixture = new Fixture($"set prefix to prefix + 1\nset result to {query} {target}\nset suffix to 99", shared, bindTarget: bindTarget, bindNote: bindNote);
         fixture.Tick();
         Require(fixture.Error is not null && fixture.Value(1) == 1 && fixture.Value(2) == 0 && fixture.Value(3) == 0,
             "Invalid quest query ran its suffix or discarded its consumed prefix.");
         var error = fixture.Error;
         fixture.Tick();
         Require(fixture.Error == error && fixture.Value(1) == 1, "A failed quest query replayed its prefix.");
-        using var cold = new Fixture(fixture.Body, shared, initialize: false, bindTarget: bindTarget);
+        using var cold = new Fixture(fixture.Body, shared, initialize: false, bindTarget: bindTarget, bindNote: bindNote);
         cold.Quests.Restore(RoundTrip(fixture.Quests.Capture().ToArray()));
         cold.Scripts.Restore(RoundTrip(fixture.Scripts.Capture()));
         cold.Tick();
@@ -250,11 +251,14 @@ internal static class QuestStateQueryContracts
         internal readonly string Body;
         internal FalloutQuestState Quests { get; }
         internal FalloutQuestScripts Scripts { get; }
+        internal FalloutReferenceWorld World => _world;
+        internal FalloutPluginStack Records => _records;
+        internal FalloutFormKey Note => new("QuestQueries.esm", 0x400);
         internal FalloutFormKey Target => new("QuestQueries.esm", 0x100);
         private FalloutFormKey Caller => new("QuestQueries.esm", 0x101);
         internal string? Error => Scripts.Capture().Instances.Single().Error;
 
-        internal Fixture(string body, bool shared, bool initialize = true, bool bindTarget = true)
+        internal Fixture(string body, bool shared, bool initialize = true, bool bindTarget = true, bool bindNote = true, bool allowNoteEffects = false)
         {
             Body = body;
             var header = new byte[20]; U32(3).CopyTo(header, 12); header[16] = 1;
@@ -263,9 +267,12 @@ internal static class QuestStateQueryContracts
                 var local = new byte[24]; U32((uint)index + 1).CopyTo(local, 0);
                 return new[] { Field("SLSD", local), Field("SCVR", Text(name)) };
             }).ToArray();
-            var bindings = new[] { Field("SCRO", U32(0x300)) }.Concat(bindTarget ? new[] { Field("SCRO", U32(0x100)) } : []);
+            var bindings = new[] { Field("SCRO", U32(0x300)), Field("SCRO", U32(0x14)) }.Concat(bindTarget ? new[] { Field("SCRO", U32(0x100)) } : [])
+                .Concat(bindNote ? new[] { Field("SCRO", U32(0x400)) } : []);
             File.WriteAllBytes(Path.Combine(_directory.FullName, "QuestQueries.esm"), Join(
                 Record("TES4", 0, Field("HEDR", new byte[12])),
+                Record("GMST", 0x401, Field("EDID", Text("sComputersAddedNote")), Field("DATA", Text("Note Added: %s"))),
+                Record("NOTE", 0x400, Field("EDID", Text("CollectedNote"))),
                 Record("QUST", 0x100, Field("EDID", Text("TargetQuest")), Field("DATA", [0, 0]),
                     Field("QOBJ", U32(0)), Field("QOBJ", U32(10)), Field("QOBJ", U32(uint.MaxValue))),
                 Record("QUST", 0x101, Field("EDID", Text("CallerQuest")), Field("SCRI", U32(0x200)), Field("DATA", [0, 0])),
@@ -274,18 +281,29 @@ internal static class QuestStateQueryContracts
                     .Concat(declarations).Append(Field("SCTX", Text("begin GameMode\n" + body + "\nend"))).ToArray())));
             _records = FalloutPluginStack.Load(_directory.FullName, ["QuestQueries.esm"]);
             _world = new(_records); Quests = new(_records);
-            Scripts = new(_records, Quests, new HashSet<FalloutFormKey>(), new FalloutPlayerInventory(),
+            Scripts = new(_records, Quests, new HashSet<FalloutFormKey>(), Inventory,
                 defaultProcessingDelay: 0, references: _world);
             if (shared)
             {
                 var executor = new FalloutReferenceScripts(_records, _world, Quests,
-                    new((_, _) => false, _ => throw new InvalidDataException("Unexpected query effect.")));
+                    new((_, _) => false, effect =>
+                    {
+                        if (!allowNoteEffects || effect.Kind is not (FalloutReferenceEffectKind.AddNote or FalloutReferenceEffectKind.AddItem))
+                            throw new InvalidDataException("Unexpected query effect.");
+                        // Controlled command composition; the separate Godot
+                        // audit exercises the actual native effect adapter.
+                        if (effect.Kind == FalloutReferenceEffectKind.AddNote)
+                            _world.AcquirePlayerNote(effect.Target!.Value, Inventory.Notifications);
+                        else new FalloutInventoryCommands(_records, _world, Inventory, () => 1).Execute(
+                            new(FalloutInventoryCommandKind.Add, effect.Target!.Value, effect.Argument, Count: effect.Value, Silent: effect.Enable));
+                    }));
                 Scripts.Host = new((_, _) => throw new InvalidDataException("Unexpected stage effect."), _ => 0,
                     ExecuteProgram: executor.ExecuteProgram);
             }
             if (initialize) { Quests.SetRunning(Caller, true); Quests.SetRunning(Target, false); }
         }
 
+        internal FalloutPlayerInventory Inventory { get; } = new();
         internal double Value(uint index) => Quests.Variable(Caller, index);
         internal void Tick() => Scripts.Advance(0);
         internal void Expect(int expected, int ticks) => Require(Error is null && Value(1) == ticks && Value(2) == expected && Value(3) == ticks,
