@@ -27,6 +27,7 @@ internal sealed partial class FalloutReferenceScripts
         if (entry.Program.Identity != selection.Entry.Program.Identity)
             throw new InvalidDataException("Terminal result fragment differs from its selection receipt.");
         entry.Program.RequireSourceExecution();
+        if (entry.Program.CompiledSize == 0) return;
         var program = FalloutGameModeProgram.Read("begin Result\n" + entry.Program.Source + "\nend", "Result");
         try { Execute(selection.Reference, Bindings(reference, current.Record, entry.Program.Fields), program, null, 0); }
         catch (Exception error)

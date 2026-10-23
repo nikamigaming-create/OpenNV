@@ -8,6 +8,7 @@ internal static partial class TerminalContracts
 {
     internal static void Run()
     {
+        RunZeroExtent();
         var directory = Path.Combine(Path.GetTempPath(), "opennv-terminal-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(directory);
         try
@@ -306,9 +307,9 @@ internal static partial class TerminalContracts
     {
         File.WriteAllBytes(Path.Combine(directory, "EngineBase.esm"), Join(Header(),
             Terminal(0x20, Entry("Player reference", "", 0, Program("player.MoveTo player", 0x14))),
-            Terminal(0x21, Entry("Missing reference", "", 0, Program("", 0x999)))));
+            Terminal(0x21, Entry("Missing reference", "", 0, Program("player.MoveTo player", 0x999)))));
         File.WriteAllBytes(Path.Combine(directory, "EngineForeign.esp"), Join(Header("EngineBase.esm"),
-            Terminal(0x01000020, Entry("Foreign player-shaped ID", "", 0, Program("", 0x01000014)))));
+            Terminal(0x01000020, Entry("Foreign player-shaped ID", "", 0, Program("player.MoveTo player", 0x01000014)))));
         using var records = FalloutPluginStack.Load(directory, ["EngineBase.esm", "EngineForeign.esp"]);
         var player = records.RuntimeFormKey(0x14);
         Reject(() => records.GetEffective(player));
@@ -344,7 +345,7 @@ internal static partial class TerminalContracts
         Terminal(0x74, Entry("bad", "", 0, [Field("SCHR", ScriptHeader(0, 2, 0)), Field("SCDA", [1])])),
         Terminal(0x75, Entry("bad", "", 0, [.. Program(""), Field("SCTX", Text("")), Field("SCTX", Text(""))])),
         Terminal(0x76, Entry("bad", "", 0, [Field("SCHR", ScriptHeader(1, 0, 0)), Field("SCRO", [1, 2, 3])])),
-        Terminal(0x77, Entry("bad", "", 0, [Field("SCHR", ScriptHeader(1, 0, 0)), Field("SCRV", UInt(1))])),
+        Terminal(0x77, Entry("bad", "", 0, [Field("SCHR", ScriptHeader(1, 1, 0)), Field("SCDA", [1]), Field("SCRV", UInt(1))])),
         Terminal(0x78, [Field("ITXT", Text("bad")), Field("ANAM", [0]), .. Program("")]),
         Terminal(0x79, Entry("bad", "", 0, [Field("TNAM", UInt(2)), .. Program("")])),
         Terminal(0x7a, Entry("compiled", "", 0, [Field("SCHR", ScriptHeader(0, 1, 0)), Field("SCDA", [1])])),

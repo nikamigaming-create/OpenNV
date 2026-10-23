@@ -10,6 +10,30 @@ if (args is ["--owned-generator-activation", var generatorGame])
     return;
 }
 
+if (args is ["--empty-info-result-contracts"])
+{
+    EmptyDialogueResultContracts.Run();
+    return;
+}
+
+if (args is ["--owned-empty-info-result", var emptyInfoGame])
+{
+    EmptyDialogueResultContracts.RunOwned(emptyInfoGame);
+    return;
+}
+
+if (args is ["--terminal-zero-extent-contracts"])
+{
+    TerminalContracts.RunZeroExtent();
+    return;
+}
+
+if (args is ["--owned-terminal-zero-extent", var zeroTerminalGame])
+{
+    TerminalContracts.RunOwnedZeroExtent(zeroTerminalGame);
+    return;
+}
+
 if (args is ["--reputation-case-contracts", var reputationCase] && reputationCase is "restore" or "duplicates")
 {
     ReputationContracts.RunCaseIdentity(reputationCase == "duplicates");
@@ -1202,6 +1226,7 @@ SandboxAdmissionFailureContracts.Run();
 ReferenceEventHostContracts.Run();
 HackingContracts.Run();
 ElsePayloadContracts.Run();
+EmptyDialogueResultContracts.Run();
 TerminalContracts.Run();
 ScriptDeathContracts.Run();
 ActivationParentContracts.Run();
