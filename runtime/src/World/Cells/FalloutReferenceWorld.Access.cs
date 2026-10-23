@@ -232,9 +232,23 @@ internal sealed partial class FalloutReferenceWorld
                 local.FactionRank is null or -1 ? linked.FactionRank : local.FactionRank,
                 local.Global ?? linked.Global);
         }
+        if (local.Owner is null && records.GetEffective(reference).Signature is not ("ACHR" or "ACRE"))
+        {
+            var instance = Get(reference);
+            var basis = records.GetEffective(instance.Base);
+            if (basis.Signature is not ("DOOR" or "ACTI" or "FURN"))
+            {
+                var cell = ReferenceSpatialCell(instance);
+                // The engine's NoZoneZone bootstrap form is not an inherited
+                // ownership source. A real assigned zone precedes the cell.
+                var inherited = EncounterOwner(ReferenceEncounterZone(instance)) ??
+                    LocalOwnership(AccessRecord(cell)).Owner ?? EncounterOwner(CellEncounterZone(cell));
+                local = local with { Owner = inherited };
+            }
+        }
         // Rank and global conditions do not follow the owner as one bundle.
         // Rank consults the encounter zone before the current cell; globals
-        // consult the cell directly. A door's owner still does not inherit
+        // consult the cell directly. Excluded owners still do not inherit
         // from either of those containers.
         if (local.FactionRank is null or -1 || local.Global is null)
         {
@@ -250,6 +264,15 @@ internal sealed partial class FalloutReferenceWorld
             local = local with { FactionRank = rank is -1 ? null : rank, Global = local.Global ?? cell.Global };
         }
         return local;
+    }
+
+    private FalloutFormKey? EncounterOwner(FalloutFormKey? zone)
+    {
+        if (zone is not { } key || records.RuntimeFormId(key) == 0x1e) return null;
+        var owner = FalloutEncounterZone.Read(records.GetEffective(key)).Owner;
+        if (owner is { } declared && records.GetEffective(declared).Signature is not ("NPC_" or "FACT" or "ACHR" or "CREA"))
+            throw new InvalidDataException("Encounter ownership has an invalid owner type.");
+        return owner;
     }
 
     private FalloutReferenceOwnership LocalOwnership(AccessSource source)

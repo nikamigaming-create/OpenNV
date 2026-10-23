@@ -5,10 +5,11 @@ using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.World.Cells;
 
-internal static class ReferenceAccessContracts
+internal static partial class ReferenceAccessContracts
 {
     internal static void Run()
     {
+        VerifyInheritedOwnership();
         var directory = Path.Combine(Path.GetTempPath(), "opennv-reference-access-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(directory);
         try

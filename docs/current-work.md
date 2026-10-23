@@ -8,41 +8,38 @@ input and Git; no competing jobs or denied writer contact are permitted.
 
 ## Active block
 
-Accepted main/origin-main is 189c98a19cf3af0bd3eadfe5b8d84141c3f68a92 (PR275).
-Independent review and all five exact-head checks passed. PR269 remains
-draft/native-and-merge-held. No third
-bot encounter or retail attempt is permitted. The independent active branch is
-codex/fnv-terminal-hack-state, frozen for publication and independent review.
+Accepted main/origin-main is 76482be2068c95873d5b6ddda4e75d40bd86d3d3 (PR276).
+PR276 terminal result-state persistence passed independent review and all five checks at
+54a20829ff9f9a214e982955133348b5df559bd5 and merged at 05:41:43 UTC.
+Its v57 migration preserves unknown v56 history; the actual unchanged campaign
+reader and temporary current-codec audit pass. Its complete runtime gate passes
+with all2197 source/config files unchanged during the run. PR269 remains draft,
+native-and-merge-held. No third bot encounter or retail attempt is permitted.
 
-The new result-byte owner distinguishes fresh source-bound known-zero TERM state
-from omitted historical state. Missing state in a restored reference stays unknown
-and refuses hacking-state queries/mutations. Existing generic lock and password
-behavior remains unchanged. The separate signed terminal difficulty override is
-not introduced or inferred from generic lock state.
+Active branch: codex/fnv-effective-reference-ownership. The qualified effective
+owner query selects a local/live override, eligible reference-zone owner, current
+cell owner, then that cell's zone owner. Actors, DOOR, ACTI and FURN do not gain
+container ownership. The engine default zone is excluded. Rank/global selection
+is independent. Existing C# ownership inherited rank/global but omitted eligible
+owner fallback, so an actual saved TERM10872f appeared unowned despite CELL106185
+owner104c6c. The shared correction also reaches ordinary pickup item metadata.
 
-Focused contracts and existing access regressions pass all 256 result bytes,
-high-bit toggles, whole-byte increment/reset, masked lockout with its required
-perk callback, per-reference isolation, hash-bound JSON cold restoration, atomic
-source/wrong-target rejection and unknown legacy roundtrips. The v57 admission
-preserves v56 reference snapshots without populating result history. The actual
-campaign reader admits the unchanged genuine v56 checkpoint; all reference
-snapshots remain exact and result histories remain unknown. Its owned TERM
-reference 10872f/base064b87 separately passes fresh-zero, controlled byte129,
-JSON cold and unchanged generic-lock checks. Save and selected source hashes
-remain unchanged. These checks do not establish native outcome/input behavior.
-The controlled known byte also passes an exact complete current-campaign
-write/read through a temporary copy, removed in finally. Formatting, full plugin
-codec regressions and the required runtime gate pass at 05:20:01 UTC: exit0,
-all2197 source/config hashes unchanged during the run, diff check0 and recording
-off. Publication is review-held; this is no native hacking or parity claim.
-Evidence: local/fnv-wells-fixed/terminal-hack-state-20261023/{owned.log,
-access.log,plugin-probe.log,final-result.json,final-source.json,final-runtime.log}.
+Focused contracts cover source priority, default/empty reference-zone fallthrough,
+exclusions, current-cell relocation, invalid inherited owner refusal, local override,
+ordinary pickup ownership and JSON cold restoration. The selected genuine saved
+interior terminal audit verifies source/saved inputs and inherited owner104c6c;
+original campaign/source bytes remain unchanged. Formatting and focused checks pass on the accepted PR276 baseline. The combined full gate passes at 05:49:54 UTC: exit0, all2199 source/config files unchanged during the run and diff check0. Publication is frozen for independent review. These are
+managed ownership/retention proofs, not a native hacking or crime outcome.
+Evidence: local/fnv-wells-fixed/effective-reference-owner-20261023/.
 
-Native locked-terminal admission remains closed. Unlock, XP, ownership/alarm,
-Computers Hacked statistics and deferred contents remain distinct unimplemented
-or unqualified handoffs. No result-byte mutation performs those effects. The
-source scan finds a shared XP owner but no MiscStat/Computers Hacked owner.
-Recording is off; existing saves and retail inputs have not been modified.
+The next unqualified success boundary is the actual resident-witness/process
+handoff after effective-owner resolution. It is not a direct XOWN setter or an
+optional effect inferred absent from missing XOWN. Success ordering remains
+result bit -> XP -> conditional owner/witness handoff -> statistic -> later
+contents. No partial success or guessed alarm suppression is introduced. Native
+hacking remains closed until the required effects and input/lifetime are owned.
+No XP, statistic, alarm or contents effect is committed by this change. Recording
+is off and original campaign/retail inputs remain read-only.
 
 ## Gameplay and test-control checkpoint
 
@@ -117,9 +114,7 @@ attempts and normal cleanup; no third blind launch.
 
 ## Remaining completion gates
 
-- Current P0: integrate qualified locked-terminal hacking owners without bypassing
-  missing outcomes, then continue remaining wells only through reliable ordinary
-  control. Shared faction arbitration is implemented; actual eligible/ineligible
+- Current P0: integrate qualified native hacking owners while preserving closed outcome admission, then resume ordinary tutorial progress with reliable control. Shared faction arbitration is implemented; actual eligible/ineligible
   assistance remains unverified. Do not repeat the retired encounter admission.
 - Tutorial: complete remaining wells, delayed death counters, loot, ingredients
   and campfire cooking through ordinary input, F5 and separate-process Continue.
@@ -129,8 +124,8 @@ attempts and normal cleanup; no third blind launch.
   completion for qualified native readiness.
 - Access: terminal pages/results exist, but missing keys/passwords stop before
   ordinary lockpicking/hacking. Candidate/attempt/bracket primitives are
-  prerequisites; native admission/UI input, source placement, retained outcomes,
-  qualified rewards and persistent outcome ownership still need integration.
+  prerequisites; native UI/admission, retained outcomes, qualified rewards and
+  persistent outcome ownership still need integration.
 - Combat: extend actual attack families, hit reactions, embedded emitters,
   assistance and survivable encounters. Selected gecko damage/kills do not
   establish complete combat.

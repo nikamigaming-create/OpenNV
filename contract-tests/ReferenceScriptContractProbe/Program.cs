@@ -10,6 +10,12 @@ if (args is ["--owned-terminal-hack-state", var terminalStateGame, var terminalS
     return;
 }
 
+if (args is ["--owned-reference-owner", var ownerGame, var ownerSave])
+{
+    OwnedReferenceOwnerProbe.Run(ownerGame, ownerSave);
+    return;
+}
+
 if (args is ["--owned-hacking-process", var hackingProcessData])
 {
     OwnedHackingProbe.RunProcess(hackingProcessData);
