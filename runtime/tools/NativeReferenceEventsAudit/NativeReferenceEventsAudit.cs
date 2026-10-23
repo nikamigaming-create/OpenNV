@@ -35,6 +35,11 @@ public partial class NativeReferenceEventsAudit : Node
                 ExerciseOwnedImageSpaceClock(imageGame, imageMod, imageRoot, imageForm, imageDependencies);
                 GetTree().Quit(); return;
             }
+            if (OS.GetCmdlineUserArgs() is ["--reputation-percentage-adapters", var percentageMode] &&
+                percentageMode is "all" or "conversation" or "speech")
+            {
+                ReputationDialogueAdapters(percentageMode, 574); GetTree().Quit(); return;
+            }
             if (OS.GetCmdlineUserArgs() is ["--reputation-dialogue-adapters", var adapterMode] &&
                 adapterMode is "all" or "conversation" or "speech")
             {
@@ -270,6 +275,7 @@ public partial class NativeReferenceEventsAudit : Node
             PlayerMoves(records);
             SaveDeferral();
             ReputationDialogueAdapters();
+            ReputationDialogueAdapters(function: 574);
             ExerciseImageSpaceClock();
             DoorActivation(records);
             AnimatedActivators(records);

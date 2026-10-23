@@ -8,97 +8,60 @@ input and Git; no competing jobs or denied writer contact are permitted.
 
 ## Active block
 
-Accepted main/origin-main is 729feec620937705ea8f51ae55a65e3b407298c5 (PR278).
-PR278 merged at 07:38:07 UTC after explicit release, independent case-identity
-re-review and all five exact-head checks passed at
-3b2b26c6e39386e09460be7ef106253bd3257d28. Local main equals origin/main.
-PR269 remains draft, native-and-merge-held. No third bot encounter or retail
-attempt is permitted. The accepted effective-owner query includes encounter-zone
-and current-cell inheritance; cold restore stages validated placement/ownership
-before querying effective access. This does not admit hacking or crime effects.
+Accepted main/origin-main is 20b03986a8d4ce6445c1311e46fd78fa98991684 (PR279),
+merged at08:41:21UTC after explicit release, independent production-adapter re-review
+and all five exact-head checks passed at b8e3c90327da9becb3a602e794474989689b9c15.
+Local main equals origin/main. PR269 stays draft/native-and-merge-held. No third
+retail or bot/encounter attempt is permitted; recording is off.
 
-Active branch: codex/fnv-reputation-notification-lifecycle. Accepted PR278
-binds source GetReputation/SetReputation through one world owner, object and quest
-script adapters, and ordinary campaign capture/restore. The setter writes one
-source float axis directly without clamping or AddReputation feedback. Fresh
-worlds have initialized zero; legacy missing history stays unknown per axis.
-An explicit setter establishes only that axis. Schema v58 retains source-hashed
-reputation state, admits v57/older without invented history and rejects old-schema
-payload injection. Restore validates all entries before replacing the owner.
+Accepted shared reputation state retains source-hashed float axes in schema v58.
+Fresh axes are initialized zero; missing legacy history remains unknown per axis.
+Explicit SetReputation establishes only its own axis, without clamp/notifications.
+GetReputation CTDA573 uses this same owner through native quest/message, ordinary
+conversation and scripted speech adapters. Its raw selector chooses positive only
+for1, otherwise negative. Actual installed-delegate composition, old-callback
+negative controls, cold/unknown-state and owned14-condition/12-INFO checks pass.
+The repaired full gate passed08:27:19UTC with all2204 source/config hashes unchanged.
+These are component proofs, not ordinary dialogue/quest or retail-parity completion.
 
-Debug builds, actual first-party OnActivate/GameMode shared-state contracts,
-malformed-state refusal and cold retention pass. The owned audit verifies all13
-winning REPU declarations, the actual v56 campaign reader and a temporary full
-v58 codec roundtrip with unchanged references, original save and source hashes.
-The case-identity review finding is reproduced by two old-runtime negative
-controls. The repaired map, duplicate validator and staging use the established
-case-insensitive form-key comparer; reads/writes/restores use canonical winning
-keys. Fresh and legacy alias lookup, unknown axes, canonical cold serialization
-and atomic duplicate-alias refusal pass. The repaired full gate passes at
-07:25:53 UTC: exit0, all2202 source/config files unchanged and diff check0. The
-repaired head is merged; hosted runtime passed at 07:34:35 UTC in run39917835438.
-These are getter/setter and persistence proofs, not ordinary campaign or retail-parity completion.
-Evidence: local/fnv-wells-fixed/reputation-state-20261023/case-final-result.json.
-Neutral source contract SHA256:
-F38D9AECF12D17B8B666B62252034F191A9992BFA2504E5A8B79F1BA57BC6789.
+Active branch: codex/fnv-reputation-percentage, now based on accepted main.
+The current independent change adds CTDA GetReputationPct(function574) through the
+same world owner and all three production condition adapters. Source arithmetic
+is float32 axis/capacity: no multiplication by100 or clamp. Capacity remains
+immutable winning REPU DATA, with no new save field. Known/unknown history,
+source identity and context refusal remain shared. Nonfinite quotients refuse;
+exceptional-result retail behavior is unclaimed. The separate SCTX GetReputationPct
+command, threshold/rank and disguise semantics remain unbound.
 
-The current runtime change binds CTDA GetReputation (function573) through the
-accepted shared reputation owner and the existing native condition adapter. Dialogue
-queries reach that owner before speaker-specific fallback, including NPC listeners.
-Its raw integer selector chooses positive only for1 and negative otherwise; this
-is distinct from script-command selector validation. Fresh zero and legacy unknown
-axes retain their existing meanings. Other reputation/rank/disguise functions stay
-unbound. Synthetic source-master, dialogue/message, comparison, live/cold and
-refusal contracts pass. The owned audit passes14 conditions in12 winning INFOs,
-including selectors0/1/2, using controlled known axes without source/save mutation.
-This does not establish whole-record eligibility or ordinary dialogue/quest progress.
-The old dialogue dispatcher negative control reproduces NPC-listener refusal;
-the repaired default contract passes. The full runtime gate passes at08:00:20UTC:
-exit0, all2203 source/config files unchanged, diff check0, recording off. Merge
-is held for independent review of the checked published head.
-Evidence: local/fnv-wells-fixed/reputation-state-20261023/condition-focused.log,
-condition-owned.log, condition-old-result.json and condition-final-result.json.
-Independent review found that ordinary conversation and scripted speech had
-separate production callbacks which still refused573. Their unchanged callbacks
-reproduce the exact refusals through native installed-delegate negative controls.
-Both callbacks now reach the shared owner. New native component tests obtain the
-production factories used by ordinary Configure, read back installed conversation
-and speech delegates, and verify dialogue composition, non-player listeners,
-raw selectors, existing global queries, cold state and unknown-axis refusals.
-The repaired Debug build, focused native/contracts and owned audit pass. The
-renewed full gate passes at08:27:19UTC: exit0, all2204 source/config files unchanged,
-diff check0 and recording off. This repair awaits replacement-head independent
-re-review and hosted checks; the earlier2203-file gate does not qualify it.
-Evidence: local/fnv-wells-fixed/reputation-state-20261023/adapter-qualified-negative-result.json,
-adapter-repair-native.log, adapter-repair-owned.log and adapter-final-result.json.
+Focused arithmetic, signed/unclamped values, finite-result/unknown-axis refusal,
+master-order, comparison and cold tests pass. Unchanged installed conversation and
+speech adapters reproduce exact missing574 refusals; repaired native composition
+passes both with current/cold/legacy state. The typed owned-data audit exercises
+two winning INFO conditions(selector1) with controlled known axes and no source/save
+mutation. The stopped reflection helper was not retried or used as corpus evidence.
+The full gate passes08:49:46UTC: exit0, all2204 source/config hashes unchanged,
+diff check0 and recording off. Keep the published head frozen and merge held for
+independent review and hosted checks. Evidence:
+local/fnv-wells-fixed/reputation-state-20261023/percentage-focused.log,
+percentage-native.log, percentage-owned.log, percentage-negative-native.json and
+percentage-final-result.json.
+Neutral percentage contract SHA256:
+88AFF097879A1166A5A96730CB1A92390EC1154D6D551E5A8E039C08D03F8FC8.
 
-Primary CTDA dispatch permits a null subject for this subject-independent command,
-including null run-on2 context. Nonzero missing/wrongly typed explicit references
-now refuse: their malformed load/fixup behavior remains unqualified. Run-on3+
-stays unbound. No ordinary conversation, speech or radio playback is claimed.
-Neutral condition contract SHA256:
-B4676FCC6F2C43C7146B336AEAA59DB3D131DB3ECDE4D310A1BC27A34018E85D.
+Primary CTDA dispatch permits null subject/context for these subject-independent
+commands. Nonzero missing/wrongly typed explicit references refuse because raw-ID
+frontend fixup remains unqualified; run-on3+ stays unbound. Source context contract
+SHA256 B4676FCC6F2C43C7146B336AEAA59DB3D131DB3ECDE4D310A1BC27A34018E85D.
 
-AddReputation/RemoveReputation, crime-triggered reputation and notification remain
-unbound. Notification qualification is parked after two finite approaches. The bounded notification qualification distinguishes
-two immediate predicates from four deferred predicates and confirms a single
-identity slot with overwrite semantics, consumed using current reputation values.
-The combat predicate depends on retained combat-group membership/counts, not
-current engagements. Dialogue/InterfaceManager and StartMenu transition owners,
-nested player serializer effects and actual warm-load reset order remain open.
-Revert clearing does not prove LoadGame clearing. Two finite approaches stop at
-those exact joins; no approximation, save-field addition or mutation is admitted.
-Evidence: local/fnv-wells-fixed/hacking-session-20261023/reputation-notification-contract.private.md
-(contract SHA256 E9BEFD3583D56C9D0012B6B1B372A9EC07C06EE3DB99DE8FD3DB368DAB38FD15).
-No notification runtime code changed in that qualification block. Existing latched
-script faults are not reset or replayed.
-
-Witness candidate membership, retained observer detection and concrete process
-responses remain distinct unknown owners. No nearby-actors substitute, empty
-witness set or counter-only crime effect is added. Hacking success ordering remains
-result bit -> XP -> conditional owner/witness handoff -> statistic -> later contents.
-Native hacking stays closed until required effects and input/lifetime are owned.
-Recording is off and original campaign/retail inputs remain read-only.
+Notification and witnessed hacking qualification stay parked after two approaches.
+Exact missing owners remain retained combat-group membership/counts, UI transition
+predicates, nested player serialization/warm-load ordering, witness membership,
+detection and concrete process responses. No generic in-combat/modal substitute,
+empty witness set, guessed history or suppressed side effect is added. Add/Remove,
+crime-triggered reputation and native hacking remain closed until required effects
+are owned. Existing latched script faults are neither reset nor replayed. Original
+campaign and retail inputs remain read-only; no campaign, ordinary conversation,
+speech/radio playback, final-pixel or parity completion is claimed.
 
 ## Gameplay and test-control checkpoint
 
