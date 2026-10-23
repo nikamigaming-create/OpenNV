@@ -98,8 +98,9 @@ internal sealed class FalloutScriptExecutionBudget(int maximum = 100_000)
 // Unsupported expressions/commands stop the caller and retain its executed prefix.
 internal sealed partial class FalloutGameModeProgram
 {
-    internal const int ParserVersion = 10;
+    internal const int ParserVersion = 11;
     private readonly IReadOnlyList<string[]> _lines;
+    private readonly IReadOnlySet<int> _baselineEndIf;
     private int _startLine = 0;
     private IReadOnlyList<bool> _enteredBranches = [];
     internal int LastStatement { get; private set; } = -1;
@@ -109,15 +110,24 @@ internal sealed partial class FalloutGameModeProgram
         System.Security.Cryptography.SHA256.HashData(System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(_lines)))
         .ToLowerInvariant();
     private readonly Dictionary<int, int> _loopEnds = [];
-    private FalloutGameModeProgram(IReadOnlyList<string[]> lines)
+    private FalloutGameModeProgram(IReadOnlyList<string[]> lines, IReadOnlySet<int>? baselineEndIf = null)
     {
         _lines = lines;
+        var baseline = new HashSet<int>();
+        var ifDepth = 0;
         var loops = new Stack<int>();
         for (var index = 0; index < lines.Count; ++index)
         {
+            if (lines[index][0].Equals("if", StringComparison.OrdinalIgnoreCase)) ++ifDepth;
+            if (lines[index][0].Equals("endif", StringComparison.OrdinalIgnoreCase))
+            {
+                if (ifDepth == 0) baseline.Add(index);
+                else --ifDepth;
+            }
             if (lines[index][0].Equals("while", StringComparison.OrdinalIgnoreCase)) loops.Push(index);
             if (lines[index][0].Equals("loop", StringComparison.OrdinalIgnoreCase)) _loopEnds.Add(loops.Pop(), index);
         }
+        _baselineEndIf = baselineEndIf ?? baseline;
     }
 
     internal IEnumerable<string> CommandNames => _lines
@@ -137,7 +147,8 @@ internal sealed partial class FalloutGameModeProgram
 
     internal static IReadOnlyList<FalloutScriptEventProgram> ReadEvents(string source) => ReadEventsCore(source, legacyElseIfGuard: false);
 
-    private static IReadOnlyList<FalloutScriptEventProgram> ReadEventsCore(string source, bool legacyElseIfGuard)
+    private static IReadOnlyList<FalloutScriptEventProgram> ReadEventsCore(string source, bool legacyElseIfGuard,
+        bool legacyBaselineEndIfGuard = false)
     {
         var events = new List<FalloutScriptEventProgram>();
         List<string[]>? lines = null;
@@ -189,7 +200,10 @@ internal sealed partial class FalloutGameModeProgram
             if (command is "if" or "while") nesting.Push((command, false));
             if (command is "endif" or "loop")
             {
-                if (!nesting.TryPop(out var parent) || parent.Kind != (command == "endif" ? "if" : "while") || tokens.Length != 1)
+                // Baseline EndIf clears selection at depth zero without an
+                // underflow. A loop mismatch is still a different structure.
+                if (tokens.Length != 1 || !(command == "endif" && nesting.Count == 0 && !legacyBaselineEndIfGuard) &&
+                    (!nesting.TryPop(out var parent) || parent.Kind != (command == "endif" ? "if" : "while")))
                     throw new InvalidDataException("Unmatched script branch or loop end.");
             }
             if (command is "else" or "elseif")
@@ -215,6 +229,12 @@ internal sealed partial class FalloutGameModeProgram
         if (!menuMode && argument is null && blocks.Any(block => block.Filter is not null))
             throw new NotSupportedException($"{blockName} block arguments are unbound.");
         var lines = new List<string[]>();
+        var baseline = new HashSet<int>();
+        void AddBlock(FalloutGameModeProgram program)
+        {
+            foreach (var index in program._baselineEndIf) baseline.Add(lines.Count + index);
+            lines.AddRange(program._lines);
+        }
         foreach (var block in blocks)
         {
             if (!menuMode && argument is not null && block.Filter is null) continue;
@@ -229,7 +249,7 @@ internal sealed partial class FalloutGameModeProgram
                     if (!menuMode) throw new NotSupportedException($"{blockName} filter is not a literal.");
                     lines.Add(["if", filter, "==", "0", "||", filter, "==", expected.ToString(CultureInfo.InvariantCulture),
                         "||", filter, "==", FalloutScriptEventProgram.MenuCategory(expected).ToString(CultureInfo.InvariantCulture)]);
-                    lines.AddRange(block.Program._lines);
+                    AddBlock(block.Program);
                     lines.Add(["endif"]);
                     continue;
                 }
@@ -237,15 +257,15 @@ internal sealed partial class FalloutGameModeProgram
             else if (menuMode && block.Filter is { } menuFilter)
             {
                 lines.Add(["if", "MenuMode", menuFilter]);
-                lines.AddRange(block.Program._lines);
+                AddBlock(block.Program);
                 lines.Add(["endif"]);
                 continue;
             }
-            lines.AddRange(block.Program._lines);
+            AddBlock(block.Program);
         }
         // Begin/End blocks share the invocation. In particular Return stops
         // the remaining source blocks, not only the current block.
-        return new(lines);
+        return new(lines, baseline);
     }
     internal void Execute(Func<string, double> variable, Action<string, double> assign,
         Action<string, IReadOnlyList<string>> call, Func<string, FalloutScriptFunction?>? function = null,
@@ -300,7 +320,11 @@ internal sealed partial class FalloutGameModeProgram
                     active = other.Parent && !other.Taken;
                     branches.Push((other.Parent, true, true));
                     break;
-                case "endif": active = branches.Pop().Parent; break;
+                case "endif":
+                    // A source baseline EndIf must not pop a generated MenuMode
+                    // guard enclosing the original event's instructions.
+                    if (!_baselineEndIf.Contains(line)) active = branches.Pop().Parent;
+                    break;
                 case "while":
                     if (!active || !(typed ? Expression(tokens[1..]).Truth :
                         FalloutNvseNumericExpression.Evaluate(tokens[1..], variable, assign, function, userFunction) != 0))
@@ -503,9 +527,9 @@ internal sealed partial class FalloutGameModeProgram
     // migration, and current-version saves must contain every admitted owner.
     internal static bool WasRejectedByParser(string source, int version)
     {
-        if (version < 10)
+        if (version < 11)
         {
-            try { _ = ReadEventsCore(source, legacyElseIfGuard: true); }
+            try { _ = ReadEventsCore(source, legacyElseIfGuard: version < 10, legacyBaselineEndIfGuard: true); }
             catch (InvalidDataException)
             {
                 // Only a prior structural rejection of source valid today can

@@ -8,40 +8,53 @@ input and Git; no competing jobs or denied writer contact are permitted.
 
 ## Active block
 
-Accepted main/origin-main is adcb7448f6b7c764f574f02e49ebf6059a5dcd45 (PR281),
-merged09:41:31UTC after explicit release, independent threshold review and all
-five exact-head checks at35843628391f7fd10ea79133059813b60957150d passed. Local
-main is verified against origin/main. PR269 stays draft/native-and-merge-held.
-No third retail or bot/encounter attempt is permitted. Recording is off; original
-inputs stay read-only.
+Accepted main/origin-main is 39b137906bc4282c923d0bc0a098fc0218eeede7 (PR282),
+merged 09:55:39 UTC after explicit release, independent adapter review and all five
+exact-head checks at 91fc72ea406b4590942a60984defa8ce79accf75 passed. Local main
+matched origin/main. PR269 remains draft/native-and-merge-held. No third retail or
+bot/encounter attempt is permitted. Recording is off; original inputs stay read-only.
+
 Shared reputation state retains source-hashed float axes in schema v58. Fresh axes
-are zero; absent legacy history stays unknown per axis. Explicit SetReputation
-establishes only its axis without clamp/notifications. CTDA573 and574 use this owner
-through native quest/message, conversation and scripted-speech adapters. Percentage
-is float32 axis/capacity, not scaled or clamped. These are component proofs with
-owned-data and cold/unknown-state checks, not ordinary campaign/retail completion.
+are zero; absent legacy history stays unknown per axis. CTDA573/574/575 use the same
+owner through native quest/message, conversation, speech and NPC/creature/unloaded
+package condition adapters. The package follow-up passed actual component methods
+and existing selector short-circuit/unknown/cold controls. Its full gate passed
+09:40:53 UTC with all 2205 source/config hashes unchanged; owned query evidence
+covers 1642 conditions across 1195 records, not ordinary package execution.
 
-Active branch: codex/fnv-package-reputation-conditions, based on accepted main.
-The accepted threshold implementation passed the full gate09:24:50UTC with all2204
-source/config hashes unchanged. The current narrow follow-up routes CTDA573/574/575
-through the existing shared reputation owner in native NPC, native creature and
-unloaded-actor package condition adapters. Selection, schedules, assignments,
-package execution and event lifecycle are unchanged.
+Active branch: codex/fnv-baseline-endif. The reached Sloan generator parse failure
+REFR0e5df9 -> ACTI08d36f -> SCPT08d19b is reproduced with the unchanged owned script.
+Both SCTX and SCDA contain a bare extra EndIf at event depth zero. The qualified
+source compiler emits it; the interpreter clears baseline selection without
+underflow. The shared parser/executor now preserves that instruction as a no-op,
+while retaining nested/loop/alternative and trailing-token guards. Source baseline
+positions survive generated MenuMode guards and stopped-command continuation.
+Parser version 11 admits previously omitted legacy owners only through actual old
+structural rejection plus current successful parsing; existing faults stay latched.
 
-Actual unchanged adapters each reproduce the exact missing573 owner refusal.
-Repaired detached-component tests pass all three queries through the actual adapter
-methods and existing authored-order selector, with false-AND/true-OR short-circuit,
-reached unknown-axis refusal, threshold both-axis requirements and cold restore.
-Queries preserve reputation and unloaded assignment state and dispatch no events.
-These first-party fixtures do not materialize actors or prove ordinary package
-execution. The existing owned threshold corpus remains query-only evidence.
-The required full gate passes09:40:53UTC: exit0, all2205 source/config hashes
-unchanged, diff check0. The selected owned audit repeats1642 threshold queries
-across1195 winning records and preserves original source/save hashes. This is
-query-only corpus evidence, not package execution. Recording is off. Evidence is under
-local/fnv-wells-fixed/reputation-state-20261023/package-*.log.
-Neutral threshold contract SHA256:
-9DC045415DC8F99781B23D3B59BB5C584190BED6C35B6537B1F34E3103DB2DF9.
+Focused contracts, the complete plugin-script probe, and actual owned OnActivate
+composition pass. The player guard requests exactly the authored generator message;
+nonplayer activation emits no effect. Cold restore preserves reference state and
+source hashes. Old-code synthetic and owned cases reproduce the exact unmatched
+branch refusal. This is controlled activation/message evidence, not physical input,
+MenuMode scheduling, generator repair/salvage, quest completion or retail parity.
+The full runtime gate passes 10:22:18 UTC: exit0, all 2206 source/config hashes
+unchanged, diff check0, recording off. Keep the published head frozen and merge-held
+for independent review and hosted checks. Neutral contract SHA256:
+64218A13FC1602521087FBBD542661D76475978A834E83D69A3138FB4D59DBB8.
+Evidence is retained under
+local/fnv-wells-fixed/generator-endif-20261023/.
+
+Snuffles is parked after the bounded join pass. REFR140c37 -> ACTI140c35 -> SCPT140c33
+first calls SetActorValue LeftMobilityCondition 0 before quest/DoOnce writes. Source
+base storage is separate from damage, defaults through fAVDDefaultBodyPartCondition,
+and restoration preserves base. Mobility notification additionally reaches the
+Locomotion/Hurt/IdleAnims resource transition; current/queued/cold ownership remains
+unqualified. Source damage clamps when applied, while old OpenNV saves retain
+uncapped per-region physical totals. After over-damage/restoration, those totals do
+not uniquely establish the source modifier history. No guessed migration, scalar
+setter bypass, source fault reset or further broad Snuffles research is admitted.
+Private source evidence remains under local/fnv-wells-fixed/limb-value-source-20261023/.
 All three getters preserve known/unknown history and canonical source identity.
 Null context is source-permitted; malformed nonzero explicit references refuse
 because raw-ID frontend fixup stays unqualified; run-on3+ stays unbound. Nonfinite
