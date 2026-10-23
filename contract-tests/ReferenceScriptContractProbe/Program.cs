@@ -365,6 +365,7 @@ if (args is ["--player-ability-script-contracts"])
 if (args is ["--reference-access-contracts"])
 {
     ReferenceAccessContracts.Run();
+    ReferenceAccessContracts.LockpickContracts();
     return;
 }
 
@@ -1347,6 +1348,7 @@ ReferencePackageEventContracts.Run();
 ReferenceHitContracts.Run();
 DoorMotionContracts.Run();
 ReferenceAccessContracts.Run();
+ReferenceAccessContracts.LockpickContracts();
 NumericGameSettingContracts.Run();
 ActorAppearanceContracts.Run();
 ChallengeContracts.Run();
