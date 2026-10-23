@@ -4,6 +4,12 @@ using System.Text.Json;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.World.Cells;
 
+if (args is ["--reputation-case-contracts", var reputationCase] && reputationCase is "restore" or "duplicates")
+{
+    ReputationContracts.RunCaseIdentity(reputationCase == "duplicates");
+    return;
+}
+
 if (args is ["--owned-reputation-state", var reputationGame, var reputationSave])
 {
     OwnedReputationProbe.Run(reputationGame, reputationSave);

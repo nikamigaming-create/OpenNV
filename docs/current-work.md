@@ -29,10 +29,15 @@ Debug builds, actual first-party OnActivate/GameMode shared-state contracts,
 malformed-state refusal and cold retention pass. The owned audit verifies all13
 winning REPU declarations, the actual v56 campaign reader and a temporary full
 v58 codec roundtrip with unchanged references, original save and source hashes.
-The final combined runtime gate passes at 06:58:17 UTC: exit0, all2202 source/config
-files unchanged during the run and diff check0. These are getter/setter and
+The case-identity review finding is reproduced by two old-runtime negative
+controls. The repaired map, duplicate validator and staging use the established
+case-insensitive form-key comparer; reads/writes/restores use canonical winning
+keys. Fresh and legacy alias lookup, unknown axes, canonical cold serialization
+and atomic duplicate-alias refusal pass. The repaired full gate passes at
+07:25:53 UTC: exit0, all2202 source/config files unchanged and diff check0. PR278
+remains merge-held for repaired-head re-review. These are getter/setter and
 persistence proofs, not ordinary campaign or retail-parity completion.
-Evidence: local/fnv-wells-fixed/reputation-state-20261023/shared-result.json.
+Evidence: local/fnv-wells-fixed/reputation-state-20261023/case-final-result.json.
 Neutral source contract SHA256:
 F38D9AECF12D17B8B666B62252034F191A9992BFA2504E5A8B79F1BA57BC6789.
 

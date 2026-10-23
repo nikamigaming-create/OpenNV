@@ -9,6 +9,8 @@ internal static class ReputationContracts
 {
     internal static void Run()
     {
+        RunCaseIdentity(false);
+        RunCaseIdentity(true);
         var directory = Directory.CreateTempSubdirectory("opennv-reputation-");
         try
         {
@@ -76,6 +78,7 @@ internal static class ReputationContracts
                 capture with { Values = [capture.Values[0] with { Positive = float.NaN }] },
                 capture with { Values = [capture.Values[0] with { Positive = null, Negative = null }] },
                 capture with { Values = [capture.Values[0] with { Form = Key(5) }] },
+                capture with { Values = [capture.Values[0] with { Form = new(null!, 1) }] },
             })
             {
                 Reject(() => cold.RestoreReputations(invalid));
@@ -110,6 +113,60 @@ internal static class ReputationContracts
             Console.WriteLine("OPENNV_REPUTATION_STATE_PASS sourceZero=true actualScriptGetSet=true questAndObjectShared=true setterUnclamped=true " +
                 "axisAndSiblingIsolation=true cold=true legacyUnknown=true explicitAxisRecovery=true invalidRestoreAtomic=true " +
                 "oldSchemaInjectionRefused=true addRemoveCrimeAndNotification=unbound ordinaryAndRetail=unverified");
+        }
+        finally { directory.Delete(true); }
+    }
+
+    internal static void RunCaseIdentity(bool duplicates)
+    {
+        var directory = Directory.CreateTempSubdirectory("opennv-reputation-case-");
+        try
+        {
+            File.WriteAllBytes(Path.Combine(directory.FullName, "Reputation.esm"), Join(
+                Record("TES4", 0, Field("HEDR", new byte[12])),
+                Record("REPU", 1, Field("DATA", BitConverter.GetBytes(100f)))));
+            using var records = FalloutPluginStack.Load(directory.FullName, ["Reputation.esm"]);
+            var canonical = records.GetEffective(Key(1)).FormKey;
+            var alias = new FalloutFormKey("REPUTATION.ESM", 1);
+            foreach (var fresh in new[] { true, false })
+            {
+                using var source = new FalloutReferenceWorld(records);
+                if (!fresh) source.RestoreReputations(null);
+                source.SetReputation(canonical, 1, 17.5);
+                if (fresh) source.SetReputation(canonical, 0, -4.25);
+                var capture = source.CaptureReputations();
+                var aliased = RoundTrip(capture with { Values = [capture.Values.Single() with { Form = alias }] });
+                using var target = new FalloutReferenceWorld(records);
+                target.SetReputation(canonical, 1, 99);
+                var before = JsonSerializer.Serialize(target.CaptureReputations());
+                if (duplicates)
+                {
+                    var repeated = capture with { Values = [capture.Values.Single(), aliased.Values.Single()] };
+                    Reject(() => target.RestoreReputations(RoundTrip(repeated)));
+                    Require(JsonSerializer.Serialize(target.CaptureReputations()) == before,
+                        "Case-alias duplicate restore partly replaced the destination reputation owner.");
+                    continue;
+                }
+                target.RestoreReputations(aliased);
+                Require(target.Reputation(canonical, 1) == 17.5f && target.Reputation(alias, 1) == 17.5f,
+                    "Mixed-case saved identity lost its value through the canonical reputation getter.");
+                if (fresh) Require(target.Reputation(canonical, 0) == -4.25f, "Known aliased axis changed.");
+                else Reject(() => target.Reputation(canonical, 0));
+                Require(JsonSerializer.Serialize(target.CaptureReputations()) == JsonSerializer.Serialize(capture),
+                    "Mixed-case restore did not retain the canonical winning form identity.");
+                target.SetReputation(alias, 0, -8.5);
+                Require(target.Reputation(canonical, 0) == -8.5f && target.CaptureReputations().Values.Count == 1 &&
+                    target.CaptureReputations().Values.Single().Form == canonical,
+                    "An aliased setter split one reputation into separate identities.");
+                using var cold = new FalloutReferenceWorld(records);
+                cold.RestoreReputations(RoundTrip(target.CaptureReputations()));
+                Require(cold.Reputation(alias, 0) == -8.5f &&
+                    JsonSerializer.Serialize(cold.CaptureReputations()) == JsonSerializer.Serialize(target.CaptureReputations()),
+                    "Canonical reputation serialization changed on a second cold restore.");
+            }
+            Console.WriteLine(duplicates
+                ? "OPENNV_REPUTATION_CASE_PASS mode=duplicates freshAndLegacy=true duplicateAliasRefused=true destinationUnchanged=true"
+                : "OPENNV_REPUTATION_CASE_PASS mode=restore freshAndLegacy=true canonicalQuery=true aliasedWrite=true canonicalSerialization=true cold=true");
         }
         finally { directory.Delete(true); }
     }
