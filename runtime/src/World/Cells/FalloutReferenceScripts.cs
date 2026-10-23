@@ -256,11 +256,13 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
 
     internal void ExecuteResult(FalloutDialogueInfo info, FalloutFormKey speaker, bool begin)
     {
+        var source = begin ? info.BeginScript : info.EndScript;
+        if (!FalloutDialogueTopic.CodeLines(source).Any()) return;
         var fields = info.Record.ReadSubrecords().ToArray();
         var split = Array.FindIndex(fields, field => field.Signature == "NEXT");
         var selected = begin ? (split < 0 ? fields : fields[..split]) : (split < 0 ? [] : fields[(split + 1)..]);
         var bindings = Bindings(records.GetEffective(info.Quest), info.Record, selected);
-        var program = FalloutGameModeProgram.Read("begin Result\n" + (begin ? info.BeginScript : info.EndScript) + "\nend", "Result");
+        var program = FalloutGameModeProgram.Read("begin Result\n" + source + "\nend", "Result");
         Execute(speaker, bindings, program, null, 0);
     }
 

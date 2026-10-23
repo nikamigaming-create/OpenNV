@@ -206,18 +206,10 @@ internal sealed partial class FalloutDialogueTopic
         if (data.Length is not (3 or 4)) throw new InvalidDataException($"INFO {record.FormKey} DATA size is unsupported.");
         var responses = new List<FalloutDialogueResponse>();
         var conditions = new List<byte[]>();
-        var begin = new List<string>();
-        var end = new List<string>();
-        var afterNext = false;
         for (var index = 0; index < fields.Length; ++index)
         {
             var field = fields[index];
-            if (field.Signature == "NEXT") { afterNext = true; continue; }
-            if (field.Signature == "SCTX")
-            {
-                (afterNext ? end : begin).Add(ScriptText(field.Data.Span));
-                continue;
-            }
+            if (field.Signature is "NEXT" or "SCTX") continue;
             if (field.Signature == "CTDA") { conditions.Add(field.Data.ToArray()); continue; }
             if (field.Signature is "NAM1" or "NAM2" or "NAM3" or "SNAM" or "LNAM")
                 throw new InvalidDataException($"INFO {record.FormKey} has response fields without TRDT.");
@@ -254,7 +246,7 @@ internal sealed partial class FalloutDialogueTopic
         var speakers = Forms("ANAM");
         if (speakers.Count > 1) throw new InvalidDataException("INFO speaker is duplicated.");
         return new FalloutDialogueInfo(record, RequiredForm(record, "QSTI"), data[0], data[1], data[2],
-            data.Length == 4 ? data[3] : (byte)0, conditions, responses, string.Join('\n', begin), string.Join('\n', end))
+            data.Length == 4 ? data[3] : (byte)0, conditions, responses, ResultSource(fields, true), ResultSource(fields, false))
         {
             Choices = Forms("TCLT"),
             AddedTopics = Forms("NAME"),
@@ -262,6 +254,27 @@ internal sealed partial class FalloutDialogueTopic
             Prompt = prompts.Length == 0 ? null : Text(prompts[0].Data.Span),
             Speaker = speakers.Count == 0 ? null : speakers[0],
         };
+    }
+
+    private static string ResultSource(FalloutPluginSubrecord[] fields, bool begin)
+    {
+        var split = Array.FindIndex(fields, field => field.Signature == "NEXT");
+        var selected = begin ? (split < 0 ? fields : fields[..split]) : (split < 0 ? [] : fields[(split + 1)..]);
+        var headers = selected.Where(field => field.Signature == "SCHR").ToArray();
+        if (headers.Length > 1) throw new InvalidDataException("INFO result has ambiguous script headers.");
+        if (headers.Length == 1 && FalloutScriptHeader.Read(headers[0].Data.Span).CompiledBytes == 0)
+        {
+            var bodies = selected.Where(field => field.Signature == "SCDA").ToArray();
+            if (bodies.Length > 1 || bodies.Any(field => field.Data.Length != 0))
+                throw new InvalidDataException("INFO result compiled body disagrees with its zero SCHR extent.");
+            if (selected.Any(field => field.Signature is "SCRO" or "SCRV" && field.Data.Length != 4))
+                throw new InvalidDataException("INFO result reference extent is invalid.");
+            // The interpreter has no instructions to execute. Retained editor
+            // text and stale reference counts cannot create a runtime result;
+            // the unchanged record still owns those original source fields.
+            return string.Empty;
+        }
+        return string.Join('\n', selected.Where(field => field.Signature == "SCTX").Select(field => ScriptText(field.Data.Span)));
     }
 
     internal static bool ConditionsPass(FalloutDialogueInfo info, FalloutFormKey speaker,
