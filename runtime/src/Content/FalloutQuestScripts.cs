@@ -864,6 +864,10 @@ internal sealed partial class FalloutQuestScripts
                     var quest = Quest(arguments[0].Identifier!).FormKey;
                     return _quests.Stage(quest);
                 }),
+                "getquestrunning" => new([FalloutScriptArgumentKind.Identifier], arguments =>
+                    _quests.IsRunning(Quest(arguments[0].Identifier!).FormKey) ? 1 : 0),
+                "getquestcompleted" => new([FalloutScriptArgumentKind.Identifier], arguments =>
+                    _quests.IsCompleted(Quest(arguments[0].Identifier!).FormKey) ? 1 : 0),
                 "getstagedone" => new([FalloutScriptArgumentKind.Identifier, FalloutScriptArgumentKind.Number], arguments =>
                 {
                     var stage = arguments[1].Number;

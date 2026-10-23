@@ -20,7 +20,10 @@ internal static class QuestStateQueryContracts
             {
                 ShortCircuit(shared);
                 foreach (var query in new[] { "GetQuestRunning", "GetQuestCompleted" })
+                {
                     foreach (var target in new[] { "BadGlobal", "MissingQuest" }) Refusal(query, target, shared);
+                    Refusal(query, "TargetQuest", shared, bindTarget: false);
+                }
             }
         }
         Console.WriteLine("OPENNV_QUEST_STATE_QUERY_CONTRACT_PASS fallbackAndShared=true liveState=true " +
@@ -64,16 +67,16 @@ internal static class QuestStateQueryContracts
             "An unselected quest-query operand was resolved or executed.");
     }
 
-    private static void Refusal(string query, string target, bool shared)
+    private static void Refusal(string query, string target, bool shared, bool bindTarget = true)
     {
-        using var fixture = new Fixture($"set prefix to prefix + 1\nset result to {query} {target}\nset suffix to 99", shared);
+        using var fixture = new Fixture($"set prefix to prefix + 1\nset result to {query} {target}\nset suffix to 99", shared, bindTarget: bindTarget);
         fixture.Tick();
         Require(fixture.Error is not null && fixture.Value(1) == 1 && fixture.Value(2) == 0 && fixture.Value(3) == 0,
             "Invalid quest query ran its suffix or discarded its consumed prefix.");
         var error = fixture.Error;
         fixture.Tick();
         Require(fixture.Error == error && fixture.Value(1) == 1, "A failed quest query replayed its prefix.");
-        using var cold = new Fixture(fixture.Body, shared, initialize: false);
+        using var cold = new Fixture(fixture.Body, shared, initialize: false, bindTarget: bindTarget);
         cold.Quests.Restore(RoundTrip(fixture.Quests.Capture().ToArray()));
         cold.Scripts.Restore(RoundTrip(fixture.Scripts.Capture()));
         cold.Tick();
@@ -105,15 +108,22 @@ internal static class QuestStateQueryContracts
         // Explicit isolated inputs, not an imported campaign or recruitment state.
         quests.SetRunning(quest.FormKey, true);
         quests.SetVariable(quest.FormKey, locals["iAprilDead"], 1);
+        // Deliberately completed source-state fixture: both completion queries
+        // execute, while unrelated dead-actor and reward owners are unselected.
+        // This is not a campaign completion or an assertion that those owners work.
+        quests.EnterStage(quest.FormKey, 100);
+        quests.Complete(quest.FormKey);
         var counter = quests.Variable(quest.FormKey, locals["iCounter"]);
         scripts.AdvanceClaimed(quest.FormKey, 0, new((_, _) => throw new InvalidDataException("Unexpected owned stage effect."), _ => 0));
         var instance = scripts.Capture().Instances.Single(value => value.Quest == quest.FormKey);
         Require(instance.Error is null && quests.Variable(quest.FormKey, locals["iCounter"]) == counter + 1 &&
-            !quests.IsCompleted(quest.FormKey), "Actual unmodified ED-E GameMode did not pass its completion queries.");
+            quests.IsCompleted(quest.FormKey) && quests.Stage(quest.FormKey) == 100,
+            "Actual unmodified ED-E GameMode did not pass its completion queries or changed the controlled completed state.");
         Require(SHA256.HashData(source.ReadData()).SequenceEqual(hash), "Owned script bytes changed.");
         Console.WriteLine($"OPENNV_OWNED_QUEST_STATE_QUERY_PASS quest={quest.FormKey} script={source.FormKey} " +
             $"sourceSha256={Convert.ToHexString(hash)} fullOriginalGameMode=true fallbackExecutor=true " +
-            "controlledFixtureInputs=true sourceUnchanged=true ordinaryRecruitment=false campaign=false retailParity=unverified");
+            "controlledCompletedFixture=true unselectedDeadAndRewardOwners=unverified sourceUnchanged=true " +
+            "ordinaryRecruitment=false campaign=false retailParity=unverified");
     }
 
     private sealed class Fixture : IDisposable
@@ -128,7 +138,7 @@ internal static class QuestStateQueryContracts
         private FalloutFormKey Caller => new("QuestQueries.esm", 0x101);
         internal string? Error => Scripts.Capture().Instances.Single().Error;
 
-        internal Fixture(string body, bool shared, bool initialize = true)
+        internal Fixture(string body, bool shared, bool initialize = true, bool bindTarget = true)
         {
             Body = body;
             var header = new byte[20]; U32(3).CopyTo(header, 12); header[16] = 1;
@@ -137,12 +147,13 @@ internal static class QuestStateQueryContracts
                 var local = new byte[24]; U32((uint)index + 1).CopyTo(local, 0);
                 return new[] { Field("SLSD", local), Field("SCVR", Text(name)) };
             }).ToArray();
+            var bindings = new[] { Field("SCRO", U32(0x300)) }.Concat(bindTarget ? new[] { Field("SCRO", U32(0x100)) } : []);
             File.WriteAllBytes(Path.Combine(_directory.FullName, "QuestQueries.esm"), Join(
                 Record("TES4", 0, Field("HEDR", new byte[12])),
                 Record("QUST", 0x100, Field("EDID", Text("TargetQuest")), Field("DATA", [0, 0])),
                 Record("QUST", 0x101, Field("EDID", Text("CallerQuest")), Field("SCRI", U32(0x200)), Field("DATA", [0, 0])),
                 Record("GLOB", 0x300, Field("EDID", Text("BadGlobal")), Field("FNAM", [(byte)'f']), Field("FLTV", new byte[4])),
-                Record("SCPT", 0x200, new[] { Field("SCHR", header), Field("SCRO", U32(0x100)), Field("SCRO", U32(0x300)) }
+                Record("SCPT", 0x200, new[] { Field("SCHR", header) }.Concat(bindings)
                     .Concat(declarations).Append(Field("SCTX", Text("begin GameMode\n" + body + "\nend"))).ToArray())));
             _records = FalloutPluginStack.Load(_directory.FullName, ["QuestQueries.esm"]);
             _world = new(_records); Quests = new(_records);
