@@ -39,6 +39,23 @@ internal sealed partial class FalloutReferenceWorld
             throw new NotSupportedException("Saved campaign has no authoritative history for this reputation axis."));
     }
 
+    internal float? EvaluateReputationCondition(FalloutCondition condition)
+    {
+        if (condition.Function != 573) return null;
+        if (condition.RunOn > 2)
+            throw new NotSupportedException("Reputation condition run-on context is unbound.");
+        if (condition.RunOn == 2 && condition.Reference != 0)
+        {
+            var reference = condition.Owner.Plugin.AdjustFormId(condition.Reference);
+            if (records.RuntimeFormId(reference) != 0x14 &&
+                (!records.TryGetEffective(reference, out var placed) || placed.Signature is not ("REFR" or "ACHR" or "ACRE")))
+                throw new InvalidDataException("Reputation condition explicit context is not an actual placed reference.");
+        }
+        // CTDA uses the raw getter, unlike the script command's validated selector.
+        // Its explicit REPU argument is independent of speaker/listener identity.
+        return Reputation(condition.FormArgument1, condition.Argument2 == 1 ? 1 : 0);
+    }
+
     internal void SetReputation(FalloutFormKey form, double axis, double amount)
     {
         var positive = ReputationAxis(axis);

@@ -14,6 +14,7 @@ internal static class OwnedReputationProbe
             activePlugins: RuntimeLiveContentSource.ResolveVanillaPlugins(game), includeImplicitPlugins: false);
         using var content = RuntimeLiveContentSource.Current!;
         using var records = FalloutPluginStack.Load(content.PluginSources);
+        RunConditions(records);
         var controls = FalloutOpeningPlayerControlResolver.Resolve(records, ["VCG00", "VCG01"]);
         var cell = FalloutCellSceneReader.Read(records, new("FalloutNV.esm", 0x103df9));
         FalloutNativeCampaignRestore Read(string path) => FalloutNativeCampaignSave.Read(path,
@@ -64,6 +65,47 @@ internal static class OwnedReputationProbe
             "actualLegacyReader=true referenceHistoryUnchanged=true legacyUnknown=true freshZero=true " +
             "controlledExplicitAxis=true fullCurrentCodec=true unknownOtherAxisPreserved=true sourceAndSaveUnchanged=true " +
             "addRemoveCrimeNotificationOrdinaryAndRetail=unverified");
+    }
+
+    private static void RunConditions(FalloutPluginStack records)
+    {
+        using var world = new FalloutReferenceWorld(records);
+        var count = 0;
+        var recordsWithConditions = 0;
+        var selectors = new HashSet<uint>();
+        var kinds = new HashSet<string>();
+        foreach (var kind in new[] { "INFO", "QUST", "MESG", "PACK", "IDLE", "TERM" })
+            foreach (var owner in records.EffectiveRecords(kind))
+            {
+                var conditions = owner.ReadSubrecords().Where(field => field.Signature == "CTDA")
+                    .Select(field => FalloutCondition.Read(owner, field.Data.Span)).Where(value => value.Function == 573).ToArray();
+                if (conditions.Length == 0) continue;
+                var hash = SHA256.HashData(owner.ReadData());
+                recordsWithConditions++;
+                foreach (var condition in conditions)
+                {
+                    if (condition.RunOn > 2) continue; // Other run-on owners remain explicitly unadmitted.
+                    var form = condition.FormArgument1;
+                    world.SetReputation(form, 1, -17.125);
+                    world.SetReputation(form, 0, 83.25);
+                    var before = JsonSerializer.Serialize(world.CaptureReputations());
+                    var expected = condition.Argument2 == 1 ? -17.125f : 83.25f;
+                    Require(world.EvaluateReputationCondition(condition) == expected,
+                        "Actual owned CTDA did not query its explicit REPU/selector.");
+                    using var cold = new FalloutReferenceWorld(records);
+                    cold.RestoreReputations(JsonSerializer.Deserialize<FalloutReputationsSnapshot>(before));
+                    Require(cold.EvaluateReputationCondition(condition) == expected &&
+                        JsonSerializer.Serialize(world.CaptureReputations()) == before,
+                        "Actual owned CTDA changed state or lost its cold axis.");
+                    count++; selectors.Add(condition.Argument2); kinds.Add(kind);
+                }
+                Require(SHA256.HashData(owner.ReadData()).SequenceEqual(hash), "Owned condition record changed.");
+            }
+        Require(count > 0, "No actual owned reputation conditions were exercised.");
+        Console.WriteLine($"OPENNV_OWNED_REPUTATION_CONDITION_PASS conditions={count} records={recordsWithConditions} " +
+            $"kinds={string.Join(',', kinds.Order())} selectors={string.Join(',', selectors.Order())} " +
+            "actualWinningCTDA=true controlledKnownAxes=true cold=true noMutation=true " +
+            "fullRecordEligibilityOrdinaryDialogueQuestAndRetail=unverified");
     }
 
     private static void Require(bool value, string message) { if (!value) throw new InvalidDataException(message); }

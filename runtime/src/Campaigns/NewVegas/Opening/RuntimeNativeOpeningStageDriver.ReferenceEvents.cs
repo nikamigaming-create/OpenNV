@@ -133,23 +133,7 @@ internal partial class RuntimeNativeOpeningStageDriver
         _scripts.Host = _scriptHost;
         _speech!.ExecuteResults = results.ExecuteResult;
         _conversation = new();
-        _conversation.Configure(_pluginStack, _quests, _player, _speech!, condition =>
-        {
-            if (FalloutPlatformConditions.Evaluate(condition) is { } platform) return platform;
-            if (condition.Function is 56 or 58 or 59 or 79 or 420 or 421 or 546) return _quests.Evaluate(condition);
-            if (condition.Function == 74) return (_globals ?? throw new InvalidOperationException("Dialogue has no global state owner.")).Get(condition.FormArgument1);
-            if (condition.Function == 53) return (float)_scripts.References!.ReadVariable(_quests, condition.FormArgument1, condition.Argument2);
-            if (condition.Function == 492 && condition.RunOn == 2)
-                return _scripts.References!.MapMarkerVisibility(condition.Owner.Plugin.AdjustFormId(condition.Reference));
-            if (condition.Function == 612) return FalloutExteriorClimate.ContainsRegion(_pluginStack, condition.FormArgument1,
-                FalloutCellSceneReader.ParentWorldspace(_pluginStack.GetEffective(_activeCell)),
-                _player.GlobalPosition.X / _player.UnitsToMeters, -_player.GlobalPosition.Z / _player.UnitsToMeters) ? 1 : 0;
-            if (FalloutInventoryConditions.EvaluateDialoguePlayer(_pluginStack, _inventory, _playerSkills.HasPerk, condition) is { } inventory)
-                return inventory;
-            if (condition.RunOn == 1 && condition.Function == 70 && condition.Argument1 <= 1)
-                return (condition.Argument1 == 1) == _character.Female ? 1 : 0;
-            throw new NotSupportedException($"Conversation condition {condition.Owner.FormKey}/{condition.Function}/{condition.RunOn} is unbound.");
-        }, results.ExecuteResult, _scripts.SaidInfos, (speaker, condition) => condition.RunOn switch
+        _conversation.Configure(_pluginStack, _quests, _player, _speech!, ConversationConditionContext(), results.ExecuteResult, _scripts.SaidInfos, (speaker, condition) => condition.RunOn switch
         {
             0 => _scripts.References!.Placement(speaker).Cell,
             1 => _activeCell,
@@ -173,6 +157,25 @@ internal partial class RuntimeNativeOpeningStageDriver
             _scripts.References!.GetDeadCount, DialogueActorDead);
         AddChild(_conversation);
     }
+
+    private Func<FalloutCondition, float> ConversationConditionContext() => condition =>
+        {
+            if (condition.Function == 573) return _scripts.References!.EvaluateReputationCondition(condition)!.Value;
+            if (FalloutPlatformConditions.Evaluate(condition) is { } platform) return platform;
+            if (condition.Function is 56 or 58 or 59 or 79 or 420 or 421 or 546) return _quests.Evaluate(condition);
+            if (condition.Function == 74) return (_globals ?? throw new InvalidOperationException("Dialogue has no global state owner.")).Get(condition.FormArgument1);
+            if (condition.Function == 53) return (float)_scripts.References!.ReadVariable(_quests, condition.FormArgument1, condition.Argument2);
+            if (condition.Function == 492 && condition.RunOn == 2)
+                return _scripts.References!.MapMarkerVisibility(condition.Owner.Plugin.AdjustFormId(condition.Reference));
+            if (condition.Function == 612) return FalloutExteriorClimate.ContainsRegion(_pluginStack, condition.FormArgument1,
+                FalloutCellSceneReader.ParentWorldspace(_pluginStack.GetEffective(_activeCell)),
+                _player.GlobalPosition.X / _player.UnitsToMeters, -_player.GlobalPosition.Z / _player.UnitsToMeters) ? 1 : 0;
+            if (FalloutInventoryConditions.EvaluateDialoguePlayer(_pluginStack, _inventory, _playerSkills.HasPerk, condition) is { } inventory)
+                return inventory;
+            if (condition.RunOn == 1 && condition.Function == 70 && condition.Argument1 <= 1)
+                return (condition.Argument1 == 1) == _character.Female ? 1 : 0;
+            throw new NotSupportedException($"Conversation condition {condition.Owner.FormKey}/{condition.Function}/{condition.RunOn} is unbound.");
+        };
 
     private bool DialogueActorDead(FalloutFormKey actor)
     {

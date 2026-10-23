@@ -353,18 +353,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
                 Synchronize();
             }
         };
-        _speech.Configure(_pluginStack, _lipConfiguration, quest => _quests.Stage(quest), condition =>
-        {
-            if (condition.Function == 53) return (float)_scripts.References!.ReadVariable(_quests, condition.FormArgument1, condition.Argument2);
-            if (condition.Function == 74) return (_globals ?? throw new InvalidOperationException("Dialogue has no global owner.")).Get(condition.FormArgument1);
-            if (condition.RunOn == 1 && condition.Function == 70 && condition.Reference == 0)
-            {
-                if (condition.Argument1 > 1) throw new InvalidDataException("GetIsSex has an invalid sex argument.");
-                return (condition.Argument1 == 1) == _character.Female ? 1 : 0;
-            }
-            if (condition.RunOn == 0 && condition.Function is 59 or 79 or 546) return _quests.Evaluate(condition);
-            throw new NotSupportedException($"Dialogue condition {condition.Function} RunOn {condition.RunOn} has no actor/quest owner.");
-        }, _scripts.SaidInfos, actor => _scripts.References!.Get(actor).Templates,
+        _speech.Configure(_pluginStack, _lipConfiguration, quest => _quests.Stage(quest), SpeechConditionContext(), _scripts.SaidInfos, actor => _scripts.References!.Get(actor).Templates,
             actor => _scripts.References!.Get(actor).SoundRandom, _player.UnitsToMeters, _quests, () => _character.Female,
             actor => _scripts.References!.ActorRace(actor), DialogueActorValue, _scripts.ScriptValues.RandomBounded, _scripts.References,
             CurrentActorPackage, _scripts.ActorQueries.GetVampire, InventoryCommands.ItemCount,
@@ -375,6 +364,20 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         ConfigureDetectionAndFinishedSpeech();
         ApplyEnteredActorCommands();
     }
+
+    private Func<FalloutCondition, float> SpeechConditionContext() => condition =>
+        {
+            if (condition.Function == 573) return _scripts.References!.EvaluateReputationCondition(condition)!.Value;
+            if (condition.Function == 53) return (float)_scripts.References!.ReadVariable(_quests, condition.FormArgument1, condition.Argument2);
+            if (condition.Function == 74) return (_globals ?? throw new InvalidOperationException("Dialogue has no global owner.")).Get(condition.FormArgument1);
+            if (condition.RunOn == 1 && condition.Function == 70 && condition.Reference == 0)
+            {
+                if (condition.Argument1 > 1) throw new InvalidDataException("GetIsSex has an invalid sex argument.");
+                return (condition.Argument1 == 1) == _character.Female ? 1 : 0;
+            }
+            if (condition.RunOn == 0 && condition.Function is 59 or 79 or 546) return _quests.Evaluate(condition);
+            throw new NotSupportedException($"Dialogue condition {condition.Function} RunOn {condition.RunOn} has no actor/quest owner.");
+        };
 
     private void Synchronize()
     {

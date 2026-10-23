@@ -24,6 +24,11 @@ internal sealed class FalloutDialogueConditions(FalloutPluginStack records, Fall
 
     internal float Evaluate(FalloutCondition condition)
     {
+        if (condition.Function == 573)
+        {
+            if (condition.RunOn > 2) throw new NotSupportedException("Dialogue reputation query scope is unbound.");
+            return (runtime ?? throw new NotSupportedException("Dialogue has no shared reputation owner."))(condition);
+        }
         if (condition.Function == 46)
         {
             var subject = condition.RunOn switch

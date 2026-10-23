@@ -16,9 +16,16 @@ if (args is ["--owned-reputation-state", var reputationGame, var reputationSave]
     return;
 }
 
+if (args is ["--reputation-condition-contracts"])
+{
+    ReputationConditionContracts.Run();
+    return;
+}
+
 if (args is ["--reputation-contracts"])
 {
     ReputationContracts.Run();
+    ReputationConditionContracts.Run();
     return;
 }
 
@@ -1126,6 +1133,7 @@ ConversationSpeakerAdmissionContracts.Run();
 ActorSourceContracts.Run();
 FactionRelationContracts.Run();
 ReputationContracts.Run();
+ReputationConditionContracts.Run();
 EncounterZoneContracts.Run();
 FollowPackageContracts.Run();
 DialoguePackageContracts.Run();
