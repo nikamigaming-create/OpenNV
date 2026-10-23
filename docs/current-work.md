@@ -8,43 +8,46 @@ input and Git; existing writers have disjoint scopes and run no competing jobs.
 
 ## Active block
 
-Baseline main/origin-main is ddbe1bd3275b8b9a764166acce38814a676c8bba (merged
-PR270; all five checks and independent review passed). Current work is on
-codex/fnv-campfire-event-path. PR269 remains draft at e7a459b5 with native/merge
-acceptance held. No third encounter admission, retail attempt or denied writer
-contact is permitted.
+Baseline main/origin-main is 621bb7e7f1b095bc773fa464598a4dac8026e1da (PR271).
+All five hosted checks and independent review passed; local main matched origin.
+The coordinator is on codex/fnv-terminal-hacking-admission. PR269 remains draft
+at e7a459b5 with native/merge acceptance held. No third encounter admission,
+retail attempt or denied writer contact is permitted.
 
-PR270 admits the source campfire script's unconditional Else followed by a dead
-ElseIf tail. A subsequent source/restore audit corrects the earlier handoff:
-normal FalloutReferenceWorld.Restore already clears Parse-prefixed faults after
-validating saved reference/base/script/hash/locals against winning data. This
-predates PR270. The exact real campfire snapshot restores with only ScriptError
-changing to null; no events or save writes occur. The saved parser is version 9,
-and its historical grammar reproduces the exact pre-execution rejection. The
-existing broad Parse-prefix policy is not evidence that arbitrary errors are safe
-to reset; no recovery rule was added or broadened.
+The active implementation closes two hacking-generation prerequisites. The owned
+dictionary is space-delimited with no newlines; the old newline-only decoder
+refused the actual resource. The source file reader uses a space delimiter and a
+32-byte buffer, retaining at most 31 bytes per call. Decoding now preserves byte
+case, delimiter consumption, empty spans, partial final tokens and long-token
+chunks. It does not use arbitrary whitespace splitting or invent replacement words.
+The source candidate-derived attempt calculator now runs inside production
+candidate generation instead of an arbitrary caller callback. It uses positional
+likeness groups and recursive retained subsets, then the existing four-attempt
+floor. Requested and retained candidate counts remain distinct.
 
-The controlled owned event fixture now uses actual shared OnTrigger admission,
-compiled bindings, quest state, canonical saved inventory and item-count owners.
-The no-powder branch completes without effects. Outer/nested powder branches
-commit their real objective prefix, then explicitly refuse at native conversation
-publication. StartConversation has an existing command and native owner; this is
-a fixture boundary, not a demonstrated missing product command. No native effect
-is falsely acknowledged, so later Disable/MarkForDelete commands are not claimed.
-Wrong contacts and duplicate event frames refuse; cold retry preserves the reached
-fault/objective prefix without replay. Original source/save hashes remain unchanged.
-Physical contact, conversation, crafting and campaign progress are unverified.
+The native terminal opener still refuses locked access without a password.
+Ordinary hacking requires remaining shared RNG/clock lifetime, reference-aware
+admission/retained outcomes, native presentation/input, success followups and
+persistence. This block does not unlock access, grant XP, acknowledge success or
+claim ordinary hacking. Terminal-specific retained difficulty is distinct from
+placed XLOC; no XLOC refusal was removed on unrelated evidence. Formatting and focused synthetic/owned-dictionary checks pass. Nine real
+word-length sets pass, including calculated allowances of five for the controlled
+four- and five-letter sets. The source recursion retains its candidate-count
+outcome-index limit even when longer words have higher likeness classes.
+The renewed full runtime gate passes at 02:31:47 UTC: exit 0, all 2,189 frozen
+source/configuration hashes unchanged, and git diff --check clean. Release/Debug
+builds have zero warnings/errors; native locomotion, render-trace and recorded-input
+audits pass with recording off. Hosted checks and independent review remain pending. Builds and native checks remain serialized, recording off.
 
-The selected next gameplay capability is ordinary locked-terminal hacking
-admission: the native opener still explicitly refuses without a password, while
-shared generation/transaction primitives already exist. Required RNG/clock,
-candidate allowance, reference-aware difficulty/admission and UI/outcome owners
-must be source-qualified and bound; no guessed attempt budget or direct unlock.
-The event proof passes formatting, Debug compilation with zero warnings/errors,
-the complete reference-script contracts and its selected owned audit. The full
-runtime gate passes at 02:01:11 UTC: exit 0, all 2,187 source/configuration hashes
-unchanged, and git diff --check clean. Hosted checks and independent review of
-this proof/claim change are pending. Builds/native checks remain serialized.
+The accepted campfire event proof uses actual shared OnTrigger admission,
+compiled bindings, quest state and canonical saved inventory. Powder paths reach
+an explicitly refused native conversation boundary; production StartConversation
+already has a command and host. This is not a missing product command. Existing
+normal Restore clears the exact retained Parse-prefixed fault after source checks;
+no new recovery policy or real save mutation was added. The probe's cold retry
+checks post-restore versus post-retry state; broader prefix restoration relies on
+existing restore contracts. Physical contact, conversation, crafting and campaign
+progress remain unverified.
 
 ## Gameplay and test-control checkpoint
 

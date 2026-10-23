@@ -3,7 +3,37 @@ using OpenNV.Runtime.Content;
 
 internal static class OwnedHackingProbe
 {
-    // The harness supplies the qualified shared RNG/clock, perk and allowance
+    internal static void RunAllowance(string dataRoot)
+    {
+        RuntimeLiveContentSource.Configure(dataRoot, RuntimeLiveContentSource.FalloutNewVegasGame,
+            activePlugins: RuntimeLiveContentSource.ResolveVanillaPlugins(dataRoot), includeImplicitPlugins: false);
+        using var content = RuntimeLiveContentSource.Current!;
+        if (!content.TryRead("menus/falloutdict.txt", null, out var bytes, out var source))
+            throw new FileNotFoundException("Owned content has no hacking dictionary.");
+        var dictionary = FalloutHackingDictionary.ReadSpaceDelimited(bytes);
+        var cases = 0;
+        foreach (var length in Enumerable.Range(4, 9))
+        {
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            var words = dictionary.Words.Where(word => word.Length == length &&
+                seen.Add(Convert.ToHexString(word.Bytes))).Take(20).ToArray();
+            if (words.Length == 0) continue;
+            var allowance = FalloutHackingAllowance.Calculate(words);
+            if (allowance == 0 || allowance > words.Length + 1 ||
+                allowance != FalloutHackingAllowance.Calculate(words.Reverse().ToArray()))
+                throw new InvalidDataException("Owned candidate allowance changed with candidate order.");
+            ++cases;
+            Console.WriteLine($"OPENNV_OWNED_HACKING_ALLOWANCE_CASE length={length} " +
+                $"candidates={words.Length} calculated={allowance} maximumAttempts={Math.Max(4u, allowance)}");
+        }
+        if (cases == 0 || !content.TryRead("menus/falloutdict.txt", null, out var after, out var afterSource) ||
+            source != afterSource || !bytes.SequenceEqual(after))
+            throw new InvalidDataException("Owned hacking allowance had no cases or changed dictionary bytes.");
+        Console.WriteLine($"OPENNV_OWNED_HACKING_ALLOWANCE_PASS cases={cases} dictionaryHash={dictionary.SourceHash} " +
+            "controlledCandidateSelection=true generationRngAndClock=unverified ordinaryHackingAndRetail=unverified");
+    }
+
+    // The harness supplies the qualified shared RNG/clock and perk
     // owners. There is deliberately no CLI seed, guessed timeout or four-attempt
     // substitute. A successful construction is not an ordinary-interaction proof.
     internal static FalloutHackingCandidates Run(string dataRoot, uint terminalRuntimeId,
@@ -23,7 +53,7 @@ internal static class OwnedHackingProbe
         var terminalHash = SHA256.HashData(terminal.Record.ReadData());
         if (!content.TryRead("menus/falloutdict.txt", null, out var bytes, out var source))
             throw new FileNotFoundException("Selected owned content has no menus/falloutdict.txt.");
-        var dictionary = FalloutHackingDictionary.ReadCanonical(bytes);
+        var dictionary = FalloutHackingDictionary.ReadSpaceDelimited(bytes);
         var request = FalloutHackingRequest.Read(records, key, terminal.Difficulty, currentScience);
         var result = FalloutHackingCandidates.Generate(dictionary, request, applyScienceBonus, owners);
         if (!SHA256.HashData(terminal.Record.ReadData()).SequenceEqual(terminalHash) ||
