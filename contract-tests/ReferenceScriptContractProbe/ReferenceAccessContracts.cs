@@ -23,6 +23,7 @@ internal static class ReferenceAccessContracts
             File.WriteAllBytes(Path.Combine(directory, "AccessPatch.esp"), patch);
             using var records = FalloutPluginStack.Load(directory, ["Access.esm", "AccessPatch.esp"]);
             var cell = FalloutCellSceneReader.Read(records, Key(0x80));
+            TerminalHackStateContracts.Run(records, cell);
             using var world = new FalloutReferenceWorld(records); world.LoadCell(cell);
             var quests = new FalloutQuestState(records);
             var effects = 0;
