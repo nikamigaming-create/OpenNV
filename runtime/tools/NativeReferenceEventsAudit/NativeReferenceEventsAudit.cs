@@ -20,6 +20,10 @@ public partial class NativeReferenceEventsAudit : Node
         RuntimeNativePlayer? player = null;
         try
         {
+            if (OS.GetCmdlineUserArgs() is ["--owned-jukebox-composition", var jukeboxGame])
+            {
+                await OwnedJukeboxComposition(jukeboxGame); GetTree().Quit(); return;
+            }
             if (OS.GetCmdlineUserArgs() is ["--player-note-adapters"])
             {
                 PlayerNoteAdapters(); GetTree().Quit(); return;
