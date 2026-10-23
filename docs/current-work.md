@@ -8,100 +8,55 @@ input and Git; no competing jobs or denied writer contact are permitted.
 
 ## Active block
 
-Accepted main/origin-main is dab17fe1db67a0664bfc0e2f8db446f305701a2f (PR291),
-merged 17:45:38 UTC after independent review and all five exact-head checks.
-Local main matched origin/main, clean. Its completed branch was removed after
-squash-tree equality and independent bundle recovery/integrity verification.
-Three persistent branches remain: main, unique classic audio PR242 and held
-combat-control PR269. Original saves are unchanged.
+Accepted main/origin-main is d814b4a1be072a6a5620a91f9e6308b9d7424629 (PR292),
+merged 19:34:05 UTC after independent corrected-head review and all five checks.
+Main matched origin/main clean; the completed branch was removed after verified
+independent bundle recovery. The three persistent branches are main, unique
+classic-audio PR242 and held combat-control PR269. Original saves are unchanged.
 
-Accepted NOTE state, acquisition/feedback, query, CTDA382, UI and schema59 share
-known/unknown membership. Both script frontends admit static compiled AddNote,
-GetHasNote and RemoveNote qualifiers without redirecting global player ownership.
-Deferred query binding preserves short circuit; dynamic reference variables are
-not admitted. RemoveNote retains exact live-menu selection invalidation without
-playback stop, menu close, inventory mutation or ItemRemoved HUD feedback.
+Active branch: codex/fnv-owned-lockpick-models. The accepted lockpick runtime
+connects admitted keyless DOOR/CONT activation to manual mouse/rebound-control
+pressure and Force, shared lock state/XP, finite sound and resident activation.
+Its real modal lease restores pause/mouse/actions on every retirement path.
+Effective ownership, attached scripts, modified threshold-cache lifetime,
+unknown lock history, extended/quest-marked pins and XR remain explicit unsupported
+lanes. TERM/hacking stays separate. Canonical lock-history continuation is not
+complete retail save/stream parity. Skill100/solved-position DOOR/CONT audits
+remain controlled composition, not campaign progress.
 
-The accepted owned jukebox composition audit's prior
-message boundary was deliberately absent from that fixture. A real production
-route exists through native driver, source message queue, NativeOwnedMessageMenu
-and consumptive button result; the boundary is not an implementation defect.
-The isolated native audit retains the unchanged complete authored OnActivate,
-with explicit absent/duplicate membership prerequisites, and tests real production
-message presentation, button ownership and later challenge/reference effects.
-Cold restoration must not replay effects. This is controlled composition, not
-ordinary campaign progress, full-cell presentation, physical input or parity.
-Selected native composition now passes: unknown history refuses with warm/cold
-retained error; absent membership uses the actual modal menu/button owner; the
-unlock branch uses its actual three-second HUD message and completes first-entry
-removal, quest writes, destroyed state, challenge progress, paired-reference
-enable request and script variable. Cold message restoration does not replay
-these effects. The selected owned/native audits and full required gate passed
-2026-10-23 17:33:04 UTC: all 2,221 frozen source/config hashes and the original
-save were unchanged, and git diff check passed. Exact reviewed head
-8ebb1d1215abc78b2c48d67faad367bb2499bc40 passed all five hosted checks before
-merge. Local main matched origin/main clean at 17:46:14 UTC; the completed
-branch was removed after squash-tree equality and independent bundle recovery.
-This tests existing production behavior and adds no new gameplay capability.
+The active model slice loads actual owned LockInterface01 and BobbyPin01 through
+the shared NIF surface, with separate pose/controller handles and the shared
+source group transform. Resource/controller preparation precedes layout RNG and
+modal acquisition. Retained pin pivot and source angle precision drive the pin;
+cylinder angle samples an inclusive Backward stop pose. Explicit clamped sampling
+does not change ordinary looping Play/Seek semantics. Both pose-owned clocks
+stay stopped after tree readiness. The winning fDefaultFOV setting supplies the
+qualified ordinary projection operands. Camera basis/clips, lighting fidelity,
+opening/replacement/break blends, jitter and matched pixels remain unaccepted.
 
-Active branch: codex/fnv-lockpick-runtime, based on that accepted main. There is
-now connected first-party lockpick runtime code for the admitted ordinary keyless
-DOOR/CONT lane. TERM/hacking stays separate. The shared session owns source
-layout RNG, generated child geometry, mouse positioning, rebound movement-control
-pressure, return/turn/obstruction phases, pin health and Force chance. A minimal
-Godot panel adapts actual input; retail 3D models, animation, haptics, exact
-presentation timing and complete audio are not accepted. Movement and pin-break
-cues use the existing finite sound owner. Break sound precedes silent pin removal.
+Selected native checks pass actual mouse ingress, independent controllers,
+inclusive open pose, off-center angle bits, pivot return/no drift and unchanged
+process RNG during model preparation. A real shader-binding negative control
+reproduces the pin outside every old fallback light. The opt-in first-party
+correction uses actual posed geometry bounds and retains source materials;
+other menus keep their previous fallback policy. Corrected checks cover several
+pin positions. The inspected GPU frame shows the actual brown pin against the
+cylinder. The corrected selected audits and full required gate passed 20:10:36 UTC:
+all 2,232 source/config hashes and the original save were unchanged; diff check
+passed. Independent exact-head review and hosted checks are next before merge.
+This is connected model presentation, not complete visual-usability, ordinary
+campaign, XR or retail parity acceptance. Recording is off; only one selected
+private diagnostic frame is retained for the active review.
 
-The coordinator acquires the real player's existing modal-input lease and restores
-prior pause/mouse state on cancel, success, failure, exceptions and owner retirement.
-Duplicate Force input cannot cancel an already admitted turn. Normal success and
-Force share authoritative lock state and the existing player XP operation, followed
-by the resident reference activation owner. Attached scripts are refused before
-reward/unlock until their post-pick activation policy is joined. Effective nonnull
-ownership likewise refuses the actually reached crime lane; it is not inferred
-from absent local XOWN. Leveled/key-only locks, unknown history, modified threshold
-cache semantics, extended/zero pin stacks and XR input remain outside admission.
-Live quest-marked pin depletion is also temporarily refused before layout RNG
-and rechecked before break sound/removal. This is an unqualified-state boundary,
-not a claim that retail permanently protects quest-marked pins from depletion.
-The qualified actor-only Ignore Broken Lock perk uses the existing numeric effect
-and condition owner, including its existing unsupported-condition/order refusals.
-
-Twenty-byte XLOC histories are read as actual counters, not padding. Short
-reused/overriding declarations keep history unknown. Lock/Unlock preserves the
-reward marker while unlock resets the failed-force counter. Existing saves lacking
-history keep it unknown; the port's canonical snapshots preserve observed history.
-That custom continuation is not a claim about the complete retail warm/cold codec
-or streaming lifetime. An uncertain throwing XP prefix makes reward history unknown
-rather than awarding again. Original saves remain unchanged.
-
-The final connected Debug build and selected access/manual/Force contracts pass;
-they cover strict Force comparison and RNG order, source-clock turn completion,
-current finite skill conversion, obstruction versus release, single silent pin loss,
-no reroll on break, one-time reward, cold canonical state and legacy unknown.
-The corrected native actual-input audit passes Force success/failure/cancel,
-exception/disposal/focus-loss restoration, nested modal ownership, rebound manual
-success, relative-mouse positioning and obstructed single-pin exhaustion. Its
-original mouse assertion ran before the menu process callback; the strict expected
-position now passes after a complete frame, retaining real event ingress.
-The live quest-pin regression fails against the factored prior admission and
-passes the repaired owner, including source/live flag precedence and a mutation
-during obstruction that must request no break sound, lose no pin and never replay.
-Installed-data sessions for one actual DOOR and one CONT pass winning geometry,
-settings, shared world/XP and canonical cold state with explicit skill-100 and
-solved-position prerequisites. These are controlled composition checks.
-PR292 is open. The repaired admission reads geometry/settings and prepares the
-session before acquiring player input; one shared pure validator checks exact
-configuration and checked margins before the layout draw. The prior construction
-order fails the no-draw regression. Native checks retain actual process RNG
-observation and player velocity/modal/pause/mouse state on rejected admission,
-separately from legitimate cancellation. The corrected revision passed selected
-audits and the full required gate at 19:21:55 UTC: all 2,230 source/config hashes
-and the original save were unchanged, and diff check passed. That receipt
-supersedes the 19:06:09 prior-head gate. No ordinary owned door/container
-playthrough is claimed. Independent exact-head re-review and main integration
-remain pending.
+Ordinary-route admission remains unverified. Candidate 10b2d4 is source metadata,
+not a reached interaction: effective runtime ownership, current skill/history,
+residency and a legitimately traversed route must pass before input. Existing
+intrinsic pins require no insertion. A normal New Game with real Lockpick tag
+selection is a possible future route, not seeded progress or an executed proof.
+No original checkpoint is overwritten, retail launched or held combat encounter
+retried. Website-copy proposal remains unapplied; no denied writer contact or
+indirect reservation is introduced. Coordinator owns Git/build/native serially.
+Private model receipts are under local/fnv-wells-fixed/lockpick-models-20261023/.
 
 Static ACTI trap activation remains a separate parked owner. A real production
 DefaultActivate route exists, but the selected controller-free trap cannot supply
@@ -217,7 +172,7 @@ attempts and normal cleanup; no third blind launch.
 
 ## Remaining completion gates
 
-- Current P0: finish checked publication of the connected lockpick runtime and
+- Current P0: connect and validate the owned lock/pin presentation and
   validate ordinary admitted DOOR/CONT interaction, then close the next reached
   gameplay owner. Collected-note integration is already on main. Hacking outcome admission remains closed.
   Shared faction arbitration is implemented; actual eligible/ineligible assistance

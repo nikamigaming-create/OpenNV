@@ -20,6 +20,11 @@ public partial class NativeReferenceEventsAudit : Node
         RuntimeNativePlayer? player = null;
         try
         {
+            if (OS.GetCmdlineUserArgs() is ["--owned-lockpick-models", var modelGame, .. var modelOptions])
+            {
+                await OwnedLockpickModels(modelGame, modelOptions.Length == 1 ? modelOptions[0] : null);
+                GetTree().Quit(); return;
+            }
             if (OS.GetCmdlineUserArgs() is ["--owned-lockpick-session", var lockpickGame])
             {
                 OwnedLockpickSession(lockpickGame); GetTree().Quit(); return;

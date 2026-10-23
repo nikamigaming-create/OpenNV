@@ -1,6 +1,6 @@
 # Implementation plan
 
-Updated 2026-10-22: the user directs complete-game playability in flat Fallout:
+Updated 2026-10-23: the user directs complete-game playability in flat Fallout:
 New Vegas before repeated deep optimization.
 Start with correct Doc Mitchell positioning and the original questionnaire,
 physical object handling including the skull, every Goodsprings tutorial,
@@ -24,15 +24,13 @@ temporary modifiers, perks, dialogue checks, crafting and combat consequences.
 Acceptance requires ordinary successful and failed interactions and their real
 world/quest consequences; loading skill values or displaying a menu is insufficient.
 
-The current access path stops locked DOOR/CONT/TERM activation when the player
-lacks a key/password. Terminal pages and authored results have owners, but hacking
-is explicitly unbound and no lockpicking interaction starts at that gate. Implement
-source-owned skill admission, lockpicking input and pick consumption, hacking
-attempts/lockout and perk effects, then shared unlock/event/XP/crime consequences
-where the source requires them. Check both unlocked access and failed/cancelled
-attempts, including persistence and quest-controlled locks. Do not unlock on a
-skill threshold alone or bypass these systems to finish a quest. This remains
-required work alongside the active population/package repair.
+The accepted lockpick runtime connects keyless DOOR/CONT activation to manual
+mouse/rebound-control input and Force outcomes for its admitted unowned,
+unscripted, known-history plain-pin scope. Shared unlock, XP and resident
+activation are owned; ordinary campaign and owned-model presentation acceptance
+remain open. TERM hacking stays unbound. Complete the unsupported ownership,
+script, threshold-cache, variant/history and XR lanes from source evidence;
+never unlock on a skill threshold alone or bypass required quest effects.
 
 The following inventory preserves FNV repair requirements from the rejected
 physical VR playtest of package g. Shared gameplay defects also block flat mode.
