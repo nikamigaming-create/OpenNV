@@ -95,6 +95,8 @@ internal static class OwnedReputationProbe
                             records.GetEffective(form).ReadSubrecords().Single(field => field.Signature == "DATA").Data.Span);
                         expected = (float)((double)expected / capacity);
                         Require(float.IsFinite(expected), "Owned percentage declaration requires a finite result.");
+                        Require(world.ReputationPercentage(form, condition.Argument2 == 1 ? 1 : 0) == expected,
+                            "Script percentage getter disagreed with the owned source capacity and known axis.");
                         Console.WriteLine($"OPENNV_OWNED_REPUTATION_PERCENTAGE_SOURCE owner={owner.FormKey} reputation={form} " +
                             $"selector={condition.Argument2} runOn={condition.RunOn} capacity={capacity} " +
                             $"sourceHash={Convert.ToHexString(hash)}");

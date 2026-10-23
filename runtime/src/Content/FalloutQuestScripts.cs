@@ -794,10 +794,15 @@ internal sealed partial class FalloutQuestScripts
                         _ => _records.PerkParameters.Get(form, index, operation == "getnthperkentryvalue2" ? 1 : 0),
                     };
                 });
-            if (parts.Length == 1 && operation == "getreputation")
+            if (parts.Length == 1 && operation is "getreputation" or "getreputationpct")
                 return new([FalloutScriptArgumentKind.Value, FalloutScriptArgumentKind.Number], arguments =>
-                    (References ?? throw new NotSupportedException("Reputation query has no shared world owner."))
-                    .Reputation(arguments[0].Value.FormKey(_records), arguments[1].Number))
+                {
+                    var world = References ?? throw new NotSupportedException("Reputation query has no shared world owner.");
+                    var form = arguments[0].Value.FormKey(_records);
+                    return operation == "getreputationpct"
+                        ? world.ReputationPercentage(form, arguments[1].Number)
+                        : world.Reputation(form, arguments[1].Number);
+                })
                 { ReadOnly = true };
             if (parts.Length == 1 && operation == "getperkentrycount")
                 return new([FalloutScriptArgumentKind.Value], arguments =>
