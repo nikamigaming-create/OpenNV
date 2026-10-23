@@ -39,12 +39,12 @@ internal sealed partial class FalloutGameModeProgram
             {
                 case "if": branches.Add(false); break;
                 case "else": branches[^1] = true; break;
-                case "endif": branches.RemoveAt(branches.Count - 1); break;
+                case "endif": if (!_baselineEndIf.Contains(index)) branches.RemoveAt(branches.Count - 1); break;
                 case "while": ++loopDepth; break;
                 case "loop": --loopDepth; break;
             }
         if (loopDepth != 0) return null;
-        return new(_lines) { _startLine = site, _enteredBranches = branches.ToArray() };
+        return new(_lines, _baselineEndIf) { _startLine = site, _enteredBranches = branches.ToArray() };
     }
 
     internal int StartStatement => _startLine;

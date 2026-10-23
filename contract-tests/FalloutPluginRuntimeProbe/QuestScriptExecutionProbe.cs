@@ -144,7 +144,7 @@ internal static class QuestScriptExecutionProbe
     private static void BranchAdmissionColdState(string directory)
     {
         File.WriteAllBytes(Path.Combine(directory, "Branches.esm"), Header().Concat(Quest())
-            .Concat(Script("if active == 0\nset result to 7\nelse UnboundTrailingText\nset result to 9\nelseif MissingDeadTailFunction\nset result to 99\nendif", [1, 2, 3])).ToArray());
+            .Concat(Script("if active == 0\nset result to 7\nelse UnboundTrailingText\nset result to 9\nelseif MissingDeadTailFunction\nset result to 99\nendif\nendif", [1, 2, 3])).ToArray());
         using var records = FalloutPluginStack.Load(directory, ["Branches.esm"]);
         var quest = new FalloutFormKey("Branches.esm", 0x100);
         var state = new FalloutQuestState(records);
@@ -157,7 +157,7 @@ internal static class QuestScriptExecutionProbe
         var restored = Scripts(); restored.Restore(legacy);
         Require(restored.Capture().Instances.SequenceEqual(legacy.Instances) && state.Variable(quest, 2) == 123.5,
             "Branch parser changes rejected or reset an existing quest script owner.");
-        foreach (var version in new[] { 3, 4, 9 })
+        foreach (var version in new[] { 3, 4, 9, 10 })
         {
             var newlyAdmitted = Scripts();
             newlyAdmitted.Restore(initial with { ParserVersion = version, Instances = [] });

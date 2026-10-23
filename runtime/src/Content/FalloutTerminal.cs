@@ -51,6 +51,21 @@ internal sealed record FalloutTerminalResultProgram(FalloutPluginRecord Terminal
         if (compiledSize != (uint)(compiled?.Data.Length ?? 0))
             throw new InvalidDataException("Terminal result compiled extent disagrees with SCHR.");
         var source = Optional(fields, "SCTX");
+        if (compiledSize == 0)
+        {
+            foreach (var field in fields)
+            {
+                if (field.Signature is "SCRO" or "SCRV" && field.Data.Length != 4 ||
+                    field.Signature == "SLSD" && field.Data.Length != 24)
+                    throw new InvalidDataException("Empty terminal result metadata extent is invalid.");
+                if (field.Signature == "SCVR") _ = FalloutTerminal.Text(field.Data.Span);
+            }
+            // A required, explicit zero extent supplies no instructions. Keep
+            // the raw fields, but do not turn editor text or unused metadata
+            // counts into executable source, bindings or event-list locals.
+            return new(terminal, entryIndex, identity, fields, "", 0,
+                decodedHeader.Type, decodedHeader.Flags, [], []);
+        }
         var references = new List<FalloutTerminalScriptReference>();
         var locals = new Dictionary<uint, FalloutTerminalLocal>();
         var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
