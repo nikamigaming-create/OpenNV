@@ -748,15 +748,17 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
                 validated.ValidateActivationRelay(snapshot.Reference, relay);
                 instance.ActivationRelay = relay.Copy();
             }
-            validated.RestoreAccess(instance, snapshot);
-            validated.RestoreTerminalHackState(instance, snapshot);
-            if (snapshot.BroadcastState is { } broadcast)
-                validated.SetBroadcastState(snapshot.Reference, broadcast ? 1 : 0);
             if (snapshot.Placement is { } placement)
             {
                 if (records.GetEffective(placement.Cell).Signature != "CELL") throw new InvalidDataException("Saved placement has no winning CELL.");
                 instance.Placement = placement.Copy();
             }
+            // Effective access metadata belongs to the restored location, not
+            // the editor cell. All staging remains in the temporary world.
+            validated.RestoreAccess(instance, snapshot);
+            validated.RestoreTerminalHackState(instance, snapshot);
+            if (snapshot.BroadcastState is { } broadcast)
+                validated.SetBroadcastState(snapshot.Reference, broadcast ? 1 : 0);
             var talkingActivator = snapshot.TalkedToPlayer && records.GetEffective(instance.Base).Signature == "TACT";
             if (talkingActivator) _ = FalloutDialogueSpeaker.Read(records, instance.Base);
             if (snapshot.Restrained || snapshot.PlayerTeammate || snapshot.TalkedToPlayer && !talkingActivator || snapshot.PackageMotion is not null ||
