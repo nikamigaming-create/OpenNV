@@ -8,55 +8,37 @@ input and Git; no competing jobs or denied writer contact are permitted.
 
 ## Active block
 
-Accepted main/origin-main is d814b4a1be072a6a5620a91f9e6308b9d7424629 (PR292),
-merged 19:34:05 UTC after independent corrected-head review and all five checks.
-Main matched origin/main clean; the completed branch was removed after verified
-independent bundle recovery. The three persistent branches are main, unique
-classic-audio PR242 and held combat-control PR269. Original saves are unchanged.
+Accepted main/origin-main is 18301de96fd9561d3445a10f9453be69d91ddade (PR293),
+merged 20:20:35 UTC after independent exact-head review and all five checks.
+The completed model branch has verified bundle recovery and was removed locally
+and remotely. Main was clean; three persistent branches remain: main, unique
+classic-audio PR242 and native-held combat-control PR269. Original saves remain
+unchanged. The lockpick runtime and actual owned lock/pin models are implemented
+for their admitted DOOR/CONT scope. Ordinary campaign, XR and retail presentation
+acceptance remain open; TERM hacking stays separate.
 
-Active branch: codex/fnv-owned-lockpick-models. The accepted lockpick runtime
-connects admitted keyless DOOR/CONT activation to manual mouse/rebound-control
-pressure and Force, shared lock state/XP, finite sound and resident activation.
-Its real modal lease restores pause/mouse/actions on every retirement path.
-Effective ownership, attached scripts, modified threshold-cache lifetime,
-unknown lock history, extended/quest-marked pins and XR remain explicit unsupported
-lanes. TERM/hacking stays separate. Canonical lock-history continuation is not
-complete retail save/stream parity. Skill100/solved-position DOOR/CONT audits
-remain controlled composition, not campaign progress.
+Active branch: codex/fnv-script-reputation-percentage. GetReputationPct is missing
+from both authored-script executors even though its shared CTDA percentage owner
+already exists. The unchanged runtime reproduces an unbound-expression failure.
+The repair routes both executors to that same source float axis/capacity division,
+with script selector validation (0/1), deferred evaluation and unknown-history
+refusal. No multiplication by 100, clamping, notification, save schema or state
+mutation is introduced. The existing CTDA raw-selector behavior stays unchanged.
+The focused regression passes both executors. The selected owned reputation audit
+and required runtime gate passed 20:35:26 UTC, with 2,229 frozen source/config inputs
+unchanged, diff check clean and the original save unchanged. Exact-head independent
+review and hosted checks precede merge. No current installed SCPT use was discovered by the bounded
+source search, so this is script capability rather than a claimed campaign fix.
 
-The active model slice loads actual owned LockInterface01 and BobbyPin01 through
-the shared NIF surface, with separate pose/controller handles and the shared
-source group transform. Resource/controller preparation precedes layout RNG and
-modal acquisition. Retained pin pivot and source angle precision drive the pin;
-cylinder angle samples an inclusive Backward stop pose. Explicit clamped sampling
-does not change ordinary looping Play/Seek semantics. Both pose-owned clocks
-stay stopped after tree readiness. The winning fDefaultFOV setting supplies the
-qualified ordinary projection operands. Camera basis/clips, lighting fidelity,
-opening/replacement/break blends, jitter and matched pixels remain unaccepted.
-
-Selected native checks pass actual mouse ingress, independent controllers,
-inclusive open pose, off-center angle bits, pivot return/no drift and unchanged
-process RNG during model preparation. A real shader-binding negative control
-reproduces the pin outside every old fallback light. The opt-in first-party
-correction uses actual posed geometry bounds and retains source materials;
-other menus keep their previous fallback policy. Corrected checks cover several
-pin positions. The inspected GPU frame shows the actual brown pin against the
-cylinder. The corrected selected audits and full required gate passed 20:10:36 UTC:
-all 2,232 source/config hashes and the original save were unchanged; diff check
-passed. Independent exact-head review and hosted checks are next before merge.
-This is connected model presentation, not complete visual-usability, ordinary
-campaign, XR or retail parity acceptance. Recording is off; only one selected
-private diagnostic frame is retained for the active review.
-
-Ordinary-route admission remains unverified. Candidate 10b2d4 is source metadata,
-not a reached interaction: effective runtime ownership, current skill/history,
-residency and a legitimately traversed route must pass before input. Existing
-intrinsic pins require no insertion. A normal New Game with real Lockpick tag
-selection is a possible future route, not seeded progress or an executed proof.
-No original checkpoint is overwritten, retail launched or held combat encounter
-retried. Website-copy proposal remains unapplied; no denied writer contact or
-indirect reservation is introduced. Coordinator owns Git/build/native serially.
-Private model receipts are under local/fnv-wells-fixed/lockpick-models-20261023/.
+Historical campfire Parse and Mojave Express OnLoad failures in the preserved
+checkpoint do not establish a current parser defect. Current branch handling
+already has coverage for those source shapes; retained errors are not cleared or
+replayed. No new route-only audit or proof-only publication is being pursued.
+The prior paused route-inspection session was closed through its real Quit/Yes
+controls with source-owner cleanup. No ordinary lockpick attempt was completed.
+Website-copy proposal remains unapplied; denied writer contact remains denied.
+Coordinator owns Git/build/native work serially; recording remains off.
+Private receipts: local/fnv-wells-fixed/script-reputation-percentage-20261023/.
 
 Static ACTI trap activation remains a separate parked owner. A real production
 DefaultActivate route exists, but the selected controller-free trap cannot supply
@@ -81,8 +63,8 @@ All three getters preserve known/unknown history and canonical source identity.
 Null context is source-permitted; malformed nonzero explicit references refuse
 because raw-ID frontend fixup stays unqualified; run-on3+ stays unbound. Nonfinite
 ratio/setting values fail visibly; exceptional retail/FPU behavior is unclaimed.
-The separate SCTX percentage/threshold commands and broader rank/disguise remain
-unbound. Existing latched errors are neither cleared nor replayed.
+The separate SCTX threshold command and broader rank/disguise remain unbound.
+Existing latched errors are neither cleared nor replayed.
 
 Generator reference MenuMode scheduling is parked after two bounded approaches.
 Selection publishes a consumptive button result; source closure has a separate

@@ -20,12 +20,15 @@ internal static class ReputationContracts
                 Record("REPU", 2, Field("DATA", BitConverter.GetBytes(200f))),
                 Record("REPU", 3, Field("DATA", new byte[3])),
                 Record("REPU", 4, Field("DATA", BitConverter.GetBytes(float.NaN))),
-                Record("FACT", 5), Record("REPU", 6),
+                Record("FACT", 5), Record("REPU", 6), Record("REPU", 15, Field("DATA", BitConverter.GetBytes(0f))),
                 Record("ACTI", 7, Field("SCRI", BitConverter.GetBytes(8u))),
                 Record("SCPT", 8, Field("SCHR", new byte[20]), Field("SCRO", BitConverter.GetBytes(1u)),
                     Field("SCTX", Text("begin OnActivate\nSetReputation FirstRep 1 -25.25\n" +
                         "SetReputation FirstRep 0 250\nif GetReputation FirstRep 1 != -25.25\nUnownedBadCommand\nendif\n" +
-                        "if GetReputation FirstRep 0 != 250\nUnownedBadCommand\nendif\nend"))),
+                        "if GetReputation FirstRep 0 != 250\nUnownedBadCommand\nendif\n" +
+                        "if GetReputationPct FirstRep 0 != 2.5\nUnownedBadCommand\nendif\n" +
+                        "if GetReputationPct FirstRep 1 >= 0\nUnownedBadCommand\nendif\n" +
+                        "if 0 && GetReputationPct 5 2\nUnownedBadCommand\nendif\nend"))),
                 Record("SCPT", 9, Field("SCHR", new byte[20]), Field("SCRO", BitConverter.GetBytes(1u)),
                     Field("SCTX", Text("begin OnActivate\nAddReputation FirstRep 1 5\nend"))),
                 Record("ACTI", 10, Field("SCRI", BitConverter.GetBytes(9u))),
@@ -35,6 +38,8 @@ internal static class ReputationContracts
                 Record("QUST", 13, Field("DATA", [1, 0]), Field("SCRI", BitConverter.GetBytes(14u))),
                 Record("SCPT", 14, Field("SCHR", QuestHeader()), Field("SCRO", BitConverter.GetBytes(1u)),
                     Field("SCTX", Text("begin GameMode\nif GetReputation FirstRep 1 != -25.25\nUnownedBadCommand\nendif\n" +
+                        "if GetReputationPct FirstRep 0 != 2.5\nUnownedBadCommand\nendif\n" +
+                        "if 0 && GetReputationPct FirstRep 2\nUnownedBadCommand\nendif\n" +
                         "SetReputation FirstRep 0 -8.5\nend"))),
                 Record("CELL", 0x80, Field("DATA", [1])), Group(0x80,
                     Record("REFR", 0x90, Field("NAME", BitConverter.GetBytes(7u)), Field("DATA", new byte[24])),
@@ -46,10 +51,18 @@ internal static class ReputationContracts
             world.LoadCell(FalloutCellSceneReader.Read(records, Key(0x80)));
             var effects = 0;
             var scripts = new FalloutReferenceScripts(records, world, new(records), new((_, _) => false, _ => ++effects));
-            Require(scripts.Activate(Key(0x90), records.RuntimeFormKey(0x14)).Error is null &&
+            var activated = scripts.Activate(Key(0x90), records.RuntimeFormKey(0x14));
+            Require(activated.Error is null &&
                 world.Reputation(Key(1), 1) == -25.25f && world.Reputation(Key(1), 0) == 250 && effects == 0,
-                "Actual Set/GetReputation script path clamped, selected the wrong axis or emitted Add feedback.");
+                $"Actual reputation script query failed or emitted Add feedback: {activated.Error}");
             Require(world.Reputation(Key(2), 0) == 0, "A reputation mutation changed its sibling.");
+            Require(world.ReputationPercentage(Key(1), 0) == 2.5f &&
+                world.ReputationPercentage(Key(1), 1) == -25.25f / 100f,
+                "Script percentage scaled, clamped or changed source float precision.");
+            foreach (var axis in new[] { -1d, .5, 2, double.NaN, double.PositiveInfinity })
+                Reject(() => world.ReputationPercentage(Key(1), axis));
+            foreach (var form in new uint[] { 3, 4, 5, 6, 15 })
+                Reject(() => world.ReputationPercentage(Key(form), 0));
             var capture = RoundTrip(world.CaptureReputations());
             foreach (var (reference, command) in new[] { (0x91u, "AddReputation"), (0x92u, "RemoveReputation") })
             {
@@ -88,13 +101,17 @@ internal static class ReputationContracts
             var questScripts = new FalloutQuestScripts(records, quests, new HashSet<FalloutFormKey>(), new(),
                 defaultProcessingDelay: 0, references: world);
             questScripts.Advance(.1);
-            Require(questScripts.Capture().Instances.Single().Error is null &&
+            var questError = questScripts.Capture().Instances.Single().Error;
+            Require(questError is null &&
                 world.Reputation(Key(1), 0) == -8.5f && cold.Reputation(Key(1), 0) == 250,
-                "Quest Get/SetReputation did not use the shared object-script owner or changed a cold sibling.");
+                $"Quest reputation query did not use the shared owner or changed a cold sibling: {questError}");
             cold.RestoreReputations(null);
             Reject(() => cold.Reputation(Key(1), 0)); Reject(() => cold.Reputation(Key(1), 1));
+            Reject(() => cold.ReputationPercentage(Key(1), 0));
             cold.SetReputation(Key(1), 1, 12.125);
             Require(cold.Reputation(Key(1), 1) == 12.125f, "Explicit legacy setter did not establish its own axis.");
+            Require(cold.ReputationPercentage(Key(1), 1) == 12.125f / 100f,
+                "Established legacy axis was not available to the script percentage getter.");
             Reject(() => cold.Reputation(Key(1), 0)); Reject(() => cold.Reputation(Key(2), 1));
             using var legacyCold = new FalloutReferenceWorld(records);
             legacyCold.RestoreReputations(RoundTrip(cold.CaptureReputations()));
@@ -110,7 +127,7 @@ internal static class ReputationContracts
             var current = migrated with { Reputations = capture };
             Require(FalloutNativeCampaignSave.AdmitPreviousOwnerSchema(current).Reputations == capture,
                 "Current campaign admission changed reputation state.");
-            Console.WriteLine("OPENNV_REPUTATION_STATE_PASS sourceZero=true actualScriptGetSet=true questAndObjectShared=true setterUnclamped=true " +
+            Console.WriteLine("OPENNV_REPUTATION_STATE_PASS sourceZero=true actualScriptGetSet=true scriptPercentage=true questAndObjectShared=true setterUnclamped=true " +
                 "axisAndSiblingIsolation=true cold=true legacyUnknown=true explicitAxisRecovery=true invalidRestoreAtomic=true " +
                 "oldSchemaInjectionRefused=true addRemoveCrimeAndNotification=unbound ordinaryAndRetail=unverified");
         }

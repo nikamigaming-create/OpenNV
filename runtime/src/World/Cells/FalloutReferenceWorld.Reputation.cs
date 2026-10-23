@@ -39,6 +39,9 @@ internal sealed partial class FalloutReferenceWorld
             throw new NotSupportedException("Saved campaign has no authoritative history for this reputation axis."));
     }
 
+    internal float ReputationPercentage(FalloutFormKey form, double axis) =>
+        ReputationRatio(form, Reputation(form, axis));
+
     internal float? EvaluateReputationCondition(FalloutCondition condition)
     {
         if (condition.Function is not (573 or 574 or 575)) return null;

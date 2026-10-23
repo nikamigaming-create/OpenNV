@@ -621,9 +621,11 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                         _ => records.PerkParameters.Get(form, index, operation == "getnthperkentryvalue2" ? 1 : 0),
                     };
                 });
-            if (parts.Length == 1 && operation == "getreputation")
+            if (parts.Length == 1 && operation is "getreputation" or "getreputationpct")
                 return new([FalloutScriptArgumentKind.Value, FalloutScriptArgumentKind.Number], arguments =>
-                    world.Reputation(arguments[0].Value.FormKey(records), arguments[1].Number))
+                    operation == "getreputationpct"
+                        ? world.ReputationPercentage(arguments[0].Value.FormKey(records), arguments[1].Number)
+                        : world.Reputation(arguments[0].Value.FormKey(records), arguments[1].Number))
                 { ReadOnly = true };
             if (parts.Length == 1 && operation == "getperkentrycount")
                 return new([FalloutScriptArgumentKind.Value], arguments =>
