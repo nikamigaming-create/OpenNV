@@ -35,6 +35,11 @@ public partial class NativeReferenceEventsAudit : Node
                 ExerciseOwnedImageSpaceClock(imageGame, imageMod, imageRoot, imageForm, imageDependencies);
                 GetTree().Quit(); return;
             }
+            if (OS.GetCmdlineUserArgs() is ["--reputation-package-adapters", var packageMode] &&
+                packageMode is "all" or "npc" or "creature" or "unloaded")
+            {
+                ReputationPackageAdapters(packageMode); GetTree().Quit(); return;
+            }
             if (OS.GetCmdlineUserArgs() is ["--reputation-threshold-adapters", var thresholdMode] &&
                 thresholdMode is "all" or "conversation" or "speech")
             {
@@ -282,6 +287,7 @@ public partial class NativeReferenceEventsAudit : Node
             ReputationDialogueAdapters();
             ReputationDialogueAdapters(function: 574);
             ReputationDialogueAdapters(function: 575);
+            ReputationPackageAdapters();
             ExerciseImageSpaceClock();
             DoorActivation(records);
             AnimatedActivators(records);

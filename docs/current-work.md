@@ -8,12 +8,12 @@ input and Git; no competing jobs or denied writer contact are permitted.
 
 ## Active block
 
-Accepted main/origin-main is 674ba9d6996e27791259cfd804c6a8fdd0b226d0 (PR280),
-merged09:05:13UTC after explicit release, independent source/wiring review and all
-five exact-head checks at02e1a67c6b300de0e05e3ccb0bdff013cefe3a72 passed. Local main
-matches origin/main. PR269 stays draft/native-and-merge-held. No third retail or
-bot/encounter attempt is permitted. Recording is off; original inputs stay read-only.
-
+Accepted main/origin-main is adcb7448f6b7c764f574f02e49ebf6059a5dcd45 (PR281),
+merged09:41:31UTC after explicit release, independent threshold review and all
+five exact-head checks at35843628391f7fd10ea79133059813b60957150d passed. Local
+main is verified against origin/main. PR269 stays draft/native-and-merge-held.
+No third retail or bot/encounter attempt is permitted. Recording is off; original
+inputs stay read-only.
 Shared reputation state retains source-hashed float axes in schema v58. Fresh axes
 are zero; absent legacy history stays unknown per axis. Explicit SetReputation
 establishes only its axis without clamp/notifications. CTDA573 and574 use this owner
@@ -21,32 +21,27 @@ through native quest/message, conversation and scripted-speech adapters. Percent
 is float32 axis/capacity, not scaled or clamped. These are component proofs with
 owned-data and cold/unknown-state checks, not ordinary campaign/retail completion.
 
-Active branch: codex/fnv-reputation-threshold, based on accepted main. The current
-change adds CTDA575 from the qualified numeric decision contract, not an inferred
-rank formula. It computes positive then negative tiers from float32 ratios and the
-current fReputationThresholdOne/Two/Three settings, preserving source comparison
-order, inclusivity and unsorted/equal settings. Both axes must be known. Both-zero
-tiers return code1 before low-byte selector dispatch; remaining codes use explicit
-source tables. No saved tier/result cache or new history is introduced. Existing
-per-stack numeric-setting lifetime is reused, not redefined.
+Active branch: codex/fnv-package-reputation-conditions, based on accepted main.
+The accepted threshold implementation passed the full gate09:24:50UTC with all2204
+source/config hashes unchanged. The current narrow follow-up routes CTDA573/574/575
+through the existing shared reputation owner in native NPC, native creature and
+unloaded-actor package condition adapters. Selection, schedules, assignments,
+package execution and event lifecycle are unchanged.
 
-Focused contracts pass all48 table entries, raw low-byte selectors, exact boundaries,
-live/equal/reordered settings, fresh-state classification, cold and unknown-axis
-refusal. Unchanged installed native callbacks reproduce exact missing575 errors;
-repaired actual conversation/speech delegate composition passes. The typed owned
-audit exercises1642 queries across1195 INFO/MESG/QUST/PACK records using controlled
-known axes, with original source/save bytes unchanged. These counts prove the
-shared query; PACK native/unloaded AI adapters remain unbound and are an explicit
-next integration owner. No package execution or full-record eligibility is claimed.
-The full gate passes09:24:50UTC: exit0, all2204 source/config hashes unchanged,
-diff check0 and recording off. Keep the published head frozen and merge held for
-independent review and hosted checks. Evidence:
-local/fnv-wells-fixed/reputation-state-20261023/threshold-focused.log,
-threshold-native.log, threshold-owned.log, threshold-negative-native.json and
-threshold-final-result.json.
+Actual unchanged adapters each reproduce the exact missing573 owner refusal.
+Repaired detached-component tests pass all three queries through the actual adapter
+methods and existing authored-order selector, with false-AND/true-OR short-circuit,
+reached unknown-axis refusal, threshold both-axis requirements and cold restore.
+Queries preserve reputation and unloaded assignment state and dispatch no events.
+These first-party fixtures do not materialize actors or prove ordinary package
+execution. The existing owned threshold corpus remains query-only evidence.
+The required full gate passes09:40:53UTC: exit0, all2205 source/config hashes
+unchanged, diff check0. The selected owned audit repeats1642 threshold queries
+across1195 winning records and preserves original source/save hashes. This is
+query-only corpus evidence, not package execution. Recording is off. Evidence is under
+local/fnv-wells-fixed/reputation-state-20261023/package-*.log.
 Neutral threshold contract SHA256:
 9DC045415DC8F99781B23D3B59BB5C584190BED6C35B6537B1F34E3103DB2DF9.
-
 All three getters preserve known/unknown history and canonical source identity.
 Null context is source-permitted; malformed nonzero explicit references refuse
 because raw-ID frontend fixup stays unqualified; run-on3+ stays unbound. Nonfinite

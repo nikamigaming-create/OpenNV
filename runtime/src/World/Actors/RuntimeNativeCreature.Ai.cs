@@ -140,7 +140,10 @@ internal sealed partial class RuntimeNativeCreature
 
     private Func<FalloutFormKey, FalloutFormKey, double>? _aiItemCount;
 
-    internal float PackageCondition(FalloutCondition condition) => condition.Function == 159
+    internal float PackageCondition(FalloutCondition condition) => condition.Function is 573 or 574 or 575
+        ? (_aiWorld ?? throw new NotSupportedException("Creature reputation query has no shared world owner."))
+            .EvaluateReputationCondition(condition)!.Value
+        : condition.Function == 159
         ? FalloutAiPackages.Sitting(_aiRecords ?? throw new NotSupportedException("Creature sitting query has no source owner."),
             condition, Appearance.Reference!.Value, PackageSitting)
         : condition.Function == 47
