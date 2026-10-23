@@ -6,6 +6,15 @@ internal sealed record FalloutDestructionState(string SourceSha256, float Health
     byte ModelStage = 0, bool Destroyed = false, bool Disabled = false, FalloutFormKey? Attacker = null, string? Error = null)
 {
     internal static FalloutDestructionState Initial(FalloutDestructible source) => new(source.Sha256, source.Health);
+
+    internal int QueryStage(FalloutDestructible source)
+    {
+        Validate(source);
+        var percent = (byte)MathF.Ceiling((float)((double)Health * 100 / source.Health));
+        for (var ordinal = 0; ordinal < source.Stages.Count; ++ordinal)
+            if (source.Stages[ordinal].HealthPercent < percent) return ordinal;
+        return source.Stages.Count;
+    }
     internal void Validate(FalloutDestructible source)
     {
         var reached = source.Stages.Take(Stage + 1).ToArray();

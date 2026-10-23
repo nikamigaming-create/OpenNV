@@ -81,8 +81,10 @@ internal sealed partial class RuntimeNativeDestructible : Node
 
     private void Apply(float amount, FalloutFormKey? attacker, bool self)
     {
-        var (next, entered) = State.Damage(_source, amount, attacker, self);
+        var previous = State;
+        var (next, entered) = previous.Damage(_source, amount, attacker, self);
         _state.Destruction = next;
+        if (!ReferenceEquals(previous, next)) _state.ObjectHealthPresent = true;
         _state.Destroyed |= next.Destroyed;
         if (next.Disabled) _state.Enabled = false;
         try
