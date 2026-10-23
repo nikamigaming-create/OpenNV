@@ -8,15 +8,16 @@ input and Git; no competing jobs or denied writer contact are permitted.
 
 ## Active block
 
-Accepted main/origin-main is 5b8406e97a40548c8304939151c163b66bb4d9d1 (PR277).
-PR277 merged at 06:21:57 UTC after independent restore re-review and all five
-exact-head checks passed at ddbfeeabd67d227f5eba670fdbdd19e7c2928b26.
+Accepted main/origin-main is 729feec620937705ea8f51ae55a65e3b407298c5 (PR278).
+PR278 merged at 07:38:07 UTC after explicit release, independent case-identity
+re-review and all five exact-head checks passed at
+3b2b26c6e39386e09460be7ef106253bd3257d28. Local main equals origin/main.
 PR269 remains draft, native-and-merge-held. No third bot encounter or retail
 attempt is permitted. The accepted effective-owner query includes encounter-zone
 and current-cell inheritance; cold restore stages validated placement/ownership
 before querying effective access. This does not admit hacking or crime effects.
 
-Active branch: codex/fnv-hacking-witness-effects. The current independent change
+Active branch: codex/fnv-reputation-notification-lifecycle. Accepted PR278
 binds source GetReputation/SetReputation through one world owner, object and quest
 script adapters, and ordinary campaign capture/restore. The setter writes one
 source float axis directly without clamping or AddReputation feedback. Fresh
@@ -34,18 +35,45 @@ controls. The repaired map, duplicate validator and staging use the established
 case-insensitive form-key comparer; reads/writes/restores use canonical winning
 keys. Fresh and legacy alias lookup, unknown axes, canonical cold serialization
 and atomic duplicate-alias refusal pass. The repaired full gate passes at
-07:25:53 UTC: exit0, all2202 source/config files unchanged and diff check0. PR278
-remains merge-held for repaired-head re-review. These are getter/setter and
-persistence proofs, not ordinary campaign or retail-parity completion.
+07:25:53 UTC: exit0, all2202 source/config files unchanged and diff check0. The
+repaired head is merged; hosted runtime passed at 07:34:35 UTC in run39917835438.
+These are getter/setter and persistence proofs, not ordinary campaign or retail-parity completion.
 Evidence: local/fnv-wells-fixed/reputation-state-20261023/case-final-result.json.
 Neutral source contract SHA256:
 F38D9AECF12D17B8B666B62252034F191A9992BFA2504E5A8B79F1BA57BC6789.
 
-AddReputation/RemoveReputation, reputation conditions, crime-triggered reputation
-and notification remain unbound. The deferred consumer is located, but its four
-source admission predicates and notification/persistence lifetime are not yet
-qualified; generic modal/paused checks cannot replace them. This is the next
-bounded source owner. Existing latched script faults are not reset or replayed.
+The current runtime change binds CTDA GetReputation (function573) through the
+accepted shared reputation owner and the existing native condition adapter. Dialogue
+queries reach that owner before speaker-specific fallback, including NPC listeners.
+Its raw integer selector chooses positive only for1 and negative otherwise; this
+is distinct from script-command selector validation. Fresh zero and legacy unknown
+axes retain their existing meanings. Other reputation/rank/disguise functions stay
+unbound. Synthetic source-master, dialogue/message, comparison, live/cold and
+refusal contracts pass. The owned audit passes14 conditions in12 winning INFOs,
+including selectors0/1/2, using controlled known axes without source/save mutation.
+This does not establish whole-record eligibility or ordinary dialogue/quest progress.
+The old dialogue dispatcher negative control reproduces NPC-listener refusal;
+the repaired default contract passes. The full runtime gate passes at08:00:20UTC:
+exit0, all2203 source/config files unchanged, diff check0, recording off. Merge
+is held for independent review of the checked published head.
+Evidence: local/fnv-wells-fixed/reputation-state-20261023/condition-focused.log,
+condition-owned.log, condition-old-result.json and condition-final-result.json.
+Neutral condition contract SHA256:
+89E70EAC09BABF287BCE033A971B8E8C18A003F7BD212C3903D9395C6E0C5253.
+
+AddReputation/RemoveReputation, crime-triggered reputation and notification remain
+unbound. Notification qualification is parked after two finite approaches. The bounded notification qualification distinguishes
+two immediate predicates from four deferred predicates and confirms a single
+identity slot with overwrite semantics, consumed using current reputation values.
+The combat predicate depends on retained combat-group membership/counts, not
+current engagements. Dialogue/InterfaceManager and StartMenu transition owners,
+nested player serializer effects and actual warm-load reset order remain open.
+Revert clearing does not prove LoadGame clearing. Two finite approaches stop at
+those exact joins; no approximation, save-field addition or mutation is admitted.
+Evidence: local/fnv-wells-fixed/hacking-session-20261023/reputation-notification-contract.private.md
+(contract SHA256 E9BEFD3583D56C9D0012B6B1B372A9EC07C06EE3DB99DE8FD3DB368DAB38FD15).
+No notification runtime code changed in that qualification block. Existing latched
+script faults are not reset or replayed.
 
 Witness candidate membership, retained observer detection and concrete process
 responses remain distinct unknown owners. No nearby-actors substitute, empty

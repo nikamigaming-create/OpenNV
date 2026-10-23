@@ -256,6 +256,7 @@ internal partial class RuntimeNativeOpeningStageDriver
     internal float EvaluateRecipeCondition(FalloutCondition condition)
     {
         if (FalloutPlatformConditions.Evaluate(condition) is { } platform) return platform;
+        if (condition.Function == 573) return _scripts.References!.EvaluateReputationCondition(condition)!.Value;
         if (condition.Function is 56 or 58 or 59 or 79 or 420 or 421 or 546) return _quests.Evaluate(condition);
         if (condition.Function == 74)
             return (_globals ?? throw new InvalidOperationException("Recipe condition has no global state owner.")).Get(condition.FormArgument1);
