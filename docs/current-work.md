@@ -28,8 +28,7 @@ Focused contracts cover source priority, default/empty reference-zone fallthroug
 exclusions, current-cell relocation, invalid inherited owner refusal, local override,
 ordinary pickup ownership and JSON cold restoration. The selected genuine saved
 interior terminal audit verifies source/saved inputs and inherited owner104c6c;
-original campaign/source bytes remain unchanged. Formatting and focused checks pass on the accepted PR276 baseline. The combined full gate passes at 05:49:54 UTC: exit0, all2199 source/config files unchanged during the run and diff check0. Publication is frozen for independent review. These are
-managed ownership/retention proofs, not a native hacking or crime outcome.
+original campaign/source bytes remain unchanged. Cold restoration now stages validated saved placement and ownership inside the temporary world before effective access validation. The moved-reference and same-cell override regressions pass; bad owner identity/type, non-CELL placement and malformed current metadata still reject atomically. The destination world receives no partial instances/events. Formatting and both owned audits pass. The replacement full gate passes at 06:05:36 UTC: exit0, all2199 source/config files unchanged during the run and diff check0. PR277 remains merge-held for independent re-review. These are managed ownership/retention proofs, not a native hacking or crime outcome.
 Evidence: local/fnv-wells-fixed/effective-reference-owner-20261023/.
 
 The next unqualified success boundary is the actual resident-witness/process

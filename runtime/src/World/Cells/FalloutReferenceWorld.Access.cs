@@ -338,8 +338,10 @@ internal sealed partial class FalloutReferenceWorld
             if (!ownership.ReferenceSha256.Equals(source.Sha256, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidDataException("Saved ownership differs from its winning reference declaration.");
             RequireCommandOwner(ownership.Owner);
-            _ = Ownership(instance.Reference);
             instance.OwnershipOverride = ownership;
+            // Validate the saved combination. Querying before staging this
+            // override can reach an inherited owner that no longer applies.
+            _ = Ownership(instance.Reference);
         }
     }
 }
