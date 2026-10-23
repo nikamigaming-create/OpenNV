@@ -37,6 +37,17 @@ internal static class PlayerNoteMembershipContracts
             var coldNotices = new FalloutHudNotifications();
             coldNotices.Restore(JsonSerializer.Deserialize<FalloutHudNotificationsSnapshot>(JsonSerializer.Serialize(notices.Capture()))!);
             Require(!coldNotices.MarkPresented(ordinal), "Cold reconstruction replayed an already presented notice.");
+            var invalidNotices = new FalloutHudNotifications();
+            var invalidBefore = JsonSerializer.Serialize(invalidNotices.Capture());
+            var invalidPending = new FalloutHudNotificationsSnapshot(ordinal, null, 0, [notices.Current!]);
+            var refusedPending = false;
+            try { invalidNotices.Restore(invalidPending); }
+            catch (InvalidDataException) { refusedPending = true; }
+            Require(refusedPending && JsonSerializer.Serialize(invalidNotices.Capture()) == invalidBefore,
+                "A pending notice already marked presented was restored or partially published.");
+            invalidNotices.Restore(invalidPending with { Pending = [notices.Current! with { Presented = false }] });
+            invalidNotices.Advance(0, _ => 2);
+            Require(invalidNotices.MarkPresented(ordinal), "A valid restored pending notice lost its first presentation.");
             coldNotices.Advance(2, _ => 2);
             Require(coldNotices.Current is null, "Source two-second duration did not retire note feedback.");
             world.PlayerNotes.Restore(null);

@@ -4,8 +4,9 @@ namespace OpenNV.Runtime.Gameplay.State;
 
 internal enum FalloutHudEventKind { ItemAdded, Message, ItemRemoved, ObjectiveDisplayed, ObjectiveCompleted, ChallengeProgress, ChallengeCompleted, RadioDiscovered, NoteAdded }
 
-// The event retains source identity and command order. Text, icons and timing
-// are resolved from the winning graph when presented, never baked into saves.
+// Events retain source identity and command order. Ordinary text, icons and
+// timing resolve at presentation; note producers retain their copied message
+// text for the lifetime of the queued notice.
 internal sealed record FalloutHudEvent(FalloutHudEventKind Kind, FalloutFormKey Source, int Count,
     FalloutFormKey? Quest = null, FalloutFormKey? Script = null, uint? ObjectiveIndex = null, string? Text = null);
 internal sealed record FalloutHudNotice(long Ordinal, FalloutHudEvent Event, bool Presented = false);
@@ -121,6 +122,7 @@ internal sealed class FalloutHudNotifications
         var notices = (snapshot.Current is null ? Enumerable.Empty<FalloutHudNotice>() : [snapshot.Current]).Concat(snapshot.Pending).ToArray();
         Validate(notices.Select(notice => notice.Event).ToArray());
         if (snapshot.LastOrdinal < 0 || !double.IsFinite(snapshot.Elapsed) || snapshot.Elapsed < 0 ||
+            snapshot.Pending.Any(notice => notice.Presented) ||
             snapshot.Current is null && snapshot.Elapsed != 0 || notices.Any(notice => notice.Ordinal <= 0 || notice.Ordinal > snapshot.LastOrdinal) ||
             notices.Zip(notices.Skip(1)).Any(pair => pair.First.Ordinal >= pair.Second.Ordinal))
             throw new InvalidDataException("Saved HUD event order or clock is invalid.");

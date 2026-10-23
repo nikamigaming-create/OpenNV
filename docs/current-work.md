@@ -63,11 +63,14 @@ fade/glow clocks, cross-kind tail-text deduplication and environment reverb rema
 visible presentation differences. No native acquisition playthrough, final-pixel,
 retail audio/timing or campaign parity completion is claimed.
 
-Required full gate PASS at15:06:59 UTC, Release/Debug zero warnings/errors,
+Corrected full gate PASS at15:17:32 UTC, Release/Debug zero warnings/errors,
 formatting/analyzers/contracts/launcher/native Godot checks passed. Selected owned
 script and HUD checks all exit0; all2214 frozen source/config hashes and original
 save hash are unchanged, diff check0. Only this ledger is finalized afterward.
-The slice is ready for checked PR publication and independent exact-head review;
+A review invariant is also closed: impossible pending notices marked Presented
+refuse atomically, while current Presented and valid pending restoration remain
+admitted. The regression fails on the prior implementation. The corrected slice
+is ready for checked PR publication and independent exact-head review;
 main remains authoritative until review and hosted checks admit the merge.
 
 Coordinator owns serialized builds/runtime/Git; no competing job is active.
