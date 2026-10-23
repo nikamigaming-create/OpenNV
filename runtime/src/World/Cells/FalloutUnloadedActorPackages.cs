@@ -160,6 +160,8 @@ internal sealed class FalloutUnloadedActorPackages(FalloutPluginStack records, F
 
     private float Evaluate(FalloutFormKey caller, FalloutCondition condition)
     {
+        if (condition.Function is 573 or 574 or 575)
+            return world.EvaluateReputationCondition(condition)!.Value;
         if (condition.Function == 159)
             return FalloutAiPackages.Sitting(records, condition, caller, sitting ?? (reference => world.GetSitting(reference)));
         if (world.EvaluateActorReferenceCondition(caller, condition) is { } referenceQuery) return referenceQuery;
