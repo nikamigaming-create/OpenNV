@@ -31,6 +31,15 @@ internal sealed class FalloutHackingCandidates
         CancellationToken cancellation = default) =>
         Generate(dictionary, request, applyScienceBonus, FalloutHackingGenerationOwners.FromProcess(cancellation));
 
+    internal FalloutHackingCandidates RetainPlacedPrefix(int count)
+    {
+        if (count < 0 || count > Words.Count) throw new ArgumentOutOfRangeException(nameof(count));
+        var retained = Words.Take(count).ToList();
+        if (!retained.Any(word => ReferenceEquals(word, Answer)))
+            throw new NotSupportedException("Hacking placement retired the answer; its source storage lifetime is unqualified.");
+        return new(retained, Answer, MaximumAttempts, RequestedCount, DictionaryHash, SelectionAttempts, RetryWindows);
+    }
+
     internal static FalloutHackingCandidates Generate(FalloutHackingDictionary dictionary,
         FalloutHackingRequest request, Func<float, float> applyScienceBonus,
         FalloutHackingGenerationOwners owners)

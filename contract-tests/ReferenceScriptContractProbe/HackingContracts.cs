@@ -6,6 +6,7 @@ internal static class HackingContracts
     internal static void Run()
     {
         HackingDisplayContracts.Run();
+        HackingLayoutContracts.Run();
         HackingAllowanceContracts.Run();
         SharedUnsignedRandomContracts.Run();
         var bytes = Encoding.ASCII.GetBytes("AABB AABC BBBC ");
