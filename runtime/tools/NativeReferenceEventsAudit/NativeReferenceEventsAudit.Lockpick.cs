@@ -39,13 +39,17 @@ public partial class NativeReferenceEventsAudit
             Input.ParseInputEvent(up);
             await ToSignal(tree, SceneTree.SignalName.ProcessFrame);
         }
-        FalloutLockpickSession Open(int chance, bool throwing = false, bool manual = false)
+        FalloutLockpickSession Open(int chance, bool throwing = false, bool manual = false, int length = 100,
+            Func<uint, uint>? random = null)
         {
+            var draw = random ?? (bound => bound == uint.MaxValue ? 0x80000000u : 0);
+            void Complete() { ++success; if (throwing) throw new InvalidOperationException("deliberate-XP-prefix"); }
+            var session = manual
+                ? FalloutLockpickSession.CreateManual(() => chance, draw, Complete, () => ++failure,
+                    1000, 500, length, 100, 1, 1, () => { ++pins; return 0; }, () => { }, new())
+                : new FalloutLockpickSession(chance, draw, Complete, () => ++failure);
             release = player.AcquireModalInput();
             var localRelease = release; var retired = false;
-            var session = new FalloutLockpickSession(chance, bound => bound == uint.MaxValue ? 0x80000000u : 0,
-                () => { ++success; if (throwing) throw new InvalidOperationException("deliberate-XP-prefix"); }, () => ++failure);
-            if (manual) session.ConfigureManual(1000, 500, 100, 100, 1, 1, () => { ++pins; return 0; }, () => { }, new());
             menu = new(session, _ =>
             {
                 if (retired) return;
@@ -58,8 +62,18 @@ public partial class NativeReferenceEventsAudit
         }
         try
         {
+            var velocity = new Vector3(1, 2, 3);
+            player.Velocity = velocity;
+            var randomBefore = FalloutSharedUnsignedRandom.Process.Observation;
+            var refused = false;
+            try { Open(100, manual: true, length: 0, random: FalloutSharedUnsignedRandom.Process.NextBounded); }
+            catch (NotSupportedException) { refused = true; }
+            Require(refused && FalloutSharedUnsignedRandom.Process.Observation == randomBefore &&
+                player.Velocity == velocity && !player.ModalInput && release is null && menu is null &&
+                tree.Paused == paused && Input.MouseMode == mouse && success == 0 && failure == 0 && pins == 0,
+                "Rejected manual preparation changed shared RNG, player input, velocity or effects.");
             var session = Open(100);
-            Require(player.ModalInput, "The real player did not acquire modal input.");
+            Require(player.ModalInput && player.Velocity == Vector3.Zero, "Legitimate modal admission did not acquire/cancel real player input.");
             await Press(Godot.Key.F); await Press(Godot.Key.F);
             Require(session.Turning && closed == 0 && success == 0 && errors == 0,
                 "Duplicate Force input cancelled a successful pending turn.");
@@ -111,7 +125,7 @@ public partial class NativeReferenceEventsAudit
                 "Actual obstructed input did not retire on exactly one depleted pin.");
             menu!.Free(); menu = null;
             GD.Print("OPENNV_LOCKPICK_INPUT_PASS actualKeyIngress=true duplicateDuringTurn=true retainedSourceClock=true success=true failure=true cancel=true " +
-                "exception=true disposal=true nestedModal=true focusLoss=true originalPauseMouse=true reboundManual=true relativeMouse=true obstructionPin=true actualWorldUnlockAndOwnedActivation=unverified");
+                "exception=true disposal=true nestedModal=true focusLoss=true originalPauseMouse=true rejectedAdmissionUnchanged=true reboundManual=true relativeMouse=true obstructionPin=true actualWorldUnlockAndOwnedActivation=unverified");
         }
         finally
         {

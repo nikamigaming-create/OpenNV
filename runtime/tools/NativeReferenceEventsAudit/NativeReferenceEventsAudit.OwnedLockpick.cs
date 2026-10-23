@@ -51,10 +51,10 @@ public partial class NativeReferenceEventsAudit
             var experience = new FalloutPlayerExperience(records, vitals, () => []);
             var initialXp = vitals.State.ExperiencePoints;
             var random = new FalloutSharedUnsignedRandom(() => 123456u);
-            var session = new FalloutLockpickSession(admission.Chance, random.NextBounded,
+            var session = FalloutLockpickSession.CreateManual(() => admission.Chance, random.NextBounded,
                 () => world.CompletePickLock(record.FormKey, state, () => experience.Reward(admission.Reward)),
-                () => world.FailForceLock(record.FormKey, state));
-            session.ConfigureManual(geometry.Width, geometry.Position, manual.Length, manual.Concentric, manual.Health, manual.BreakSeconds,
+                () => world.FailForceLock(record.FormKey, state),
+                geometry.Width, geometry.Position, manual.Length, manual.Concentric, manual.Health, manual.BreakSeconds,
                 () => throw new InvalidOperationException("Aligned owned test must not consume a pin."), () => { }, new());
             session.AdvanceManual(1, session.Target - session.Position, true);
             session.AdvanceManual(1001, 0, true);

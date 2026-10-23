@@ -91,11 +91,17 @@ during obstruction that must request no break sound, lose no pin and never repla
 Installed-data sessions for one actual DOOR and one CONT pass winning geometry,
 settings, shared world/XP and canonical cold state with explicit skill-100 and
 solved-position prerequisites. These are controlled composition checks.
-The final repaired revision passed selected audits and the full required gate at
-19:06:09 UTC: all 2,230 source/config hashes and the original save were unchanged;
-diff check passed. The earlier transport-interrupted run has no terminal receipt
-and is not used as acceptance. No ordinary owned door/container playthrough is
-claimed. Independent exact-head review and main integration remain pending.
+PR292 is open. The repaired admission reads geometry/settings and prepares the
+session before acquiring player input; one shared pure validator checks exact
+configuration and checked margins before the layout draw. The prior construction
+order fails the no-draw regression. Native checks retain actual process RNG
+observation and player velocity/modal/pause/mouse state on rejected admission,
+separately from legitimate cancellation. The corrected revision passed selected
+audits and the full required gate at 19:21:55 UTC: all 2,230 source/config hashes
+and the original save were unchanged, and diff check passed. That receipt
+supersedes the 19:06:09 prior-head gate. No ordinary owned door/container
+playthrough is claimed. Independent exact-head re-review and main integration
+remain pending.
 
 Static ACTI trap activation remains a separate parked owner. A real production
 DefaultActivate route exists, but the selected controller-free trap cannot supply

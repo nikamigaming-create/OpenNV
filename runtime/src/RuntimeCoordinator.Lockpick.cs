@@ -33,6 +33,26 @@ public partial class RuntimeCoordinator
         var admission = FalloutLockpickSession.Admission(records, state.Level, driver.PlayerSkillValue("Lockpick"));
         var pin = records.RuntimeFormKey(0x0a);
         _ = FalloutLockpickSession.RequirePlainPins(records, _nativeInventory, pin);
+        var geometry = NativeLockpickMenu.ReadGeometry(GetViewport().GetVisibleRect().Size);
+        var settings = FalloutLockpickSession.ManualSettings(records, admission.Class, driver.PlayerSkillValue("Lockpick"));
+        void Sound(string name) => _nativeQuestScripts!.Scripts.Sounds.Play(records.RuntimeFormKey(0x14),
+            FalloutDialogueTopic.Find(records, "SOUN", name).FormKey, systemSound: true);
+        int BreakPin()
+        {
+            _ = FalloutLockpickSession.RequirePlainPins(records, _nativeInventory, pin);
+            Sound("UILockpickingPickBreak");
+            _nativeInventory.Remove(pin, 1, silent: true);
+            return _nativeInventory.Item(pin)?.Count ?? 0;
+        }
+        // Prepare every deterministic geometry/setting refusal before capturing
+        // player actions. CreateManual validates before its shared layout draw.
+        var session = FalloutLockpickSession.CreateManual(
+            () => FalloutLockpickSession.ForceChance(records, admission.Class, driver.PlayerSkillValue("Lockpick")),
+            FalloutSharedUnsignedRandom.Process.NextBounded,
+            () => world.CompletePickLock(reference.FormKey, state, () => driver.RewardExperience(admission.Reward)),
+            () => world.FailForceLock(reference.FormKey, state),
+            geometry.Width, geometry.Position, settings.Length, settings.Concentric, settings.Health, settings.BreakSeconds,
+            BreakPin, () => Sound("UILockpickingPickMovement"));
         var tree = GetTree();
         var wasPaused = tree.Paused;
         var mouse = Input.MouseMode;
@@ -55,25 +75,6 @@ public partial class RuntimeCoordinator
         }
         try
         {
-            var session = new FalloutLockpickSession(
-                () => FalloutLockpickSession.ForceChance(records, admission.Class, driver.PlayerSkillValue("Lockpick")),
-                FalloutSharedUnsignedRandom.Process.NextBounded,
-                () => world.CompletePickLock(reference.FormKey, state, () => driver.RewardExperience(admission.Reward)),
-                () => world.FailForceLock(reference.FormKey, state));
-            var geometry = NativeLockpickMenu.ReadGeometry(GetViewport().GetVisibleRect().Size);
-            var settings = FalloutLockpickSession.ManualSettings(records, admission.Class, driver.PlayerSkillValue("Lockpick"));
-            void Sound(string name) => _nativeQuestScripts!.Scripts.Sounds.Play(records.RuntimeFormKey(0x14),
-                FalloutDialogueTopic.Find(records, "SOUN", name).FormKey, systemSound: true);
-            int BreakPin()
-            {
-                _ = FalloutLockpickSession.RequirePlainPins(records, _nativeInventory, pin);
-                Sound("UILockpickingPickBreak");
-                _nativeInventory.Remove(pin, 1, silent: true);
-                return _nativeInventory.Item(pin)?.Count ?? 0;
-            }
-            session.ConfigureManual(geometry.Width, geometry.Position,
-                settings.Length, settings.Concentric, settings.Health, settings.BreakSeconds,
-                BreakPin, () => Sound("UILockpickingPickMovement"));
             var menu = new NativeLockpickMenu(session, Close,
                 error => GD.PushError($"OPENNV_LOCKPICK_FORCE_FAIL {error.Message}"))
             { MouseScale = geometry.MouseScale };

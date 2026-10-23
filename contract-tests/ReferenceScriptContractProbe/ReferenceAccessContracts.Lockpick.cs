@@ -38,6 +38,32 @@ internal static partial class ReferenceAccessContracts
         Require(live.Force(), "Force used constructor-time skill rather than its current owner.");
         live.Cancel();
 
+        var rejectedDraws = 0;
+        foreach (var invalid in new[]
+        {
+            (Width: 1000f, Position: 500f, Length: 0, Concentric: 100, Health: 1f, BreakSeconds: 1f),
+            (Width: 1000f, Position: 500f, Length: 100, Concentric: 100, Health: float.NaN, BreakSeconds: 1f),
+            (Width: 100f, Position: 50f, Length: 100, Concentric: 100, Health: 1f, BreakSeconds: 1f),
+            (Width: 1000f, Position: 1001f, Length: 100, Concentric: 100, Health: 1f, BreakSeconds: 1f)
+        })
+        {
+            MustReject(() => FalloutLockpickSession.CreateManual(() => 100,
+                _ => { ++rejectedDraws; return 0; }, () => ++rewards, () => ++failures,
+                invalid.Width, invalid.Position, invalid.Length, invalid.Concentric, invalid.Health, invalid.BreakSeconds,
+                () => throw new InvalidOperationException("Rejected admission lost a pin."),
+                () => throw new InvalidOperationException("Rejected admission requested audio."), new()));
+            Require(rejectedDraws == 0, "Rejected manual admission consumed shared layout RNG.");
+        }
+        var overflowRejected = false;
+        try
+        {
+            _ = FalloutLockpickSession.CreateManual(() => 100, _ => { ++rejectedDraws; return 0; },
+                () => ++rewards, () => ++failures, float.MaxValue, 500, int.MaxValue, int.MaxValue, 1, 1,
+                () => 0, () => { }, new());
+        }
+        catch (OverflowException) { overflowRejected = true; }
+        Require(overflowRejected && rejectedDraws == 0, "Checked manual margin overflow consumed layout RNG.");
+
         var directory = Path.Combine(Path.GetTempPath(), "opennv-force-lock-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(directory);
         try
@@ -141,7 +167,7 @@ internal static partial class ReferenceAccessContracts
             Directory.Delete(directory);
         }
         Console.WriteLine("OPENNV_LOCKPICK_CONTRACT_PASS layoutThenForce=true strictChance=true sourceClock=true cancel=true once=true " +
-            "typedNoCrime=true sourceTails=true coldCanonical=true legacyUnknown=true liveQuestPinRefused=true manualAndOrdinaryInput=unverified");
+            "typedNoCrime=true sourceTails=true coldCanonical=true legacyUnknown=true liveQuestPinRefused=true rejectedAdmissionNoDraw=true manualAndOrdinaryInput=unverified");
     }
 
     private static void MustReject(Action action)

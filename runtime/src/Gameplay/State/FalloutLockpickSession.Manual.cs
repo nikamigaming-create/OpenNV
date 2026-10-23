@@ -23,20 +23,38 @@ internal sealed partial class FalloutLockpickSession
     private Action? _movementSound;
     private FalloutLockpickMovementState? _movement;
 
+    internal static FalloutLockpickSession CreateManual(Func<int> chance, Func<uint, uint> random,
+        Action success, Action failure, float width, float initialPosition, int length, int concentric,
+        float health, float breakSeconds, Func<int> breakPin, Action movementSound,
+        FalloutLockpickMovementState? movement = null)
+    {
+        _ = ManualMargin(width, initialPosition, length, concentric, health, breakSeconds);
+        var session = new FalloutLockpickSession(chance, random, success, failure);
+        session.ConfigureManual(width, initialPosition, length, concentric, health, breakSeconds, breakPin, movementSound, movement);
+        return session;
+    }
+
     internal void ConfigureManual(float width, float initialPosition, int length, int concentric, float health,
         float breakSeconds, Func<int> breakPin, Action movementSound, FalloutLockpickMovementState? movement = null)
     {
         if (ManualReady || Turning || Finished) throw new InvalidOperationException("Manual picking is already configured or retired.");
-        if (!float.IsFinite(width) || width <= 0 || !float.IsFinite(initialPosition) || initialPosition < 0 || initialPosition > width ||
-            length <= 0 || concentric <= 0 || !float.IsFinite(health) || health <= 0 || !float.IsFinite(breakSeconds))
-            throw new NotSupportedException("Manual picking has unadmitted source geometry or health settings.");
-        _margin = checked(concentric + length / 2);
-        if (2d * _margin >= width) throw new NotSupportedException("Degenerate source picking geometry is not admitted.");
+        var margin = ManualMargin(width, initialPosition, length, concentric, health, breakSeconds);
+        _margin = margin;
         Width = width; Position = initialPosition; _length = length; _concentric = concentric;
         Target = MathF.Min(MathF.Max(LayoutUnit * width, _margin), width - _margin);
         _initialHealth = PinHealth = health; _breakSeconds = breakSeconds;
         _breakPin = breakPin; _movementSound = movementSound; _movement = movement ?? FalloutLockpickMovementState.Process;
         ManualReady = true;
+    }
+
+    private static int ManualMargin(float width, float initialPosition, int length, int concentric, float health, float breakSeconds)
+    {
+        if (!float.IsFinite(width) || width <= 0 || !float.IsFinite(initialPosition) || initialPosition < 0 || initialPosition > width ||
+            length <= 0 || concentric <= 0 || !float.IsFinite(health) || health <= 0 || !float.IsFinite(breakSeconds))
+            throw new NotSupportedException("Manual picking has unadmitted source geometry or health settings.");
+        var margin = checked(concentric + length / 2);
+        if (2d * margin >= width) throw new NotSupportedException("Degenerate source picking geometry is not admitted.");
+        return margin;
     }
 
     internal float PermittedAngle()
