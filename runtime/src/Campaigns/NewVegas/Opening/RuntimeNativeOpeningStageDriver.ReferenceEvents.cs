@@ -338,6 +338,11 @@ internal partial class RuntimeNativeOpeningStageDriver
                 // acquisition, popup or sound to replay.
                 _scripts.References!.AcquirePlayerNote(note.FormKey, _inventory.Notifications);
                 break;
+            case FalloutReferenceEffectKind.RemoveNote:
+                _scripts.References!.RemovePlayerNote(effect.Target!.Value, _pipBoy is null ? null : _pipBoy.InvalidateNote);
+                // The optional source console diagnostic is not a removal HUD
+                // event. Its console eligibility remains presentation divergence.
+                break;
             case FalloutReferenceEffectKind.SayTo:
                 _speechStage = $"{QuestEditorId}:{Stage}";
                 _speech!.SayTo(effect.Target!.Value, effect.Argument!.Value, effect.Topic!.Value, effect.ForceSubtitles);

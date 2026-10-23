@@ -8,78 +8,66 @@ input and Git; no competing jobs or denied writer contact are permitted.
 
 ## Active block
 
-Accepted main/origin-main is 899b73c2c897d5ecc383a1bca0c6005d8333c99b (PR286),
-merged 14:01:20 UTC after independent review and all five exact-head checks passed.
-Fallback GetQuestRunning/GetQuestCompleted/GetObjectiveCompleted now share compiled
-QUST state with the shared executor. Native startup already delegates to that
-executor; this is fallback consistency, not proven ED-E native recruitment.
-The accepted objective slice retained the then-unbound GetHasNote boundary at
-statement83. The active note slice now exercises the unchanged full GameMode in
-a controlled fixture through both executors; this is separate from native play.
+Accepted main/origin-main is05b4366deaf366b13e629d31111a5e8e9389b0f1 (PR287),
+merged15:29:18 UTC after independent source review and allfive exact-head checks.
+Local main matched origin/main and was clean. Completed feature refs were removed
+only after exact squash-tree equality and independent bundle recovery/integrity
+verification. Three refs remain apart from this new feature: main, unique classic
+sound PR242 and held combat-control PR269. Original saves remain unchanged.
 
-Completed refs are cleaned after verified recovery. Remote and local branch counts
-returned to3 after PR286 cleanup at14:02:21 UTC: main, open classic audio PR242 and
-held combat controls PR269. The note feature is the only additional active branch. The41 historical integrated tips and each completed slice have exact
-recovery manifests/bundles; all required tip objects were independently recovered
-and integrity checked before ref deletion. No unique work or save was removed.
+Accepted NOTE membership is shared by script queries, CTDA382, native adapters,
+Pip-Boy and schema59. Legacy missing history remains unknown through resave.
+AddNote and positive player AddItem join membership and qualified source-formatted
+HUD/audio requests. The full unchanged owned ED-E GameMode passes controlled note
+fixtures through both executors; the owned HUD selects/registers/completes an
+actual folder variant without cold Presented replay. Those are component proofs,
+not ordinary recruitment, acquisition, campaign or retail presentation parity.
 
-Active slice: codex/fnv-player-note-membership, based on accepted main. Collected
-NOTE identities now have a dedicated ordered player owner shared by both script
-executors, CTDA382, conversation/speech/recipe/NPC/creature/unloaded adapters,
-Pip-Boy membership and campaign schema v59. Fresh history is known-empty; missing
-legacy history stays unknown through restore/resave. Inventory is never used to
-invent membership, and original saves and latched script errors are preserved.
-The notes pane reports unavailable history instead of showing a false empty list.
+Active slice: codex/fnv-remove-note. Ordinary non-console RemoveNote now binds both
+script executors to typed compiled NOTE identity and the same first-entry removal
+owner. Native effects invalidate only that exact current selection before removal,
+even when membership is absent. No playback stop, menu close, inventory mutation
+or ItemRemoved HUD notice is introduced. Unknown membership refuses before UI
+mutation; duplicate saved identities lose only their first match.
 
-AddNote and positive player AddItem acquire one membership independently of item
-count and the outer AddItem silent flag. Zero-count player NOTE additions emit no
-effect or membership query. Duplicates emit no feedback; equal formatted note text
-shares tail feedback. Text uses winning sComputersAddedNote and NOTE full name
-(empty when absent, never EDID). The HUD requests the qualified icon/two-second
-lifetime and routes UIItemGenericUp through the existing shared variant selector
-and finite world voice owner. No separate note RNG or replay owner was added.
-Terminal AddNote metadata uses that same native effect adapter.
+Selection belongs to the actual menu lifetime. It survives refresh/visibility
+changes of that owner, clears on matching removal without selecting another row,
+and retires when the owner is destroyed. A newly constructed flat menu starts a
+fresh selection; a retained XR menu keeps its own lifetime. Source diagnostic
+output is conditional on console invocation, not a required ordinary-script HUD
+side effect. Console invocation/output remains unsupported rather than inventing
+its eligibility, text lifetime or nested-context behavior.
 
-The unchanged owned ED-E GameMode passes controlled absent/present NOTE fixtures
-through both executors: present membership selects six authored objective changes,
-and cold reconstruction preserves the prefix without replaying completed effects.
-This also reached two missing fallback objective command bindings, now joined to
-the existing shared quest owner with its uint/index and boolean checks. This is
-full source-program component execution, not ordinary recruitment or campaign proof.
+Corrected full gate PASS at15:56:53 UTC, Release/Debug zero warnings/errors,
+formatting/analyzers/contracts/launcher/native Godot checks passed. Allfive
+selected checks pass: both-executor removal, full quest-query suite, unchanged
+owned ED-E GameMode fixture, actual native adapters and owned Pip-Boy UI.
+All2216 frozen source/config hashes and original save hash remain unchanged,
+diff check0. Only this ledger is finalized afterward.
 
-The owned HUD check selects an actual archived folder WAV, registers/completes one
-finite voice, resolves the actual note text/icon and restores Presented state
-without sound replay. The later verbose receipt has no HUD error or ObjectDB leak.
-Source-bound synthetic tests cover typed/canonical identities, order/duplicates,
-unknown history, atomic replacement, compiled arguments, short circuit, refusal
-prefixes, both command executors, real native adapters and cold state. Removed
-query/native bindings reproduce the respective unbound-operation/conversation382
-failures; temporary controls are restored before accepted validation.
+Disabled command bindings reproduce the original unsupported operation separately
+in fallback and shared execution, with exact source restoration. Two additional
+negative controls reproduce navigation-reset selection loss and empty-list
+selection suppression. The corrected implementation preserves those existing
+behaviors. Tests cover first-match duplicates, absent/unknown membership,
+canonical/compiled argument refusal, cold state and retained failure prefixes.
+Actual native tests cover exact selection, invalid-input atomicity, replacement/
+retirement and playback-owner noninterference. Owned UI tests click actual NOTE
+rows and verify live removal, no forced reselection and cold membership. Existing
+radio/Aid negative paths remain intentional. The slice is ready for checked PR
+publication and independent exact-head review; main remains authoritative.
+Ordinary placed-note pickup and world/container transfers remain refused before
+mutation. They require the separate ownership/Karma predecessor and reversible
+reference retirement/relationship owners; neither Taken=true nor queued
+SetEnabled(false) is substituted. HUD readiness/drop, fade/glow timing,
+cross-kind tail deduplication, reverb and full console presentation remain
+visible differences. No ordinary RemoveNote playthrough or parity claim.
 
-Ordinary placed-note pickup and container/world transfers remain closed before
-mutation: ownership/Karma and general reference retirement are separate owners.
-RemoveNote command feedback remains unbound. Exact HUD readiness/drop behavior,
-fade/glow clocks, cross-kind tail-text deduplication and environment reverb remain
-visible presentation differences. No native acquisition playthrough, final-pixel,
-retail audio/timing or campaign parity completion is claimed.
-
-Corrected full gate PASS at15:17:32 UTC, Release/Debug zero warnings/errors,
-formatting/analyzers/contracts/launcher/native Godot checks passed. Selected owned
-script and HUD checks all exit0; all2214 frozen source/config hashes and original
-save hash are unchanged, diff check0. Only this ledger is finalized afterward.
-A review invariant is also closed: impossible pending notices marked Presented
-refuse atomically, while current Presented and valid pending restoration remain
-admitted. The regression fails on the prior implementation. The corrected slice
-is ready for checked PR publication and independent exact-head review;
-main remains authoritative until review and hosted checks admit the merge.
-
-Coordinator owns serialized builds/runtime/Git; no competing job is active.
-Outbound writer contact was denied by automatic approval review and was neither
-retried nor relayed. Incoming sealed evidence supported coordinator-local work.
-Private receipts: local/fnv-wells-fixed/player-note-membership-20261023/.
-Standing checked-publication direction remains active. PR269 stays draft/native-
-and-merge-held; no third retail or bot/encounter attempt. Recording is off.
-
+The coordinator owns serialized builds/runtime/Git. No denied outbound writer
+contact is retried or relayed; incoming sealed evidence is independently assessed.
+Private receipts: local/fnv-wells-fixed/remove-note-20261023/. Standing checked
+publication direction remains active. PR269 stays draft/native-and-merge-held;
+no third retail or bot encounter attempt. Recording is off.
 Shared reputation state retains source-hashed float axes in schema v58. Fresh axes
 are zero; absent legacy history stays unknown per axis. CTDA573/574/575 share that
 owner through native quest/message, conversation, speech and NPC/creature/unloaded

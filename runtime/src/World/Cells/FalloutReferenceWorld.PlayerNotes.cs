@@ -48,4 +48,15 @@ internal sealed partial class FalloutReferenceWorld
         if (item.Signature == "NOTE")
             throw new NotSupportedException("Collected-note world/container handoff requires its ownership and retirement owners.");
     }
+
+    internal bool RemovePlayerNote(FalloutFormKey note, Action<FalloutFormKey>? invalidateSelection = null)
+    {
+        // Validate identity and known history before touching presentation.
+        _ = PlayerNotes.Contains(note);
+        var canonical = records.GetEffective(note).FormKey;
+        invalidateSelection?.Invoke(canonical);
+        // Source removal clears the matching selection before its first list
+        // match, even when no membership exists. It does not stop note audio.
+        return PlayerNotes.RemoveMembership(canonical);
+    }
 }
