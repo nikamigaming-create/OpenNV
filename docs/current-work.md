@@ -1,6 +1,6 @@
 # Current work
 
-Updated 2026-10-22. Priority: fully playable vanilla Fallout: New Vegas flat mode
+Updated 2026-10-23. Priority: fully playable vanilla Fallout: New Vegas flat mode
 before repeated deep optimization. Follow docs/implementation-plan.md, including
 terminals, lockpicking, hacking and all 13 skills. Owned retail inputs stay read-only;
 no campaign or parity completion is claimed. The coordinator owns builds, native
@@ -8,32 +8,57 @@ input and Git; existing writers have disjoint scopes and run no competing jobs.
 
 ## Active block
 
-Baseline main/origin-main is 42fadb24355c05443a8e6fee75625f4106dcbcdb (PR267,
-checked and merged). Work is on codex/fnv-well2-combat-and-healing. The current
-repair is the reached P0 mixed-faction combat-assistance refusal. NotifyAssistance
-queries candidate-to-victim relation before range and line-of-sight; a logged
-candidate is not necessarily eligible to assist. The bounded private source
-contract qualifies aggregation priority ally 2 > friend 3 > enemy 1 > neutral 0.
-The signed disposition field is not part of that inspected aggregation lane.
-The input trace also disproves the unconditional shared-faction ally synthesis:
-shared AnimalFriend membership without an authored/self-overlay reaction is
-neutral. The directed pair owner must supply even same-faction reactions.
+Baseline main/origin-main is 5a7b14b893f95dc651f18156bc5bd80b68abc464 (PR268,
+checked and merged). Work is on codex/fnv-bounded-combat-control. The current
+block adds optional health and simulation-time stop limits to the existing
+explicit-combat bot owner. Direct physics observations must stop input before
+evidence persistence can block; the session clock excludes pause, loading and
+modal control and does not reset between targets. Absent limits retain existing
+defaults. A stop requests ordinary protective pause once; only observed source
+pause establishes that it took effect. Pending shots cannot become successes.
+The unchanged 250 ms publication-loss guard remains independent. The writer owns
+bot/admission/contracts; the coordinator owns builds, native input and publication.
+Debug compilation has zero warnings/errors, and the focused bot contracts pass,
+including exact HP/time boundaries, default behavior, invalid admission, original
+fault precedence, pending-shot refusal and release before throwing/blocking
+persistence. The optional clock is advanced only by the harness physics callback
+at early physics priority; ordinary process ticks add no time. Duplicate/regressed
+physics samples, process/physics same-sample ordering, excluded states and default
+callbacks have focused checks. Default bot/skill process cadence is unchanged.
+The first actual-physics snapshot passed the local full gate and all five hosted
+checks at a9264881, but independent source review found two remaining defects.
+The repair shares the skill's nonmutating target/weapon/firing validation with
+optional limits, so safety policy cannot mask source faults. Physics sample IDs
+are not immutable snapshots: process checks must re-evaluate health changed by
+actor physics in the same sample, before admitting a pending-shot completion.
+Time accrual alone remains deduplicated. New regressions exercise both boundary
+faults and physics-first same-sample damage with pending/completed shot evidence.
+Corrected focused tests pass, and an old-code negative control reproduces both
+review findings. The renewed full gate passes at 01:00:40 UTC: exit 0, all 2,186
+source/configuration hashes unchanged, and git diff --check clean. Hosted checks
+and independent review of this repair are pending. PR269 remains draft, with native claims and merge
+admission held for parent review. Earlier green gates do not qualify this repair.
 
-Implement the minimal shared FalloutActorThreat.Relation correction, preserving
-winning records, live faction/template membership, directional overlays, removed
-ranks and invalid-input refusal, while removing the invented shared-ally input. Debug compilation has zero warnings/errors. Focused mixed-priority, shared-neutral,
-self-reaction, malformed-input, directional-overlay and cold contracts pass.
-The owned saved coyote 157b38/gecko 10a210 pair returns enemy in both directions;
-shared CreatureFaction/AnimalFriend membership is neutral, while the authored
-Coyote/Gecko pair is enemy. All ten actor overrides, six faction overlays and saved
-template choices/RNG survive the scoped cold fixture. Source/save hashes are
-unchanged. The same owned probe against the pre-repair Release runtime reproduces
-the exact old refusal. This controlled pair is not a join to the historical logged
-victim. The required full runtime gate passes at 23:44:03 UTC: exit 0, all 2,186 frozen
-source/configuration hashes unchanged and git diff --check clean. Hosted checks
-and checked-PR publication remain pending. Do not
-change assistance distance/LOS, package, aggression or confidence guards. The independent player-enemy faction flag remains a separate
-qualification boundary; no general relationship or native-assistance parity claim.
+Native acceptance is blocked after two failed private-driver admissions; the bot
+never started in either. The first waited incorrectly for pause after Continue
+resumed. The second passed offline readiness checks against retained real states,
+then failed on a raw observation file-sharing error while loading. Its settled
+Stop command released input but did not request a new pause because the loading
+tree was already paused; ordinary Continue later resumed and the player was
+defeated. Both runs exited normally, recorded no frames or publication losses,
+made no saves, and preserved source/copy hashes. No optional-limit native outcome
+or campaign progress is claimed. No third encounter: diagnose the private read
+and loading/cleanup lifecycle before another attempt. Product proof and this
+driver failure remain separate; do not alter gameplay or weaken telemetry guards.
+
+PR268 fixes directed faction aggregation priority ally 2 > friend 3 > enemy 1 >
+neutral 0 and removes an invented shared-membership ally input. Explicit self
+reactions and live directional overlays remain authoritative. Synthetic and
+genuine saved coyote/gecko pair/cold checks, the old-runtime refusal negative
+control, full local gate and all five hosted checks pass. The selected pair is
+not joined to the historical logged victim. Native assistance, its unchanged
+range/LOS/package/aggression guards, the separate player-enemy faction flag and
+retail parity remain unverified.
 
 ## Gameplay and test-control checkpoint
 
