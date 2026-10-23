@@ -19,6 +19,7 @@ internal static partial class QuestStateQueryContracts
             RunObjective();
             RunNotes();
             RunNoteRemoval();
+            RunNoteReceivers();
             foreach (var shared in new[] { false, true })
             {
                 ShortCircuit(shared);
@@ -259,7 +260,7 @@ internal static partial class QuestStateQueryContracts
         private FalloutFormKey Caller => new("QuestQueries.esm", 0x101);
         internal string? Error => Scripts.Capture().Instances.Single().Error;
 
-        internal Fixture(string body, bool shared, bool initialize = true, bool bindTarget = true, bool bindNote = true, bool allowNoteEffects = false)
+        internal Fixture(string body, bool shared, bool initialize = true, bool bindTarget = true, bool bindNote = true, bool allowNoteEffects = false, bool bindPlayer = true)
         {
             Body = body;
             var header = new byte[20]; U32(3).CopyTo(header, 12); header[16] = 1;
@@ -268,12 +269,13 @@ internal static partial class QuestStateQueryContracts
                 var local = new byte[24]; U32((uint)index + 1).CopyTo(local, 0);
                 return new[] { Field("SLSD", local), Field("SCVR", Text(name)) };
             }).ToArray();
-            var bindings = new[] { Field("SCRO", U32(0x300)), Field("SCRO", U32(0x14)) }.Concat(bindTarget ? new[] { Field("SCRO", U32(0x100)) } : [])
+            var bindings = new[] { Field("SCRO", U32(0x300)), Field("SCRO", U32(0x500)) }.Concat(bindPlayer ? new[] { Field("SCRO", U32(0x14)) } : []).Concat(bindTarget ? new[] { Field("SCRO", U32(0x100)) } : [])
                 .Concat(bindNote ? new[] { Field("SCRO", U32(0x400)) } : []);
             File.WriteAllBytes(Path.Combine(_directory.FullName, "QuestQueries.esm"), Join(
                 Record("TES4", 0, Field("HEDR", new byte[12])),
                 Record("GMST", 0x401, Field("EDID", Text("sComputersAddedNote")), Field("DATA", Text("Note Added: %s"))),
                 Record("NOTE", 0x400, Field("EDID", Text("CollectedNote"))),
+                Record("REFR", 0x500, Field("EDID", Text("PlacedReceiver"))),
                 Record("QUST", 0x100, Field("EDID", Text("TargetQuest")), Field("DATA", [0, 0]),
                     Field("QOBJ", U32(0)), Field("QOBJ", U32(10)), Field("QOBJ", U32(uint.MaxValue))),
                 Record("QUST", 0x101, Field("EDID", Text("CallerQuest")), Field("SCRI", U32(0x200)), Field("DATA", [0, 0])),

@@ -939,6 +939,19 @@ internal sealed partial class FalloutQuestScripts
                 return;
             }
             var arguments = FalloutGameModeProgram.ResolveCommandArguments(rawArguments, values, Function);
+            if (operation == "addnote")
+            {
+                if (parts.Length > 2 || arguments.Count != 1)
+                    throw new InvalidDataException("AddNote requires one NOTE and at most one reference qualifier.");
+                // The receiver is admitted, but the global effect belongs to
+                // player membership rather than that reference's inventory.
+                if (parts.Length == 2) _ = instance.Bindings.Reference(parts[0]);
+                var note = Form(arguments[0]);
+                if (note.Signature != "NOTE") throw new InvalidDataException("AddNote target is not NOTE.");
+                (References ?? throw new NotSupportedException("Note acquisition has no shared world owner."))
+                    .AcquirePlayerNote(note.FormKey, _inventory.Notifications);
+                return;
+            }
             if (operation == "forcesave")
             {
                 if (parts.Length != 1 || arguments.Count != 0)
@@ -1256,12 +1269,6 @@ internal sealed partial class FalloutQuestScripts
                     break;
                 case "killquestupdates" or "kqu" when arguments.Count == 0:
                     _quests.KillQuestUpdates();
-                    break;
-                case "addnote" when arguments.Count == 1:
-                    var addedNote = Form(arguments[0]);
-                    if (addedNote.Signature != "NOTE") throw new InvalidDataException("AddNote target is not NOTE.");
-                    (References ?? throw new NotSupportedException("Note acquisition has no shared world owner."))
-                        .AcquirePlayerNote(addedNote.FormKey, _inventory.Notifications);
                     break;
                 case "removenote" when arguments.Count == 1:
                     var removedNote = Form(arguments[0]);
