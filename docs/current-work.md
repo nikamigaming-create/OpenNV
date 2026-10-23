@@ -8,60 +8,59 @@ input and Git; no competing jobs or denied writer contact are permitted.
 
 ## Active block
 
-Accepted main/origin-main is 20b03986a8d4ce6445c1311e46fd78fa98991684 (PR279),
-merged at08:41:21UTC after explicit release, independent production-adapter re-review
-and all five exact-head checks passed at b8e3c90327da9becb3a602e794474989689b9c15.
-Local main equals origin/main. PR269 stays draft/native-and-merge-held. No third
-retail or bot/encounter attempt is permitted; recording is off.
+Accepted main/origin-main is 674ba9d6996e27791259cfd804c6a8fdd0b226d0 (PR280),
+merged09:05:13UTC after explicit release, independent source/wiring review and all
+five exact-head checks at02e1a67c6b300de0e05e3ccb0bdff013cefe3a72 passed. Local main
+matches origin/main. PR269 stays draft/native-and-merge-held. No third retail or
+bot/encounter attempt is permitted. Recording is off; original inputs stay read-only.
 
-Accepted shared reputation state retains source-hashed float axes in schema v58.
-Fresh axes are initialized zero; missing legacy history remains unknown per axis.
-Explicit SetReputation establishes only its own axis, without clamp/notifications.
-GetReputation CTDA573 uses this same owner through native quest/message, ordinary
-conversation and scripted speech adapters. Its raw selector chooses positive only
-for1, otherwise negative. Actual installed-delegate composition, old-callback
-negative controls, cold/unknown-state and owned14-condition/12-INFO checks pass.
-The repaired full gate passed08:27:19UTC with all2204 source/config hashes unchanged.
-These are component proofs, not ordinary dialogue/quest or retail-parity completion.
+Shared reputation state retains source-hashed float axes in schema v58. Fresh axes
+are zero; absent legacy history stays unknown per axis. Explicit SetReputation
+establishes only its axis without clamp/notifications. CTDA573 and574 use this owner
+through native quest/message, conversation and scripted-speech adapters. Percentage
+is float32 axis/capacity, not scaled or clamped. These are component proofs with
+owned-data and cold/unknown-state checks, not ordinary campaign/retail completion.
 
-Active branch: codex/fnv-reputation-percentage, now based on accepted main.
-The current independent change adds CTDA GetReputationPct(function574) through the
-same world owner and all three production condition adapters. Source arithmetic
-is float32 axis/capacity: no multiplication by100 or clamp. Capacity remains
-immutable winning REPU DATA, with no new save field. Known/unknown history,
-source identity and context refusal remain shared. Nonfinite quotients refuse;
-exceptional-result retail behavior is unclaimed. The separate SCTX GetReputationPct
-command, threshold/rank and disguise semantics remain unbound.
+Active branch: codex/fnv-reputation-threshold, based on accepted main. The current
+change adds CTDA575 from the qualified numeric decision contract, not an inferred
+rank formula. It computes positive then negative tiers from float32 ratios and the
+current fReputationThresholdOne/Two/Three settings, preserving source comparison
+order, inclusivity and unsorted/equal settings. Both axes must be known. Both-zero
+tiers return code1 before low-byte selector dispatch; remaining codes use explicit
+source tables. No saved tier/result cache or new history is introduced. Existing
+per-stack numeric-setting lifetime is reused, not redefined.
 
-Focused arithmetic, signed/unclamped values, finite-result/unknown-axis refusal,
-master-order, comparison and cold tests pass. Unchanged installed conversation and
-speech adapters reproduce exact missing574 refusals; repaired native composition
-passes both with current/cold/legacy state. The typed owned-data audit exercises
-two winning INFO conditions(selector1) with controlled known axes and no source/save
-mutation. The stopped reflection helper was not retried or used as corpus evidence.
-The full gate passes08:49:46UTC: exit0, all2204 source/config hashes unchanged,
+Focused contracts pass all48 table entries, raw low-byte selectors, exact boundaries,
+live/equal/reordered settings, fresh-state classification, cold and unknown-axis
+refusal. Unchanged installed native callbacks reproduce exact missing575 errors;
+repaired actual conversation/speech delegate composition passes. The typed owned
+audit exercises1642 queries across1195 INFO/MESG/QUST/PACK records using controlled
+known axes, with original source/save bytes unchanged. These counts prove the
+shared query; PACK native/unloaded AI adapters remain unbound and are an explicit
+next integration owner. No package execution or full-record eligibility is claimed.
+The full gate passes09:24:50UTC: exit0, all2204 source/config hashes unchanged,
 diff check0 and recording off. Keep the published head frozen and merge held for
 independent review and hosted checks. Evidence:
-local/fnv-wells-fixed/reputation-state-20261023/percentage-focused.log,
-percentage-native.log, percentage-owned.log, percentage-negative-native.json and
-percentage-final-result.json.
-Neutral percentage contract SHA256:
-88AFF097879A1166A5A96730CB1A92390EC1154D6D551E5A8E039C08D03F8FC8.
+local/fnv-wells-fixed/reputation-state-20261023/threshold-focused.log,
+threshold-native.log, threshold-owned.log, threshold-negative-native.json and
+threshold-final-result.json.
+Neutral threshold contract SHA256:
+9DC045415DC8F99781B23D3B59BB5C584190BED6C35B6537B1F34E3103DB2DF9.
 
-Primary CTDA dispatch permits null subject/context for these subject-independent
-commands. Nonzero missing/wrongly typed explicit references refuse because raw-ID
-frontend fixup remains unqualified; run-on3+ stays unbound. Source context contract
-SHA256 B4676FCC6F2C43C7146B336AEAA59DB3D131DB3ECDE4D310A1BC27A34018E85D.
+All three getters preserve known/unknown history and canonical source identity.
+Null context is source-permitted; malformed nonzero explicit references refuse
+because raw-ID frontend fixup stays unqualified; run-on3+ stays unbound. Nonfinite
+ratio/setting values fail visibly; exceptional retail/FPU behavior is unclaimed.
+The separate SCTX percentage/threshold commands and broader rank/disguise remain
+unbound. Existing latched errors are neither cleared nor replayed.
 
-Notification and witnessed hacking qualification stay parked after two approaches.
-Exact missing owners remain retained combat-group membership/counts, UI transition
-predicates, nested player serialization/warm-load ordering, witness membership,
-detection and concrete process responses. No generic in-combat/modal substitute,
-empty witness set, guessed history or suppressed side effect is added. Add/Remove,
-crime-triggered reputation and native hacking remain closed until required effects
-are owned. Existing latched script faults are neither reset nor replayed. Original
-campaign and retail inputs remain read-only; no campaign, ordinary conversation,
-speech/radio playback, final-pixel or parity completion is claimed.
+Notification/witness qualification remains parked after two approaches. Missing
+owners include retained combat-group membership/counts, UI transition predicates,
+nested player serialization/warm-load ordering, witness membership, detection and
+concrete process responses. No generic in-combat/modal substitute, empty witness
+set, guessed history or omitted side effect is added. Add/Remove, crime-triggered
+reputation and native hacking remain closed. No ordinary dialogue/speech/radio,
+campaign, final-pixel or retail parity completion is claimed.
 
 ## Gameplay and test-control checkpoint
 
