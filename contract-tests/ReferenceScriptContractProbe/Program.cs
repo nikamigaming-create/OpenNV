@@ -4,6 +4,30 @@ using System.Text.Json;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.World.Cells;
 
+if (args is ["--quest-state-query-contracts"])
+{
+    QuestStateQueryContracts.Run();
+    return;
+}
+
+if (args is ["--quest-state-query-contracts", var selectedQuestQuery] && selectedQuestQuery is "GetQuestRunning" or "GetQuestCompleted")
+{
+    QuestStateQueryContracts.Run(selectedQuestQuery);
+    return;
+}
+
+if (args is ["--owned-quest-state-queries", var questQueryGame])
+{
+    QuestStateQueryContracts.RunOwned(questQueryGame);
+    return;
+}
+
+if (args is ["--owned-quest-state-query-prefix", var questQueryPrefixGame])
+{
+    QuestStateQueryContracts.RunOwned(questQueryPrefixGame, expectPrefixFailure: true);
+    return;
+}
+
 if (args is ["--owned-generator-activation", var generatorGame])
 {
     OwnedGeneratorActivationProbe.Run(generatorGame);
@@ -1267,6 +1291,7 @@ RadioConversationContracts.Run();
 ScreenBloodContracts.Run();
 QuestMenuContracts.Run();
 QuestUpdateContracts.Run();
+QuestStateQueryContracts.Run();
 IngestibleContracts.Run();
 if (args is [var voiceRoot, "--voices"]) OwnedDialogueVoiceProbe.Run(voiceRoot);
 if (args is [var aidRoot, "--ingestibles"]) OwnedIngestibleProbe.Run(aidRoot);

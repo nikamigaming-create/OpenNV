@@ -8,51 +8,48 @@ input and Git; no competing jobs or denied writer contact are permitted.
 
 ## Active block
 
-Accepted baseline for this slice is 305f7514eda820dfabb61fecaa40284f65ce3d72 (PR283),
-merged 12:30:38 UTC after independent review and all five exact-head checks passed.
-The source-qualified baseline EndIf fix preserves nested and generated MenuMode
-control flow, parser-version11 migration guards and existing latched faults.
-Owned generator activation/message proof remains distinct from physical contact,
-MenuMode scheduling and repair/salvage. PR269 stays draft/native-and-merge-held.
-Nick's direct standing direction authorizes checked slices to be published and
-merged; the earlier approval hold is resolved. No third retail or bot/encounter
-attempt is permitted. Recording is off; original inputs and saves are read-only.
+Accepted main/origin-main is 09a6d6f6eac93152ff71513ecb271ab4087ab209 (PR284),
+merged 12:52:21 UTC after independent review and all five exact-head checks passed.
+The integrated INFO/TERM slice passed its full gate at12:41:12 UTC with2208
+source/config hashes unchanged. Empty results preserve metadata/caller admission;
+these component proofs do not establish ordinary terminal access or campaign parity.
 
-Active branch: codex/fnv-empty-results-publication, from accepted main. The reviewed
-INFO and terminal changes are integrated with only CLI registration and this ledger
-resolved. All seven implementation/test bodies match their independently reviewed
-originals; all four focused/owned commands remain, plus PR283's owned generator
-command. Default INFO tests run once; terminal zero tests run once in the existing
-group. Original individual commits and the prior local combined branch remain
-preserved. The independent quest-query regression WIP is isolated on
-codex/fnv-quest-state-script-queries and is not part of this slice.
+Branch reconciliation verified all merged tips, including six exact squash trees.
+Remote branches are reduced37 to3; local branches45 to4. Main, open classic audio
+PR242, held combat controls PR269 and the unique quest-query branch remain.
+The41 integrated local tips are preserved in one self-contained verified Git bundle
+with an exact recovery manifest under local/fnv-wells-fixed/branch-reconciliation-20261023/.
+All41 commits were independently unbundled and integrity checked before ref cleanup.
+No unique work, save or source input was removed. Cleanup belongs to each completed
+slice; do not accumulate merged feature refs. Do not delete held or writer-owned work.
 
-Explicit zero-byte INFO and TERM results cannot execute retained editor text or
-evaluate unused bindings. Raw fields and source identities remain unchanged.
-INFO keeps its existing absent-header extraction behavior; TERM still requires a
-valid explicit header and matching body extent. Nonzero sibling execution and
-malformed-body/reference/local refusals remain. Terminal result admission still
-checks the actual placed caller, residency/availability and source/fragment identity;
-the menu still owns locks/access, conditions, generations and non-script effects.
-No save schema or latched-fault recovery changes are introduced.
+Active branch: codex/fnv-quest-state-script-queries, integrated with accepted main.
+The narrow change binds fallback GetQuestRunning/GetQuestCompleted to compiled
+QUST identity and the existing shared quest state, matching the shared executor.
+Native startup already delegates to that shared executor; this fixes fallback
+executor consistency, not a demonstrated ED-E native recruitment failure.
+Synthetic tests cover both owners, independent running/completed flags, live changes,
+compiled-reference/type refusals, short circuit, cold clocks and retained failure prefixes.
 
-Individual old-code controls and gates passed: INFO at10:56:53 UTC, TERM at11:26:09
-UTC. The prior combined tree passed focused/owned checks and its full gate at
-11:44:37 UTC, with2207 unchanged source/config hashes. Those receipts do not qualify
-the integration with PR283. The integrated focused/owned checks pass12:33:11 UTC,
-including the unchanged owned generator. The integrated full gate passes12:41:12
-UTC, exit0, all2208 source/config hashes unchanged and diff check0. Debug/Release
-builds have zero warnings/errors; each default empty-result test runs once. All
-seven reviewed bodies still match; independent integration review finds no blocker.
-The original save remains unchanged. Hosted checks are required before ordinary
-merge. No schema or fault recovery is changed.
-Owned targets remain INFO FalloutNV.esm:15ad0d and terminal entries
-DeadMoney.esm:00923d/0 and OldWorldBlues.esm:004902/2. These are controlled result
-composition and reader proofs, not ordinary conversation, owned placed terminal
-access, hacking, native selection or retail parity. Existing negative controls
-remain valid only while runtime/test bodies match their reviewed commits exactly.
-Integrated evidence is under local/fnv-wells-fixed/empty-results-publication-20261023/;
-prior combined evidence remains in empty-results-combined-20261023/.
+The actual unchanged vDialogueEDE GameMode fixture initially failed at completion
+query statement5 with counter0. With the bindings it reaches statement83/source
+line107 after counter1, then refuses a separate condition whose GetObjectiveCompleted
+and GetHasNote signatures remain unsupported by fallback. The original full-script
+completion command still fails; it has not been weakened or bypassed.
+A separate owned-prefix audit explicitly requires this exact remaining refusal and
+verifies consumed-prefix/error state unchanged before/after cold restore and retry.
+Its old-code negative control fails before the counter; fixed prefix checks pass.
+The running query has synthetic/composition proof, no owned running-query coverage.
+No full-script, ordinary recruitment, campaign or retail parity success is claimed.
+
+The accepted-main integration passes focused/prefix checks and the full gate at
+13:18:15 UTC: exit0, all2209 source/config hashes unchanged, diff check0 and original
+save unchanged. Release/Debug builds have zero warnings/errors. This frozen slice
+is ready for checked publication and independent review; merge is not yet accepted.
+Evidence is under local/fnv-wells-fixed/quest-state-queries-20261023/.
+Original saves remain unchanged. Standing checked-publication direction is active;
+PR269 stays draft/native-and-merge-held. No third retail or bot/encounter attempt
+is permitted. Recording is off; all runtime/build work remains serialized.
 
 Shared reputation state retains source-hashed float axes in schema v58. Fresh axes
 are zero; absent legacy history stays unknown per axis. CTDA573/574/575 share that
