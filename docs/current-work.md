@@ -8,39 +8,40 @@ input and Git; no competing jobs or denied writer contact are permitted.
 
 ## Active block
 
-Baseline main/origin-main is a43441c3a6db22d962148e49ff8798f648928766 (PR273),
-accepted after independent review and all five checks. The active branch is
-codex/fnv-hacking-selection-mapping. PR269 remains draft/native-and-merge-held.
-No third bot encounter or retail attempt is permitted.
+Accepted main/origin-main is bd52dbd11ea81e2da04e4351ae7fd05b1265b7f7 (PR274).
+Independent review and all five exact-head checks passed. PR269 remains
+draft/native-and-merge-held. No third bot encounter or retail attempt is permitted.
+The active independent branch is codex/fnv-hacking-display-layout.
 
-The current change connects qualified display coordinates to the existing hacking
-transaction: two columns, seventeen rows each, twelve payload characters per row,
-and the seven-character address prefix/separator excluded from input. Word spans
-use the complete backing display and can cross rows/columns. Bracket scans stop
-at the selected payload row boundary. Each click resolves the current word map
-again after dud removal; it cannot execute a retained stale candidate index.
-Invalid coordinates and incomplete display extents refuse before mutation.
+The new placement producer binds the qualified shared process stream to ordered
+punctuation fill, bounded candidate positions and the exact uppercase collision
+predicate. It resets the consecutive-miss counter after a successful word. One
+hundred misses trigger a full-grid retry; after four retries it retires the
+unplaced suffix and regenerates the retained prefix without resetting that retry
+counter. The original answer and attempt allowance survive prefix retention.
+Answer retirement has no qualified replacement/storage-lifetime owner and refuses
+explicitly before exposing a transaction. Original candidates remain immutable.
 
-Focused contracts pass cross-row/cross-column words, both display endpoints,
-clipped brackets, repeated wrong guesses, reset/dud consumption, shifted candidate
-indices, lockout and post-success refusal. Two actual owned candidate generations
-pass every word-character mapping and select their genuine retained answers through
-the transaction. Their placements are explicitly controlled source-shaped layouts;
-this is not a captured retail layout or native mouse/controller proof. Source
-resources remain unchanged. The required runtime gate passes at 04:11:44 UTC,
-including Release/Debug, contracts and native audits with recording off. The fresh
-checkout regenerates defaults in twenty-two tracked import metadata files; those
-generated changes were restored after both runs. All 2,192 canonical input hashes
-match after cleanup, all C# hashes stayed unchanged during validation, and diff
-check is clean. This is post-cleanup closure, not an unchanged-tree-during-run claim.
+Focused contracts pass normal fill/draw order, row/column-crossing words, margin
+and end bounds, repeated exhaustion, retained allowance, answer-retirement
+refusal, cancellation, invalid draws and the source uppercase-only predicate.
+Two actual owned candidate sets pass process-stream layout creation and original
+answer selection through the logical row mapper and existing transaction, retaining 20 words each with
+438 and 439 layout draws and allowances 4 and 5. These are producer/transaction proofs;
+ordinary input, persistent effects and retail parity remain unverified. Formatter
+checks and the full runtime gate pass at 04:43:20 UTC: exit 0, all 2,194 source and
+configuration hashes unchanged during the run, and clean diff checks. Native
+audits pass with recording off. Publication checks and independent review remain
+pending.
 
-The accepted process RNG/clock owner and canonical player14 terminal-result
-binding remain unchanged. Existing saved script/sound/actor streams are not
-reinterpreted. Native locked-terminal admission remains closed at both existing
-gates. Placement-exhaustion lifetime, actual menu hit-testing/navigation and the
-terminal-extra outcome/persistence/reward/statistic/ownership handoff remain
-required. Do not unlock or award XP while omitting a source effect. Recording is
-off; no native hacking, campaign completion or retail parity is claimed.
+Gate receipts distinguish in-run source changes from post-cleanup canonical
+closure. No generated import metadata changes are intended for this branch.
+
+Native locked-terminal admission remains closed. Actual hit-testing/navigation,
+terminal-extra persistence and ordered unlock/XP/ownership/statistic/contents
+handoffs still need their qualified owners. Recording is off. Existing saved
+script/sound/actor RNG fields are not reinterpreted. No world effect is committed
+by display preparation or the pure transaction.
 
 ## Gameplay and test-control checkpoint
 
@@ -115,9 +116,7 @@ attempts and normal cleanup; no third blind launch.
 
 ## Remaining completion gates
 
-- Current P0: integrate qualified locked-terminal hacking owners without bypassing
-  missing outcomes, then continue remaining wells only through reliable ordinary
-  control. Shared faction arbitration is implemented; actual eligible/ineligible
+- Current P0: integrate qualified native hacking owners while preserving closed outcome admission, then resume ordinary tutorial progress with reliable control. Shared faction arbitration is implemented; actual eligible/ineligible
   assistance remains unverified. Do not repeat the retired encounter admission.
 - Tutorial: complete remaining wells, delayed death counters, loot, ingredients
   and campfire cooking through ordinary input, F5 and separate-process Continue.
@@ -127,8 +126,8 @@ attempts and normal cleanup; no third blind launch.
   completion for qualified native readiness.
 - Access: terminal pages/results exist, but missing keys/passwords stop before
   ordinary lockpicking/hacking. Candidate/attempt/bracket primitives are
-  prerequisites; native admission/UI input, source placement, retained outcomes,
-  qualified rewards and persistent outcome ownership still need integration.
+  prerequisites; native UI/admission, retained outcomes, qualified rewards and
+  persistent outcome ownership still need integration.
 - Combat: extend actual attack families, hit reactions, embedded emitters,
   assistance and survivable encounters. Selected gecko damage/kills do not
   establish complete combat.
