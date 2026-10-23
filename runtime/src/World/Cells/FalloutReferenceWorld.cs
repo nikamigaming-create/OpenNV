@@ -40,7 +40,7 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
     IReadOnlyList<FalloutObjectPhysicsSnapshot>? ObjectPhysics = null,
     float? ConversationSuppressionSeconds = null, FalloutConversationHistory? ConversationHistory = null,
     FalloutActorSandboxAdmissionFailure? SandboxAdmissionFailure = null,
-    FalloutTerminalHackState? TerminalHackState = null)
+    FalloutTerminalHackState? TerminalHackState = null, bool? ObjectHealthPresent = null)
 {
     internal static void Validate(IReadOnlyList<FalloutReferenceSnapshot> snapshots)
     {
@@ -53,6 +53,7 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
                 !ValidKey(snapshot.Cell) || !ValidKey(snapshot.Base) || snapshot.Variables is null ||
                 snapshot.Variables.Values.Any(value => !double.IsFinite(value)) ||
                 snapshot.Deleted && snapshot.DeletePending || snapshot.DeathCount is < 0 ||
+                snapshot.ObjectHealthPresent == true && snapshot.Destruction is null ||
                 !float.IsFinite(snapshot.Opacity) || snapshot.Opacity is < 0 or > 1 ||
                 (snapshot.Script is null ? snapshot.ScriptSha256 is not null || snapshot.Variables.Count != 0 :
                     !ValidKey(snapshot.Script.Value) || snapshot.ScriptSha256 is not { Length: 64 } || !snapshot.ScriptSha256.All(Uri.IsHexDigit)))
@@ -206,6 +207,7 @@ internal sealed partial class FalloutReferenceInstance
     internal bool NoFade { get; set; }
     internal bool Destroyed { get; set; }
     internal FalloutDestructionState? Destruction { get; set; }
+    internal bool? ObjectHealthPresent { get; set; } = false;
     internal bool DeletePending { get; set; }
     private bool _deleted, _taken;
     internal bool Deleted
@@ -450,7 +452,7 @@ internal sealed partial class FalloutReferenceInstance
             ConversationSuppressionSeconds: ConversationSuppressionSeconds, ConversationHistory: ConversationHistory?.Copy(),
             SandboxAdmissionFailure: SandboxAdmissionFailureCaptureReady ? CaptureSandboxAdmissionFailure is { } captureSandbox
                 ? captureSandbox() : SandboxAdmissionFailure?.Copy() : null,
-            TerminalHackState: TerminalHackState);
+            TerminalHackState: TerminalHackState, ObjectHealthPresent: ObjectHealthPresent);
     }
 }
 
@@ -733,10 +735,15 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
             instance.Opacity = snapshot.Opacity;
             instance.NoFade = snapshot.NoFade ?? instance.NoFade;
             instance.Destroyed = snapshot.Destroyed;
+            instance.ObjectHealthPresent = snapshot.ObjectHealthPresent;
             if (snapshot.Destruction is { } destruction)
             {
-                destruction.Validate(FalloutDestructible.Read(records, instance.Base) ??
-                    throw new InvalidDataException("Saved destruction has no source DEST."));
+                var declaration = FalloutDestructible.Read(records, instance.Base) ??
+                    throw new InvalidDataException("Saved destruction has no source DEST.");
+                destruction.Validate(declaration);
+                if (snapshot.ObjectHealthPresent == false &&
+                    (destruction.Health != declaration.Health || destruction.Stage != -1))
+                    throw new InvalidDataException("Missing object health cannot retain applied destruction damage.");
                 instance.Destruction = destruction;
             }
             instance.DeletePending = snapshot.DeletePending;

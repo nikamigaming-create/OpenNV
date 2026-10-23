@@ -8,37 +8,46 @@ input and Git; no competing jobs or denied writer contact are permitted.
 
 ## Active block
 
-Accepted main/origin-main is 18301de96fd9561d3445a10f9453be69d91ddade (PR293),
-merged 20:20:35 UTC after independent exact-head review and all five checks.
-The completed model branch has verified bundle recovery and was removed locally
-and remotely. Main was clean; three persistent branches remain: main, unique
-classic-audio PR242 and native-held combat-control PR269. Original saves remain
-unchanged. The lockpick runtime and actual owned lock/pin models are implemented
-for their admitted DOOR/CONT scope. Ordinary campaign, XR and retail presentation
-acceptance remain open; TERM hacking stays separate.
+Accepted main/origin-main is 26cabbf29562087d60a0baf74b46db878e7211d1 (PR294),
+merged 20:49:03 UTC after independent exact-head review and all five hosted checks.
+The script percentage getter now shares the existing reputation ratio owner in
+both executors, with strict script selectors and unknown-history refusal. No
+installed SCPT use was found, so no campaign progression is claimed. Local main
+was fast-forwarded to origin/main; the next slice's WIP was preserved separately.
+Completed branch cleanup uses an independently recovered Git bundle and exact
+squash-tree equality. Original saves remain unchanged.
 
-Active branch: codex/fnv-script-reputation-percentage. GetReputationPct is missing
-from both authored-script executors even though its shared CTDA percentage owner
-already exists. The unchanged runtime reproduces an unbound-expression failure.
-The repair routes both executors to that same source float axis/capacity division,
-with script selector validation (0/1), deferred evaluation and unknown-history
-refusal. No multiplication by 100, clamping, notification, save schema or state
-mutation is introduced. The existing CTDA raw-selector behavior stays unchanged.
-The focused regression passes both executors. The selected owned reputation audit
-and required runtime gate passed 20:35:26 UTC, with 2,229 frozen source/config inputs
-unchanged, diff check clean and the original save unchanged. Exact-head independent
-review and hosted checks precede merge. No current installed SCPT use was discovered by the bounded
-source search, so this is script capability rather than a claimed campaign fix.
+Active branch: codex/fnv-script-destruction-stage. Authored destructible-object
+scripts, including grenade-trap checks, need GetDestructionStage. The implemented
+shared query distinguishes known missing, known present and unknown object health
+independently of rendered destruction Stage/ModelStage. Model attachment does not
+create health history; accepted native damage commits establish presence. Explicit
+presence and existing source-hashed health survive first-party capture/restore.
+Older absent evidence stays unknown. This does not claim retail save-lifetime parity.
 
-Historical campfire Parse and Mojave Express OnLoad failures in the preserved
-checkpoint do not establish a current parser defect. Current branch handling
-already has coverage for those source shapes; retained errors are not cleared or
-replayed. No new route-only audit or proof-only publication is being pursued.
-The prior paused route-inspection session was closed through its real Quit/Yes
-controls with source-owner cleanup. No ordinary lockpick attempt was completed.
-Website-copy proposal remains unapplied; denied writer contact remains denied.
-Coordinator owns Git/build/native work serially; recording remains off.
-Private receipts: local/fnv-wells-fixed/script-reputation-percentage-20261023/.
+Both script executors now route the no-operand getter through this shared owner.
+Absent context and known missing health return -1; malformed targets refuse, and
+known-present actor health still requires its separate maximum-health owner.
+Nonactor results use the source float-narrowed ceiling percentage and first
+strictly lower DSTD threshold ordinal. Queries are deferred/read-only; dead branches
+do not resolve missing receivers. A focused compile/regression passes object and
+quest calls, full/present versus missing health, source threshold equality, cold
+known/unknown and atomic invalid restore. This slice remains local/unpublished;
+no new broad suite, native capture or ordinary trap outcome is claimed.
+DamageObject scheduling, actor health and complete trap activation/effects remain
+outside this query repair. Historical script errors are not cleared or replayed.
+
+The user has explicitly authorized coordinating the existing writer chat. The
+writer is assigned only new Presentation/Ui/NativeHackingMenu.cs: actual ordinary
+mouse/keyboard input over the existing hacking transaction. The coordinator owns
+all other files, locked-TERM admission/consequence integration, Git and serial
+build/runtime jobs. No new chat/worktree or competing job is introduced. The panel
+is not itself terminal-hacking admission or a completed gameplay claim.
+
+No new route-only audit or proof-only publication is being pursued. The prior
+paused route-inspection session closed through real Quit/Yes controls; no ordinary
+lockpick attempt was completed. Website-copy proposal remains unapplied. Recording
+is off. Private receipts: local/fnv-wells-fixed/destruction-query-20261023/.
 
 Static ACTI trap activation remains a separate parked owner. A real production
 DefaultActivate route exists, but the selected controller-free trap cannot supply

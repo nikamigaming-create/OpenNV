@@ -4,6 +4,13 @@ using System.Text.Json;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.World.Cells;
 
+if (args is ["--destruction-contracts"])
+{
+    DestructionContracts.Run();
+    Console.WriteLine("OPENNV_DESTRUCTION_CONTRACT_PASS sourceDamage=true queryOrdinal=true equality=true cold=true");
+    return;
+}
+
 if (args is ["--remove-note-receiver-contracts", .. var removalReceiverExecutor])
 {
     QuestStateQueryContracts.RunRemoveNoteReceivers(removalReceiverExecutor.SingleOrDefault());
