@@ -4,6 +4,12 @@ using System.Text.Json;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.World.Cells;
 
+if (args is ["--owned-hacking-process", var hackingProcessData])
+{
+    OwnedHackingProbe.RunProcess(hackingProcessData);
+    return;
+}
+
 if (args is ["--owned-hacking-allowance", var hackingAllowanceData])
 {
     OwnedHackingProbe.RunAllowance(hackingAllowanceData);

@@ -93,7 +93,9 @@ internal sealed record FalloutTerminalResultProgram(FalloutPluginRecord Terminal
                 if (field.Signature == "SCRO")
                 {
                     var form = terminal.Plugin.AdjustFormId(raw);
-                    _ = records.GetEffective(form);
+                    // The canonical player is engine-created, not a placed
+                    // plugin record. Match the shared script binding rule.
+                    if (records.RuntimeFormId(form) != 0x14) _ = records.GetEffective(form);
                     references.Add(new(form, null));
                 }
                 else references.Add(new(null, raw));

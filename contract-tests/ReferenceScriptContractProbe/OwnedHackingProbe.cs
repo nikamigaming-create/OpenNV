@@ -1,8 +1,38 @@
 using System.Security.Cryptography;
+using System.Diagnostics;
+using System.Globalization;
 using OpenNV.Runtime.Content;
 
 internal static class OwnedHackingProbe
 {
+    internal static void RunProcess(string dataRoot)
+    {
+        uint terminal;
+        float science;
+        RuntimeLiveContentSource.Configure(dataRoot, RuntimeLiveContentSource.FalloutNewVegasGame,
+            activePlugins: RuntimeLiveContentSource.ResolveVanillaPlugins(dataRoot), includeImplicitPlugins: false);
+        using (var content = RuntimeLiveContentSource.Current!)
+        using (var records = FalloutPluginStack.Load(content.PluginSources))
+        {
+            var selected = records.EffectiveRecords("TERM").Select(record => FalloutTerminal.Read(records, record.FormKey))
+                .First(value => (value.Flags & 1) == 0 && value.Difficulty <= 4);
+            terminal = records.RuntimeFormId(selected.Record.FormKey);
+            science = FalloutHackingRequest.Read(records, selected.Record.FormKey, selected.Difficulty, 0).MinimumScience;
+        }
+        var before = FalloutSharedUnsignedRandom.Process.Observation;
+        _ = Run(dataRoot, terminal, science, value => value);
+        var middle = FalloutSharedUnsignedRandom.Process.Observation;
+        _ = Run(dataRoot, terminal, science, value => value);
+        var after = FalloutSharedUnsignedRandom.Process.Observation;
+        if (middle.Seed is null || after.Seed != middle.Seed ||
+            middle.Draws <= before.Draws || after.Draws <= middle.Draws)
+            throw new InvalidDataException("Owned generation reset or failed to consume its process unsigned owner.");
+        Console.WriteLine($"OPENNV_OWNED_HACKING_PROCESS_PASS terminal={terminal:x8} " +
+            $"seed={after.Seed} firstDraws={middle.Draws} secondDraws={after.Draws} " +
+            "sameProcessAcrossSourceRetirement=true sourceClock=Win32-GetTickCount retryWindowMilliseconds=100 " +
+            "scienceAndPerkInputs=controlled sourceResourcesReadonly=true nativeAdmissionAndRetail=unverified");
+    }
+
     internal static void RunAllowance(string dataRoot)
     {
         RuntimeLiveContentSource.Configure(dataRoot, RuntimeLiveContentSource.FalloutNewVegasGame,
@@ -33,12 +63,11 @@ internal static class OwnedHackingProbe
             "controlledCandidateSelection=true generationRngAndClock=unverified ordinaryHackingAndRetail=unverified");
     }
 
-    // The harness supplies the qualified shared RNG/clock and perk
-    // owners. There is deliberately no CLI seed, guessed timeout or four-attempt
-    // substitute. A successful construction is not an ordinary-interaction proof.
+    // Generation uses the process unsigned/clock boundary. The caller must still
+    // supply the real Science/perk inputs for an ordinary interaction; this
+    // resource construction helper does not prove reference access admission.
     internal static FalloutHackingCandidates Run(string dataRoot, uint terminalRuntimeId,
-        float currentScience, Func<float, float> applyScienceBonus,
-        FalloutHackingGenerationOwners owners)
+        float currentScience, Func<float, float> applyScienceBonus)
     {
         RuntimeLiveContentSource.Configure(dataRoot, RuntimeLiveContentSource.FalloutNewVegasGame,
             activePlugins: RuntimeLiveContentSource.ResolveVanillaPlugins(dataRoot), includeImplicitPlugins: false);
@@ -55,7 +84,11 @@ internal static class OwnedHackingProbe
             throw new FileNotFoundException("Selected owned content has no menus/falloutdict.txt.");
         var dictionary = FalloutHackingDictionary.ReadSpaceDelimited(bytes);
         var request = FalloutHackingRequest.Read(records, key, terminal.Difficulty, currentScience);
-        var result = FalloutHackingCandidates.Generate(dictionary, request, applyScienceBonus, owners);
+        var randomBefore = FalloutSharedUnsignedRandom.Process.Observation.Draws;
+        var started = Stopwatch.GetTimestamp();
+        var result = FalloutHackingCandidates.GenerateFromProcess(dictionary, request, applyScienceBonus);
+        var elapsed = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+        var draws = FalloutSharedUnsignedRandom.Process.Observation.Draws - randomBefore;
         if (!SHA256.HashData(terminal.Record.ReadData()).SequenceEqual(terminalHash) ||
             !content.TryRead("menus/falloutdict.txt", null, out var after, out var afterSource) ||
             !bytes.SequenceEqual(after) || source != afterSource)
@@ -64,7 +97,10 @@ internal static class OwnedHackingProbe
             $"terminalHash={Convert.ToHexString(terminalHash)} dictionaryHash={dictionary.SourceHash} " +
             $"wordLength={request.WordLength} requested={result.RequestedCount} retained={result.Words.Count} " +
             $"maximumAttempts={result.MaximumAttempts} sourceBytesUnchanged=true " +
-            "ownerQualification=callerRequired oracleComparison=callerRequired ordinaryInteraction=unverified");
+            $"selectionAttempts={result.SelectionAttempts} retryWindows={result.RetryWindows} sourceDraws={draws} " +
+            $"elapsedWallMilliseconds={elapsed.ToString("F3", CultureInfo.InvariantCulture)} " +
+            "randomAndClock=process-owner scienceAndPerkQualification=callerRequired " +
+            "oracleComparison=unverified ordinaryInteraction=unverified");
         return result;
     }
 }

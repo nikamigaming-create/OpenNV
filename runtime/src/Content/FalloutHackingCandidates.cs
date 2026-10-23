@@ -2,7 +2,11 @@ namespace OpenNV.Runtime.Content;
 
 // The shared random stream and source clock units remain explicit owners.
 internal sealed record FalloutHackingGenerationOwners(Func<uint, uint> Random, Func<uint> Clock,
-    uint RetryWindowTicks, CancellationToken Cancellation);
+    uint RetryWindowTicks, CancellationToken Cancellation)
+{
+    internal static FalloutHackingGenerationOwners FromProcess(CancellationToken cancellation = default) =>
+        new(FalloutSharedUnsignedRandom.Process.NextBounded, FalloutSourceMilliseconds.Read, 100, cancellation);
+}
 
 internal sealed class FalloutHackingCandidates
 {
@@ -11,13 +15,21 @@ internal sealed class FalloutHackingCandidates
     internal uint MaximumAttempts { get; }
     internal int RequestedCount { get; }
     internal string DictionaryHash { get; }
+    internal uint SelectionAttempts { get; }
+    internal uint RetryWindows { get; }
 
     private FalloutHackingCandidates(List<FalloutHackingWord> words, FalloutHackingWord answer,
-        uint attempts, int requested, string dictionaryHash)
+        uint attempts, int requested, string dictionaryHash, uint selectionAttempts, uint retryWindows)
     {
         Words = Array.AsReadOnly(words.ToArray()); Answer = answer;
         MaximumAttempts = attempts; RequestedCount = requested; DictionaryHash = dictionaryHash;
+        SelectionAttempts = selectionAttempts; RetryWindows = retryWindows;
     }
+
+    internal static FalloutHackingCandidates GenerateFromProcess(FalloutHackingDictionary dictionary,
+        FalloutHackingRequest request, Func<float, float> applyScienceBonus,
+        CancellationToken cancellation = default) =>
+        Generate(dictionary, request, applyScienceBonus, FalloutHackingGenerationOwners.FromProcess(cancellation));
 
     internal static FalloutHackingCandidates Generate(FalloutHackingDictionary dictionary,
         FalloutHackingRequest request, Func<float, float> applyScienceBonus,
@@ -40,8 +52,10 @@ internal sealed class FalloutHackingCandidates
         var zeroAdmission = 0u;
         var classLimit = unchecked(((uint)requested - 2u) / (uint)length + 1u);
         var attempts = 0u;
+        var retryWindows = 0u;
         while (true)
         {
+            retryWindows = unchecked(retryWindows + 1);
             var deadline = unchecked(owners.Clock() + owners.RetryWindowTicks);
             while (owners.Clock() < deadline)
             {
@@ -86,6 +100,6 @@ internal sealed class FalloutHackingCandidates
         for (var pass = 0; pass < 4; ++pass) FalloutHackingRules.Order(selected, owners.Random);
         var answer = selected[(int)FalloutHackingRules.Draw(owners.Random, (uint)selected.Count)];
         var allowance = FalloutHackingAllowance.Calculate(selected, owners.Cancellation);
-        return new(selected, answer, Math.Max(4u, allowance), requested, dictionary.SourceHash);
+        return new(selected, answer, Math.Max(4u, allowance), requested, dictionary.SourceHash, attempts, retryWindows);
     }
 }

@@ -6,6 +6,7 @@ internal static class HackingContracts
     internal static void Run()
     {
         HackingAllowanceContracts.Run();
+        SharedUnsignedRandomContracts.Run();
         var bytes = Encoding.ASCII.GetBytes("AABB AABC BBBC ");
         var dictionary = FalloutHackingDictionary.ReadSpaceDelimited(bytes);
         var original = bytes.ToArray();
@@ -39,7 +40,8 @@ internal static class HackingContracts
         var generated = FalloutHackingCandidates.Generate(dictionary, request, value => value,
             new(Random, () => 0, 100, CancellationToken.None));
         Require(calls.SequenceEqual(Enumerable.Repeat(2u, 16).Append(3u)) &&
-            generated.MaximumAttempts == 4 && generated.Answer.Bytes.SequenceEqual("AABB"u8),
+            generated.MaximumAttempts == 4 && generated.Answer.Bytes.SequenceEqual("AABB"u8) &&
+            generated.SelectionAttempts == 1 && generated.RetryWindows == 1,
             "Source ordering, answer draw or retained allowance changed.");
         Require(bytes.SequenceEqual(original), "Dictionary source bytes were mutated.");
         var indistinguishable = FalloutHackingDictionary.ReadSpaceDelimited("AAAA BBBB CCCC DDDD EEEE FFFF GGGG"u8);
@@ -49,7 +51,8 @@ internal static class HackingContracts
             new(bound => bound == 2 ? 1u : 0u, () => tick++, 10, CancellationToken.None));
         // The final likeness-class restriction cannot retain the seventh
         // zero-likeness candidate before the source retry relaxation ends.
-        Require(aboveFloor.RequestedCount == 7 && aboveFloor.Words.Count == 6 && aboveFloor.MaximumAttempts == 6,
+        Require(aboveFloor.RequestedCount == 7 && aboveFloor.Words.Count == 6 && aboveFloor.MaximumAttempts == 6 &&
+            aboveFloor.SelectionAttempts == 180 && aboveFloor.RetryWindows == 20,
             "Actual generation did not use its candidate-derived allowance above four.");
 
         static bool Alphabetic(byte value) => value is >= (byte)'A' and <= (byte)'Z' or >= (byte)'a' and <= (byte)'z';
