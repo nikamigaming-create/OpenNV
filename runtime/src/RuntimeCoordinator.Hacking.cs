@@ -69,7 +69,10 @@ public partial class RuntimeCoordinator
                 driver.ApplyTerminalHackingOutcome(reference.FormKey, session);
                 if (session.Stage == FalloutHackingStage.Succeeded) timer.Start();
                 else Close(false);
-            }, () => Close(false), Fail);
+            }, () => Close(false, save: false), Fail);
+            // Child exit can precede its parent's exit signal. Cancellation has
+            // no persistent outcome, so neither path saves during retirement.
+            menu.TreeExiting += () => Close(false, save: false);
             _nativeHackingLayer = layer;
             AddChild(layer); layer.AddChild(timer); layer.AddChild(menu);
             if (menu.Error is { } error) throw new InvalidOperationException(error);

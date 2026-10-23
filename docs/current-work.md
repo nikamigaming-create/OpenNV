@@ -41,7 +41,8 @@ the coordinator owns integration, Git and serialized builds. The connected runti
 compiled with zero warnings/errors. Selected hacking contracts, including new
 statistic prefix/cold/unknown controls, pass; changed-file formatting passes.
 Earlier local NU1900 failures were package advisory transport,
-not gameplay failures. No new full-suite, capture or route-only audit stream is
+not gameplay failures. The required publication gate passed; a final menu-retirement
+guard is being closed against the amended runtime. No capture or route-only audit stream is
 introduced. No ordinary hacking, campaign, XR or retail presentation acceptance is
 claimed. Recording is off; original saves remain unchanged. Private receipts:
 local/fnv-wells-fixed/hacking-integration-20261023/.
