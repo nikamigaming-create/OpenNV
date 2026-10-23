@@ -16,6 +16,12 @@ if (args is ["--owned-faction-arbitration", var factionData, var factionSave, va
     return;
 }
 
+if (args is ["--owned-campfire-branches", var campfireData])
+{
+    OwnedCampfireBranchProbe.Run(campfireData);
+    return;
+}
+
 if (args is ["--else-payload-contracts"])
 {
     ElsePayloadContracts.Run();
