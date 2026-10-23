@@ -14,11 +14,14 @@ internal static class ElsePayloadContracts
         Check("if 0\nif 0\nset value to 98\nelse (UnknownQuery (1 / 0))\nset value to 99\nendif\nendif\nset value to 3", 3);
         Check("if 0\nset value to 99\nelseif Allowed\nset value to 4\nelse (UnknownQuery (1 / 0))\nset value to 98\nendif", 4, 1);
         Check("if 1\nset value to 5\nelseif UnknownQuery\nset value to 99\nelse (UnknownQuery (1 / 0))\nset value to 98\nendif", 5);
+        Check("if 1\nset value to 6\nelse ignored\nif UnknownQuery\nset value to 99\nendif\nelseif UnknownQuery\nset value to 98\nendif", 6);
+        Check("if 0\nset value to 99\nelse if UnknownQuery\nif 1\nset value to 7\nendif\nelseif (1 / 0)\nset value to 98\nendif", 7);
+        Check("if 0\nif 0\nelse ignored\nelseif UnknownQuery\nset value to 99\nendif\nendif\nset value to 8", 8);
         foreach (var source in new[]
         {
             "else (UnknownQuery)\nendif",
             "if 1\nelse ignored\nelse ignoredAgain\nendif",
-            "if 1\nelse ignored\nelseif 1\nendif",
+            "if 1\nelse ignored\nelseif 0\nelse duplicateAfterTail\nendif",
             "if 1\nelse ignored"
         })
         {
@@ -26,8 +29,13 @@ internal static class ElsePayloadContracts
             catch (InvalidDataException) { continue; }
             throw new InvalidDataException("Ignoring Else text admitted malformed surrounding structure.");
         }
+        const string newlyAdmitted = "begin GameMode\nif 0\nelse ignored\nelseif UnknownQuery\nendif\nend";
+        Require(FalloutGameModeProgram.WasRejectedByParser(newlyAdmitted, 9) &&
+            !FalloutGameModeProgram.WasRejectedByParser(newlyAdmitted, FalloutGameModeProgram.ParserVersion) &&
+            !FalloutGameModeProgram.WasRejectedByParser("begin GameMode\nif 0\nelse ignored\nNotify \"elseif\" ; elseif 1\nendif\nend", 9),
+            "Parser migration admitted an unrelated missing owner or lost the exact old structural refusal.");
         ExerciseRetainedActivationPrefix();
-        Console.WriteLine("OPENNV_ELSE_PAYLOAD_CONTRACT_PASS taken=true untaken=true inactiveNested=true ignoredTailNeverQueried=true elseIfStillConditional=true structuralRefusals=true committedActivationRetained=true oldInvalidElseLatched=true coldNoReplay=true");
+        Console.WriteLine("OPENNV_ELSE_PAYLOAD_CONTRACT_PASS taken=true untaken=true inactiveNested=true ignoredTailNeverQueried=true elseIfStillConditional=true elseIfAfterElseDead=true nestedParentSelection=true structuralRefusals=true committedActivationRetained=true oldInvalidElseLatched=true coldNoReplay=true");
     }
 
     private static void Check(string source, double expected, int expectedQueries = 0)
@@ -56,7 +64,7 @@ internal static class ElsePayloadContracts
             var local = new byte[24]; U32(1).CopyTo(local, 0);
             // Original synthetic source: the earlier branch commits before
             // reaching the ignored Else tail, as in the owned gate failure.
-            var program = "float counter\nbegin OnActivate\nif 1\nset counter to counter + 1\nActivate\nelse (UnknownQuery (1 / 0))\nset counter to 99\nendif\nMissingAfterActivation\nend";
+            var program = "float counter\nbegin OnActivate\nif 1\nset counter to counter + 1\nActivate\nelse (UnknownQuery (1 / 0))\nset counter to 99\nelseif UnknownQuery\nset counter to 98\nendif\nMissingAfterActivation\nend";
             File.WriteAllBytes(Path.Combine(directory.FullName, "Else.esm"), Join(
                 Record("TES4", 0, Field("HEDR", new byte[12])),
                 Record("ACTI", 1, Field("SCRI", U32(0x50))),

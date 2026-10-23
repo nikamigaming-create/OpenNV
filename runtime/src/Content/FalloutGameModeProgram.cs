@@ -98,7 +98,7 @@ internal sealed class FalloutScriptExecutionBudget(int maximum = 100_000)
 // Unsupported expressions/commands stop the caller and retain its executed prefix.
 internal sealed partial class FalloutGameModeProgram
 {
-    internal const int ParserVersion = 9;
+    internal const int ParserVersion = 10;
     private readonly IReadOnlyList<string[]> _lines;
     private int _startLine = 0;
     private IReadOnlyList<bool> _enteredBranches = [];
@@ -135,7 +135,9 @@ internal sealed partial class FalloutGameModeProgram
         return Read(text, blockName, argument);
     }
 
-    internal static IReadOnlyList<FalloutScriptEventProgram> ReadEvents(string source)
+    internal static IReadOnlyList<FalloutScriptEventProgram> ReadEvents(string source) => ReadEventsCore(source, legacyElseIfGuard: false);
+
+    private static IReadOnlyList<FalloutScriptEventProgram> ReadEventsCore(string source, bool legacyElseIfGuard)
     {
         var events = new List<FalloutScriptEventProgram>();
         List<string[]>? lines = null;
@@ -192,11 +194,11 @@ internal sealed partial class FalloutGameModeProgram
             }
             if (command is "else" or "elseif")
             {
-                if (!nesting.TryPop(out var parent) || parent.Kind != "if" || parent.Else)
+                if (!nesting.TryPop(out var parent) || parent.Kind != "if" || parent.Else && (command == "else" || legacyElseIfGuard))
                     throw new InvalidDataException("Unmatched or repeated script branch.");
                 // Else keeps its original line tokens for source identity,
                 // but its trailing text has no condition semantics.
-                nesting.Push(("if", command == "else"));
+                nesting.Push(("if", parent.Else || command == "else"));
             }
             if (command is "break" or "continue" && (tokens.Length != 1 || !nesting.Any(frame => frame.Kind == "while")))
                 throw new InvalidDataException("Script loop control has no enclosing loop.");
@@ -286,9 +288,9 @@ internal sealed partial class FalloutGameModeProgram
                     break;
                 case "elseif":
                     var prior = branches.Pop();
-                    if (prior.Else) throw new InvalidDataException("Elseif follows else.");
                     active = prior.Parent && !prior.Taken && Condition(tokens);
-                    branches.Push((prior.Parent, prior.Taken || active, false));
+                    // Else has already selected this chain; a later ElseIf stays dead.
+                    branches.Push((prior.Parent, prior.Taken || active, prior.Else));
                     break;
                 case "else":
                     var other = branches.Pop();
@@ -501,6 +503,17 @@ internal sealed partial class FalloutGameModeProgram
     // migration, and current-version saves must contain every admitted owner.
     internal static bool WasRejectedByParser(string source, int version)
     {
+        if (version < 10)
+        {
+            try { _ = ReadEventsCore(source, legacyElseIfGuard: true); }
+            catch (InvalidDataException)
+            {
+                // Only a prior structural rejection of source valid today can
+                // admit a missing owner. Existing faulted owners are untouched.
+                _ = ReadEvents(source);
+                return true;
+            }
+        }
         if (version < 9 && source.Split('\n').Select(line => StripComment(line).Trim())
             .Where(line => line.Length != 0).Any(line => Tokens(line).Contains("."))) return true;
         if (version < 8 && ReadEvents(source).Count(block => block.Event.Equals("GameMode", StringComparison.OrdinalIgnoreCase)) > 1)

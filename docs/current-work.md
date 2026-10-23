@@ -1,6 +1,6 @@
 # Current work
 
-Updated 2026-10-22. Priority: fully playable vanilla Fallout: New Vegas flat mode
+Updated 2026-10-23. Priority: fully playable vanilla Fallout: New Vegas flat mode
 before repeated deep optimization. Follow docs/implementation-plan.md, including
 terminals, lockpicking, hacking and all 13 skills. Owned retail inputs stay read-only;
 no campaign or parity completion is claimed. The coordinator owns builds, native
@@ -8,32 +8,38 @@ input and Git; existing writers have disjoint scopes and run no competing jobs.
 
 ## Active block
 
-Baseline main/origin-main is 42fadb24355c05443a8e6fee75625f4106dcbcdb (PR267,
-checked and merged). Work is on codex/fnv-well2-combat-and-healing. The current
-repair is the reached P0 mixed-faction combat-assistance refusal. NotifyAssistance
-queries candidate-to-victim relation before range and line-of-sight; a logged
-candidate is not necessarily eligible to assist. The bounded private source
-contract qualifies aggregation priority ally 2 > friend 3 > enemy 1 > neutral 0.
-The signed disposition field is not part of that inspected aggregation lane.
-The input trace also disproves the unconditional shared-faction ally synthesis:
-shared AnimalFriend membership without an authored/self-overlay reaction is
-neutral. The directed pair owner must supply even same-faction reactions.
+Baseline main/origin-main is 5a7b14b893f95dc651f18156bc5bd80b68abc464 (PR268).
+The coordinator is on codex/fnv-campfire-branch in the existing checkout. PR269's
+independent optional-combat-control repair remains frozen at e7a459b5, with local
+and hosted checks passing and both source-review findings closed. It stays draft;
+merge/native acceptance remain held. No third encounter admission is permitted.
+No denied writer contact is retried or relayed.
 
-Implement the minimal shared FalloutActorThreat.Relation correction, preserving
-winning records, live faction/template membership, directional overlays, removed
-ranks and invalid-input refusal, while removing the invented shared-ally input. Debug compilation has zero warnings/errors. Focused mixed-priority, shared-neutral,
-self-reaction, malformed-input, directional-overlay and cold contracts pass.
-The owned saved coyote 157b38/gecko 10a210 pair returns enemy in both directions;
-shared CreatureFaction/AnimalFriend membership is neutral, while the authored
-Coyote/Gecko pair is enemy. All ten actor overrides, six faction overlays and saved
-template choices/RNG survive the scoped cold fixture. Source/save hashes are
-unchanged. The same owned probe against the pre-repair Release runtime reproduces
-the exact old refusal. This controlled pair is not a join to the historical logged
-victim. The required full runtime gate passes at 23:44:03 UTC: exit 0, all 2,186 frozen
-source/configuration hashes unchanged and git diff --check clean. Hosted checks
-and checked-PR publication remain pending. Do not
-change assistance distance/LOS, package, aggression or confidence guards. The independent player-enemy faction flag remains a separate
-qualification boundary; no general relationship or native-assistance parity claim.
+The reached campfire trigger reference failed while parsing its authored If /
+Else / ElseIf chain. Static qualification binds the exact winning reference,
+activator, source script and compiled control instructions. A recognized Else
+ignores its tail, selects the chain unconditionally when reached, and makes a
+later same-chain ElseIf expression/body unreachable. Nested If/EndIf retains the
+parent selection. The parser now admits that ordering while preserving Else-seen
+state, duplicate-Else/unmatched-nesting refusals, original tokens and source hash.
+It does not reinterpret spaced `else if` as a conditional alias. Parser version
+10 recognizes missing older quest owners only by reproducing the old structural
+rejection and validating the same source today; existing faulted owners remain
+latched. Missing current-version owners and unrelated legacy omissions refuse.
+
+Focused branch/no-replay contracts and the controlled owned-script probe pass.
+The latter uses the original source and compiled bindings with explicit numeric
+function inputs; callbacks check command order without applying campaign effects.
+Physical trigger delivery, ordinary gathering/cooking, quest progression and
+retail parity remain unverified. Existing retained invocation faults are not
+cleared or replayed. Old-code negative controls reproduce the exact parse refusal on both synthetic
+and original owned source. Formatting, Debug compilation (zero warnings/errors), the complete reference-script
+probe and the selected owned audit pass. The first grammar-only full gate passes (01:17:28 UTC, 2,187 hashes unchanged),
+but does not qualify the subsequent save-compatibility amendment. The amendment passes formatting, zero-warning Debug compilation, complete
+plugin/reference contract probes and the selected owned script audit. Its renewed full gate passes at 01:26:07 UTC: exit 0, all 2,187 source/configuration
+hashes unchanged, and git diff --check clean. Hosted checks and independent
+review are pending;
+source/Git/native jobs remain serialized under the coordinator.
 
 ## Gameplay and test-control checkpoint
 
@@ -108,8 +114,10 @@ attempts and normal cleanup; no third blind launch.
 
 ## Remaining completion gates
 
-- Current P0: implement and validate qualified mixed-faction aggregation, then
-  verify actual eligible/ineligible assistance when ordinary control is reliable.
+- Current P0: publish and review the qualified campfire branch/save-admission
+  repair, then continue the remaining-wells route only through reliable ordinary
+  control. Shared faction arbitration is implemented; actual eligible/ineligible
+  assistance remains unverified. Do not repeat the retired encounter admission.
 - Tutorial: complete remaining wells, delayed death counters, loot, ingredients
   and campfire cooking through ordinary input, F5 and separate-process Continue.
 - NPC packages: marker current/queued/outgoing animation and physical occupancy
