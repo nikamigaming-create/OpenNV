@@ -1,10 +1,31 @@
 using System.Text;
 using OpenNV.Runtime.Content;
+using OpenNV.Runtime.Gameplay.State;
 
 internal static class HackingContracts
 {
     internal static void Run()
     {
+        var events = new List<(int, int)>();
+        var statistics = new FalloutMiscStatistics((index, amount) => events.Add((index, amount)));
+        Require(statistics.Read(5) == 0, "Fresh computer statistic was not zero.");
+        statistics.Increment(5);
+        Require(statistics.Read(5) == 1 && events.SequenceEqual(new[] { (5, 1) }), "Computer statistic callback changed.");
+        var savedStatistics = statistics.Capture();
+        var coldStatistics = new FalloutMiscStatistics((_, _) => throw new InvalidOperationException("completion unavailable"));
+        coldStatistics.Restore(savedStatistics);
+        Reject(() => coldStatistics.Increment(5));
+        Require(coldStatistics.Read(5) == 2 && coldStatistics.Error is not null, "Failed completion lost its published statistic prefix.");
+        Reject(() => coldStatistics.Increment(5));
+        Require(coldStatistics.Read(5) == 2, "Failed completion replayed the statistic.");
+        var stoppedStatistics = coldStatistics.Capture();
+        coldStatistics.Restore(stoppedStatistics);
+        Reject(() => coldStatistics.Increment(5));
+        coldStatistics.Restore(null);
+        Reject(() => coldStatistics.Read(5));
+        Require(coldStatistics.Capture().Values.All(value => value is null), "Legacy statistics invented count history.");
+        Reject(() => statistics.Restore(new(new int?[42])));
+        Require(statistics.Read(5) == 1, "Invalid statistic replacement mutated current state.");
         HackingDisplayContracts.Run();
         HackingLayoutContracts.Run();
         HackingAllowanceContracts.Run();

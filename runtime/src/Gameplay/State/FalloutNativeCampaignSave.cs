@@ -355,6 +355,7 @@ internal static class FalloutNativeCampaignSave
         {
             new FalloutQuestObjectFlags(stack).Restore(savedScripts.Session?.QuestObjects);
             new FalloutChallenges(stack, new()).Restore(savedScripts.Challenges);
+            savedScripts.MiscStatistics?.Validate();
             using var radioWorld = new FalloutReferenceWorld(stack);
             new FalloutRadioStations(stack, radioWorld, new()).Restore(savedScripts.Radio);
             validatedValues = new FalloutScriptValueStore();

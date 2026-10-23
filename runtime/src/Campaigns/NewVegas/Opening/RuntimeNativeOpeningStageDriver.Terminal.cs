@@ -13,7 +13,8 @@ internal partial class RuntimeNativeOpeningStageDriver
     internal string? BlockingTerminalExecutionFault => _terminalMenus.Values.Select(menu => menu.BlockingError)
         .FirstOrDefault(error => error is not null);
 
-    internal string? TerminalSaveBlocker => BlockingTerminalExecutionFault is not null ? "terminal-result" :
+    internal string? TerminalSaveBlocker => _hackingReference is not null ? "terminal-hacking" :
+        BlockingTerminalExecutionFault is not null ? "terminal-result" :
         _terminalMenus.Values.Any(menu => menu.Active) ? "terminal-menu" : null;
 
     private IReadOnlyList<FalloutTerminalClosedSnapshot> CaptureTerminalResults()
@@ -81,8 +82,8 @@ internal partial class RuntimeNativeOpeningStageDriver
             throw new InvalidOperationException("Another terminal menu owns the player interaction.");
         var world = _scripts.References ?? throw new InvalidOperationException("Terminal has no world owner.");
         RequireTerminalReference(reference);
-        if (!world.UnlockWithKey(reference, _inventory))
-            throw new NotSupportedException("Locked terminal has no available password; hacking is unbound.");
+        if (!TerminalHacked(reference) && !world.UnlockWithKey(reference, _inventory))
+            throw new InvalidOperationException("Locked terminal requires its password or successful hacking outcome.");
         var conditions = new FalloutTerminalConditions(_pluginStack, _quests, world,
             target => ReferencePresentation().GetOpenState(target));
         var menu = new FalloutTerminalMenu(_pluginStack, reference, RequireTerminalAdmission,
@@ -104,7 +105,7 @@ internal partial class RuntimeNativeOpeningStageDriver
     private void RequireTerminalAdmission(FalloutFormKey reference)
     {
         RequireTerminalReference(reference);
-        if (_scripts.References!.GetLocked(reference) != 0)
+        if (!TerminalHacked(reference) && _scripts.References!.GetLocked(reference) != 0)
             throw new InvalidOperationException("Terminal selection requires its shared access owner to be unlocked.");
     }
 
