@@ -57,7 +57,8 @@ internal sealed record FalloutNativeCampaignState(
     FalloutPlayerAbilityScriptsSnapshot? PlayerAbilityScripts = null,
     FalloutMusicPlaybackSnapshot? Music = null,
     FalloutTransientExplosionsSnapshot? TransientExplosions = null,
-    FalloutFastTravelSnapshot? FastTravel = null);
+    FalloutFastTravelSnapshot? FastTravel = null,
+    FalloutReputationsSnapshot? Reputations = null);
 
 internal sealed record FalloutNativeCampaignRestore(
     FalloutNativeCampaignState State,
@@ -66,7 +67,8 @@ internal sealed record FalloutNativeCampaignRestore(
 
 internal static class FalloutNativeCampaignSave
 {
-    internal const string ExpectedSchema = "opennv-native-fnv-campaign-save/v57";
+    internal const string ExpectedSchema = "opennv-native-fnv-campaign-save/v58";
+    internal const string BeforeReputationSchema = "opennv-native-fnv-campaign-save/v57";
     internal const string BeforeTerminalHackStateSchema = "opennv-native-fnv-campaign-save/v56";
     internal const string BeforeSandboxAdmissionSchema = "opennv-native-fnv-campaign-save/v55";
     internal const string BeforeObjectPhysicsSchema = "opennv-native-fnv-campaign-save/v54";
@@ -375,6 +377,7 @@ internal static class FalloutNativeCampaignSave
             references.ValidateValueHandles();
             references.RestoreActorOverrides(state.ActorOverrides);
             references.RestoreFactionRelations(state.FactionRelations);
+            references.RestoreReputations(state.Reputations);
         }
         validatedValues?.Arrays.ValidateRestoredRoots();
         foreach (var form in validatedValues?.Arrays.Forms ?? [])
@@ -506,8 +509,19 @@ internal static class FalloutNativeCampaignSave
             throw new InvalidDataException("Earlier campaign schemas cannot own retained terminal hacking results.");
     }
 
+    private static void ValidateReputationSchema(FalloutNativeCampaignState state)
+    {
+        if (state.Schema != ExpectedSchema && state.Reputations is not null)
+            throw new InvalidDataException("Earlier campaign schemas cannot own retained reputation history.");
+        if (state.Reputations is not null && state.References is null)
+            throw new InvalidDataException("Saved reputation history has no reference world.");
+        if (state.Reputations is { } reputations) FalloutReferenceWorld.ValidateReputations(reputations);
+    }
+
     internal static FalloutNativeCampaignState AdmitPreviousOwnerSchema(FalloutNativeCampaignState state)
     {
+        ValidateReputationSchema(state);
+        if (state.Schema == BeforeReputationSchema) state = state with { Schema = ExpectedSchema };
         ValidateTerminalHackStateSchema(state);
         if (state.Schema == BeforeTerminalHackStateSchema) state = state with { Schema = ExpectedSchema };
         if (state.Schema != ExpectedSchema && state.References?.Any(reference => reference.SandboxAdmissionFailure is not null) == true)
@@ -537,6 +551,7 @@ internal static class FalloutNativeCampaignSave
         string expectedSaveCompatibilityId,
         FalloutPlayerAbilitySaveAdmission? originalAbilityAdmission)
     {
+        ValidateReputationSchema(state);
         ValidateTerminalHackStateSchema(state);
         if (state.Schema != ExpectedSchema && state.References?.Any(reference => reference.SandboxAdmissionFailure is not null) == true)
             throw new InvalidDataException("Earlier campaign schemas cannot own stopped Sandbox admission.");

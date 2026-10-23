@@ -605,6 +605,7 @@ public partial class RuntimeCoordinator
             _nativeReferences.RestoreActorOverrides(restore.State.ActorOverrides);
             _nativeReferences.RestoreDetection(restore.State.DetectionEvents);
             _nativeReferences.RestoreFactionRelations(restore.State.FactionRelations);
+            _nativeReferences.RestoreReputations(restore.State.Reputations);
         }
         else if (_nativeBootstrap is null)
         {

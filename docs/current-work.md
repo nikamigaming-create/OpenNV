@@ -8,37 +8,51 @@ input and Git; no competing jobs or denied writer contact are permitted.
 
 ## Active block
 
-Accepted main/origin-main is 76482be2068c95873d5b6ddda4e75d40bd86d3d3 (PR276).
-PR276 terminal result-state persistence passed independent review and all five checks at
-54a20829ff9f9a214e982955133348b5df559bd5 and merged at 05:41:43 UTC.
-Its v57 migration preserves unknown v56 history; the actual unchanged campaign
-reader and temporary current-codec audit pass. Its complete runtime gate passes
-with all2197 source/config files unchanged during the run. PR269 remains draft,
-native-and-merge-held. No third bot encounter or retail attempt is permitted.
+Accepted main/origin-main is 5b8406e97a40548c8304939151c163b66bb4d9d1 (PR277).
+PR277 merged at 06:21:57 UTC after independent restore re-review and all five
+exact-head checks passed at ddbfeeabd67d227f5eba670fdbdd19e7c2928b26.
+PR269 remains draft, native-and-merge-held. No third bot encounter or retail
+attempt is permitted. The accepted effective-owner query includes encounter-zone
+and current-cell inheritance; cold restore stages validated placement/ownership
+before querying effective access. This does not admit hacking or crime effects.
 
-Active branch: codex/fnv-effective-reference-ownership. The qualified effective
-owner query selects a local/live override, eligible reference-zone owner, current
-cell owner, then that cell's zone owner. Actors, DOOR, ACTI and FURN do not gain
-container ownership. The engine default zone is excluded. Rank/global selection
-is independent. Existing C# ownership inherited rank/global but omitted eligible
-owner fallback, so an actual saved TERM10872f appeared unowned despite CELL106185
-owner104c6c. The shared correction also reaches ordinary pickup item metadata.
+Active branch: codex/fnv-hacking-witness-effects. The current independent change
+binds source GetReputation/SetReputation through one world owner, object and quest
+script adapters, and ordinary campaign capture/restore. The setter writes one
+source float axis directly without clamping or AddReputation feedback. Fresh
+worlds have initialized zero; legacy missing history stays unknown per axis.
+An explicit setter establishes only that axis. Schema v58 retains source-hashed
+reputation state, admits v57/older without invented history and rejects old-schema
+payload injection. Restore validates all entries before replacing the owner.
 
-Focused contracts cover source priority, default/empty reference-zone fallthrough,
-exclusions, current-cell relocation, invalid inherited owner refusal, local override,
-ordinary pickup ownership and JSON cold restoration. The selected genuine saved
-interior terminal audit verifies source/saved inputs and inherited owner104c6c;
-original campaign/source bytes remain unchanged. Cold restoration now stages validated saved placement and ownership inside the temporary world before effective access validation. The moved-reference and same-cell override regressions pass; bad owner identity/type, non-CELL placement and malformed current metadata still reject atomically. The destination world receives no partial instances/events. Formatting and both owned audits pass. The replacement full gate passes at 06:05:36 UTC: exit0, all2199 source/config files unchanged during the run and diff check0. PR277 remains merge-held for independent re-review. These are managed ownership/retention proofs, not a native hacking or crime outcome.
-Evidence: local/fnv-wells-fixed/effective-reference-owner-20261023/.
+Debug builds, actual first-party OnActivate/GameMode shared-state contracts,
+malformed-state refusal and cold retention pass. The owned audit verifies all13
+winning REPU declarations, the actual v56 campaign reader and a temporary full
+v58 codec roundtrip with unchanged references, original save and source hashes.
+The case-identity review finding is reproduced by two old-runtime negative
+controls. The repaired map, duplicate validator and staging use the established
+case-insensitive form-key comparer; reads/writes/restores use canonical winning
+keys. Fresh and legacy alias lookup, unknown axes, canonical cold serialization
+and atomic duplicate-alias refusal pass. The repaired full gate passes at
+07:25:53 UTC: exit0, all2202 source/config files unchanged and diff check0. PR278
+remains merge-held for repaired-head re-review. These are getter/setter and
+persistence proofs, not ordinary campaign or retail-parity completion.
+Evidence: local/fnv-wells-fixed/reputation-state-20261023/case-final-result.json.
+Neutral source contract SHA256:
+F38D9AECF12D17B8B666B62252034F191A9992BFA2504E5A8B79F1BA57BC6789.
 
-The next unqualified success boundary is the actual resident-witness/process
-handoff after effective-owner resolution. It is not a direct XOWN setter or an
-optional effect inferred absent from missing XOWN. Success ordering remains
-result bit -> XP -> conditional owner/witness handoff -> statistic -> later
-contents. No partial success or guessed alarm suppression is introduced. Native
-hacking remains closed until the required effects and input/lifetime are owned.
-No XP, statistic, alarm or contents effect is committed by this change. Recording
-is off and original campaign/retail inputs remain read-only.
+AddReputation/RemoveReputation, reputation conditions, crime-triggered reputation
+and notification remain unbound. The deferred consumer is located, but its four
+source admission predicates and notification/persistence lifetime are not yet
+qualified; generic modal/paused checks cannot replace them. This is the next
+bounded source owner. Existing latched script faults are not reset or replayed.
+
+Witness candidate membership, retained observer detection and concrete process
+responses remain distinct unknown owners. No nearby-actors substitute, empty
+witness set or counter-only crime effect is added. Hacking success ordering remains
+result bit -> XP -> conditional owner/witness handoff -> statistic -> later contents.
+Native hacking stays closed until required effects and input/lifetime are owned.
+Recording is off and original campaign/retail inputs remain read-only.
 
 ## Gameplay and test-control checkpoint
 

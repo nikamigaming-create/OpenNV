@@ -783,6 +783,11 @@ internal sealed partial class FalloutQuestScripts
                         _ => _records.PerkParameters.Get(form, index, operation == "getnthperkentryvalue2" ? 1 : 0),
                     };
                 });
+            if (parts.Length == 1 && operation == "getreputation")
+                return new([FalloutScriptArgumentKind.Value, FalloutScriptArgumentKind.Number], arguments =>
+                    (References ?? throw new NotSupportedException("Reputation query has no shared world owner."))
+                    .Reputation(arguments[0].Value.FormKey(_records), arguments[1].Number))
+                { ReadOnly = true };
             if (parts.Length == 1 && operation == "getperkentrycount")
                 return new([FalloutScriptArgumentKind.Value], arguments =>
                     _records.PerkParameters.Count(arguments[0].Value.FormKey(_records)));
@@ -1098,6 +1103,14 @@ internal sealed partial class FalloutQuestScripts
                 if (arguments.Count != 1) throw new InvalidDataException("SetBroadcastState requires one state.");
                 (References ?? throw new NotSupportedException("Broadcast command has no reference owner."))
                     .SetBroadcastState(parts.Length == 1 ? instance.Quest.FormKey : ReferenceArgument(parts[0]), NumberArgument(arguments[0]));
+                return;
+            }
+            if (parts.Length == 1 && operation == "setreputation")
+            {
+                if (arguments.Count != 3) throw new InvalidDataException("SetReputation requires a reputation, axis and value.");
+                (References ?? throw new NotSupportedException("Reputation setter has no shared world owner."))
+                    .SetReputation(TryForm(arguments[0])?.FormKey ?? AuxiliaryValueOwner(NumberArgument(arguments[0])),
+                        NumberArgument(arguments[1]), NumberArgument(arguments[2]));
                 return;
             }
             if (parts.Length == 1 && operation is "setally" or "setenemy")

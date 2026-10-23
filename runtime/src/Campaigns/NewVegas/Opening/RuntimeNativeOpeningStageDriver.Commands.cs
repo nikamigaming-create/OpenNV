@@ -221,6 +221,7 @@ internal partial class RuntimeNativeOpeningStageDriver
             Ingestibles = _ingestibles.Capture(),
             ActorOverrides = _scripts.References!.CaptureActorOverrides(),
             FactionRelations = _scripts.References.CaptureFactionRelations(),
+            Reputations = _scripts.References.CaptureReputations(),
             EncounterZones = _scripts.References.CaptureEncounterZones(),
             ExplosionExposure = _player.CaptureExplosionExposure(),
             Music = _scriptMusic?.Capture()

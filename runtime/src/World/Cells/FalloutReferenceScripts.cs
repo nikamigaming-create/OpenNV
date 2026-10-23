@@ -609,6 +609,10 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                         _ => records.PerkParameters.Get(form, index, operation == "getnthperkentryvalue2" ? 1 : 0),
                     };
                 });
+            if (parts.Length == 1 && operation == "getreputation")
+                return new([FalloutScriptArgumentKind.Value, FalloutScriptArgumentKind.Number], arguments =>
+                    world.Reputation(arguments[0].Value.FormKey(records), arguments[1].Number))
+                { ReadOnly = true };
             if (parts.Length == 1 && operation == "getperkentrycount")
                 return new([FalloutScriptArgumentKind.Value], arguments =>
                     records.PerkParameters.Count(arguments[0].Value.FormKey(records)));
@@ -1142,6 +1146,9 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                     break;
                 case "setbroadcaststate" when arguments.Count == 1:
                     world.SetBroadcastState(target, Number(arguments[0]));
+                    break;
+                case "setreputation" when parts.Length == 1 && arguments.Count == 3:
+                    world.SetReputation(bindings.Form(arguments[0]).FormKey, Number(arguments[1]), Number(arguments[2]));
                     break;
                 case "setally" or "setenemy" when parts.Length == 1 && arguments.Count is >= 2 and <= 4:
                     world.SetFactionRelationship(bindings.Form(arguments[0]).FormKey, bindings.Form(arguments[1]).FormKey,
