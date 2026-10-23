@@ -12,6 +12,7 @@ internal static class BotCombatIntegrationContracts
         PersistenceFailureReleasesInput();
         OptionalCombatLimits();
         CombatPhysicsClock();
+        CombatLimitReviewRegressions();
         CombatLimitAdmission();
         CombatLimitFaultPrecedence();
         CombatLimitPersistenceOrdering();
@@ -277,6 +278,66 @@ internal static class BotCombatIntegrationContracts
         Require(!Active(bot) && PhysicsSeconds(bot) == 0 &&
             state.RootElement.GetProperty("combatPolicyStop").ValueKind == JsonValueKind.Null,
             "An arbitrary large process interval became an optional physics stop.");
+    }
+
+    private static void CombatLimitReviewRegressions()
+    {
+        var failures = new List<string>();
+        foreach (var timeBound in new[] { false, true })
+            foreach (var (change, kind) in new (Func<BotCombatObservation, BotCombatObservation>, string)[]
+            {
+            (value => value with { Targets = [] }, "observation-loss"),
+            (value => value with { Targets = [value.Targets[0], value.Targets[0]] }, "observation-loss"),
+            (value => value with { Targets = [value.Targets[0] with { Error = "target owner" }] }, "engine-owner"),
+            (value => value with { Targets = [value.Targets[0] with { Health = null }] }, "engine-owner"),
+            (value => value with { Weapon = null }, "engine-owner"),
+            (value => value with { Weapon = value.Weapon! with { Error = "weapon owner" } }, "engine-owner"),
+            (value => value with { Weapon = value.Weapon! with { Supported = false } }, "skill-limit"),
+            (value => value with { Weapon = value.Weapon! with { Ammunition = "changed" } }, "observation-loss"),
+            (value => value with { Weapon = value.Weapon! with { Loaded = -1 } }, "observation-loss"),
+            (value => value with { Firing = value.Firing with { Error = "firing owner" } }, "engine-owner")
+            })
+            {
+                var combat = Observation(); var library = new VerifiedBotSkillLibrary();
+                var inputs = new List<SteeringIntent>();
+                var bot = new ReactiveReferenceBot(_ => Goal(combat), (_, end, _) => new([end], end, end, true),
+                    (intent, _) => inputs.Add(intent), skills: library);
+                bot.Start(null, "combat", 1.5f, minimumCombatHitPoints: timeBound ? null : 90,
+                    maximumCombatSimulationSeconds: timeBound ? .125f : null);
+                bot.Tick(.016f);
+                combat = change(combat with { Sample = 2, HitPoints = 90 });
+                bot.AdvanceCombatPhysics(.125f); bot.Tick(.016f);
+                using var state = JsonSerializer.SerializeToDocument(bot.State);
+                if (Active(bot) || library.Feedback.Last().FailureKind != kind || library.Feedback.Last().Success ||
+                    library.Feedback.Last().Receipts.Count != 0 || PhysicsSeconds(bot) != 0 ||
+                    state.RootElement.GetProperty("combatPolicyStop").ValueKind != JsonValueKind.Null)
+                    failures.Add($"{(timeBound ? "time" : "HP")} masked {kind} source owner");
+            }
+        foreach (var completedShot in new[] { false, true })
+        {
+            var combat = Observation(); var library = new VerifiedBotSkillLibrary(); var persisted = 0;
+            var inputs = new List<SteeringIntent>();
+            var bot = new ReactiveReferenceBot(_ => Goal(combat), (_, end, _) => new([end], end, end, true),
+                (intent, _) => inputs.Add(intent), skills: library, persistSkills: () => persisted++);
+            bot.Start(null, "combat", 1.5f, minimumCombatHitPoints: 90);
+            bot.Tick(.016f); // The ordinary skill has a pending shot.
+            combat = combat with { Sample = 2 };
+            bot.AdvanceCombatPhysics(.125f); // Early physics sees 100 HP at sample 2.
+            // Later actor physics changes vitals and may complete the shot in that SAME sample.
+            combat = (completedShot ? Discharge(combat) : combat) with { Sample = 2, HitPoints = 90 };
+            bot.Tick(.016f);
+            using var state = JsonSerializer.SerializeToDocument(bot.State);
+            var stop = state.RootElement.GetProperty("combatPolicyStop");
+            if (Active(bot) || stop.ValueKind != JsonValueKind.Object ||
+                stop.GetProperty("HitPoints").GetSingle() != 90 ||
+                library.Feedback.Last().Success || library.Feedback.Last().Receipts.Count != 0 ||
+                inputs.Count(value => value.Pause) != 1 || persisted != 1 || PhysicsSeconds(bot) != .125f)
+                failures.Add($"physics-first same-sample HP stop lost (completion={completedShot})");
+            var inputCount = inputs.Count;
+            bot.AdvanceCombatPhysics(.125f); bot.Tick(.016f);
+            if (inputs.Count != inputCount || persisted != 1) failures.Add("Stopped callbacks duplicated Pause/persistence.");
+        }
+        Require(failures.Count == 0, "Combat review regressions: " + string.Join("; ", failures));
     }
 
     private static float PhysicsSeconds(ReactiveReferenceBot bot)
