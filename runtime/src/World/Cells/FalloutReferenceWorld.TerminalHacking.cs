@@ -4,13 +4,13 @@ namespace OpenNV.Runtime.World.Cells;
 
 // A known result byte, not the physical presence of a retail extra allocation.
 // Null snapshots retain unknown historical state; generic locks are independent.
-internal sealed record FalloutTerminalHackState(string ReferenceSha256, byte RawState)
+internal sealed record FalloutTerminalHackState(string ReferenceSha256, byte RawState, string? Error = null)
 {
     internal bool Hacked => (RawState & 0x80) != 0;
     internal int Failures => RawState & 0x7f;
     internal void Validate()
     {
-        if (ReferenceSha256 is not { Length: 64 } || !ReferenceSha256.All(Uri.IsHexDigit))
+        if (ReferenceSha256 is not { Length: 64 } || !ReferenceSha256.All(Uri.IsHexDigit) || Error is { Length: 0 })
             throw new InvalidDataException("Saved terminal hacking state has no source identity.");
     }
 }
@@ -39,6 +39,7 @@ internal sealed partial class FalloutReferenceWorld
     internal void SetTerminalHacked(FalloutFormKey reference, bool hacked)
     {
         var state = TerminalHackResult(reference);
+        if (state.Error is not null) throw new InvalidOperationException("Terminal hacking retains its outcome failure: " + state.Error);
         Get(reference).TerminalHackState = state with
         {
             RawState = (byte)(hacked ? state.RawState | 0x80 : state.RawState & 0x7f)
@@ -48,6 +49,7 @@ internal sealed partial class FalloutReferenceWorld
     internal void SetTerminalHackFailure(FalloutFormKey reference, bool failed)
     {
         var state = TerminalHackResult(reference);
+        if (state.Error is not null) throw new InvalidOperationException("Terminal hacking retains its outcome failure: " + state.Error);
         Get(reference).TerminalHackState = state with
         {
             RawState = failed ? unchecked((byte)(state.RawState + 1)) : (byte)0

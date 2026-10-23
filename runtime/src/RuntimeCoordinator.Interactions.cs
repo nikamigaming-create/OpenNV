@@ -146,14 +146,15 @@ public partial class RuntimeCoordinator
         var player = actor == _nativePluginStack!.RuntimeFormKey(0x14);
         if (!player && (type != "DOOR" || !world.CanNpcOpenDoor(reference.FormKey, actor)))
             throw new NotSupportedException($"Default interaction by {actor} requires an ordinary door admitting that NPC.");
-        if (player && type is "DOOR" or "CONT" or "TERM" && !world.UnlockWithKey(reference.FormKey, _nativeInventory))
+        var hacked = type == "TERM" && _nativeOpeningStageDriver!.TerminalHacked(reference.FormKey);
+        if (player && type is "DOOR" or "CONT" or "TERM" && !hacked && !world.UnlockWithKey(reference.FormKey, _nativeInventory))
         {
             if (type is "DOOR" or "CONT")
             {
                 OpenNativeLockpick(reference);
                 return;
             }
-            GD.Print($"OPENNV_NATIVE_LOCKED reference={reference.FormKey} level={world.Lock(reference.FormKey)!.Level}");
+            OpenNativeHacking(reference);
             return;
         }
         if (type == "DOOR")

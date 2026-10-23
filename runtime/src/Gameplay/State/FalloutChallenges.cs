@@ -57,6 +57,7 @@ internal sealed class FalloutChallenges(FalloutPluginStack records, FalloutHudNo
     private readonly Dictionary<FalloutFormKey, FalloutChallengeDefinition> _definitions = [];
     private readonly Dictionary<FalloutFormKey, FalloutChallengeSnapshot> _state = [];
     private FalloutChallengeDefinition[]? _completionStatistics;
+    private readonly Dictionary<ushort, FalloutChallengeDefinition[]> _statistics = [];
     internal int ChallengesCompleted { get; private set; }
     private FalloutChallengeDefinition Definition(FalloutFormKey form)
     {
@@ -76,6 +77,38 @@ internal sealed class FalloutChallenges(FalloutPluginStack records, FalloutHudNo
         var definition = Definition(form);
         // The native command searches only the scripted challenge bucket.
         if (definition.Type == 13) Increment(definition);
+    }
+    private FalloutChallengeDefinition[] Statistics(ushort index)
+    {
+        if (!_statistics.TryGetValue(index, out var definitions))
+            _statistics.Add(index, definitions = records.EffectiveRecordsInRegistrationOrder("CHAL")
+                .Select(record => Definition(record.FormKey)).Where(value => value.Type == 11 && value.Value1 == index).ToArray());
+        return definitions;
+    }
+    internal void RequireStatisticIncrement(ushort index)
+    {
+        foreach (var definition in Statistics(index))
+        {
+            var state = State(definition.Record.FormKey);
+            if (state.Error is not null) throw new NotSupportedException("Statistic challenge retains its completion failure.");
+            if (Locked(definition.Record.FormKey) || state.Completed && !definition.Recurring) continue;
+            if (state.Progress == int.MaxValue) throw new OverflowException("Challenge progress is exhausted.");
+            if (state.Progress + 1 >= definition.Threshold)
+            {
+                if (definition.Script is not null)
+                    throw new NotSupportedException("Statistic challenge completion requires its immediate player script owner.");
+                if (index != 27)
+                {
+                    if (ChallengesCompleted == int.MaxValue) throw new OverflowException("Challenge completion count is exhausted.");
+                    RequireStatisticIncrement(27);
+                }
+            }
+        }
+    }
+    internal void IncrementStatistic(ushort index, int amount)
+    {
+        if (amount != 1) throw new NotSupportedException("Statistic challenge updates currently require one event.");
+        foreach (var definition in Statistics(index)) Increment(definition);
     }
     private void Increment(FalloutChallengeDefinition definition)
     {

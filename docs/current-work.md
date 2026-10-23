@@ -4,52 +4,47 @@ Updated 2026-10-23. Priority: fully playable vanilla Fallout: New Vegas flat mod
 before repeated deep optimization. Follow docs/implementation-plan.md, including
 terminals, lockpicking, hacking and all 13 skills. Owned retail inputs stay read-only;
 no campaign or parity completion is claimed. The coordinator owns builds, native
-input and Git; no competing jobs or denied writer contact are permitted.
+input and Git; no competing jobs are permitted. The existing writer is explicitly authorized.
 
 ## Active block
 
-Accepted main/origin-main is 26cabbf29562087d60a0baf74b46db878e7211d1 (PR294),
-merged 20:49:03 UTC after independent exact-head review and all five hosted checks.
-The script percentage getter now shares the existing reputation ratio owner in
-both executors, with strict script selectors and unknown-history refusal. No
-installed SCPT use was found, so no campaign progression is claimed. Local main
-was fast-forwarded to origin/main; the next slice's WIP was preserved separately.
-Completed branch cleanup uses an independently recovered Git bundle and exact
-squash-tree equality. Original saves remain unchanged.
+Accepted main/origin-main is b6836fecb8847f2d743c3561c959db003bbce92c (PR295),
+merged after exact-head independent review and all five hosted checks. Both script
+executors now share GetDestructionStage with explicit known/unknown object-health
+presence, separate from rendering Stage/ModelStage. Actor maximum health, complete
+trap activation and DamageObject scheduling remain outside that query repair.
+Local main was synchronized; the completed branch has a verified complete Git
+bundle with an identical tree to the accepted squash commit and is removed.
 
-Active branch: codex/fnv-script-destruction-stage. Authored destructible-object
-scripts, including grenade-trap checks, need GetDestructionStage. The implemented
-shared query distinguishes known missing, known present and unknown object health
-independently of rendered destruction Stage/ModelStage. Model attachment does not
-create health history; accepted native damage commits establish presence. Explicit
-presence and existing source-hashed health survive first-party capture/restore.
-Older absent evidence stays unknown. This does not claim retail save-lifetime parity.
+Active branch: codex/fnv-terminal-hacking. Locked keyless TERM activation now
+connects to the existing owned-dictionary/shared-RNG hacking transaction through
+a first-party mouse/keyboard character grid. Both columns, word/bracket selection,
+dud removal, attempts, cancel and terminal outcomes remain transaction-owned.
+Success publishes the independent terminal high bit, shared player XP and the
+Computers Hacked statistic/CHAL handoff, then opens actual terminal contents after
+the source success delay. Lockout increments the retained result byte once.
+Generic Unlock and row-zero result execution are not substitutes. Active puzzles
+block saves; cancellation and external layer retirement release input and restore
+pause/mouse state, including teardown during the success delay. Teardown neither
+opens contents nor saves a retiring campaign. Outcome failures retain consumed
+state and diagnostics instead of replaying XP/statistic callbacks.
 
-Both script executors now route the no-operand getter through this shared owner.
-Absent context and known missing health return -1; malformed targets refuse, and
-known-present actor health still requires its separate maximum-health owner.
-Nonactor results use the source float-narrowed ceiling percentage and first
-strictly lower DSTD threshold ordinal. Queries are deferred/read-only; dead branches
-do not resolve missing receivers. A focused compile/regression passes object and
-quest calls, full/present versus missing health, source threshold equality, cold
-known/unknown and atomic invalid restore. Changed-file whitespace formatting and
-diff checks pass. This slice is being published for brief exact-head code review;
-the implementation-first direction limits verification to the changed owner.
-No fresh broad suite, native capture or ordinary trap outcome is claimed.
-DamageObject scheduling, actor health and complete trap activation/effects remain
-outside this query repair. Historical script errors are not cleared or replayed.
+Initial admission is flat, effectively unowned, nonleveled/non-overridden TERM,
+known result/stat history, ASCII dictionary and no acquired generation perk
+entries. Crime/witness, Science-bonus entry context, unknown legacy history and XR
+remain visible refusals. IgnoreLockedTerminal uses entry20 only at failure count1.
+Fresh statistic counts start at zero; missing saved counts stay unknown through
+restore/resave. Existing saves are not inferred from CHAL progress or inventory.
 
-The user has explicitly authorized coordinating the existing writer chat. The
-writer is assigned only new Presentation/Ui/NativeHackingMenu.cs: actual ordinary
-mouse/keyboard input over the existing hacking transaction. The coordinator owns
-all other files, locked-TERM admission/consequence integration, Git and serial
-build/runtime jobs. No new chat/worktree or competing job is introduced. The panel
-is not itself terminal-hacking admission or a completed gameplay claim.
-
-No new route-only audit or proof-only publication is being pursued. The prior
-paused route-inspection session closed through real Quit/Yes controls; no ordinary
-lockpick attempt was completed. Website-copy proposal remains unapplied. Recording
-is off. Private receipts: local/fnv-wells-fixed/destruction-query-20261023/.
+The existing writer delivered NativeHackingMenu.cs and FalloutMiscStatistics.cs;
+the coordinator owns integration, Git and serialized builds. The connected runtime
+compiled with zero warnings/errors. Selected hacking contracts, including new
+statistic prefix/cold/unknown controls, pass; changed-file formatting passes.
+Earlier local NU1900 failures were package advisory transport,
+not gameplay failures. No new full-suite, capture or route-only audit stream is
+introduced. No ordinary hacking, campaign, XR or retail presentation acceptance is
+claimed. Recording is off; original saves remain unchanged. Private receipts:
+local/fnv-wells-fixed/hacking-integration-20261023/.
 
 Static ACTI trap activation remains a separate parked owner. A real production
 DefaultActivate route exists, but the selected controller-free trap cannot supply
