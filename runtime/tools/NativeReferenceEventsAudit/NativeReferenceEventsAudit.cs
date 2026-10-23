@@ -20,6 +20,14 @@ public partial class NativeReferenceEventsAudit : Node
         RuntimeNativePlayer? player = null;
         try
         {
+            if (OS.GetCmdlineUserArgs() is ["--owned-lockpick-session", var lockpickGame])
+            {
+                OwnedLockpickSession(lockpickGame); GetTree().Quit(); return;
+            }
+            if (OS.GetCmdlineUserArgs() is ["--lockpick-input"])
+            {
+                await LockpickInput(); GetTree().Quit(); return;
+            }
             if (OS.GetCmdlineUserArgs() is ["--owned-jukebox-composition", var jukeboxGame])
             {
                 await OwnedJukeboxComposition(jukeboxGame); GetTree().Quit(); return;
@@ -302,6 +310,7 @@ public partial class NativeReferenceEventsAudit : Node
             AnimatedActivators(records);
             DisabledSpeech(records);
             HitEvents();
+            await LockpickInput();
             GD.Print("OPENNV_NATIVE_REFERENCE_EVENTS_AUDIT_PASS physicalContacts=true primitiveHalfExtents=true axisConversion=true modelLess=true leave=true reentry=true retainedContacts=true retainedOnLoad=true activation=true faultReentryRetained=true faultActivationRetained=true localState=true delayedDeath=true killerFilter=true questDeathResult=true livePerkParameters=true parity=unverified");
         }
         catch (Exception error)

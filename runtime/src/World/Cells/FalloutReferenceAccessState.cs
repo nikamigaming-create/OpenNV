@@ -4,7 +4,8 @@ namespace OpenNV.Runtime.World.Cells;
 
 // Overrides retain the winning placed declaration, independently of its script.
 // Difficulty and access are separate: unlocking never erases the source lock.
-internal sealed record FalloutReferenceLockState(string ReferenceSha256, int Level, bool Locked)
+internal sealed record FalloutReferenceLockState(string ReferenceSha256, int Level, bool Locked,
+    uint? FailedPickAttempts = null, uint? PickRewardCount = null)
 {
     internal void Validate()
     {

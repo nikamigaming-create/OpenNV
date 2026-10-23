@@ -9,9 +9,21 @@ internal sealed partial class FalloutReferenceWorld
 {
     private sealed record AccessSource(FalloutPluginRecord Record, string Sha256,
         IReadOnlyList<FalloutPluginSubrecord> Fields);
-    private sealed record LockDeclaration(int Level, FalloutFormKey? Key, byte Flags, bool InitiallyLocked = true);
+    private sealed record LockDeclaration(int Level, FalloutFormKey? Key, byte Flags, bool InitiallyLocked = true,
+        uint? FailedPickAttempts = null, uint? PickRewardCount = null);
     private readonly Dictionary<FalloutFormKey, AccessSource> _accessSources = [];
     private readonly Dictionary<FalloutFormKey, AccessSource> _terminalAccessSources = [];
+    private readonly Dictionary<FalloutFormKey, LockDeclaration> _lockDeclarations = [];
+    private sealed class RepeatedLockDeclarations : IFalloutSourceIndex
+    {
+        internal readonly HashSet<FalloutFormKey> Repeated = new(FalloutFormKeyComparer.Instance);
+        internal RepeatedLockDeclarations(FalloutPluginStack stack)
+        {
+            var seen = new HashSet<FalloutFormKey>(FalloutFormKeyComparer.Instance);
+            foreach (var record in stack.Plugins.SelectMany(plugin => plugin.Plugin.Records))
+                if (record.Signature is "REFR" or "ACHR" or "ACRE" && !seen.Add(record.FormKey)) Repeated.Add(record.FormKey);
+        }
+    }
 
     private AccessSource Access(FalloutFormKey reference)
     {
@@ -117,11 +129,21 @@ internal sealed partial class FalloutReferenceWorld
 
     private LockDeclaration ReadReferenceLock(AccessSource source, ReadOnlyMemory<byte> field)
     {
+        if (_lockDeclarations.TryGetValue(source.Record.FormKey, out var retained)) return retained;
         if (field.Length is not (12 or 20)) throw new InvalidDataException("Reference lock has an invalid extent.");
         var key = source.Record.Plugin.AdjustOptionalFormId(BinaryPrimitives.ReadUInt32LittleEndian(field.Span[4..]));
         if (key is { } form && records.GetEffective(form).Signature != "KEYM")
             throw new InvalidDataException("Reference lock key is not a KEYM form.");
-        return new(field.Span[0], key, field.Span[8]);
+        // Full declarations contain retained histories, not padding. A short
+        // overriding declaration may reuse earlier tails; that load join is
+        // deliberately unknown rather than reconstructed from the winner.
+        var fresh = field.Length == 20 || !records.ReadSourceIndex<RepeatedLockDeclarations>(
+            (stack, _) => new(stack)).Repeated.Contains(source.Record.FormKey);
+        uint? failures = field.Length == 20 ? BinaryPrimitives.ReadUInt32LittleEndian(field.Span[12..]) : fresh ? 0u : null;
+        uint? rewards = field.Length == 20 ? BinaryPrimitives.ReadUInt32LittleEndian(field.Span[16..]) : fresh ? 0u : null;
+        var declaration = new LockDeclaration(field.Span[0], key, field.Span[8], FailedPickAttempts: failures, PickRewardCount: rewards);
+        _lockDeclarations.Add(source.Record.FormKey, declaration);
+        return declaration;
     }
 
     private AccessSource ReciprocalDoorSource(AccessSource source)
@@ -175,7 +197,8 @@ internal sealed partial class FalloutReferenceWorld
         var declaration = LockSource(owner, source);
         var state = instance?.LockState ?? (declaration is null ? null :
             new FalloutReferenceLockState(LockSourceHash(owner, source), declaration.Level,
-                declaration.InitiallyLocked && instance?.Unlocked != true));
+                declaration.InitiallyLocked && instance?.Unlocked != true,
+                declaration.FailedPickAttempts, declaration.PickRewardCount));
         return (state, declaration);
     }
 
@@ -197,7 +220,9 @@ internal sealed partial class FalloutReferenceWorld
         var owner = LockOwner(reference);
         var instance = Get(owner);
         instance.LockState = new(LockSourceHash(owner, Access(owner)),
-            difficulty == 0 ? state?.Level ?? 0 : unchecked((byte)difficulty), true);
+            difficulty == 0 ? state?.Level ?? 0 : unchecked((byte)difficulty), true,
+            state?.FailedPickAttempts ?? (state is null ? 0u : null),
+            state?.PickRewardCount ?? (state is null ? 0u : null));
         instance.Unlocked = false;
     }
 
@@ -207,7 +232,7 @@ internal sealed partial class FalloutReferenceWorld
         var (state, _) = EffectiveLock(reference);
         if (state is null) return;
         var instance = Get(LockOwner(reference));
-        instance.LockState = state with { Locked = false };
+        instance.LockState = state with { Locked = false, FailedPickAttempts = 0 };
         instance.Unlocked = true;
     }
 
