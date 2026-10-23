@@ -16,6 +16,7 @@ internal static class QuestStateQueryContracts
         }
         if (selected is null)
         {
+            RunObjective();
             foreach (var shared in new[] { false, true })
             {
                 ShortCircuit(shared);
@@ -27,8 +28,59 @@ internal static class QuestStateQueryContracts
             }
         }
         Console.WriteLine("OPENNV_QUEST_STATE_QUERY_CONTRACT_PASS fallbackAndShared=true liveState=true " +
-            "runningIndependentFromCompleted=true coldExact=true invalidTargetsRefused=true " +
-            "shortCircuit=true failurePrefixLatched=true ordinaryGameplay=unverified");
+            $"runningIndependentFromCompleted=true coldExact=true fullSuite={(selected is null ? "true" : "false")} " +
+            $"invalidTargetAndShortCircuitChecks={(selected is null ? "passed" : "not-run")} ordinaryGameplay=unverified");
+    }
+
+    internal static void RunObjective(string? selected = null)
+    {
+        bool[] executors = selected == "fallback" ? [false] : selected == "shared" ? [true] : [false, true];
+        foreach (var shared in executors)
+        {
+            using var fixture = new Fixture("set prefix to prefix + 1\nset result to GetObjectiveCompleted TargetQuest 10\nset suffix to suffix + 1", shared);
+            fixture.Tick(); fixture.Expect(0, 1);
+            fixture.Quests.ApplyObjective(fixture.Target, 10, display: true, value: true);
+            fixture.Tick(); fixture.Expect(0, 2);
+            fixture.Quests.ApplyObjective(fixture.Target, 10, display: false, value: true);
+            fixture.Quests.ApplyObjective(fixture.Target, 10, display: true, value: false);
+            fixture.Tick(); fixture.Expect(1, 3);
+            Require(!fixture.Quests.ObjectiveDisplayed(fixture.Target, 10), "Completion query displayed a hidden objective.");
+            fixture.Quests.Complete(fixture.Target);
+            fixture.Quests.ApplyObjective(fixture.Target, 10, display: false, value: false);
+            fixture.Tick(); fixture.Expect(0, 4);
+            fixture.Quests.ApplyObjective(fixture.Target, 10, display: false, value: true);
+            fixture.Quests.SetRunning(fixture.Target, false);
+            var before = JsonSerializer.Serialize(fixture.Quests.Capture().Single(value => value.Quest == fixture.Target));
+            fixture.Tick(); fixture.Expect(1, 5);
+            Require(JsonSerializer.Serialize(fixture.Quests.Capture().Single(value => value.Quest == fixture.Target)) == before,
+                "Objective query changed target state, flags or objective declarations.");
+            var quests = JsonSerializer.Serialize(fixture.Quests.Capture());
+            var scripts = JsonSerializer.Serialize(fixture.Scripts.Capture());
+            using var cold = new Fixture(fixture.Body, shared, initialize: false);
+            cold.Quests.Restore(RoundTrip(fixture.Quests.Capture().ToArray()));
+            cold.Scripts.Restore(RoundTrip(fixture.Scripts.Capture()));
+            Require(JsonSerializer.Serialize(cold.Quests.Capture()) == quests && JsonSerializer.Serialize(cold.Scripts.Capture()) == scripts,
+                "Cold restore changed objective flags, values, counters or clocks.");
+            cold.Tick(); cold.Expect(1, 6);
+            foreach (var index in new[] { "0", "4294967295", "11" })
+            {
+                using var boundary = new Fixture($"set prefix to prefix + 1\nset result to GetObjectiveCompleted TargetQuest {index}\nset suffix to suffix + 1", shared);
+                boundary.Tick(); boundary.Expect(0, 1);
+                if (index == "11") continue;
+                boundary.Quests.ApplyObjective(boundary.Target, uint.Parse(index, System.Globalization.CultureInfo.InvariantCulture), display: false, value: true);
+                boundary.Tick(); boundary.Expect(1, 2);
+            }
+            using var unselected = new Fixture("if 0 && GetObjectiveCompleted MissingQuest 10\nset result to 99\nendif\n" +
+                "if 1 || GetObjectiveCompleted BadGlobal -1\nset result to 7\nendif\nset suffix to 1", shared);
+            unselected.Tick();
+            Require(unselected.Error is null && unselected.Value(2) == 7 && unselected.Value(3) == 1,
+                "Unselected objective query resolved a target or validated an unselected argument.");
+            foreach (var target in new[] { "BadGlobal 10", "MissingQuest 10", "TargetQuest -1", "TargetQuest .5", "TargetQuest 4294967296", "TargetQuest 1e309", "TargetQuest", "TargetQuest 10 11" })
+                Refusal("GetObjectiveCompleted", target, shared);
+            Refusal("GetObjectiveCompleted", "TargetQuest 10", shared, bindTarget: false);
+        }
+        Console.WriteLine($"OPENNV_OBJECTIVE_QUERY_CONTRACT_PASS executors={selected ?? "fallback-and-shared"} " +
+            "independentFlags=true uintBoundaries=true invalidArgumentsRefused=true shortCircuit=true coldExact=true prefixRetained=true gameplay=unverified");
     }
 
     private static void Exercise(string query, bool shared)
@@ -148,14 +200,14 @@ internal static class QuestStateQueryContracts
             if (expectPrefixFailure)
             {
                 var tokens = statements[program.LastStatement];
-                Require(error.Message == "NVSE expression has an unbound operation." &&
+                Require(program.LastStatement == 83 && error.Message == "NVSE expression has an unbound operation." &&
                     tokens[0] == "if" && tokens.Contains("GetObjectiveCompleted") &&
                     tokens.Contains("gethasnote") && quests.Variable(quest.FormKey, locals["iCounter"]) == counter + 1,
                     "Owned query prefix did not reach the diagnosed independent condition refusal.");
                 var questState = JsonSerializer.Serialize(quests.Capture());
                 var scriptState = JsonSerializer.Serialize(scripts.Capture());
-                try { scripts.AdvanceClaimed(quest.FormKey, 10, new((_, _) => throw new InvalidDataException("Unexpected stage replay."), _ => 0)); }
-                catch (NotSupportedException retained) when (retained.Message == error.Message) { }
+                RequireRetainedRefusal(() => scripts.AdvanceClaimed(quest.FormKey, 10,
+                    new((_, _) => throw new InvalidDataException("Unexpected stage replay."), _ => 0)), error.Message);
                 Require(JsonSerializer.Serialize(quests.Capture()) == questState && JsonSerializer.Serialize(scripts.Capture()) == scriptState,
                     "Retry changed the consumed owned prefix or cleared its refusal.");
                 using var coldWorld = new FalloutReferenceWorld(records);
@@ -166,8 +218,8 @@ internal static class QuestStateQueryContracts
                 coldScripts.Restore(RoundTrip(scripts.Capture()));
                 Require(JsonSerializer.Serialize(coldQuests.Capture()) == questState && JsonSerializer.Serialize(coldScripts.Capture()) == scriptState,
                     "Cold restore changed the owned query prefix or retained error.");
-                try { coldScripts.AdvanceClaimed(quest.FormKey, 10, new((_, _) => throw new InvalidDataException("Unexpected cold stage replay."), _ => 0)); }
-                catch (NotSupportedException retained) when (retained.Message == error.Message) { }
+                RequireRetainedRefusal(() => coldScripts.AdvanceClaimed(quest.FormKey, 10,
+                    new((_, _) => throw new InvalidDataException("Unexpected cold stage replay."), _ => 0)), error.Message);
                 Require(JsonSerializer.Serialize(coldQuests.Capture()) == questState && JsonSerializer.Serialize(coldScripts.Capture()) == scriptState,
                     "Cold retry changed the consumed owned prefix or cleared its refusal.");
                 Require(SHA256.HashData(source.ReadData()).SequenceEqual(hash), "Owned script bytes changed.");
@@ -214,7 +266,8 @@ internal static class QuestStateQueryContracts
             var bindings = new[] { Field("SCRO", U32(0x300)) }.Concat(bindTarget ? new[] { Field("SCRO", U32(0x100)) } : []);
             File.WriteAllBytes(Path.Combine(_directory.FullName, "QuestQueries.esm"), Join(
                 Record("TES4", 0, Field("HEDR", new byte[12])),
-                Record("QUST", 0x100, Field("EDID", Text("TargetQuest")), Field("DATA", [0, 0])),
+                Record("QUST", 0x100, Field("EDID", Text("TargetQuest")), Field("DATA", [0, 0]),
+                    Field("QOBJ", U32(0)), Field("QOBJ", U32(10)), Field("QOBJ", U32(uint.MaxValue))),
                 Record("QUST", 0x101, Field("EDID", Text("CallerQuest")), Field("SCRI", U32(0x200)), Field("DATA", [0, 0])),
                 Record("GLOB", 0x300, Field("EDID", Text("BadGlobal")), Field("FNAM", [(byte)'f']), Field("FLTV", new byte[4])),
                 Record("SCPT", 0x200, new[] { Field("SCHR", header) }.Concat(bindings)
@@ -241,6 +294,13 @@ internal static class QuestStateQueryContracts
     }
 
     private static T RoundTrip<T>(T value) => JsonSerializer.Deserialize<T>(JsonSerializer.Serialize(value))!;
+    private static void RequireRetainedRefusal(Action invoke, string expected)
+    {
+        var refused = false;
+        try { invoke(); }
+        catch (NotSupportedException error) when (error.Message == expected) { refused = true; }
+        Require(refused, "Retry did not explicitly throw its retained source error.");
+    }
     private static void Require(bool condition, string message) { if (!condition) throw new InvalidDataException(message); }
     private static byte[] U32(uint value) => BitConverter.GetBytes(value);
     private static byte[] Text(string value) => Encoding.ASCII.GetBytes(value + '\0');

@@ -887,6 +887,14 @@ internal sealed partial class FalloutQuestScripts
                         .IsTagged(arguments[0].Identifier!) ? 1 : 0)
                 { ReadOnly = true },
                 "abs" => new([FalloutScriptArgumentKind.Number], arguments => Math.Abs(arguments[0].Number)),
+                "getobjectivecompleted" => new([FalloutScriptArgumentKind.Identifier, FalloutScriptArgumentKind.Number], arguments =>
+                {
+                    var quest = Quest(arguments[0].Identifier!).FormKey;
+                    var value = arguments[1].Number;
+                    var index = value >= 0 && value <= uint.MaxValue && value == Math.Truncate(value) ? (uint)value :
+                        throw new InvalidDataException("Script objective index is invalid.");
+                    return _quests.ObjectiveCompleted(quest, index) ? 1 : 0;
+                }),
                 "getobjectivedisplayed" => new([FalloutScriptArgumentKind.Identifier, FalloutScriptArgumentKind.Number], arguments =>
                 {
                     var index = arguments[1].Number;
