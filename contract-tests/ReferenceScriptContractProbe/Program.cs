@@ -4,6 +4,18 @@ using System.Text.Json;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.World.Cells;
 
+if (args is ["--objective-query-contracts"])
+{
+    QuestStateQueryContracts.RunObjective();
+    return;
+}
+
+if (args is ["--objective-query-contracts", var objectiveExecutor] && objectiveExecutor is "fallback" or "shared")
+{
+    QuestStateQueryContracts.RunObjective(objectiveExecutor);
+    return;
+}
+
 if (args is ["--quest-state-query-contracts"])
 {
     QuestStateQueryContracts.Run();

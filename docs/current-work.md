@@ -8,48 +8,58 @@ input and Git; no competing jobs or denied writer contact are permitted.
 
 ## Active block
 
-Accepted main/origin-main is 09a6d6f6eac93152ff71513ecb271ab4087ab209 (PR284),
-merged 12:52:21 UTC after independent review and all five exact-head checks passed.
-The integrated INFO/TERM slice passed its full gate at12:41:12 UTC with2208
-source/config hashes unchanged. Empty results preserve metadata/caller admission;
-these component proofs do not establish ordinary terminal access or campaign parity.
-
-Branch reconciliation verified all merged tips, including six exact squash trees.
-Remote branches are reduced37 to3; local branches45 to4. Main, open classic audio
-PR242, held combat controls PR269 and the unique quest-query branch remain.
-The41 integrated local tips are preserved in one self-contained verified Git bundle
-with an exact recovery manifest under local/fnv-wells-fixed/branch-reconciliation-20261023/.
-All41 commits were independently unbundled and integrity checked before ref cleanup.
-No unique work, save or source input was removed. Cleanup belongs to each completed
-slice; do not accumulate merged feature refs. Do not delete held or writer-owned work.
-
-Active branch: codex/fnv-quest-state-script-queries, integrated with accepted main.
-The narrow change binds fallback GetQuestRunning/GetQuestCompleted to compiled
-QUST identity and the existing shared quest state, matching the shared executor.
-Native startup already delegates to that shared executor; this fixes fallback
+Accepted main/origin-main is 4ffc3fd99c86df8de703d55fd7a2cc98f93f11cc (PR285),
+merged 13:31:38 UTC after independent review and all five exact-head checks passed.
+GetQuestRunning/GetQuestCompleted now share compiled QUST state in both executors.
+Native startup already delegates to the shared executor; this closes fallback
 executor consistency, not a demonstrated ED-E native recruitment failure.
-Synthetic tests cover both owners, independent running/completed flags, live changes,
-compiled-reference/type refusals, short circuit, cold clocks and retained failure prefixes.
 
-The actual unchanged vDialogueEDE GameMode fixture initially failed at completion
-query statement5 with counter0. With the bindings it reaches statement83/source
-line107 after counter1, then refuses a separate condition whose GetObjectiveCompleted
-and GetHasNote signatures remain unsupported by fallback. The original full-script
-completion command still fails; it has not been weakened or bypassed.
-A separate owned-prefix audit explicitly requires this exact remaining refusal and
-verifies consumed-prefix/error state unchanged before/after cold restore and retry.
-Its old-code negative control fails before the counter; fixed prefix checks pass.
-The running query has synthetic/composition proof, no owned running-query coverage.
-No full-script, ordinary recruitment, campaign or retail parity success is claimed.
+Completed branch reconciliation reduced remote branches from37 to3 and local
+branches from45 to3 before this slice. The current objective-query feature branch
+is the one additional active local branch. Main, open classic audio PR242 and
+held combat controls PR269 remain. The41 integrated local tips and completed
+PR285 tip have verified recovery bundles and exact manifests under
+local/fnv-wells-fixed/branch-reconciliation-20261023/ and quest-state-queries-20261023/.
+All preserved tips were independently recovered and integrity checked before ref
+cleanup. No unique work, save or source input was removed. Clean completed feature
+refs after each accepted merge; preserve open, held and writer-owned work.
 
-The accepted-main integration passes focused/prefix checks and the full gate at
-13:18:15 UTC: exit0, all2209 source/config hashes unchanged, diff check0 and original
-save unchanged. Release/Debug builds have zero warnings/errors. This frozen slice
-is ready for checked publication and independent review; merge is not yet accepted.
-Evidence is under local/fnv-wells-fixed/quest-state-queries-20261023/.
+Active branch: codex/fnv-objective-completion-query from accepted main.
+The narrow repair binds fallback GetObjectiveCompleted to the existing compiled
+QUST/shared objective owner with the shared executor's finite unsigned integer
+index validation. It changes no quest flags, objective declarations, schema or
+fault recovery. The old-code control passes through the shared executor but fails
+through unchanged fallback with the unbound operation at13:37:36 UTC.
+Focused tests exercise both executors, independent displayed/completed/running
+flags, live changes, unsigned boundaries, compiled-reference/type refusals,
+short circuit, exact cold state and retained failure prefixes. Prior query summary
+reporting now distinguishes selected checks from the full suite; owned-prefix
+checks additionally require statement83 and explicit retained-error throws.
+
+The unchanged vDialogueEDE GameMode fixture still has an independent unsupported
+GetHasNote signature in statement83/source line107. No guessed inventory-count
+alias is introduced. Full expression parsing can refuse before evaluating the new
+objective callback, so owned-prefix acceptance does not establish owned objective
+query execution, full-script success, ordinary recruitment or campaign parity.
+The original full-script completion command remains strict. Dedicated note
+membership acquisition/removal/load ownership is separate work; legacy unknown
+membership must not be inferred from inventory. No note implementation is part
+of this objective slice.
+
+The frozen slice passed its required full gate at13:50:58 UTC: focused and owned-
+prefix checks exit0, all2209 source/config hashes unchanged, diff check0 and the
+original save hash unchanged. Release/Debug builds have zero warnings/errors.
+Independent review and hosted exact-head checks are required before merge.
+The two separate note-owner writer files are preserved outside compile inputs in
+the private objective-completion-query-20261023/note-writer-hold directory, with
+exact hashes and original-path manifest; they are not tested or published here.
+
 Original saves remain unchanged. Standing checked-publication direction is active;
-PR269 stays draft/native-and-merge-held. No third retail or bot/encounter attempt
-is permitted. Recording is off; all runtime/build work remains serialized.
+publication requires the selected owned-prefix audit, full local gate, independent
+review and exact-head hosted checks before merge. PR269 stays draft/native-and-
+merge-held. No third retail or bot/encounter attempt is permitted. Recording is
+off; runtime/build work remains serialized. Current evidence is under
+local/fnv-wells-fixed/objective-completion-query-20261023/.
 
 Shared reputation state retains source-hashed float axes in schema v58. Fresh axes
 are zero; absent legacy history stays unknown per axis. CTDA573/574/575 share that
