@@ -26,6 +26,7 @@
 /runtime/tests/fixtures/*.gltf.import
 *.uid
 /local/
+/.staging/
 
 # wrangler files
 .wrangler
