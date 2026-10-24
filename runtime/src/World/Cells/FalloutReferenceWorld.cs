@@ -43,7 +43,8 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
     FalloutTerminalHackState? TerminalHackState = null, bool? ObjectHealthPresent = null,
     FalloutActorSandboxMotionFailure? SandboxMotionFailure = null,
     FalloutActorStoppedIdleAnimation? CreatureScriptIdle = null,
-    FalloutActorPendingSandboxStart? PendingSandboxStart = null)
+    FalloutActorPendingSandboxStart? PendingSandboxStart = null,
+    FalloutActorProjectileLaunch? ProjectileLaunch = null)
 {
     internal static void Validate(IReadOnlyList<FalloutReferenceSnapshot> snapshots)
     {
@@ -93,6 +94,7 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
             snapshot.Placement?.Validate();
             snapshot.Engagement?.Validate();
             snapshot.AggroWarning?.Validate();
+            snapshot.ProjectileLaunch?.Validate();
             if (snapshot.AggroWarning is { } warning && (snapshot.Engagement is not null || warning.Target == snapshot.Reference))
                 throw new InvalidDataException("Actor cannot warn and engage in combat simultaneously.");
             FalloutActorCorpseEquipment.ValidateSnapshot(snapshot);
@@ -238,6 +240,7 @@ internal sealed partial class FalloutReferenceInstance
         set { if (_taken == value) return; _taken = value; _stateChanged?.Invoke(this, true); }
     }
     internal bool DoorOpen { get; set; }
+    internal FalloutActorProjectileLaunch? ProjectileLaunch { get; set; }
     internal FalloutReferenceGrabEvents? GrabEvents { get; set; }
     internal FalloutDoorMotionState? DoorMotion { get; set; }
     private FalloutActivationRelaySnapshot? _activationRelay;
@@ -495,7 +498,8 @@ internal sealed partial class FalloutReferenceInstance
             CreatureScriptIdle: CreatureScriptIdle is not null && CaptureCreatureScriptIdle is { } captureScriptIdle
                 ? captureScriptIdle()?.Copy() : CreatureScriptIdle?.Copy(),
             PendingSandboxStart: PendingSandboxStartCaptureReady ? CapturePendingSandboxStart is { } captureSandboxStart
-                ? captureSandboxStart() : PendingSandboxStart?.Copy() : null);
+                ? captureSandboxStart() : PendingSandboxStart?.Copy() : null,
+            ProjectileLaunch: ProjectileLaunch);
     }
 }
 
@@ -887,6 +891,12 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
                     if (records.GetEffective(partner).Signature is not ("ACHR" or "ACRE"))
                         throw new InvalidDataException("Saved conversation partner is not an actor reference.");
                 instance.ConversationHistory = history.Copy();
+            }
+            if (snapshot.ProjectileLaunch is { } launch)
+            {
+                _ = validated.Actor(snapshot.Reference);
+                launch.Validate();
+                instance.ProjectileLaunch = launch;
             }
             if (snapshot.SoundRandomState is { } soundRandom) instance.SoundRandom.Restore(soundRandom);
             if (snapshot.AnimationSoundEvents is { } soundEvents) instance.AnimationSoundEvents.Restore(soundEvents, records);

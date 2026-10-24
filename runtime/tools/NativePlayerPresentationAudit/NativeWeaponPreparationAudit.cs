@@ -33,6 +33,7 @@ public partial class NativePlayerPresentationAudit
                 for (var frame = 0; frame < 8; frame++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
                 await CheckAimPreparation(player, records);
                 CheckArmSpread(records, FalloutWeaponShot.Read(records, weapon.Form, weapon.Ammunition[0]));
+                CheckLaunchSpread(records, FalloutWeaponShot.Read(records, weapon.Form, weapon.Ammunition[0]));
                 var state = JsonSerializer.SerializeToElement(player.FiringState);
                 if (state.GetProperty("resourcePreparation").GetProperty("error").ValueKind != JsonValueKind.Null ||
                     state.GetProperty("shots").GetInt64() != 0 ||
@@ -134,4 +135,53 @@ public partial class NativePlayerPresentationAudit
         }
         GD.Print("OPENNV_SHARED_ARM_SPREAD_PASS oneHanded=true twoHanded=true exclusiveInjuryStates=true");
     }
+
+    private static void CheckLaunchSpread(FalloutPluginStack records, FalloutWeaponShot source)
+    {
+        var shot = source with
+        {
+            MinimumSpread = 3,
+            Spread = 5,
+            WeaponAnimationType = 3,
+            StrengthRequirement = 0,
+            SkillRequirement = 0,
+            AmmoEffects = []
+        };
+        var owner = new FalloutWeaponSpread(records);
+        var process = FalloutActorProjectileLaunch.NewProcess();
+        var penalty = Math.Max(FalloutGameSettingFloats.Read(records, "fMinGunSpreadValue"),
+            (1 - FalloutGameSettingFloats.Read(records, "fWobbleToSkillConversion") * .3f) *
+            FalloutGameSettingFloats.Read(records, "fStandingSpreadPenalty"));
+        var expected = Mathf.DegToRad(3 + penalty * FalloutGameSettingFloats.Read(records, "fNPCMaxGunWobbleAngle"));
+        float Extent(FalloutActorProjectileLaunch state) => owner.NpcLaunchExtentRadians(shot, 30, 2,
+            false, false, false, false, false, state, []);
+        if (MathF.Abs(Extent(process) - expected) > 1e-6f ||
+            MathF.Abs(Extent(new(2, -.01f)) - expected - Mathf.DegToRad(10) + .01f) > 1e-6f)
+            throw new InvalidOperationException("Launch radius merged independent process and actor components.");
+        var retained = new FalloutActorProjectileLaunch(2, -.2f);
+        var cold = JsonSerializer.Deserialize<FalloutActorProjectileLaunch>(JsonSerializer.Serialize(retained))!;
+        if (cold != retained || MathF.Abs(cold.Advance(.1, 3, 1).AimChaseRadians + .14f) > 1e-6f ||
+            new FalloutActorProjectileLaunch(0, .2f).Advance(1, 3, 1).AimChaseRadians != 0 ||
+            new FalloutActorProjectileLaunch(0, 1e-7f).Advance(0, 3, 1).AimChaseRadians != 0)
+            throw new InvalidOperationException("Aim-chase cold state, signed decay or crossing clamp changed.");
+        var calls = 0;
+        var center = new Vector3(.3f, .2f, -.8f).Normalized();
+        var zero = FalloutWeaponSpread.DeviateLaunch(center, 0, () => { calls++; return .5f; });
+        if (calls != 2 || zero.DistanceTo(center) > 1e-6f)
+            throw new InvalidOperationException("Zero launch extent skipped source draws or changed heading.");
+        var samples = new Queue<float>([1, .25f]);
+        var vertical = FalloutWeaponSpread.DeviateLaunch(Vector3.Up, .1f, samples.Dequeue);
+        if (MathF.Abs(vertical.Y - MathF.Cos(.1f)) > 1e-6f ||
+            MathF.Abs(vertical.X + MathF.Sin(.1f)) > 1e-6f || samples.Count != 0)
+            throw new InvalidOperationException("Vertical source heading did not survive Euler perturbation.");
+        for (var i = 0; i < 128; i++)
+        {
+            var values = new Queue<float>([1, i / 128f]);
+            var result = FalloutWeaponSpread.DeviateLaunch(center, -.2f, values.Dequeue);
+            if (center.AngleTo(result) > .20001f || MathF.Abs(result.Length() - 1) > 1e-6f)
+                throw new InvalidOperationException("Euler launch escaped its conservative friendly-query extent.");
+        }
+        GD.Print("OPENNV_PROJECTILE_LAUNCH_CONTRACT_PASS processCold=true signedDecay=true sourceEuler=true zeroDraws=2 friendExtent=true bitParity=false");
+    }
+
 }

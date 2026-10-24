@@ -955,6 +955,12 @@ public partial class RuntimeCoordinator
         {
             RuntimeNativeNpc? actor = preparedNpc;
             var previousActor = _nativeReferencePresentation?.Nodes.GetValueOrDefault(reference.FormKey);
+            var launchState = _nativeReferences!.Get(reference.FormKey);
+            var newLaunchProcess = previousActor is null && launchState.ProjectileLaunch is null &&
+                launchState.Animation.Resource.Length == 0 && launchState.PackageAssignment is null &&
+                launchState.PackageMotion is null && launchState.Engagement is null && launchState.AggroWarning is null &&
+                launchState.SandboxAdmissionFailure is null && launchState.SandboxMotionFailure is null &&
+                launchState.PendingSandboxStart is null;
             try
             {
                 var selection = _nativeReferences!.InitializeActorTemplates(reference.FormKey,
@@ -998,7 +1004,7 @@ public partial class RuntimeCoordinator
                 }
                 actor.Combat = RuntimeNativeActorCombat.Attach(actor, actor.Skeleton, actor.Appearance.SkeletonPath,
                     _nativeReferences!, _nativeReferences!.Get(reference.FormKey), _nativePluginStack!, source,
-                    _configuration.Player.CollisionLayer, _configuration.Player.CollisionMask | _configuration.Player.CollisionLayer, NativeCombatContext);
+                    _configuration.Player.CollisionLayer, _configuration.Player.CollisionMask | _configuration.Player.CollisionLayer, NativeCombatContext, newLaunchProcess);
                 actor.ConfigureAi(_nativePluginStack!, _nativeQuestState!, cell, ReferenceTransform,
                     () => _nativeReferences!.ActorFactions(reference.FormKey), _nativeGameTime, _nativeGlobals, _nativeReferences,
                     NativeActorItemCount);
@@ -1026,6 +1032,12 @@ public partial class RuntimeCoordinator
         {
             RuntimeNativeCreature? actor = null;
             var previousActor = _nativeReferencePresentation?.Nodes.GetValueOrDefault(reference.FormKey);
+            var launchState = _nativeReferences!.Get(reference.FormKey);
+            var newLaunchProcess = previousActor is null && launchState.ProjectileLaunch is null &&
+                launchState.Animation.Resource.Length == 0 && launchState.PackageAssignment is null &&
+                launchState.PackageMotion is null && launchState.Engagement is null && launchState.AggroWarning is null &&
+                launchState.SandboxAdmissionFailure is null && launchState.SandboxMotionFailure is null &&
+                launchState.PendingSandboxStart is null;
             try
             {
                 var selection = _nativeReferences!.InitializeActorTemplates(reference.FormKey,
@@ -1047,7 +1059,7 @@ public partial class RuntimeCoordinator
                 root.AddChild(actor);
                 actor.Combat = RuntimeNativeActorCombat.Attach(actor, actor.Skeleton, actor.Appearance.SkeletonPath,
                     _nativeReferences!, _nativeReferences.Get(reference.FormKey), _nativePluginStack!, source,
-                    _configuration.Player.CollisionLayer, _configuration.Player.CollisionMask | _configuration.Player.CollisionLayer, NativeCombatContext);
+                    _configuration.Player.CollisionLayer, _configuration.Player.CollisionMask | _configuration.Player.CollisionLayer, NativeCombatContext, newLaunchProcess);
                 actor.ConfigureAi(_nativePluginStack!, _nativeQuestState!, _nativeReferences, _nativeGameTime, _nativeGlobals,
                     NativeActorItemCount);
                 actor.ExecutePackageEvent = (program, caller) => (_nativeOpeningStageDriver ??

@@ -15,6 +15,7 @@ internal sealed partial class RuntimeNativeActorCombat : Node
     private FalloutPluginStack _records = null!;
     private RuntimeLiveContentSource _content = null!;
     private string _skeletonPath = "";
+    private bool _newLaunchProcess;
     private uint _layer, _mask;
     private RuntimeNativeActorRagdoll? _ragdoll;
     private bool _deathPresentationAttempted;
@@ -51,6 +52,9 @@ internal sealed partial class RuntimeNativeActorCombat : Node
         goreError = _goreError,
         lastLimbEffect = _lastLimbEffect,
         error = Error,
+        projectileLaunch = _state.ProjectileLaunch,
+        muzzle = _enemyMuzzle?.State,
+        shotEffects = _enemyShotEffects?.State,
         muzzlePresentationError = _muzzlePresentationError,
         casingPresentationError = _casingPresentationError,
         beamPresentationError = _beamPresentationError,
@@ -61,7 +65,7 @@ internal sealed partial class RuntimeNativeActorCombat : Node
 
     internal static RuntimeNativeActorCombat Attach(Node3D actor, RuntimeNativeNifSkeleton skeleton, string skeletonPath,
         FalloutReferenceWorld world, FalloutReferenceInstance state, FalloutPluginStack records, RuntimeLiveContentSource content,
-        uint layer, uint mask, NativeActorCombatContext? context = null)
+        uint layer, uint mask, NativeActorCombatContext? context = null, bool newLaunchProcess = false)
     {
         world.InitializeSourceCorpse(state.Reference);
         var owner = new RuntimeNativeActorCombat
@@ -76,6 +80,7 @@ internal sealed partial class RuntimeNativeActorCombat : Node
             _content = content,
             _layer = layer,
             _mask = mask,
+            _newLaunchProcess = newLaunchProcess,
             _context = context
         };
         state.QuerySpatialPlacement = owner.CaptureSpatialPlacement;
@@ -97,6 +102,10 @@ internal sealed partial class RuntimeNativeActorCombat : Node
     public override void _Ready()
     {
         AddToGroup(CombatActorsGroup);
+        // Publish only after this actual process entered the live scene. A cold
+        // or previously materialized actor without the field stays unknown.
+        if (_newLaunchProcess && _state.ProjectileLaunch is null)
+            _state.ProjectileLaunch = FalloutActorProjectileLaunch.NewProcess();
         _state.StopCombat = StopCombat;
         _hitReactionError = _state.CurrentHitReactionError;
         _state.CaptureEngagement = CaptureEngagement;

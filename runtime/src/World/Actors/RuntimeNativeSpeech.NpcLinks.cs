@@ -47,11 +47,13 @@ internal partial class RuntimeNativeSpeech
         if (references.BlocksAmbientConversation(speaker) || references.BlocksAmbientConversationTarget(target) ||
             IsDialogueBusy(speaker) || IsDialogueBusy(target)) return false;
         if (references.BlocksAmbientConversationRelationship(speaker, target)) return false;
-        _ = ResidentSpeaker(_stack.GetEffective(speaker));
-        _ = ResidentSpeaker(_stack.GetEffective(target));
         source.ConversationSuppressionSeconds = FalloutConversationSuppression.Sample(_stack.NumericSettings, source.SoundRandom.NextUnitFloat);
         references.RememberConversationAttempt(speaker, target);
         if (!FalloutDialogueSpeaker.HasConversationVoice(_stack, source.Base, source.Templates)) return false;
+        var listener = references.Get(target);
+        if (!FalloutDialogueSpeaker.HasConversationVoice(_stack, listener.Base, listener.Templates)) return false;
+        _ = ResidentSpeaker(_stack.GetEffective(speaker));
+        _ = ResidentSpeaker(_stack.GetEffective(target));
         var opening = SelectNpcConversationOpening(speaker, target, topic);
         if (opening is not { } selected) return false;
         try

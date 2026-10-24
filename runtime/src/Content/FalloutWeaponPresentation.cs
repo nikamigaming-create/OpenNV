@@ -27,6 +27,19 @@ internal sealed record FalloutWeaponPresentation(FalloutFormKey Form, FalloutNpc
     internal bool IsThrownWeapon => WeaponAnimationType is 10 or 13;
     internal bool Playable { get; init; }
     internal bool Embedded { get; init; }
+    internal string? EmbeddedNodeName { get; init; }
+
+    internal string ResolveEmbeddedProjectileNode(IEnumerable<string> sourceNodes)
+    {
+        var nodes = sourceNodes.Where(name => EmbeddedNodeName is { } declared
+            ? name.Equals(declared, StringComparison.Ordinal)
+            : name.StartsWith("ProjectileNode", StringComparison.OrdinalIgnoreCase)).ToArray();
+        if (nodes.Length != 1)
+            throw new NotSupportedException(EmbeddedNodeName is { } name
+                ? $"Embedded weapon {Form} requires its unique declared node {name}."
+                : "Embedded actor weapon requires one source ProjectileNode; multiple emitters need attack-node selection.");
+        return nodes[0];
+    }
     internal float Reach { get; init; }
     internal float MaximumRange { get; init; }
     internal string? ShellModel { get; init; }
@@ -98,6 +111,11 @@ internal sealed record FalloutWeaponPresentation(FalloutFormKey Form, FalloutNpc
         var weapon = records.GetEffective(key);
         if (weapon.Signature != "WEAP") throw new InvalidDataException("Equipped weapon is not WEAP.");
         var fields = weapon.ReadSubrecords().ToArray();
+        var embeddedNodeFields = fields.Where(field => field.Signature == "NNAM").ToArray();
+        if (embeddedNodeFields.Length > 1) throw new InvalidDataException("Weapon embedded node is duplicated.");
+        if (embeddedNodeFields.Length == 1 && embeddedNodeFields[0].Data.Length == 0)
+            throw new InvalidDataException("Weapon embedded node lacks its source string terminator.");
+        var embeddedNode = embeddedNodeFields.Length == 0 ? null : FalloutDialogueTopic.Text(embeddedNodeFields[0].Data.Span);
         var data = fields.Single(field => field.Signature == "DNAM").Data.Span;
         if (!IsSupportedDnamExtent(data.Length)) throw new NotSupportedException($"WEAP DNAM extent {data.Length} is unbound.");
         var type = BinaryPrimitives.ReadUInt32LittleEndian(data);
@@ -196,6 +214,7 @@ internal sealed record FalloutWeaponPresentation(FalloutFormKey Form, FalloutNpc
             Automatic = (data[12] & 2) != 0,
             Playable = (data[12] & 0x80) == 0,
             Embedded = (data[12] & 0x20) != 0,
+            EmbeddedNodeName = string.IsNullOrEmpty(embeddedNode) ? null : embeddedNode,
             AttackShotsPerSecond = BinaryPrimitives.ReadSingleLittleEndian(data[88..]),
             NpcsUseAmmo = (BinaryPrimitives.ReadUInt32LittleEndian(data[56..]) & 2) != 0,
             SightFieldOfViewDegrees = sightFov,

@@ -94,6 +94,27 @@ internal static class CorpseEquipmentContracts
                         ? item with { Count = 5 } : item).ToArray(), null) } } },
                 corpse with { Inventory = corpse.Inventory! with { Contents = corpse.Inventory!.Contents with { EquippedRuntimeFormIds = [] } } }
             }) Reject(() => FalloutReferenceSnapshot.Validate([changed]));
+
+            var refusal = new FalloutCorpseLaunchRefusal(corpse.Reference, corpse.CorpseEquipment!.HandlingWeapon!,
+                actualHandling, FalloutCorpseLaunchRefusal.UnknownProcess);
+            var retiredLaunch = corpse with { CorpseEquipment = corpse.CorpseEquipment with { LaunchRefusal = refusal } };
+            var retiredSet = Replace(complete, retiredLaunch);
+            using (var refusalCold = new FalloutReferenceWorld(records))
+            {
+                refusalCold.Restore(JsonSerializer.Deserialize<FalloutReferenceSnapshot[]>(JsonSerializer.Serialize(retiredSet))!);
+                Require(JsonSerializer.Serialize(refusalCold.Capture()) == JsonSerializer.Serialize(retiredSet),
+                    "Cold corpse launch refusal changed handling/RNG, pose, or supplied missing process state.");
+            }
+            AtomicReject(records, Replace(complete, retiredLaunch with { ProjectileLaunch = new(0, 0) }));
+            AtomicReject(records, Replace(complete, retiredLaunch with { Injury = retiredLaunch.Injury! with { Dead = false } }));
+            AtomicReject(records, Replace(complete, retiredLaunch with { CorpseEquipment = retiredLaunch.CorpseEquipment! with
+                { LaunchRefusal = refusal with { Actor = Key(0x902) } } }));
+            AtomicReject(records, Replace(complete, retiredLaunch with { CorpseEquipment = retiredLaunch.CorpseEquipment! with
+                { LaunchRefusal = refusal with { Kind = "arbitrary-combat-failure" } } }));
+            AtomicReject(records, Replace(complete, retiredLaunch with { CorpseEquipment = retiredLaunch.CorpseEquipment! with
+                { LaunchRefusal = refusal with { Weapon = refusal.Weapon with { Sha256 = new string('0', 64) } } } }));
+            CorpseEquippedLootContracts.Run(records, retiredSet);
+            Console.WriteLine("OPENNV_CORPSE_LAUNCH_REFUSAL_PASS deadOnly=true sourceBound=true handlingPrefix=true unknownRemainsUnknown=true coldNoReplay=true lootPreservesHistory=true foreignAndGenericFaultsRefused=true");
             VirtualMagazineContracts(records);
             LegacySchemaBoundary(corpse, directory);
             Console.WriteLine("OPENNV_CORPSE_EQUIPMENT_CONTRACT_PASS current=true cold=true retirementReceipt=true rawGraph=true " +

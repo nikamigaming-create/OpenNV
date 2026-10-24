@@ -3,6 +3,42 @@ using OpenNV.Runtime.Gameplay.State;
 
 namespace OpenNV.Runtime.World.Cells;
 
+// Historical refusal of a launch that never issued. Only death can retire it;
+// this receipt cannot supply the absent process value or resume a shot.
+internal sealed record FalloutCorpseLaunchRefusal(FalloutFormKey Actor, FalloutCorpseWeaponSource Weapon,
+    FalloutWeaponHandlingSnapshot Handling, string Kind)
+{
+    internal const string UnknownProcess = "unknown-process-state";
+    internal const string MissingProcessError = "Actor launch process history is unbound.";
+    internal string Error => MissingProcessError;
+
+    internal void Validate()
+    {
+        if (Kind != UnknownProcess || Weapon is null || Handling is null ||
+            string.IsNullOrWhiteSpace(Actor.OwnerPlugin) || Actor.ObjectId is 0 or > FalloutFormKey.ObjectIdMask)
+            throw new InvalidDataException("Corpse launch refusal has no qualified source boundary.");
+        Weapon.Validate(); FalloutWeaponHandling.Validate(Handling);
+        if (Handling.ShotRandomState is null || Handling.AttackRandomState is null)
+            throw new InvalidDataException("Corpse launch refusal lost its consumed handling prefix.");
+    }
+
+    internal void ValidateSource(FalloutPluginStack records)
+    {
+        Validate();
+        var source = records.GetEffective(Weapon.Weapon);
+        if (source.Signature != "WEAP" || !FalloutActorFurnitureContinuation.RecordHash(source)
+            .Equals(Weapon.Sha256, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException("Corpse launch refusal differs from its winning weapon.");
+        foreach (var magazine in Handling.Magazines)
+            if (magazine.Loaded > FalloutWeaponPresentation.Read(records, magazine.Weapon, false).ClipSize ||
+                records.GetEffective(magazine.Ammunition).Signature != "AMMO")
+                throw new InvalidDataException("Corpse launch refusal has an invalid historical magazine.");
+    }
+
+    internal FalloutCorpseLaunchRefusal Copy() => this with
+    { Handling = Handling with { Magazines = Handling.Magazines.ToArray() } };
+}
+
 internal sealed record FalloutCorpseWeaponSource(FalloutFormKey Weapon, string Sha256)
 {
     internal void Validate()
@@ -119,7 +155,7 @@ internal sealed record FalloutActorCorpseEquipment(IReadOnlyList<float> RootPose
     FalloutActorResidualPose ResidualPose,
     IReadOnlyList<FalloutCorpseWeaponAttachment> Attachments, FalloutCorpseWeaponSource? HandlingWeapon = null,
     FalloutWeaponHandlingSnapshot? WeaponHandling = null, string? EmbeddedMuzzleBone = null,
-    FalloutCorpseRouteRetirement? RouteRetirement = null)
+    FalloutCorpseRouteRetirement? RouteRetirement = null, FalloutCorpseLaunchRefusal? LaunchRefusal = null)
 {
     internal void Validate()
     {
@@ -143,6 +179,7 @@ internal sealed record FalloutActorCorpseEquipment(IReadOnlyList<float> RootPose
             (combat.Source != HandlingWeapon || EmbeddedMuzzleBone is not null))
             throw new InvalidDataException("Corpse combat attachment differs from its actual handling owner.");
         RouteRetirement?.Validate();
+        LaunchRefusal?.Validate();
     }
 
     internal static void ValidateSnapshot(FalloutReferenceSnapshot snapshot)
@@ -154,6 +191,10 @@ internal sealed record FalloutActorCorpseEquipment(IReadOnlyList<float> RootPose
             return;
         }
         equipment.Validate();
+        if (equipment.LaunchRefusal is { } refusal && refusal.Actor != snapshot.Reference)
+            throw new InvalidDataException("Corpse launch refusal belongs to another actor.");
+        if (equipment.LaunchRefusal is not null && snapshot.ProjectileLaunch is not null)
+            throw new InvalidDataException("An unknown-process corpse refusal cannot replace known launch state.");
         if (snapshot.Injury?.Dead != true || snapshot.Ragdoll is null || snapshot.Inventory is null ||
             snapshot.KnockedDown || snapshot.HitReaction is not null)
             throw new InvalidDataException("Corpse equipment requires actual death, inventory and an independent physical capture.");
@@ -182,6 +223,7 @@ internal sealed record FalloutActorCorpseEquipment(IReadOnlyList<float> RootPose
     internal void ValidateSource(FalloutPluginStack records, FalloutPlayerInventory inventory)
     {
         Validate();
+        LaunchRefusal?.ValidateSource(records);
         foreach (var attachment in Attachments)
         {
             var weapon = attachment.Source.ValidateSource(records, inventory);
@@ -217,6 +259,7 @@ internal sealed record FalloutActorCorpseEquipment(IReadOnlyList<float> RootPose
         RootPose = RootPose.ToArray(),
         ResidualPose = ResidualPose.Copy(),
         Attachments = Attachments.Select(attachment => attachment.Copy()).ToArray(),
-        WeaponHandling = WeaponHandling is { } handling ? handling with { Magazines = handling.Magazines.ToArray() } : null
+        WeaponHandling = WeaponHandling is { } handling ? handling with { Magazines = handling.Magazines.ToArray() } : null,
+        LaunchRefusal = LaunchRefusal?.Copy()
     };
 }

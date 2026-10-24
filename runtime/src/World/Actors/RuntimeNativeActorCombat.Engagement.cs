@@ -84,6 +84,8 @@ internal sealed partial class RuntimeNativeActorCombat
     private FalloutActorEngagement? CaptureEngagement()
     {
         if (_state.Engagement is not { } state) return null;
+        if (!Dead && (Error ?? _engagementError ?? _assistanceError) is { } failure)
+            throw new NotSupportedException($"Living actor combat continuation remains unowned: {failure}");
         var p = _actor.GlobalPosition; var q = _actor.GlobalBasis.Orthonormalized().GetRotationQuaternion();
         return _state.Engagement = state with
         {
@@ -161,6 +163,22 @@ internal sealed partial class RuntimeNativeActorCombat
     {
         using var frameWork = OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Measure(OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Owner.Combat);
         _enemyMuzzle?.Advance(delta);
+        if (_state.ProjectileLaunch is { } launch && EffectiveEnabled)
+        {
+            try
+            {
+                _state.ProjectileLaunch = launch.Advance(delta,
+                    _records.IniSettings.Float("fAimChaseLookingMult:Combat"),
+                    _records.IniSettings.Float("fAnimationMult:General"));
+            }
+            catch (Exception error)
+            {
+                _engagementError = error.Message;
+                _launchRefusalOwnsError = false;
+                GD.PushError($"OPENNV_ACTOR_AIM_CHASE_UNBOUND reference={_state.Reference} {error.Message}");
+                return;
+            }
+        }
         if (Dead) { RestoreDeath(); return; }
         if (_context is null || !EffectiveEnabled || _state.Unconscious) return;
         var player = _context.Player();
@@ -178,6 +196,7 @@ internal sealed partial class RuntimeNativeActorCombat
             {
                 if (_engagementError != error.Message) GD.PushError($"OPENNV_ACTOR_COMBAT_UNBOUND reference={_state.Reference} {error.Message}");
                 _engagementError = error.Message;
+                _launchRefusalOwnsError = false;
             }
         }
         if (AdvanceKnockdown() || AdvanceHitReaction(delta) || _state.Restrained || _engagementError is not null) return;
@@ -226,6 +245,7 @@ internal sealed partial class RuntimeNativeActorCombat
         catch (Exception error)
         {
             _engagementError = error.Message;
+            _launchRefusalOwnsError = error is LaunchAdmissionException admission && ReferenceEquals(admission.Refusal, _launchRefusal);
             if (_actor is CharacterBody3D body) body.Velocity = Vector3.Zero;
             GD.PushError($"OPENNV_ACTOR_COMBAT_UNBOUND reference={_state.Reference} {error}");
         }

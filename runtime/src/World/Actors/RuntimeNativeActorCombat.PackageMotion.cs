@@ -246,7 +246,8 @@ internal sealed partial class RuntimeNativeActorCombat
         var clip = SelectPackageMotionClip(moving, running, sneaking);
         if (_packageSounds is null)
         {
-            var sounds = new NativeOwnedAnimationSoundPlayer(_records, _content, _actor, _skeleton.UnitsToMetres, _state.SoundRandom);
+            var sounds = new NativeOwnedAnimationSoundPlayer(_records, _content, _actor, _skeleton.UnitsToMetres,
+                _state.SoundRandom, _state.AnimationSoundEvents);
             _actor.AddChild(sounds);
             _packageSounds = sounds;
         }
