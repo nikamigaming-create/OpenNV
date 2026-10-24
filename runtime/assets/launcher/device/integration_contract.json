@@ -1,46 +1,35 @@
 {
-  "version": "1.0.0",
-  "provenance": "Original procedural geometry. No retail meshes or extracted textures. Generated with Blender 4.3.2.",
-  "scale": "1 unit = 1 metre",
+  "version": "2.1.0",
+  "design": "Original sculpted instrument, informed by inspected MK II concept; not a retail mesh copy.",
+  "scale": "metres",
   "axes": {
     "blender": "Z up, front -Y",
-    "gltf_godot": "Y up, front +Z",
-    "mapping": "(x,y,z) Blender -> (x,z,-y) glTF"
+    "godot": "Y up, front +Z",
+    "conversion": "(x,y,z)->(x,z,-y)"
   },
-  "bounds_blender_m": [
-    [
-      -0.28599998354911804,
-      0.28599998354911804
-    ],
-    [
-      -0.1899999976158142,
-      0.20000000298023224
-    ],
-    [
-      0.0,
-      0.46150001883506775
-    ]
-  ],
-  "dimensions_m": [
-    0.5719999670982361,
-    0.39000000059604645,
-    0.46150001883506775
-  ],
   "screen": {
-    "name": "CRT_Screen",
+    "surface": "CRT_Screen",
+    "glass": "CRT_Glass",
+    "read_only": true,
+    "dimensions_m": [
+      0.31,
+      0.216
+    ],
+    "aspect": 1.4351851851851851,
     "origin_blender_m": [
-      -0.07,
-      -0.1,
-      0.22
+      -0.0989999994635582,
+      -0.06400000303983688,
+      0.2630000114440918
     ],
     "origin_godot_m": [
-      -0.07,
-      0.22,
-      0.1
+      -0.0989999994635582,
+      0.2630000114440918,
+      0.06400000303983688
     ],
-    "width_m": 0.288,
-    "height_m": 0.216,
-    "aspect": "4:3",
+    "uv": "Continuous 0..1 ScreenUV, rounded squircle boundary. Blender v increases upward; glTF image V convention is top-left. Read-only display, no screen buttons.",
+    "curvature": "14mm convex bulge, 64x48 quads; glass 1.3mm forward",
+    "rim_front_y_blender": -0.107,
+    "glass_material": "alpha 0.025, roughness .25, coat .15; disable depth writes and picking in consumer",
     "facing_normal_blender": [
       0,
       -1,
@@ -51,226 +40,538 @@
       0,
       1
     ],
-    "curvature": "y=-0.100-0.014*(1-(2u-1)^2)*(1-(2v-1)^2). Center bulges toward viewer 14 mm. UV grid 48 by 36 quads.",
-    "uv": "Continuous 0..1, no overlaps. ScreenUV. Blender corners: bottom-left(0,0), bottom-right(1,0), top-left(0,1), top-right(1,1). glTF exporter stores V flipped by specification: imported TEXCOORD_0 top-left(0,0). Godot image/viewport top-left is (0,0). Verify with provided labeled preview before hit mapping.",
-    "glass": "CRT_Glass: same curvature, 1.2 mm closer to viewer; alpha 0.06, roughness 0.18. Disable glass depth writes and cast shadows if needed in Godot.",
-    "ui_integration": "Replace CRT_Screen material with viewport texture. Supplied static UI is preview only, not implemented launcher behavior."
+    "uv_corners_blender": {
+      "bottom_left": [
+        0,
+        0
+      ],
+      "bottom_right": [
+        1,
+        0
+      ],
+      "top_right": [
+        1,
+        1
+      ],
+      "top_left": [
+        0,
+        1
+      ]
+    },
+    "uv_corners_gltf": {
+      "bottom_left": [
+        0,
+        1
+      ],
+      "bottom_right": [
+        1,
+        1
+      ],
+      "top_right": [
+        1,
+        0
+      ],
+      "top_left": [
+        0,
+        0
+      ]
+    },
+    "mapping_note": "Central 0..1 grid is linear; only corners outside power-6 squircle are pulled inward. Continuous unique UVs, no stacked islands. Read-only panel, disable picking."
   },
   "controls": [
     {
-      "name": "CONTROL_MainTuning_pivotY",
-      "position_blender_m": [
-        0.19499999284744263,
-        -0.12200000137090683,
-        0.2669999897480011
-      ],
-      "position_godot_m": [
-        0.19499999284744263,
-        0.2669999897480011,
-        0.12200000137090683
-      ],
-      "rotation_euler_blender": [
-        0.0,
-        0.0,
-        0.0
-      ],
-      "metadata": {
-        "action": "PreviousGame / NextGame",
-        "rotation_axis_local": "Y",
-        "detent_degrees": 30,
-        "rotation_limits_degrees": "unbounded",
-        "asset_role": "launcher_device",
-        "rotation_axis": "local Y",
-        "intended_motion": "rotary"
-      }
-    },
-    {
-      "name": "CONTROL_Range_pivotY",
-      "position_blender_m": [
-        0.16699999570846558,
-        -0.1080000028014183,
-        0.17499999701976776
-      ],
-      "position_godot_m": [
-        0.16699999570846558,
-        0.17499999701976776,
-        0.1080000028014183
-      ],
-      "rotation_euler_blender": [
-        0.0,
-        0.0,
-        0.0
-      ],
-      "metadata": {
-        "action": "PreviousGame / NextGame",
-        "rotation_axis_local": "Y",
-        "rotation_limits_degrees": "-45 to +45",
-        "asset_role": "launcher_device"
-      }
-    },
-    {
-      "name": "CONTROL_Toggle_0_pivotX",
-      "position_blender_m": [
-        0.2329999953508377,
-        -0.08900000154972076,
-        0.18700000643730164
-      ],
-      "position_godot_m": [
-        0.2329999953508377,
-        0.18700000643730164,
-        0.08900000154972076
-      ],
-      "rotation_euler_blender": [
-        1.0499999523162842,
-        0.0,
-        0.0
-      ],
-      "metadata": {
-        "asset_role": "launcher_device",
-        "action": "Instrument cosmetic toggle (not bound to destructive actions)",
-        "rotation_axis_local": "X",
-        "rotation_limits_degrees": "-18 to +18"
-      }
-    },
-    {
-      "name": "CONTROL_Toggle_1_pivotX",
-      "position_blender_m": [
-        0.2329999953508377,
-        -0.08900000154972076,
-        0.1469999998807907
-      ],
-      "position_godot_m": [
-        0.2329999953508377,
-        0.1469999998807907,
-        0.08900000154972076
-      ],
-      "rotation_euler_blender": [
-        1.0499999523162842,
-        0.0,
-        0.0
-      ],
-      "metadata": {
-        "asset_role": "launcher_device",
-        "action": "Instrument cosmetic toggle (not bound to destructive actions)",
-        "rotation_axis_local": "X",
-        "rotation_limits_degrees": "-18 to +18"
-      }
-    },
-    {
       "name": "CONTROL_FunctionKey_0",
-      "position_blender_m": [
-        -0.1899999976158142,
-        -0.09399999678134918,
-        0.07800000160932541
-      ],
-      "position_godot_m": [
-        -0.1899999976158142,
-        0.07800000160932541,
-        0.09399999678134918
-      ],
-      "rotation_euler_blender": [
-        0.0,
-        0.0,
-        0.0
-      ],
       "metadata": {
         "action": "Play",
         "press_axis_local": "+Y",
         "travel_m": 0.003,
-        "asset_role": "launcher_device"
-      }
+        "asset_role": "sculpted_original_launcher_instrument",
+        "binding_state": "Consumer wiring required; action intention only"
+      },
+      "position_blender_m": [
+        -0.23800000548362732,
+        -0.16837210953235626,
+        0.12788645923137665
+      ],
+      "position_godot_m": [
+        -0.23800000548362732,
+        0.12788645923137665,
+        0.16837210953235626
+      ],
+      "matrix_world_blender": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          -0.23800000548362732
+        ],
+        [
+          0.0,
+          0.6691305637359619,
+          0.7431448698043823,
+          -0.16837210953235626
+        ],
+        [
+          0.0,
+          -0.7431448698043823,
+          0.6691305637359619,
+          0.12788645923137665
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ]
     },
     {
       "name": "CONTROL_FunctionKey_1",
-      "position_blender_m": [
-        -0.13199999928474426,
-        -0.09399999678134918,
-        0.07800000160932541
-      ],
-      "position_godot_m": [
-        -0.13199999928474426,
-        0.07800000160932541,
-        0.09399999678134918
-      ],
-      "rotation_euler_blender": [
-        0.0,
-        0.0,
-        0.0
-      ],
       "metadata": {
         "action": "Settings",
         "press_axis_local": "+Y",
         "travel_m": 0.003,
-        "asset_role": "launcher_device"
-      }
+        "asset_role": "sculpted_original_launcher_instrument",
+        "binding_state": "Consumer wiring required; action intention only"
+      },
+      "position_blender_m": [
+        -0.1509999930858612,
+        -0.16837210953235626,
+        0.12788645923137665
+      ],
+      "position_godot_m": [
+        -0.1509999930858612,
+        0.12788645923137665,
+        0.16837210953235626
+      ],
+      "matrix_world_blender": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          -0.1509999930858612
+        ],
+        [
+          0.0,
+          0.6691305637359619,
+          0.7431448698043823,
+          -0.16837210953235626
+        ],
+        [
+          0.0,
+          -0.7431448698043823,
+          0.6691305637359619,
+          0.12788645923137665
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ]
     },
     {
       "name": "CONTROL_FunctionKey_2",
-      "position_blender_m": [
-        -0.07400000095367432,
-        -0.09399999678134918,
-        0.07800000160932541
-      ],
-      "position_godot_m": [
-        -0.07400000095367432,
-        0.07800000160932541,
-        0.09399999678134918
-      ],
-      "rotation_euler_blender": [
-        0.0,
-        0.0,
-        0.0
-      ],
       "metadata": {
         "action": "Back",
         "press_axis_local": "+Y",
         "travel_m": 0.003,
-        "asset_role": "launcher_device"
-      }
+        "asset_role": "sculpted_original_launcher_instrument",
+        "binding_state": "Consumer wiring required; action intention only"
+      },
+      "position_blender_m": [
+        -0.06400000303983688,
+        -0.16837210953235626,
+        0.12788645923137665
+      ],
+      "position_godot_m": [
+        -0.06400000303983688,
+        0.12788645923137665,
+        0.16837210953235626
+      ],
+      "matrix_world_blender": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          -0.06400000303983688
+        ],
+        [
+          0.0,
+          0.6691305637359619,
+          0.7431448698043823,
+          -0.16837210953235626
+        ],
+        [
+          0.0,
+          -0.7431448698043823,
+          0.6691305637359619,
+          0.12788645923137665
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ]
     },
     {
       "name": "CONTROL_FunctionKey_3",
-      "position_blender_m": [
-        -0.01600000075995922,
-        -0.09399999678134918,
-        0.07800000160932541
-      ],
-      "position_godot_m": [
-        -0.01600000075995922,
-        0.07800000160932541,
-        0.09399999678134918
-      ],
-      "rotation_euler_blender": [
-        0.0,
-        0.0,
-        0.0
-      ],
       "metadata": {
         "action": "Quit",
         "press_axis_local": "+Y",
         "travel_m": 0.003,
-        "asset_role": "launcher_device"
-      }
+        "asset_role": "sculpted_original_launcher_instrument",
+        "binding_state": "Consumer wiring required; action intention only"
+      },
+      "position_blender_m": [
+        0.023000000044703484,
+        -0.16837210953235626,
+        0.12788645923137665
+      ],
+      "position_godot_m": [
+        0.023000000044703484,
+        0.12788645923137665,
+        0.16837210953235626
+      ],
+      "matrix_world_blender": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.023000000044703484
+        ],
+        [
+          0.0,
+          0.6691305637359619,
+          0.7431448698043823,
+          -0.16837210953235626
+        ],
+        [
+          0.0,
+          -0.7431448698043823,
+          0.6691305637359619,
+          0.12788645923137665
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ]
+    },
+    {
+      "name": "CONTROL_Toggle_0_pivotX",
+      "metadata": {
+        "action": "AudioToggle",
+        "rotation_axis_local": "X",
+        "rotation_limits_degrees": [
+          -18,
+          18
+        ],
+        "asset_role": "sculpted_original_launcher_instrument",
+        "binding_state": "Consumer wiring required; action intention only"
+      },
+      "position_blender_m": [
+        0.18799999356269836,
+        -0.14050182700157166,
+        0.15703964233398438
+      ],
+      "position_godot_m": [
+        0.18799999356269836,
+        0.15703964233398438,
+        0.14050182700157166
+      ],
+      "matrix_world_blender": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.18799999356269836
+        ],
+        [
+          0.0,
+          0.6691305637359619,
+          0.7431448698043823,
+          -0.14050182700157166
+        ],
+        [
+          0.0,
+          -0.7431448698043823,
+          0.6691305637359619,
+          0.15703964233398438
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ]
+    },
+    {
+      "name": "CONTROL_Toggle_1_pivotX",
+      "metadata": {
+        "action": "ReadViewToggle",
+        "rotation_axis_local": "X",
+        "rotation_limits_degrees": [
+          -18,
+          18
+        ],
+        "asset_role": "sculpted_original_launcher_instrument",
+        "binding_state": "Consumer wiring required; action intention only"
+      },
+      "position_blender_m": [
+        0.2630000114440918,
+        -0.14050182700157166,
+        0.15703964233398438
+      ],
+      "position_godot_m": [
+        0.2630000114440918,
+        0.15703964233398438,
+        0.14050182700157166
+      ],
+      "matrix_world_blender": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.2630000114440918
+        ],
+        [
+          0.0,
+          0.6691305637359619,
+          0.7431448698043823,
+          -0.14050182700157166
+        ],
+        [
+          0.0,
+          -0.7431448698043823,
+          0.6691305637359619,
+          0.15703964233398438
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ]
+    },
+    {
+      "name": "CONTROL_MainTuning_pivotY",
+      "metadata": {
+        "action": "PreviousGame / NextGame",
+        "rotation_axis_local": "Y",
+        "detent_degrees": 90,
+        "rotation_limits_degrees": [
+          -45,
+          225
+        ],
+        "asset_role": "sculpted_original_launcher_instrument",
+        "binding_state": "Consumer wiring required; action intention only",
+        "wrap_degrees": 360,
+        "axis_conversion": "Blender local +Y = Godot local -Z",
+        "positive_rotation": "CLOCKWISE as viewed from front",
+        "neutral_pointer_front_angle_degrees": 90,
+        "selection_map_json": "[{\"game_id\": \"fallout1\", \"front_angle_degrees\": 135, \"local_rotation_degrees\": -45}, {\"game_id\": \"fallout2\", \"front_angle_degrees\": 45, \"local_rotation_degrees\": 45}, {\"game_id\": \"newvegas\", \"front_angle_degrees\": -45, \"local_rotation_degrees\": 135}, {\"game_id\": \"fallout3\", \"front_angle_degrees\": -135, \"local_rotation_degrees\": 225}]"
+      },
+      "position_blender_m": [
+        0.2199999988079071,
+        -0.11100000143051147,
+        0.30300000309944153
+      ],
+      "position_godot_m": [
+        0.2199999988079071,
+        0.30300000309944153,
+        0.11100000143051147
+      ],
+      "matrix_world_blender": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.2199999988079071
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          -0.11100000143051147
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.30300000309944153
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ]
+    },
+    {
+      "name": "CONTROL_Brightness_pivotY",
+      "metadata": {
+        "action": "ScreenBrightness",
+        "rotation_axis_local": "Y",
+        "rotation_limits_degrees": [
+          -135,
+          135
+        ],
+        "legacy_alias": "CONTROL_Range_pivotY",
+        "asset_role": "sculpted_original_launcher_instrument",
+        "binding_state": "Consumer wiring required; action intention only"
+      },
+      "position_blender_m": [
+        0.17599999904632568,
+        -0.11100000143051147,
+        0.210999995470047
+      ],
+      "position_godot_m": [
+        0.17599999904632568,
+        0.210999995470047,
+        0.11100000143051147
+      ],
+      "matrix_world_blender": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.17599999904632568
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          -0.11100000143051147
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.210999995470047
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ]
     }
   ],
   "materials": [
-    "01 enamel | faded field olive",
-    "02 edge castings | warm dark alloy",
-    "03 old charcoal rubber",
-    "04 brushed brass hardware",
-    "05 aged ivory dial",
-    "06 oxidized signal red",
-    "07 dark vent recess",
-    "08 cream enamel lettering",
-    "09 CRT glass | replace with viewport shader",
-    "10 CRT protective glass | alpha 0.06",
+    "01 Cast olive enamel | localized wear",
+    "02 Aged ivory instrument insert",
+    "03 Worn charcoal elastomer",
+    "04 Exposed warm cast alloy",
+    "05 Brushed brass control hardware",
+    "06 Dark recessed instrument face",
+    "07 Warm ivory legends",
+    "08 Engraved dark legends",
+    "09 Oxblood power key",
+    "10 Amber ready lens",
+    "11 CRT read-only phosphor",
+    "12 Curved protective CRT glass",
     "Material"
   ],
   "textures": [
-    "olive_enamel_basecolor.png",
-    "crt_preview_ui.png"
+    "crt_readonly_preview.png",
+    "olive_basecolor.png",
+    "olive_roughness.png",
+    "ivory_basecolor.png",
+    "ivory_roughness.png",
+    "metal_basecolor.png",
+    "metal_roughness.png",
+    "brass_basecolor.png",
+    "brass_roughness.png",
+    "rubber_basecolor.png",
+    "rubber_roughness.png"
   ],
-  "triangle_count": 54716,
-  "collision": "No baked collision. Use one body box plus simple ray-pick shapes on named controls. Ray hits on CRT_Screen may interpolate its UVs for curved pointer mapping. Do not use glass to intercept input.",
-  "lod": "Hero asset only. Enable Godot mesh LOD generation for housing where appropriate. Preserve CRT_Screen UV grid and individual control identities. No independently validated LOD meshes delivered."
+  "wear": "Localized authored vertex-color paint loss/oxide/recess grime plus actual exposed rim chip geometry; no uniform speckle overlay.",
+  "binding_note": "Preserved four function key names and main tuning name. Brightness replaces old range knob; two toggles map AudioToggle/ReadViewToggle only. No mods, restore or invented destructive functions.",
+  "triangle_count": 136884,
+  "bounds_blender_m": [
+    [
+      -0.36399999260902405,
+      0.36399999260902405
+    ],
+    [
+      -0.19980323314666748,
+      0.28307998180389404
+    ],
+    [
+      0.0044999998062849045,
+      0.534375011920929
+    ]
+  ],
+  "collision_lod": "No gameplay collision or LOD authored. Use casing proxy and control pick shapes; preserve CRT UVs/control hierarchy.",
+  "runtime_status": "NOT integrated/tested in Godot by cloud modeler.",
+  "housing_mesh": "Housing",
+  "concept_comparison": {
+    "target": "Approved instrument MK II concept",
+    "status": "Faithful sculpted working candidate, not verified exact 1:1 or final engine appearance.",
+    "intentional_deviations": [
+      "Two authorized system toggles Audio and ReadView, not three generated MODS/RESTORE suggestions.",
+      "Original OPENNV side branding."
+    ],
+    "remaining_art_gaps": [
+      "Procedural chipped enamel is less varied than concept wear.",
+      "Lower bank/bumper contours and guard mounts are approximate rather than pixel-identical.",
+      "Offline studio preview is not a Godot screenshot."
+    ]
+  },
+  "selector": {
+    "object": "CONTROL_MainTuning_pivotY",
+    "lever": "Selector_ChunkyBrassLever",
+    "pointer_tip": "Selector_PointerTip_Up",
+    "application_order": [
+      "fallout1",
+      "fallout2",
+      "newvegas",
+      "fallout3"
+    ],
+    "front_angle_definition": "Right=0 degrees; up=90 degrees.",
+    "neutral_pointer_front_angle_degrees": 90,
+    "axis": "Blender local +Y maps to Godot local -Z",
+    "positive_rotation": "CLOCKWISE from front",
+    "detent_degrees": 90,
+    "game_positions": [
+      {
+        "game_id": "fallout1",
+        "label": "FALLOUT",
+        "front_angle_degrees": 135,
+        "local_rotation_degrees": -45
+      },
+      {
+        "game_id": "fallout2",
+        "label": "FALLOUT 2",
+        "front_angle_degrees": 45,
+        "local_rotation_degrees": 45
+      },
+      {
+        "game_id": "newvegas",
+        "label": "NEW VEGAS",
+        "front_angle_degrees": -45,
+        "local_rotation_degrees": 135
+      },
+      {
+        "game_id": "fallout3",
+        "label": "FALLOUT 3",
+        "front_angle_degrees": -135,
+        "local_rotation_degrees": 225
+      }
+    ],
+    "wrap": "360 degrees; FO3 225 -> FO1 315 is equivalent to -45.",
+    "rest_basis_preserved": true,
+    "lever_child_tilt_radians": 0
+  },
+  "v21_scope": "Dial labels/markers/pointer and exact selection contract only. Body, materials, other controls and screen unchanged."
 }

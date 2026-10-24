@@ -306,7 +306,12 @@ internal sealed partial class RuntimeNativeCreature
             }
             else if (source.Procedure == 6) travel = FalloutTravelPackage.Read(selected!);
             else if (source.Procedure == 14) guard = FalloutGuardPackage.Read(selected!);
-            else if (source.Procedure == 12) sandbox = FalloutSandboxPackage.Read(selected!);
+            else if (source.Procedure == 12)
+            {
+                sandbox = FalloutSandboxPackage.Read(selected!);
+                if (sandbox.ContinueIfPlayerNear)
+                    throw new NotSupportedException("Creature Sandbox requires its continuing-selection owner.");
+            }
             else if (source.Procedure == 13) patrol = ReadPatrol(selected!);
             else if (source.Procedure == 15)
             {

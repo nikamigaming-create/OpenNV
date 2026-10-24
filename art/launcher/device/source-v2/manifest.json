@@ -1,0 +1,162 @@
+{
+  "asset": "OPENNV Instrument MK II",
+  "version": "2.0.0",
+  "status": "Integration candidate; not owner-approved final or verified 1:1",
+  "provenance": "Original procedural geometry and authored surface maps; no extracted retail meshes or source sprites.",
+  "native_evidence": "Blender Cycles hero/front/side renders, not Godot.",
+  "validation": {
+    "clean_glb_import": true,
+    "missing_named_objects": [],
+    "meshes_without_uv": [],
+    "nonfinite_coordinates": [],
+    "mesh_count": 194,
+    "triangles": 136884,
+    "screen_uv_min": [
+      0.0,
+      0.0
+    ],
+    "screen_uv_max": [
+      1.0,
+      1.0
+    ],
+    "external_image_dependencies": [],
+    "godot_runtime_test": false
+  },
+  "files": [
+    {
+      "filename": "README.txt",
+      "bytes": 3171,
+      "sha256": "8de793b1945c1b81b4625711e716cfaf8333554a05b32edd3a1217b2c51c0f85"
+    },
+    {
+      "filename": "add_sideplates.py",
+      "bytes": 746,
+      "sha256": "3308d128ebb33b0d4920f0fbc090bab30a75f9f62037fffa5e2917ea5e752670"
+    },
+    {
+      "filename": "author_surface_atlas.py",
+      "bytes": 4082,
+      "sha256": "39a55e2f9b5173c3159e477ea3a76a704acdd3776a0b0cb65d9d8bd59cf7d232"
+    },
+    {
+      "filename": "brass_basecolor.png",
+      "bytes": 598530,
+      "sha256": "11c269db329faf01a815931a013e149c1171289b9d5edfd279ff646643c766d1"
+    },
+    {
+      "filename": "brass_roughness.png",
+      "bytes": 174558,
+      "sha256": "daa7175ed57ebc3cce0aefa4d14faf28d792da3c852c2395517875ee5d02c701"
+    },
+    {
+      "filename": "build_instrument.py",
+      "bytes": 24234,
+      "sha256": "10cf3deaac12599eec972cc4e1552bdab2e61a66de79609411569e4263ce31d3"
+    },
+    {
+      "filename": "crt_readonly_preview.png",
+      "bytes": 19677,
+      "sha256": "6d920f208b648ee4d3ee9433d0f857711e9a427cf153a30c5b9b8320918420c7"
+    },
+    {
+      "filename": "device_mesh_helpers.py",
+      "bytes": 4573,
+      "sha256": "dd39881e985a8c7bc30d6f3b245b1475b83aad646a84c0d8a4d6beb1f1d59c71"
+    },
+    {
+      "filename": "finalize_display_glare.py",
+      "bytes": 1294,
+      "sha256": "e0d019b8ffb1405f561232637366bc3569840ee15f2881d5aaaf1c756e6a2ac5"
+    },
+    {
+      "filename": "instrument_mkii_native_contact_sheet.png",
+      "bytes": 2828231,
+      "sha256": "d2d1ed22bce37049953eb3a575e70eb8bf9cd5afb4a746ef3d0dd45fe2fc5fb2"
+    },
+    {
+      "filename": "instrument_mkii_native_front.png",
+      "bytes": 3169312,
+      "sha256": "138ff4d13d56bbdcde2fb777f3e752fe467ff8ce03ab3850eb8475725c9ca18d"
+    },
+    {
+      "filename": "instrument_mkii_native_hero.png",
+      "bytes": 3335760,
+      "sha256": "27d0f384c12fd7c38194c751ff40b2e3547a01504ab7f1a11ecf82e01ab84c4b"
+    },
+    {
+      "filename": "instrument_mkii_native_side.png",
+      "bytes": 2716903,
+      "sha256": "14035132c08cf4c5eded8945823ee923287baf7cb5880dc82ae2168647854264"
+    },
+    {
+      "filename": "integration_contract_v2.json",
+      "bytes": 12551,
+      "sha256": "0f5ab79298284cb558863ec2867379b58db6e38d8251d5ac11c4245da7e3cc03"
+    },
+    {
+      "filename": "ivory_basecolor.png",
+      "bytes": 2468410,
+      "sha256": "5b81ba46bb51ed2fb25cd46d0b553a8dd8747082bd145616a30292af5f163965"
+    },
+    {
+      "filename": "ivory_roughness.png",
+      "bytes": 451497,
+      "sha256": "0b751b410942d93dce35efeb9c5e7b48ad785ab70d7bc52972f804ac06e8868e"
+    },
+    {
+      "filename": "metal_basecolor.png",
+      "bytes": 551307,
+      "sha256": "bba47e2ad6348ab7688c339b1b44fd89ec66a50f8cca31619cb3f4621bfe83dc"
+    },
+    {
+      "filename": "metal_roughness.png",
+      "bytes": 167948,
+      "sha256": "99bacabbc97b7c0b9ed4076fd3534542cc845a8a6ba41bb4ff02b7190d687d31"
+    },
+    {
+      "filename": "olive_basecolor.png",
+      "bytes": 2257550,
+      "sha256": "7d8c0fa982fd506d824f2ea76d19656c1f9ddd4a70168af248437e4af200a327"
+    },
+    {
+      "filename": "olive_roughness.png",
+      "bytes": 722136,
+      "sha256": "efd27e89b5fde1c4e080309cf065a933d960c16f25483a609514c6fa88393d17"
+    },
+    {
+      "filename": "opennv_instrument_mkii.blend",
+      "bytes": 17476860,
+      "sha256": "4667e05c4c10a74a6f0e505c5f5c0072c9051b6389564928dfc0eccae4eb15f6"
+    },
+    {
+      "filename": "opennv_instrument_mkii.glb",
+      "bytes": 12287616,
+      "sha256": "e43b1cff8ef1d305db91668d706d7f631fa5f7e6e0a01e019831ef5bfe8ddcaf"
+    },
+    {
+      "filename": "package_candidate.py",
+      "bytes": 2198,
+      "sha256": "d90b9b53d0ba52c10705e891c0796db38e20520599d510c65c5c9d2067408d7b"
+    },
+    {
+      "filename": "rubber_basecolor.png",
+      "bytes": 142416,
+      "sha256": "5e6408643a8fd24757a62b5b24de7df06670d8b6cb6ec303ca3697ded0542c34"
+    },
+    {
+      "filename": "rubber_roughness.png",
+      "bytes": 171019,
+      "sha256": "1eb80e049b54a816305145aa2f6fd9bba76bb7908cce43c67289af5a8d642725"
+    },
+    {
+      "filename": "validate_asset.py",
+      "bytes": 1483,
+      "sha256": "f942f11038d96ffd821b0d19c7519f60c557ed30b770eed607368261a9463e3f"
+    },
+    {
+      "filename": "validation_report.json",
+      "bytes": 317,
+      "sha256": "5d9b82cb6aaa8a5697ab17b7c4cba42f6cc0f575b10a0ecb98cacb5118320a87"
+    }
+  ]
+}

@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://eauxad8tif5r"
-path="res://.godot/imported/olive_enamel_basecolor.png-d75be61cb6fcc76b689c8524916a84f3.ctex"
+uid="uid://bb2wb6gg151b2"
+path="res://.godot/imported/olive_roughness.png-f369e16cace1a8cdcb7ef284da7e2ff3.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/launcher/device/olive_enamel_basecolor.png"
-dest_files=["res://.godot/imported/olive_enamel_basecolor.png-d75be61cb6fcc76b689c8524916a84f3.ctex"]
+source_file="res://assets/launcher/device/olive_roughness.png"
+dest_files=["res://.godot/imported/olive_roughness.png-f369e16cace1a8cdcb7ef284da7e2ff3.ctex"]
 
 [params]
 
