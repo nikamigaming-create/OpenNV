@@ -10,6 +10,32 @@ using OpenNV.Runtime.Formats.Gamebryo;
 
 internal static class TravelContracts
 {
+    internal static void RunOwnedDialogueEditorRegion(string dataRoot)
+    {
+        RuntimeLiveContentSource.Configure(dataRoot, RuntimeLiveContentSource.FalloutNewVegasGame,
+            activePlugins: RuntimeLiveContentSource.ResolveVanillaPlugins(dataRoot), includeImplicitPlugins: false);
+        using var content = RuntimeLiveContentSource.Current!;
+        using var records = FalloutPluginStack.Load(content.PluginSources);
+        using var world = new FalloutReferenceWorld(records);
+        var actor = new FalloutFormKey("FalloutNV.esm", 0x0e5e51);
+        var package = records.GetEffective(new("FalloutNV.esm", 0x0e6343));
+        var sourceHash = Hash(package.ReadData());
+        var source = FalloutScriptPackage.Read(package);
+        var dialogue = FalloutDialoguePackage.Read(package);
+        var placement = world.EditorPlacement(actor);
+        var mergedCell = new FalloutFormKey("FalloutNV.esm", 0x0e1aa8);
+        var originalPosition = (float[])placement.Position.Clone();
+        Require(source.LocationType == 3 && dialogue.Target == records.RuntimeFormKey(0x14) &&
+            placement.Cell != mergedCell && world.SameTravelRegion(placement.Cell, mergedCell) &&
+            world.TravelRegion(placement.Cell) == new FalloutFormKey("FalloutNV.esm", 0x0da726),
+            "Owned persistent editor location lost its shared exterior coordinate region.");
+        Require(world.EditorPlacement(actor).Position.SequenceEqual(originalPosition) &&
+            world.Get(actor).PackageMotion is null && world.Get(actor).PackageAssignment is null &&
+            sourceHash == Hash(package.ReadData()),
+            "Coordinate admission changed source placement, package state or owned bytes.");
+        Console.WriteLine($"OPENNV_OWNED_DIALOGUE_EDITOR_REGION_PASS actor={actor} sourceCell={placement.Cell} mergedCell={mergedCell} sameWorld=true sourceUnchanged=true nativeFloorAndRoute=uninspected");
+    }
+
     internal static void RunOwnedCurrentLocation(string dataRoot)
     {
         RuntimeLiveContentSource.Configure(dataRoot, RuntimeLiveContentSource.FalloutNewVegasGame,
@@ -224,11 +250,12 @@ internal static class TravelContracts
             }
             var failedRoute = npcStart with
             {
-                RouteWaypoints = [], RouteCursor = 0,
+                RouteWaypoints = [],
+                RouteCursor = 0,
                 RouteFailure = new("No supported source corridor.", 3, 1.25)
             };
             var failedSaved = npcSaved.Select(value => value.Reference == npcActor ? value with
-                { PackageMotion = npcMotion with { Travel = failedRoute } } : value).ToArray();
+            { PackageMotion = npcMotion with { Travel = failedRoute } } : value).ToArray();
             using (var failedCold = new FalloutReferenceWorld(records))
             {
                 failedCold.Restore(JsonSerializer.Deserialize<FalloutReferenceSnapshot[]>(JsonSerializer.Serialize(failedSaved))!);
@@ -242,7 +269,7 @@ internal static class TravelContracts
             using (var pendingCold = new FalloutReferenceWorld(records))
             {
                 var pendingSaved = npcSaved.Select(value => value.Reference == npcActor ? value with
-                    { PackageMotion = npcMotion with { Travel = pendingRoute } } : value).ToArray();
+                { PackageMotion = npcMotion with { Travel = pendingRoute } } : value).ToArray();
                 pendingCold.Restore(JsonSerializer.Deserialize<FalloutReferenceSnapshot[]>(JsonSerializer.Serialize(pendingSaved))!);
                 var resumed = pendingCold.Get(npcActor);
                 Require(resumed.PackageMotion!.Travel is { RoutePending: true, Complete: false, RouteCursor: 0, RouteWaypoints.Length: 0 } &&
@@ -384,8 +411,11 @@ internal static class TravelContracts
         world.Get(actor).PackageAssignment = new(source.FormKey, Hash(source.ReadData()), false);
         world.Get(actor).PackageMotion = template with
         {
-            Package = source.FormKey, PackageSha256 = Hash(source.ReadData()), Animation = "meshes/actor/sneakmtidle.kf",
-            Seconds = 7.5, Travel = template.Travel! with { Complete = false, Location = world.Placement(Key(0x902)).Position }
+            Package = source.FormKey,
+            PackageSha256 = Hash(source.ReadData()),
+            Animation = "meshes/actor/sneakmtidle.kf",
+            Seconds = 7.5,
+            Travel = template.Travel! with { Complete = false, Location = world.Placement(Key(0x902)).Position }
         };
         var saved = JsonSerializer.Deserialize<FalloutReferenceSnapshot[]>(JsonSerializer.Serialize(world.Capture()))!;
         using var cold = new FalloutReferenceWorld(records);
@@ -435,8 +465,13 @@ internal static class TravelContracts
         state.PackageAssignment = new(package.FormKey, Hash(package.ReadData()), false);
         Reject(() => receipt.Validate(records, world, actor, package));
         world.SetPlacement(actor, arrival);
-        state.PackageMotion = template with { Package = package.FormKey, PackageSha256 = Hash(package.ReadData()),
-            Travel = null, AccompanyPortal = receipt };
+        state.PackageMotion = template with
+        {
+            Package = package.FormKey,
+            PackageSha256 = Hash(package.ReadData()),
+            Travel = null,
+            AccompanyPortal = receipt
+        };
         receipt.Validate(records, world, actor, package);
         Require(world.CurrentPackage(actor) == package.FormKey, "Accompany lost its package during committed portal handoff.");
         var saved = JsonSerializer.Deserialize<FalloutReferenceSnapshot[]>(JsonSerializer.Serialize(world.Capture()))!;
@@ -533,9 +568,12 @@ internal static class TravelContracts
         var source = FalloutTravelPackage.Read(package);
         var progress = source.Start(records, world, actor) with
         {
-            RouteCell = Key(0x800), PortalDoor = door,
+            RouteCell = Key(0x800),
+            PortalDoor = door,
             NavigationSha256 = world.TravelNavigation(Key(0x800)).SourceSha256,
-            RouteTarget = [4, 5, 6], RouteWaypoints = [[1, 2, 3], [4, 5, 6]], RouteCursor = 1
+            RouteTarget = [4, 5, 6],
+            RouteWaypoints = [[1, 2, 3], [4, 5, 6]],
+            RouteCursor = 1
         };
         Require(world.TravelPortal(actor, progress.Cell) == door, "Cross-cell Travel lost its directed source door.");
         source.Validate(records, world, actor, progress);
@@ -593,7 +631,7 @@ internal static class TravelContracts
         {
             using var cold = new FalloutReferenceWorld(records);
             Reject(() => cold.Restore(saved.Select(value => value.Reference == actor ? value with
-                { PackageMotion = template with { Travel = invalid } } : value).ToArray()));
+            { PackageMotion = template with { Travel = invalid } } : value).ToArray()));
             Require(cold.Capture().Count == 0, "Invalid portal receipt partially restored its world.");
         }
         Console.WriteLine("OPENNV_TRAVEL_PORTAL_CONTRACT_PASS directed=true lockedAndDisabledRefused=true coldApproach=true coldCommittedArrival=true committedPackageHandoff=true finalMarkerPending=true noReverseInference=true malformedAtomic=true");
@@ -614,8 +652,12 @@ internal static class TravelContracts
         Require(progress.Location.SequenceEqual([20f, 30f, 0f]), "Current-location anchor retained mutable input or used editor placement.");
         progress = progress with
         {
-            Complete = true, RouteCell = Key(0x800), NavigationSha256 = world.TravelNavigation(Key(0x800)).SourceSha256,
-            RouteTarget = [20, 0, -30], RouteWaypoints = [], RouteCursor = 0
+            Complete = true,
+            RouteCell = Key(0x800),
+            NavigationSha256 = world.TravelNavigation(Key(0x800)).SourceSha256,
+            RouteTarget = [20, 0, -30],
+            RouteWaypoints = [],
+            RouteCursor = 0
         };
         // Movement after package selection must not relocate its persisted anchor.
         world.SetPlacement(actor, new(Key(0x800), [70, 80, 0], [0, 0, 0]));
@@ -721,12 +763,23 @@ internal static class TravelContracts
             body.CopyTo(group, 24); return group;
         }
         File.WriteAllBytes(Path.Combine(directory, "Worlds.esm"), Join(Header(), Record("WRLD", 0x100),
-            Group(0x100, Record("CELL", 0x810, Field("DATA", [0]), Field("XCLC", new byte[8])),
-                Record("CELL", 0x811, Field("DATA", [0]), Field("XCLC", new byte[8]))),
+            Group(0x100, Record("CELL", 0x810, Field("DATA", [2]), Field("XCLC", new byte[8])),
+                Record("CELL", 0x811, Field("DATA", [0]), Field("XCLC", new byte[8])),
+                Record("CELL", 0x813, Field("DATA", [1]))),
+            Record("WRLD", 0x200), Group(0x200, Record("CELL", 0x812, Field("DATA", [0]), Field("XCLC", new byte[8]))),
+            Record("CELL", 0x814, Field("DATA", [1])), Record("CELL", 0x815, Field("DATA", [1])),
             NavigationMesh(0x610, 0x810), NavigationMesh(0x611, 0x811)));
         using (var records = FalloutPluginStack.Load(directory, ["Worlds.esm"]))
         {
             var a = new FalloutFormKey("Worlds.esm", 0x810); var b = new FalloutFormKey("Worlds.esm", 0x811);
+            using var world = new FalloutReferenceWorld(records);
+            Require(world.SameTravelRegion(a, b) && world.SameTravelRegion(a, a) &&
+                world.SameTravelRegion(a, new("WORLDS.ESM", 0x811)) &&
+                !world.SameTravelRegion(a, new("Worlds.esm", 0x812)) &&
+                !world.SameTravelRegion(a, new("Worlds.esm", 0x813)) &&
+                !world.SameTravelRegion(new("Worlds.esm", 0x814), new("Worlds.esm", 0x815)) &&
+                world.SameTravelRegion(new("Worlds.esm", 0x814), new("Worlds.esm", 0x814)),
+                "Travel coordinate admission separated a persistent exterior parent or merged different interiors/worlds.");
             var region = FalloutNavigationSources.Region(records, a);
             var cell = FalloutNavigationSources.Cell(records, a);
             Require(region.NavMeshes == 2 && cell.NavMeshes == 1 && region.SourceSha256 != cell.SourceSha256 &&

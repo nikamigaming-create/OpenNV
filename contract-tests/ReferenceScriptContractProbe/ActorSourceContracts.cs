@@ -29,7 +29,8 @@ internal static class ActorSourceContracts
                 "Radius behavior lost neutral intrusion, friendly exclusions or cowardly confidence.");
             File.WriteAllBytes(Path.Combine(directory, "Actors.esm"), Join(Header(),
                 Creature(0x800, 0, 0, "creatures/test/skeleton.nif", "body.nif", 1.5f,
-                    Field("CNTO", Join(BitConverter.GetBytes(0x840u), BitConverter.GetBytes(3)))),
+                    Field("CNTO", Join(BitConverter.GetBytes(0x840u), BitConverter.GetBytes(3))),
+                    Field("KFFZ", Text("1hpattackright.kf\0specialanims/custom.kf\0meshes/shared/attack.kf"))),
                 Creature(0x801, 65, 0x800, "creatures/local/skeleton.nif", "local.nif", .75f),
                 Creature(0x802, 66, 0x802, "creatures/test/skeleton.nif", "body.nif", 1),
                 Record("NPC_", 7, Field("EDID", Text("PlayerBase"))),
@@ -135,6 +136,9 @@ internal static class ActorSourceContracts
                 "Unused template flags rejected an actor with a null or absent template link.");
             Check(appearance.ModelOwner == Key(0x800) && appearance.StatsOwner == Key(0x801) && appearance.BaseScale == .75f &&
                 appearance.Models.Single() == "meshes/creatures/test/body.nif", "Independent CREA template groups or part directory changed.");
+            Check(appearance.AnimationFiles.SequenceEqual(new[] { "meshes/creatures/test/specialanims/1hpattackright.kf",
+                "meshes/creatures/test/specialanims/custom.kf", "meshes/shared/attack.kf" }),
+                "Inherited KFFZ lost its assigned namespace or explicit source paths.");
             Reject(() => FalloutCreatureAppearanceResolver.Resolve(records, Key(0x802)));
             Reject(() => FalloutCreatureAppearanceResolver.Resolve(records, Key(0x803)));
             Reject(() => FalloutCreatureAppearanceResolver.Resolve(records, Key(0x800), Key(0x900)));

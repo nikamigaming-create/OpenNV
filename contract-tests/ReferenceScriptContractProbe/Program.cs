@@ -707,6 +707,11 @@ if (args is ["--audit-current-location-travel", var currentLocationData])
     TravelContracts.RunOwnedCurrentLocation(currentLocationData);
     return;
 }
+if (args is ["--audit-dialogue-editor-region", var dialogueEditorData])
+{
+    TravelContracts.RunOwnedDialogueEditorRegion(dialogueEditorData);
+    return;
+}
 if (args is ["--furniture-contracts"])
 {
     FurnitureContracts.Run();
@@ -886,6 +891,11 @@ if (args is ["--animation-resource-contracts"])
 {
     AnimationResourceContracts.Run();
     AttackVariantContracts.Run();
+    return;
+}
+if (args is ["--audit-creature-weapon-bindings", var creatureWeaponData])
+{
+    AnimationResourceContracts.RunOwnedCreatureWeapon(creatureWeaponData);
     return;
 }
 if (args is ["--audit-player-start-inventory", var inventoryRoot])

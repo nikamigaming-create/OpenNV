@@ -8,8 +8,14 @@ internal sealed partial class FalloutReferenceWorld
     private FalloutCampaignPortalGraph? _travelPortals;
     private readonly Dictionary<FalloutFormKey, CellNavigationGraph> _travelNavigation = [];
 
-    internal FalloutFormKey TravelRegion(FalloutFormKey cell) =>
-        FalloutCellSceneReader.ReadDefinition(records, cell).Worldspace ?? cell;
+    internal FalloutFormKey TravelRegion(FalloutFormKey cell)
+    {
+        var definition = FalloutCellSceneReader.ReadDefinition(records, cell);
+        return (definition.Flags & 1) == 0 ? definition.Worldspace ?? cell : cell;
+    }
+
+    internal bool SameTravelRegion(FalloutFormKey first, FalloutFormKey second) =>
+        FalloutFormKeyComparer.Instance.Equals(TravelRegion(first), TravelRegion(second));
 
     internal CellNavigationGraph TravelNavigation(FalloutFormKey cell)
     {

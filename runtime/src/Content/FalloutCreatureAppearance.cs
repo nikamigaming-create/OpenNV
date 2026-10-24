@@ -32,7 +32,11 @@ internal static class FalloutCreatureAppearanceResolver
         var scale = BinaryPrimitives.ReadSingleLittleEndian(Field(stats, "BNAM", 4).Span);
         if (!float.IsFinite(scale) || scale <= 0)
             throw new InvalidDataException($"CREA {stats.FormKey} has an invalid base scale.");
-        var animations = ReadList(model, "KFFZ").Select(path => ModelPath(path, directory, ".kf")).ToArray();
+        // Bare assigned-animation names belong to the model's SpecialAnims
+        // namespace. Explicit relative/full resource paths retain their source
+        // directory instead of being discovered by an unrestricted scan.
+        var animations = ReadList(model, "KFFZ").Select(path => ModelPath(path,
+            path.Contains('/') || path.Contains('\\') ? directory : directory + "/specialanims", ".kf")).ToArray();
         return new(creature, reference, model.FormKey, stats.FormKey, skeleton, scale,
             BinaryPrimitives.ReadUInt32LittleEndian(Field(model, "ACBS", 24).Span), models, animations);
     }

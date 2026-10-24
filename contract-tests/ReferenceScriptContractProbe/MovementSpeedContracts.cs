@@ -12,6 +12,7 @@ internal static class MovementSpeedContracts
         {
             File.WriteAllBytes(Path.Combine(directory.FullName, "Movement.esm"), Fixture());
             using var records = FalloutPluginStack.Load(directory.FullName, ["Movement.esm"]);
+            CheckCreatureTurning(records);
             var inventory = new FalloutPlayerInventory();
             inventory.Restore(new(Enumerable.Range(0, 14).Select(type => Item((uint)(1000 + type), "WEAP"))
                 .Concat(new[] { Item(20, "ARMO"), Item(21, "ARMO"), Item(22, "ARMO") }).ToArray(), null), []);
@@ -54,12 +55,38 @@ internal static class MovementSpeedContracts
         finally { directory.Delete(true); }
     }
 
+    private static void CheckCreatureTurning(FalloutPluginStack records)
+    {
+        float Turn(uint id) => FalloutCreatureTurnSpeed.ResolveDegrees(records,
+            FalloutCreatureTurnSpeed.ReadAuthoredDegrees(records, records.GetEffective(Key(id))));
+        Near(Turn(300), 45);
+        Near(Turn(301), 45); // Stats inheritance owns TNAM.
+        Near(Turn(302), 70); // Model-only inheritance does not own TNAM.
+        Near(Turn(308), 45); // Negative zero also requests the setting.
+        Check(records.NumericSettings.Set("fCreatureDefaultTurningSpeed", 90), "Creature default setting was not mutable.");
+        Near(Turn(300), 90); Near(Turn(301), 90); Near(Turn(302), 70);
+        Check(records.NumericSettings.Set("fCreatureDefaultTurningSpeed", 0), "Creature default zero was not retained.");
+        Reject(() => Turn(300)); Near(Turn(302), 70);
+        Check(records.NumericSettings.Set("fCreatureDefaultTurningSpeed", -1), "Creature default negative value was not retained.");
+        Reject(() => Turn(300)); Near(Turn(302), 70);
+        Check(records.NumericSettings.Set("fCreatureDefaultTurningSpeed", 45), "Creature default setting was not restored.");
+        foreach (var id in new uint[] { 303, 304, 305, 306, 307 }) Reject(() => Turn(id));
+        Reject(() => FalloutCreatureTurnSpeed.ResolveDegrees(records, float.PositiveInfinity));
+        Console.WriteLine("OPENNV_CREATURE_TURN_SPEED_PASS zeroNamedDefault=true signedZero=true statsInheritance=true currentSetting=true authoredNonzero=true invalidRefused=true gameplay=false");
+    }
+
     internal static void RunOwned(string dataRoot)
     {
         RuntimeLiveContentSource.Configure(dataRoot, RuntimeLiveContentSource.FalloutNewVegasGame,
             activePlugins: RuntimeLiveContentSource.ResolveVanillaPlugins(dataRoot), includeImplicitPlugins: false);
         using var content = RuntimeLiveContentSource.Current!;
         using var records = FalloutPluginStack.Load(content.PluginSources);
+        var creature = records.GetEffective(records.RuntimeFormKey(0x168bd9));
+        var authoredTurn = FalloutCreatureTurnSpeed.ReadAuthoredDegrees(records, creature);
+        var selectedTurn = FalloutCreatureTurnSpeed.ResolveDegrees(records, authoredTurn);
+        Check(authoredTurn == 0 && selectedTurn == FalloutGameSettingFloats.Read(records, "fCreatureDefaultTurningSpeed"),
+            "Reached creature did not use its current source default for authored zero turn speed.");
+        Console.WriteLine($"OPENNV_OWNED_CREATURE_TURN_SPEED_PASS creature={creature.FormKey} authored={authoredTurn:R} selected={selectedTurn:R} sourceReadonly=true gameplay=false");
         var inventory = new FalloutPlayerInventory();
         var values = new FalloutPlayerActorValues(records);
         var skills = new FalloutPlayerSkills(records, () => values.BaseSpecial, _ => false, () => [],
@@ -83,19 +110,30 @@ internal static class MovementSpeedContracts
         var settings = new (string Name, float Value)[] { ("fMoveBaseSpeed", 100), ("fMoveRunMult", 2),
             ("fMoveSneakMult", .5f), ("fMoveNoWeaponMult", 1.1f), ("fMoveOneCrippledLegSpeedMult", .8f),
             ("fMoveTwoCrippledLegsSpeedMult", .6f), ("fMoveMediumArmorPenalty", .1f), ("fMoveHeavyArmorPenalty", .2f),
-            ("fMove2HRPenalty", .15f), ("fMove2HBigPenalty", .3f) };
+            ("fMove2HRPenalty", .15f), ("fMove2HBigPenalty", .3f), ("fCreatureDefaultTurningSpeed", 45) };
         byte[] Part(byte type, byte value)
         {
             var data = new byte[84]; data[5] = type; data[6] = 50; data[7] = value;
             return Join(Field("BPTN", Text("Mobility" + type)), Field("BPND", data));
         }
         byte[] Weapon(uint type) { var data = new byte[204]; BitConverter.GetBytes(type).CopyTo(data, 0); return Record("WEAP", 1000 + type, Field("DNAM", data)); }
+        byte[] Creature(uint id, float turn, ushort inheritance = 0)
+        {
+            var data = new byte[24]; BinaryPrimitives.WriteUInt16LittleEndian(data.AsSpan(22), inheritance);
+            var fields = new List<byte[]> { Field("ACBS", data), Field("TNAM", BitConverter.GetBytes(turn)) };
+            if (inheritance != 0) fields.Add(Field("TPLT", BitConverter.GetBytes(300u)));
+            return Record("CREA", id, fields.ToArray());
+        }
         return Join(Record("TES4", 0, Field("HEDR", new byte[12])), Record("BPTD", 0x1d, Part(7, 29), Part(8, 30)),
             Record("ARMO", 20, Field("BMDT", [4, 0, 0, 0, 0x80, 0, 0, 0])),
             Record("ARMO", 21, Field("BMDT", [4, 0, 0, 0, 8, 0, 0, 0])),
             Record("ARMO", 22, Field("BMDT", [4, 0, 0, 0, 0, 0, 0, 0])),
             Join(settings.Select((setting, index) => Record("GMST", (uint)(100 + index), Field("EDID", Text(setting.Name)), Field("DATA", BitConverter.GetBytes(setting.Value)))).ToArray()),
-            Join(Enumerable.Range(0, 14).Select(type => Weapon((uint)type)).ToArray()));
+            Join(Enumerable.Range(0, 14).Select(type => Weapon((uint)type)).ToArray()),
+            Creature(300, 0), Creature(301, 60, 2), Creature(302, 70, 64), Creature(303, -1), Creature(304, float.NaN),
+            Record("CREA", 305, Field("ACBS", new byte[24]), Field("TNAM", new byte[3])),
+            Record("CREA", 306, Field("ACBS", new byte[24]), Field("TNAM", BitConverter.GetBytes(1f)), Field("TNAM", BitConverter.GetBytes(2f))),
+            Record("CREA", 307, Field("ACBS", new byte[24])), Creature(308, -0.0f));
     }
 
     private static FalloutCampaignItem Item(uint id, string type) => new(Key(id), id, "Synthetic", type, 1, 1, 1);

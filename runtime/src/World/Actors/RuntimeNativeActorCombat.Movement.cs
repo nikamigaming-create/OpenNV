@@ -13,6 +13,7 @@ internal sealed partial class RuntimeNativeActorCombat
     private float _movementSkeletonScale, _movementActorScale;
     private Vector3 _movementWorldScale;
     private float _radius, _motionScale, _turnSpeed;
+    private float? _creatureTurnDegrees;
     private string? _movementBlock;
     private string? _stepBlock;
     private (float One, float Two)? _crippledLegSpeedSettings;
@@ -87,14 +88,12 @@ internal sealed partial class RuntimeNativeActorCombat
         _motionScale = scale * _actor.Scale.X * BinaryPrimitives.ReadUInt16LittleEndian(acbs[14..]) / 100;
         if (_actor is RuntimeNativeCreature)
         {
-            var model = FalloutActorTemplateOwner.Resolve(_records, _records.GetEffective(_state.Base), 64, _state.Templates);
-            var turning = model.ReadSubrecords().Single(field => field.Signature == "TNAM").Data.Span;
-            if (turning.Length != 4) throw new InvalidDataException("Creature turn speed extent is invalid.");
-            _turnSpeed = Mathf.DegToRad(FalloutProjectile.Number(turning, 0));
+            _creatureTurnDegrees = FalloutCreatureTurnSpeed.ReadAuthoredDegrees(_records,
+                _records.GetEffective(_state.Base), _state.Templates);
+            _turnSpeed = Mathf.DegToRad(FalloutCreatureTurnSpeed.ResolveDegrees(_records, _creatureTurnDegrees.Value));
         }
         else _turnSpeed = Mathf.DegToRad(FalloutGameSettingFloats.ReadRetained(_records, "fCharacterDefaultTurningSpeed", nameof(RuntimeNativeActorCombat)));
-        if (_motionScale <= 0 || _turnSpeed < 0) throw new NotSupportedException("Actor movement/turn speed is not positive.");
-        if (_turnSpeed == 0) throw new FalloutActorZeroTurnException();
+        if (_motionScale <= 0 || _turnSpeed <= 0) throw new NotSupportedException("Actor movement/turn speed is not positive.");
         GamebryoReferenceEnableRuntime.SetCollisionFilter(mover, 0, _mask);
         mover.FloorSnapLength = radius;
         mover.FloorMaxAngle = Mathf.DegToRad(_context?.MaximumWalkableSlopeDegrees ?? PlayerConfiguration.DefaultMaximumWalkableSlopeDegrees);
@@ -132,8 +131,10 @@ internal sealed partial class RuntimeNativeActorCombat
         var destination = Basis.LookingAt(direction.Normalized(), Vector3.Up).GetRotationQuaternion();
         var current = _actor.GlobalBasis.Orthonormalized().GetRotationQuaternion();
         var angle = current.AngleTo(destination);
+        var turnSpeed = _creatureTurnDegrees is { } authored
+            ? Mathf.DegToRad(FalloutCreatureTurnSpeed.ResolveDegrees(_records, authored)) : _turnSpeed;
         _actor.GlobalBasis = new Basis(current.Slerp(destination, angle <= .00001f ? 1 :
-            Math.Min(1, _turnSpeed * (float)delta / angle)).Normalized()).Scaled(_movementWorldScale);
+            Math.Min(1, turnSpeed * (float)delta / angle)).Normalized()).Scaled(_movementWorldScale);
     }
 
     private void MoveActor(Vector3 localMotion, double delta, Vector3? waypoint = null)

@@ -17,7 +17,7 @@ internal partial class RuntimeNativeNpc
         status = _editorTravelStatus,
         projectedEndpoint = _editorTravelDestination is { } point ? new[] { point.X, point.Y, point.Z } : null,
         owner = "source-editor-location-native-capsule-and-kf",
-        unbound = new[] { "other-cell-route", "must-complete-reevaluation", "retail-timing" }
+        unbound = new[] { "other-region-route", "must-complete-reevaluation", "retail-timing" }
     };
 
     private void BeginEditorTravel(FalloutPluginRecord package, bool initializing)
@@ -29,8 +29,8 @@ internal partial class RuntimeNativeNpc
             ? world.Get(actor).PackageMotion!.EditorTravel : null;
         var progress = restored ?? source.Start(world, actor);
         source.Validate(world, actor, progress);
-        if (progress.Cell != _aiCell!.Cell.FormKey)
-            throw new NotSupportedException("Editor travel destination requires its other-cell route owner.");
+        if (!world.SameTravelRegion(progress.Cell, _aiCell!.Cell.FormKey))
+            throw new NotSupportedException("Editor travel destination requires its other-region route owner.");
         _editorTravel = source; _editorTravelProgress = progress; _editorTravelDestination = null;
         _editorTravelStatus = restored is null ? "pending-native-observation" : "restored";
         _aiPackage = package; _travelProgress?.Cancel();

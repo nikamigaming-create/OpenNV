@@ -57,6 +57,7 @@ internal sealed record FalloutWeaponPresentation(FalloutFormKey Form, FalloutNpc
         156 => "attackthrow7",
         162 => "attackthrow8",
         255 when WeaponAnimationType is 0 or 1 or 2 => "attackleft",
+        255 when WeaponAnimationType is 3 or 4 => "attackright",
         _ => throw new NotSupportedException($"WEAP attack group {AttackAnimation} has no selection owner.")
     };
     internal IReadOnlyList<FalloutFormKey> Ammunition { get; init; } = [];
