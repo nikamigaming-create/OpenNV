@@ -404,6 +404,15 @@ internal partial class RuntimeNativeNpc
             selected = selection.Record;
             _selectedSourcePackage = selected?.FormKey; _sourceSelectionKnown = true;
             if (!forced && _aiError is not null && selected is not null && _failedPackage == selected.FormKey) return;
+            // Same-cell continuation holds the actual healthy procedure and
+            // consumed lifecycle. Explicit EVP and failed owners may retire it.
+            if (_aiError is null && _sandboxPackage is { ContinueIfPlayerNear: true } sandbox &&
+                selected?.FormKey != sandbox.Form && !forced &&
+                sandbox.RetainsSelection(Combat!.PackagePlayerInSameCell(), forced))
+            {
+                _selectedSourcePackage = sandbox.Form;
+                return;
+            }
             if (_aiReferenceState is not null) ClearBindingFailure();
             ClearSandboxAdmissionFailure();
             // A failed procedure cannot freeze a later eligible package. Event

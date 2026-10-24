@@ -1,0 +1,172 @@
+{
+  "version": "2.1.0",
+  "scope": "Dial-only correction, four-game order/angles/physical marked pointer. No body or material redesign.",
+  "validation": {
+    "static_meshes_checked": 187,
+    "non_dial_meshes_and_transforms_unchanged": true,
+    "control_rest_basis_preserved": true,
+    "game_order": [
+      "fallout1",
+      "fallout2",
+      "newvegas",
+      "fallout3"
+    ],
+    "front_angles_degrees": [
+      135,
+      45,
+      -45,
+      -135
+    ],
+    "local_rotations_degrees": [
+      -45,
+      45,
+      135,
+      225
+    ],
+    "measured_tip_alignment": [
+      {
+        "expected_front_degrees": 135,
+        "actual_front_degrees": 135.0,
+        "error_degrees": 0.0
+      },
+      {
+        "expected_front_degrees": 45,
+        "actual_front_degrees": 45.0,
+        "error_degrees": 0.0
+      },
+      {
+        "expected_front_degrees": -45,
+        "actual_front_degrees": -45.0,
+        "error_degrees": 0.0
+      },
+      {
+        "expected_front_degrees": -135,
+        "actual_front_degrees": -135.0,
+        "error_degrees": 0.0
+      }
+    ],
+    "godot_runtime_verified": false
+  },
+  "files": [
+    {
+      "filename": "opennv_instrument_mkii_v21.blend",
+      "bytes": 17608732,
+      "sha256": "9de5a0289ddb1cd2e3861f7a2201d340321f638b06c7376dc9a441c9a3d309d7"
+    },
+    {
+      "filename": "opennv_instrument_mkii_v21.glb",
+      "bytes": 12351912,
+      "sha256": "26f2547dc412fb1a34d1f238ba97c7d9c99a1adc01fcee00f0313f7c98bdcfbd"
+    },
+    {
+      "filename": "integration_contract_v21.json",
+      "bytes": 14565,
+      "sha256": "b27083b5bbd918d459874435fce159ffb22a35e6aef04c1428a11a24f01de66a"
+    },
+    {
+      "filename": "dial_v21_validation.json",
+      "bytes": 875,
+      "sha256": "f227cb95824d5671f8b21ab9bee90a6349c90f8fa1bcbf35d2561969e5813eb9"
+    },
+    {
+      "filename": "apply_dial_v21.py",
+      "bytes": 7146,
+      "sha256": "ea1b4468f3c67ec2dd2391db2d267a607a3fccf960beac41a821337bff65e53a"
+    },
+    {
+      "filename": "README.txt",
+      "bytes": 1801,
+      "sha256": "7e29b266251da518d829007a2ecbc97884db3d21d8eb298c03b0f8a82ff515ca"
+    },
+    {
+      "filename": "crt_readonly_preview.png",
+      "bytes": 19677,
+      "sha256": "6d920f208b648ee4d3ee9433d0f857711e9a427cf153a30c5b9b8320918420c7"
+    },
+    {
+      "filename": "dial_neutral_up.png",
+      "bytes": 689258,
+      "sha256": "0180231ea624f50bf2954c59fe22d4c96e93a59db26d83bc188889baed0b3a97"
+    },
+    {
+      "filename": "dial_v21_four_detent_proof.png",
+      "bytes": 1886452,
+      "sha256": "57ef261dc24d5df1a43aff46a0fd373a8d466797fe0e20cfb18b8c756012df52"
+    },
+    {
+      "filename": "package_dial_v21.py",
+      "bytes": 2006,
+      "sha256": "e96cdd1a59c8c7f22d9cab2755b759e2d502f765ce4c1aca272920cd89290ede"
+    },
+    {
+      "filename": "brass_basecolor.png",
+      "bytes": 598530,
+      "sha256": "11c269db329faf01a815931a013e149c1171289b9d5edfd279ff646643c766d1"
+    },
+    {
+      "filename": "ivory_basecolor.png",
+      "bytes": 2468410,
+      "sha256": "5b81ba46bb51ed2fb25cd46d0b553a8dd8747082bd145616a30292af5f163965"
+    },
+    {
+      "filename": "metal_basecolor.png",
+      "bytes": 551307,
+      "sha256": "bba47e2ad6348ab7688c339b1b44fd89ec66a50f8cca31619cb3f4621bfe83dc"
+    },
+    {
+      "filename": "olive_basecolor.png",
+      "bytes": 2257550,
+      "sha256": "7d8c0fa982fd506d824f2ea76d19656c1f9ddd4a70168af248437e4af200a327"
+    },
+    {
+      "filename": "rubber_basecolor.png",
+      "bytes": 142416,
+      "sha256": "5e6408643a8fd24757a62b5b24de7df06670d8b6cb6ec303ca3697ded0542c34"
+    },
+    {
+      "filename": "brass_roughness.png",
+      "bytes": 174558,
+      "sha256": "daa7175ed57ebc3cce0aefa4d14faf28d792da3c852c2395517875ee5d02c701"
+    },
+    {
+      "filename": "ivory_roughness.png",
+      "bytes": 451497,
+      "sha256": "0b751b410942d93dce35efeb9c5e7b48ad785ab70d7bc52972f804ac06e8868e"
+    },
+    {
+      "filename": "metal_roughness.png",
+      "bytes": 167948,
+      "sha256": "99bacabbc97b7c0b9ed4076fd3534542cc845a8a6ba41bb4ff02b7190d687d31"
+    },
+    {
+      "filename": "olive_roughness.png",
+      "bytes": 722136,
+      "sha256": "efd27e89b5fde1c4e080309cf065a933d960c16f25483a609514c6fa88393d17"
+    },
+    {
+      "filename": "rubber_roughness.png",
+      "bytes": 171019,
+      "sha256": "1eb80e049b54a816305145aa2f6fd9bba76bb7908cce43c67289af5a8d642725"
+    },
+    {
+      "filename": "dial_detent_fallout1.png",
+      "bytes": 689758,
+      "sha256": "7a02700cb9680cc1cbb3b45eceeeba13ae5b6732f882f2a52a11a3853bd496c5"
+    },
+    {
+      "filename": "dial_detent_fallout2.png",
+      "bytes": 691705,
+      "sha256": "6f663fdc0cb770164e4766917e0c8aaf18261bcd90ff13ed3657aeeef11dd82c"
+    },
+    {
+      "filename": "dial_detent_fallout3.png",
+      "bytes": 691449,
+      "sha256": "cf7d26d0343c0b2f6eda9384e5002d8fd5138bb3a5095b65620c230f45e2fc66"
+    },
+    {
+      "filename": "dial_detent_newvegas.png",
+      "bytes": 689271,
+      "sha256": "157e4a9c0f97252d6cb76624cbc6a9fd1f8b0e752c1c554e317dd3401158f024"
+    }
+  ]
+}

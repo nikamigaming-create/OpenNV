@@ -9,6 +9,9 @@ internal sealed record FalloutSandboxPackage(FalloutFormKey Form, uint Flags, in
     internal const string CaptureBlockerPrefix = "Sandbox continuation: ";
     internal bool Running => (Flags & 0x2000) != 0;
     internal bool WeaponDrawn => (Flags & 0x800000) != 0;
+    internal bool ContinueIfPlayerNear => (Flags & 0x200) != 0;
+    internal bool RetainsSelection(bool playerInSameCell, bool forced) =>
+        !forced && ContinueIfPlayerNear && playerInSameCell;
 
     internal static FalloutSandboxPackage Read(FalloutPluginRecord record)
     {
@@ -17,7 +20,7 @@ internal sealed record FalloutSandboxPackage(FalloutFormKey Form, uint Flags, in
         if (source.LocationType is not (0 or 3))
             throw new NotSupportedException("Sandbox needs its non-reference/non-editor location owner.");
         var data = FalloutPackageData.Read(record);
-        const uint supported = 0x1000 | 0x2000 | 0x800000 | FalloutScriptPackage.HeadTrackingOffFlag |
+        const uint supported = 0x200 | 0x1000 | 0x2000 | 0x800000 | FalloutScriptPackage.HeadTrackingOffFlag |
             FalloutScriptPackage.WeaponsUnequippedFlag;
         if ((data.Flags & ~supported) != 0)
             throw new NotSupportedException($"Sandbox package flags 0x{data.Flags & ~supported:x8} have no execution owner.");

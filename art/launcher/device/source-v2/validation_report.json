@@ -1,0 +1,18 @@
+{
+  "clean_glb_import": true,
+  "missing_named_objects": [],
+  "meshes_without_uv": [],
+  "nonfinite_coordinates": [],
+  "mesh_count": 194,
+  "triangles": 136884,
+  "screen_uv_min": [
+    0.0,
+    0.0
+  ],
+  "screen_uv_max": [
+    1.0,
+    1.0
+  ],
+  "external_image_dependencies": [],
+  "godot_runtime_test": false
+}

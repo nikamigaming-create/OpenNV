@@ -1,0 +1,46 @@
+{
+  "static_meshes_checked": 187,
+  "non_dial_meshes_and_transforms_unchanged": true,
+  "control_rest_basis_preserved": true,
+  "game_order": [
+    "fallout1",
+    "fallout2",
+    "newvegas",
+    "fallout3"
+  ],
+  "front_angles_degrees": [
+    135,
+    45,
+    -45,
+    -135
+  ],
+  "local_rotations_degrees": [
+    -45,
+    45,
+    135,
+    225
+  ],
+  "measured_tip_alignment": [
+    {
+      "expected_front_degrees": 135,
+      "actual_front_degrees": 135.0,
+      "error_degrees": 0.0
+    },
+    {
+      "expected_front_degrees": 45,
+      "actual_front_degrees": 45.0,
+      "error_degrees": 0.0
+    },
+    {
+      "expected_front_degrees": -45,
+      "actual_front_degrees": -45.0,
+      "error_degrees": 0.0
+    },
+    {
+      "expected_front_degrees": -135,
+      "actual_front_degrees": -135.0,
+      "error_degrees": 0.0
+    }
+  ],
+  "godot_runtime_verified": false
+}

@@ -98,12 +98,12 @@ if ($taskReadyRows.Count -ne 1) { throw "The exported native launcher did not re
 $taskReady = $taskReadyRows[0].Groups[1].Value | ConvertFrom-Json
 $taskRuntimeManifestHash = (Get-FileHash -LiteralPath (Join-Path $taskRepository 'runtime/runtime-manifest.json') -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($taskReady.phase -ne 'launcher-construction' -or !$taskReady.refreshed -or !$taskReady.displayConstructed -or
-    $taskReady.displayStyle -notin @('original-physical-device', 'standard-accessible-launcher') -or
+    $taskReady.displayStyle -notin @('original-physical-instrument', 'standard-accessible-launcher') -or
     $taskReady.buildVersion -ne $Version -or $taskReady.sourceCommit -ne $taskCommit -or
     $taskReady.sourceModified -ne $false -or $taskReady.runtimeManifestSha256 -ne $taskRuntimeManifestHash) {
     throw "Exported launcher identity differs from the pinned source/package: $taskSmokeLog"
 }
-if ($RequirePhysicalDevice -and (!$taskReady.deviceConstructed -or $taskReady.displayStyle -ne 'original-physical-device')) {
+if ($RequirePhysicalDevice -and (!$taskReady.deviceConstructed -or !$taskReady.instrumentConstructed -or $taskReady.displayStyle -ne 'original-physical-instrument')) {
     throw "The original physical launcher device was required but is unavailable: $taskSmokeLog"
 }
 

@@ -2,19 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://b4hp15syl8c78"
-path="res://.godot/imported/launcher_device_crt_preview_ui.png-e174ca186176ae0c974419e03bceeefa.ctex"
+uid="uid://cmqaonnekf3wy"
+path="res://.godot/imported/brass_roughness.png-3b161687ddfc470a960237e17404063a.ctex"
 metadata={
 "vram_texture": false
-}
-generator_parameters={
-"md5": "7bf244095fba3818f0793db13ee7836e"
 }
 
 [deps]
 
-source_file="res://assets/launcher/device/launcher_device_crt_preview_ui.png"
-dest_files=["res://.godot/imported/launcher_device_crt_preview_ui.png-e174ca186176ae0c974419e03bceeefa.ctex"]
+source_file="res://assets/launcher/device/brass_roughness.png"
+dest_files=["res://.godot/imported/brass_roughness.png-3b161687ddfc470a960237e17404063a.ctex"]
 
 [params]
 
@@ -27,7 +24,7 @@ compress/rdo_quality_loss=0.0
 compress/hdr_compression=1
 compress/normal_map=0
 compress/channel_pack=0
-mipmaps/generate=true
+mipmaps/generate=false
 mipmaps/limit=-1
 mipmaps/preserve_alpha_test_coverage=false
 mipmaps/alpha_test_threshold=0.5

@@ -2,19 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://peslcwfaks64"
-path="res://.godot/imported/launcher_device_olive_enamel_basecolor.png-11c47030331a69f0969722a4f2f53197.ctex"
+uid="uid://d2sv8ivalki27"
+path="res://.godot/imported/ivory_basecolor.png-ff570a1be6dc36c109754dc522367108.ctex"
 metadata={
 "vram_texture": false
-}
-generator_parameters={
-"md5": "cf2c2a4cc2f5649672d04053c08578f9"
 }
 
 [deps]
 
-source_file="res://assets/launcher/device/launcher_device_olive_enamel_basecolor.png"
-dest_files=["res://.godot/imported/launcher_device_olive_enamel_basecolor.png-11c47030331a69f0969722a4f2f53197.ctex"]
+source_file="res://assets/launcher/device/ivory_basecolor.png"
+dest_files=["res://.godot/imported/ivory_basecolor.png-ff570a1be6dc36c109754dc522367108.ctex"]
 
 [params]
 
@@ -27,7 +24,7 @@ compress/rdo_quality_loss=0.0
 compress/hdr_compression=1
 compress/normal_map=0
 compress/channel_pack=0
-mipmaps/generate=true
+mipmaps/generate=false
 mipmaps/limit=-1
 mipmaps/preserve_alpha_test_coverage=false
 mipmaps/alpha_test_threshold=0.5

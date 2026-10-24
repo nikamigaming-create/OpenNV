@@ -188,6 +188,7 @@ internal sealed partial class NativeGodotLauncher : Control
         RefreshPresentationModes(campaign);
         RefreshDetails(CurrentCampaign());
         RefreshStackLaunch(campaign);
+        RefreshInstrument();
     }
 
     private void ShowToast(string message)

@@ -21,10 +21,12 @@ internal sealed partial class NativeGodotLauncher
         runtimeManifestSha256 = _launcherManifestSha256,
         selectedProfile = _selectedGameId,
         selectedPresentation = _selectedPresentation,
-        displayStyle = DevicePresentationConstructed ? "original-physical-device" : "standard-accessible-launcher",
+        displayStyle = InstrumentPresentationConstructed ? "original-physical-instrument" : "standard-accessible-launcher",
         displayConstructed = DevicePresentationConstructed || GodotObject.IsInstanceValid(_hero) && _hero.HasNode("PhosphorDisplay"),
         deviceConstructed = DevicePresentationConstructed,
+        instrumentConstructed = InstrumentPresentationConstructed,
         deviceStatus = DevicePresentationStatus,
+        selectorStatus = DeviceSelectorContractStatus,
         nativePixels = "unchecked",
         gameplayReady = false,
     }));

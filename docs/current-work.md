@@ -1,108 +1,139 @@
 # Current work
 
-Updated 2026-10-24. Deliver fresh ordinary flat New Vegas through Doc, Sunny's
-wells, ingredients and campfire, then Primm/ED-E. Recording is off. Owned retail
-inputs are read-only. No campaign, physical XR or retail parity completion claim.
+Updated 2026-10-24. Deliver fresh ordinary New Vegas through Doc, Sunny's wells,
+ingredients and campfire, then Primm/ED-E. Recording is off. Owned retail inputs
+are read-only. No campaign, physical XR or retail parity completion claim.
 
 ## Baseline and ownership
 
-Accepted main is 7760357aa81f7d352e49c73ad107b6234e32444b (PR304), verified equal
-to local main, origin/main and live remote after all five hosted checks passed.
-Current branch is codex/fnv-fresh-tutorial. PR305 carries the source Sneak and original device batch; the repaired full local gate passed16:02:57.9800863Z, Gate0/Diff0/Public2542/no source or save drift. Updated-head hosted checks are next.
-One coordinator owns builds, gameplay input, Git and this document. No competing
-runtime or build job. Denied optional old-writer messaging is not retried.
+Accepted main is d760340b0ef081b08a231b4856579acd81858fa2 (PR305), merged16:17:14Z
+after all five exact-head hosted checks passed. Local main, origin/main and live
+remote were verified equal; merge tree matches tested head82f86692. Current
+branch is codex/fnv-campfire-progression. Unrelated held PR242/269 stay untouched.
+One coordinator owns gameplay input, builds, Git and this document. No competing
+build/runtime is authorized. Denied optional old-writer messages are not retried.
 
-## Fresh playable checkpoint
+## Durable fresh gameplay
 
-The user reset the active OpenNV profile on13:13:15Z. Canonical save and30 slots
-were reversibly moved to local/opennv-save-reset-20261024T131315Z, outside the
-active scan. Never restore those files. Retail/other profiles were untouched.
-All subsequent progress belongs to the fresh character CourierCourier.
+The user reset the active profile13:13:15Z: canonical save and30 old slots were
+reversibly moved outside the active scan to local/opennv-save-reset-20261024T131315Z.
+Never restore those files. Fresh character CourierCourier completed Doc200,
+SPECIAL, Guns/Repair/Speech tags, no traits and normal farewell. Ordinary saloon
+entry, Sunny dialogue, outdoor rifle/reload and bottle hits completed shooting.
+No authored quest, survival, placement or collision state was forced.
 
-Fresh ordinary play completed Doc at VCG01 stage200, with SPECIAL allocation,
-Guns/Repair/Speech tags, no optional traits and normal farewell. Actual front
-saloon entry10636f, Sunny's initial choice, exterior transition and three bottle
-hits completed the shooting lesson. The real next-lesson choice advanced VCG02
-to25. F5 committed a586f849745a4f4a8f6fdc7c343f5e26 at14:57:17.6207402Z:
-v61,120HP, exterior0daeb8, PlayerSneaking=true, no pending procedure owners or
-save/cleanup/publication errors. No quest state was forced.
+Actual first-well rifle contacts killed10a1fd/10a1fe; source death scripts advanced
+VCG02 to50. Corpse loot supplied Gecko Meat1. F5 c96b2ea991424621b434955d5f1dbd1e
+retains schema61/120HP/both deaths and completed death dispatch. Save/cleanup and
+publication errors were absent. Current durable near-next-well checkpoint is
+689d4aeb00e94fa197604b7cda11d75a:120HP/Meat1/stage50, player near[-939.55,106.72,199.90],
+Sunny alive and the real next-well choice accepted. Later-well kills are not yet
+durable; normal Load recovered three ordinary combat deaths. One was an operator
+pause-toggle error, not an engine defect. Do not repeat opening acceptance.
 
-Smoke31 PID36656 / runner8382 completed the ordinary first-well instructions and
-combat. Real rifle contacts killed10a1fd and10a1fe, including a normal reload;
-Sunny's/source death scripts advanced VCG02 to50. Corpse inventory supplied one
-Gecko Meat. F5 committed c96b2ea991424621b434955d5f1dbd1e: schema61,120HP,
-Meat1, both Injury.Dead=true and DeathEventPending=false; save/cleanup errors null
-and publicationFailures0. No quest state or survival was fabricated. Two earlier
-shots hit real rock107107; native routing subsequently cleared the obstruction.
-The game normally quit through observed requests74/75; runner8382 exit0, PID absent.
-Smoke32 PID18736 / runner77566 used ordinary Continue from this earned fresh checkpoint. Its return-to-Sunny capsule search exhausted against actual canyon rocks. It normally quit through observed requests4/5, runner exit0, for the serialized device window. No game is active. Next play continues the same earned stage50 save,
-then Sunny's remaining wells and ingredients/campfire. No duplicate runtime.
-## Connected input repair
+Smoke33 normally quit through observed Quit/YES requests172/173; runner1027
+returned exit0 and PID3752 is absent. The earned689 checkpoint remains intact.
+No gameplay runtime is active. Any future combat macro must stop its controller,
+read fresh authoritative player state and verify pause before returning to
+analysis; never blindly toggle Escape after automatic pause.
 
-Source control8 now toggles authoritative Sneaking activity through source
-permissions and modal/furniture/camera guards. Existing movement/spread owners
-consume it; campaign state retains PlayerSneaking. Camera/capsule/body crouch
-remains explicitly unbound. Harness named Ctrl/Shift/Alt now carry matching Left
-location; bot bindings admit that exact side and refuse unrepresented Right
-modifiers. Existing native recorded-input audit tests real press/release.
+17:31Z read-only recovery observation: game remains alive/paused, next request170.
+Publication failures55 are retained. Last failed publication1840 had an actual
+CommitStarted IOException sharing violation0x80070020; publication4464 subsequently
+completed in15.714ms. Coordinator's earlier Get-Content -Tail reader lacked delete
+sharing and likely caused this burst; it has closed. All current live reads use
+FileShare.ReadWrite|Delete. Do not reset counters or classify this reader error as
+a gameplay defect. Input remains stopped pending explicit recovery reconciliation.
 
-Connected Debug build passed with zero warnings/errors. Existing native input
-and bot-binding audit passed, including Left modifier and Right refusal. Actual
-new-DLL Ctrl toggled Sneak, two further bottle hits completed the objective, and
-F5 retained the flag. Cold restoration awaits a natural later Continue. The full required gate passed15:28:26.3145949Z: Gate0/Diff0,2528 public files, no source/add/save drift. This receipt covers the frozen input/device-source/fallback batch; checked publication is next.
+## Current implementation boundary
 
-## Related gameplay owners
+PR305 delivered source control8 Sneak activity/save retention and matching Left
+modifier input leases, plus functional original physical-launcher scaffolding.
+Its exact-tree required gate passed16:02:57.9800863Z, Gate0/Diff0/Public2542 with
+no source/add/protected-save drift; all hosted checks passed before merge.
+Sneak camera/capsule/body posture and physical XR remain unbound.
 
-PR304 delivered basic source NPC dart emission/damage and process continuation;
-exact visual/RNG/aim parity remains unclaimed. Same-world dialogue admission
-keeps native floor/routes and distinct interior/world identities.
+The owner rejected the generic box and browser UI embedded in its CRT as final
+art. Historical functional acceptance is not acceptance of that final design.
+The four-file hardware-first handoff was hash-checked against exact public bases
+and applied: dedicated CRT instrument readout; separate F2 accessible library;
+shared semantic game/mode selection; LOAD/CONFIG/RETURN/POWER, brightness,
+Master-bus audio and read-view controls. Construction/package identity now names
+the instrument. The existing native audit was adapted to these real semantics,
+including noninteractive CRT output and filter-independent physical selection.
+The revised original body/contract is installed, with named aliases, verified
+pivots/curved CRT UVs and metadata-driven camera/brightness/switch poses. Combined
+Debug build passed zero warnings/errors; Godot import and native1280x800 preview
+passed. Actual CRT
+has dedicated output; no regular browser is embedded. Source contract JSON is
+explicitly included in exports. Superseded v1 texture/sidecars were removed using
+the manifest's exact list. Native comparison found overbright trim, weak text
+hierarchy and simplified wear/shoulders/feet. Grouped lighting/readout repairs
+compiled with zero warnings/errors. Original v2.1 corrects the four game labels
+and keyed90-degree pointer/pin positions while preserving non-dial geometry.
+The native interaction run passed: four actual game choices, selector movement
+and roundtrip (the production contract validates all four target/pin poses),
+five CRT production ray/UV joins, brightness, Master mute, read camera, cancellation,
+source picker, separate F2 filter and normal New Vegas launch request. No gameplay
+launched. Physical POWER produced exit0 before the audit's failure timeout, with
+no automatic-quit fallback. Whole/read/F2 selected native images and input/power
+receipts are under .staging/launcher-device-v21/qa. Actual pixels were compared to
+locked concept libfile_bd5bdd391cc48191bb230d4932cc4226; wear/shoulders/feet are still
+simpler, so no final1:1 claim. The original editable blend ships; supplementary
+authoring recipes remain in the original private Library bundles.
+Required frozen-tree publication gate passed18:11:19.9395447Z: Gate0/Diff0,
+2585 public files, no source/add/protected-save drift. Checked publication is next.
 
-Fresh Doc PACK10b756 uses PLDT current-location type2/radius1024, which Sandbox
-currently refuses. Implement a latched persistent package-start anchor and the
-actual continue-near semantics, rather than recentering every wander. Actor Eat
-also needs actor-owned inventory, effects and procedure persistence; do not use
-the player ingestible instance or suppress the source candidate1210c9 refusal.
-Neither has been fixed in this batch. Side door10aedc independently refused its
-unbound ownership/crime effect; normal front saloon entry worked. No collision
-or access guard was weakened. Fresh campfire crafting/quest completion remains
-unaccepted, despite existing shared recipe/inventory rollback support.
+Worker01a16e13 owns Device.cs v2 geometry/control/camera reconciliation, ONLY
+SyncInstrumentHardware in Instruments.cs for metadata-driven poses, and
+original runtime/assets/launcher/device + art/launcher/device exports/manifest.
+Coordinator owns Instruments/Library/main hook/Actions/package/audit integration.
+Worker handoff is complete/frozen; all files now belong to coordinator integration.
+No worker builds/runtime/Git. Automatic Library transfer already works through
+the dedicated Ubuntu environment; do not retry the old Windows helper.
 
-## Original device delivery
+## Remaining gameplay systems
 
-Original GLB/textures/contract/manifest are installed under runtime/assets/launcher/device;
-editable original Blender source is under art/launcher/device. No retail art is
-included. The writer verified all delivered bundle hashes and Library provenance.
-Godot import passed, and settled native pixels show the live green interface on
-actual curved CRT geometry. The existing preview now waits for the two-viewport
-composition instead of capturing its first empty target. Phosphor backing and
-lighting preserve readable green controls; Read screen and F2 provide larger views.
+PR304 supplies basic source NPC dart emission/damage and process continuation;
+exact aim/visual/RNG parity is unclaimed. Same-region dialogue keeps native floor
+and route execution with different interior/world identities isolated.
+Doc PACK10b756 current-location Sandbox still needs a retained package-start
+anchor. Automatic approval review rejected its connected
+persistence patch because schema change/v61 admission conflicted with the stated
+no-old-save-compatibility constraint. No denied operation was retried. The prior
+partial anchor hunks were inspected and selectively reversed; no anchor or schema
+change remains. Explicit approval is required for that persistence cut.
+Independent source-flag support is now implemented without snapshot/schema edits:
+healthy native NPC Sandbox retains its active package while the player is in the
+same actual cell; an explicit evaluation or leaving that cell allows reevaluation.
+Failed procedures do not gain a hold. Creature continuing-selection remains
+explicitly refused. The existing Sandbox probe has flag/cell/explicit-evaluation
+coverage and passes; combined build has zero warnings/errors. The selected owned
+record audit confirms Doc's package declares this flag alongside unsupported type2.
+Current-location PLDT type2 is still refused, so Doc's whole package is not claimed.
+Actor Eat requires actor-owned inventory, effects and
+persistent procedure state; player ingestibles must not be reused and the source
+candidate refusal must not be suppressed. Existing shared campfire recipe and
+inventory rollback are implemented, but fresh ingredient/cooking/quest acceptance
+remains open. Ordinary combat deaths/controller limits alone justify no engine fix.
 
-The actual native input check passed: four CRT corners plus center, real keyboard
-filtering, tuning/range constrained to visible library choices, pointer cancellation,
-settings/back, both cosmetic toggles, F2 reparenting of the same live interface,
-and normal launch-request/quit callbacks through all four physical function keys.
-The private preview subscribed to the real launch request; it started no game.
-Selected diagnostics are .staging/pipboy-launcher/qa/launcher.png, launcher-read.png
-and launcher-standard.png. Recording is off. This is launcher acceptance only,
-not campaign or XR readiness. No preview image is used as gameplay/menu authority.
+## Classic lane
 
-PR305's first hosted head passed modifier bindings but failed the existing recording
-audit's physical-hold renewal assertion. Its short SceneTree timer did not use the
-monotonic clock that owns real leases. The fixture now waits through that clock's
-hold span and retains all previous renewal/release assertions; the focused native
-audit passes. No production timing, diagnostics or refusal was waived. The related original-device and fixture repair tree passed its full required integrated gate16:02:57.9800863Z, Gate0/Diff0/Public2542/no drift; updated-head checked publication is next.
+Twelve-file staged foundation: .staging/classic-animation/classic-foundation.patch,
+SHA2561cadea3b663250eb7f39ccaebdb9e0a008a5199deff10b4e275da1db9009fb00.
+Public classic files remain unchanged. It connects source actor geometry picking,
+request/turn/prefix persistence, source animation commands and committed-elevation
+map-update delivery. Hit/action-frame/RNG/AP/ammo/HP/death resolution and NPC
+hostility/AI execution remain unbound; combat exit has no completed producer.
+No working encounter/fire/campaign claim. Revised Arroyo candidates remain staged
+until source silhouettes/seams/passage fit are admitted; no forced mappings.
 
-Classic writer01a16e13 owns only a staged patch for generic source object-animation
-execution plus the exact classic config/Arroyo original-asset reservation. Existing
-kits do not match temple/sculpture source pieces, so no forced classic mappings or
-canonical placement claims were added. Public classic edits remain held until this
-checkpoint is pinned. No competing builds/runtime/Git ownership is delegated.
 ## Next integrated boundary
 
-Continue ordinary later lessons from the earned stage50 checkpoint, gather ingredients and
-craft through source interactions. Collect related runtime failures as one repair
-batch. Keep independent gameplay publication moving if model delivery remains
-blocked; preserve the writer's changes. Run the required exact-tree publication
-gate and diff check before push/checked PR, then wait all five exact-head hosted
-successes before normal merge. No repeated full gates per small edit, optional
-proof-only research, old-save compatibility or fabricated progress.
+Keep the game stopped during the serialized integration window. Finish v2 instrument
+source/assets and grouped compile/native interaction/locked-concept comparison.
+Continue remaining ordinary wells, ingredients and actual campfire interactions;
+implement related proven failures as one repair batch. Keep independent gameplay
+publication moving. Run repository-required checks once at the coherent changed
+boundary, then checked PR/all five exact-head hosted successes/normal merge.
+No repeated optional audit passes, fabricated progress or save-compatibility work.

@@ -33,18 +33,7 @@ internal sealed partial class NativeGodotLauncher
                     ClipText = true,
                     TooltipText = campaign.Title,
                 };
-                button.Pressed += () =>
-                {
-                    _selectedId = campaign.Id;
-                    if (!FalloutModInstallation.IsMod(campaign.Id))
-                    {
-                        _selectedGameId = campaign.Id;
-                        if (!campaign.Presentations.ContainsKey(_selectedPresentation))
-                            _selectedPresentation = campaign.DefaultPresentation;
-                    }
-                    _toast.Text = string.Empty;
-                    Refresh();
-                };
+                button.Pressed += () => SelectLauncherCampaign(campaign);
                 _campaignButtons[id] = button;
                 var row = new HBoxContainer { Name = "LibraryRow_" + id };
                 row.AddThemeConstantOverride("separation", 3);
@@ -123,6 +112,38 @@ internal sealed partial class NativeGodotLauncher
         }
     }
 
+    // One semantic selection path for the instrument and accessible library.
+    // Presentation visibility and a library search never decide hardware state.
+    private void SelectLauncherCampaign(NativeGodotLauncherCampaign campaign)
+    {
+        _selectedId = campaign.Id;
+        if (!FalloutModInstallation.IsMod(campaign.Id))
+        {
+            _selectedGameId = campaign.Id;
+            if (!campaign.Presentations.ContainsKey(_selectedPresentation))
+                _selectedPresentation = campaign.DefaultPresentation;
+        }
+        _toast.Text = string.Empty;
+        Refresh();
+    }
+
+    private bool SelectLauncherPresentation(string mode)
+    {
+        var campaign = LaunchCampaign();
+        if (!campaign.Presentations.TryGetValue(mode, out var route) || !route.Launchable || mode == "openxr" && !XrAvailable)
+        {
+            ShowToast(mode == "openxr" && !XrAvailable
+                ? "Start OpenNV VR with your headset runtime active to enable this mode."
+                : route?.Status ?? "This game has no supported " + RouteLabel(mode) + " mode.");
+            RefreshInstrument();
+            return false;
+        }
+        _selectedPresentation = mode;
+        _toast.Text = string.Empty;
+        Refresh();
+        return true;
+    }
+
     private void RefreshPresentationModes(NativeGodotLauncherCampaign campaign)
     {
         foreach (var child in _presentationList.GetChildren().ToArray())
@@ -149,7 +170,7 @@ internal sealed partial class NativeGodotLauncher
                 button.AddThemeStyleboxOverride("disabled", Box(new Color("283323"), new Color("657756")));
                 button.AddThemeColorOverride("font_color", Gold);
             }
-            button.Pressed += () => { _selectedPresentation = mode; Refresh(); };
+            button.Pressed += () => SelectLauncherPresentation(mode);
             _presentationList.AddChild(button);
         }
     }

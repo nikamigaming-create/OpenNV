@@ -27,13 +27,18 @@ internal static class SandboxAdmissionFailureContracts
             BinaryPrimitives.WriteUInt32LittleEndian(group.AsSpan(12), 6); reference.CopyTo(group, 24);
             creatureReference.CopyTo(group, 24 + reference.Length);
             turningReference.CopyTo(group, 24 + reference.Length + creatureReference.Length);
-            byte[] Package(uint id, bool idle) => Record("PACK", id,
-                Field("EDID", Encoding.ASCII.GetBytes("Sandbox\0")), Field("PKDT", data), Field("PLDT", location),
-                Field("IDLC", [idle ? (byte)1 : (byte)0]), Field("IDLA", idle ? BitConverter.GetBytes(0x30u) : []),
-                Field("POBA", []));
+            byte[] Package(uint id, bool idle, uint flags = 0)
+            {
+                var declaration = (byte[])data.Clone();
+                BinaryPrimitives.WriteUInt32LittleEndian(declaration, flags);
+                return Record("PACK", id,
+                    Field("EDID", Encoding.ASCII.GetBytes("Sandbox\0")), Field("PKDT", declaration), Field("PLDT", location),
+                    Field("IDLC", [idle ? (byte)1 : (byte)0]), Field("IDLA", idle ? BitConverter.GetBytes(0x30u) : []),
+                    Field("POBA", []));
+            }
             File.WriteAllBytes(path, Join(Record("TES4", 0, Field("HEDR", new byte[12])),
                 Record("NPC_", 0x10, Field("ACBS", new byte[24]), Field("PKID", BitConverter.GetBytes(0x20u)),
-                    Field("PKID", BitConverter.GetBytes(0x21u))), Package(0x20, false), Package(0x21, true),
+                    Field("PKID", BitConverter.GetBytes(0x21u))), Package(0x20, false), Package(0x21, true), Package(0x22, false, 0x200),
                 Record("CREA", 0x11, Field("ACBS", creatureStats), Field("TNAM", BitConverter.GetBytes(0f)), Field("PKID", BitConverter.GetBytes(0x20u))),
                 Record("CREA", 0x12, Field("ACBS", creatureStats), Field("TNAM", BitConverter.GetBytes(180f)), Field("PKID", BitConverter.GetBytes(0x20u))),
                 Record("CELL", 0x800, Field("DATA", [1, 0])), group,
@@ -41,6 +46,11 @@ internal static class SandboxAdmissionFailureContracts
             using var records = FalloutPluginStack.Load(directory, ["Admission.esm"]);
             FalloutFormKey Key(uint id) => new("Admission.esm", id);
             string Hash(uint id) => FalloutActorFurnitureContinuation.RecordHash(records.GetEffective(Key(id)));
+            var continuingSandbox = FalloutSandboxPackage.Read(records.GetEffective(Key(0x22)));
+            Require(continuingSandbox.ContinueIfPlayerNear && continuingSandbox.RetainsSelection(true, false) &&
+                !continuingSandbox.RetainsSelection(false, false) && !continuingSandbox.RetainsSelection(true, true) &&
+                !FalloutSandboxPackage.Read(records.GetEffective(Key(0x20))).RetainsSelection(true, false),
+                "Sandbox continuation ignored its source flag, cell boundary or explicit evaluation override.");
             var actor = new FalloutReferenceInstance(records.GetEffective(Key(0x900)), null);
             var effects = 0;
             void Dispatch(FalloutScriptPackage package, string kind)

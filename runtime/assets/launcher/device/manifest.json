@@ -1,60 +1,595 @@
 {
-  "version": "1.0.0",
-  "asset": "OpenNV original field instrument",
+  "version": "2.1.0",
+  "asset": "Original OpenNV Instrument MK II",
+  "status": "Four-game physical instrument connected; native input and POWER exit passed. Visual fidelity remains approximate, not1:1.",
   "provenance": {
-    "origin": "Original procedural geometry and textures authored for OpenNV in Blender 4.3.2. No retail meshes or extracted textures.",
-    "bundle": "opennv-cloud-models-v1.zip",
-    "bundle_sha256": "695484b350e3531be2065588fd4ba13b2e722ecebeba50d26349c8d19918c7e0"
+    "origin": "Original procedural geometry and authored surface maps; no extracted retail meshes or source sprites.",
+    "library_id": "libfile_d5988c0ccc788191b5c2f16de7cc0747",
+    "library_version": 0,
+    "bundle": "opennv-launcher-dial-v2.1.zip",
+    "bundle_bytes": 32509105,
+    "bundle_sha256": "c9a3165deab3b982d6e8c18a0306ec4282dc54b3dd1dd05e1cf7026fdaed91f7"
   },
-  "contract": "integration_contract.json",
-  "scale": "1 unit = 1 metre",
-  "axes": "Godot Y up; device front +Z",
+  "locked_concept_library_id": "libfile_bd5bdd391cc48191bb230d4932cc4226",
   "runtime": "res://assets/launcher/device/launcher_device.glb",
   "editable_source": "art/launcher/device/launcher_device.blend",
-  "dependencies": "GLB embeds its two textures. Separate PNG files preserve editable texture sources. No Blender installation is required for the GLB runtime path.",
-  "screen": "CRT_Screen must receive the live launcher SubViewport texture. crt_preview_ui.png is an orientation preview only, not launcher behavior.",
-  "geometry": {
-    "triangles": 54716,
-    "screen_vertices": 1813,
-    "screen_uv_bounds": [
-      0,
-      1,
-      0,
-      1
-    ],
-    "named_controls": 8
-  },
-  "lod": "Hero asset; no independently validated LOD meshes. Preserve screen UV grid and control identities if enabling generated LODs.",
-  "collision": "No baked collision. Launcher performs triangle ray/UV picking and ignores CRT_Glass for input.",
+  "contract": "integration_contract.json",
+  "scale": "metres; glTF/Godot Y up, front +Z",
+  "dependencies": "11 original textures embedded in GLB/blend; separate PNGs retained. Runtime does not invoke Blender. Editable blend is shipped; original generation recipes remain in the provenance-identified private Library bundles.",
+  "screen": "CRT_Screen receives dedicated instrument readout. Preview texture is never application state. Exact 310x216mm power-6 squircle; glass excluded from picking/depth writes.",
+  "controls": "Brightness declared legacy alias CONTROL_Range_pivotY; -135..135 degrees. Keys retain actual sloped pivots and 3mm local travel; toggles use declared -18..18 degrees. Ready lens consumes existing launch readiness.",
+  "visual_gaps": [
+    "Procedural chipped enamel is less varied than concept wear.",
+    "Lower bank/bumper contours and guard mounts are approximate rather than pixel-identical.",
+    "Offline studio preview is not a Godot screenshot."
+  ],
+  "lod": "No authored LOD. Preserve CRT UV grid and control nodes; generated Godot LOD requires native inspection.",
+  "collision": "No gameplay collision. Exact triangle ray picking retains occlusion; glass excluded.",
   "local_validation": {
-    "blender": "Blender 5.2.3 LTS imported GLB through approved MCP connection; required names present; max screen contract error 2.850721178640396e-8 metres.",
-    "godot": "Godot4.8-dev7 compatibility renderer1280x800: original GLB imported, settled whole/read/F2 pixels inspected; native actual input passed5CRT points, filtering, tuning/range, cancellation,4function keys,2toggles,F2, normal launch request and quit. Preview launched no game. Full integrated gate passed2026-10-24T16:02:57.9800863Z; campaign/XR/retail parity unverified."
+    "bundle_and_files": "ZIP hash/size and all24 producer file hashes verified; all installed file hashes checked.",
+    "geometry": {
+      "method": "Direct original GLB buffer/scene graph inspection; no Godot or Blender execution",
+      "manifest_files_verified": 24,
+      "mesh_count": 197,
+      "triangles": 138561,
+      "screen_vertex_count": 3185,
+      "screen_max_error_m": 2.7857905019759872E-08,
+      "bounds_godot_m": [
+        [
+          -0.3639999944716692,
+          0.3639999944716692
+        ],
+        [
+          0.0044999998062849045,
+          0.534375011920929
+        ],
+        [
+          -0.2830799922129798,
+          0.1998032389413508
+        ]
+      ],
+      "controls": {
+        "CONTROL_FunctionKey_0": {
+          "matrix_godot": [
+            [
+              1.0,
+              0.0,
+              0.0,
+              -0.23800000548362732
+            ],
+            [
+              0.0,
+              0.6691305594234151,
+              0.7431448554615443,
+              0.12788645923137665
+            ],
+            [
+              0.0,
+              -0.7431448554615443,
+              0.6691305594234151,
+              0.16837210953235626
+            ],
+            [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ]
+          ],
+          "extras": {
+            "action": "Play",
+            "press_axis_local": "+Y",
+            "travel_m": 0.003,
+            "asset_role": "sculpted_original_launcher_instrument",
+            "binding_state": "Consumer wiring required; action intention only"
+          },
+          "matrix_error": 1.4342838028369442E-08
+        },
+        "CONTROL_FunctionKey_1": {
+          "matrix_godot": [
+            [
+              1.0,
+              0.0,
+              0.0,
+              -0.1509999930858612
+            ],
+            [
+              0.0,
+              0.6691305594234151,
+              0.7431448554615443,
+              0.12788645923137665
+            ],
+            [
+              0.0,
+              -0.7431448554615443,
+              0.6691305594234151,
+              0.16837210953235626
+            ],
+            [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ]
+          ],
+          "extras": {
+            "action": "Settings",
+            "press_axis_local": "+Y",
+            "travel_m": 0.003,
+            "asset_role": "sculpted_original_launcher_instrument",
+            "binding_state": "Consumer wiring required; action intention only"
+          },
+          "matrix_error": 1.4342838028369442E-08
+        },
+        "CONTROL_FunctionKey_2": {
+          "matrix_godot": [
+            [
+              1.0,
+              0.0,
+              0.0,
+              -0.06400000303983688
+            ],
+            [
+              0.0,
+              0.6691305594234151,
+              0.7431448554615443,
+              0.12788645923137665
+            ],
+            [
+              0.0,
+              -0.7431448554615443,
+              0.6691305594234151,
+              0.16837210953235626
+            ],
+            [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ]
+          ],
+          "extras": {
+            "action": "Back",
+            "press_axis_local": "+Y",
+            "travel_m": 0.003,
+            "asset_role": "sculpted_original_launcher_instrument",
+            "binding_state": "Consumer wiring required; action intention only"
+          },
+          "matrix_error": 1.4342838028369442E-08
+        },
+        "CONTROL_FunctionKey_3": {
+          "matrix_godot": [
+            [
+              1.0,
+              0.0,
+              0.0,
+              0.023000000044703484
+            ],
+            [
+              0.0,
+              0.6691305594234151,
+              0.7431448554615443,
+              0.12788645923137665
+            ],
+            [
+              0.0,
+              -0.7431448554615443,
+              0.6691305594234151,
+              0.16837210953235626
+            ],
+            [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ]
+          ],
+          "extras": {
+            "action": "Quit",
+            "press_axis_local": "+Y",
+            "travel_m": 0.003,
+            "asset_role": "sculpted_original_launcher_instrument",
+            "binding_state": "Consumer wiring required; action intention only"
+          },
+          "matrix_error": 1.4342838028369442E-08
+        },
+        "CONTROL_Toggle_0_pivotX": {
+          "matrix_godot": [
+            [
+              1.0,
+              0.0,
+              0.0,
+              0.18799999356269836
+            ],
+            [
+              0.0,
+              0.6691305594234151,
+              0.7431448554615443,
+              0.15703964233398438
+            ],
+            [
+              0.0,
+              -0.7431448554615443,
+              0.6691305594234151,
+              0.14050182700157166
+            ],
+            [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ]
+          ],
+          "extras": {
+            "action": "AudioToggle",
+            "rotation_axis_local": "X",
+            "rotation_limits_degrees": [
+              -18,
+              18
+            ],
+            "asset_role": "sculpted_original_launcher_instrument",
+            "binding_state": "Consumer wiring required; action intention only"
+          },
+          "matrix_error": 1.4342838028369442E-08
+        },
+        "CONTROL_Toggle_1_pivotX": {
+          "matrix_godot": [
+            [
+              1.0,
+              0.0,
+              0.0,
+              0.2630000114440918
+            ],
+            [
+              0.0,
+              0.6691305594234151,
+              0.7431448554615443,
+              0.15703964233398438
+            ],
+            [
+              0.0,
+              -0.7431448554615443,
+              0.6691305594234151,
+              0.14050182700157166
+            ],
+            [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ]
+          ],
+          "extras": {
+            "action": "ReadViewToggle",
+            "rotation_axis_local": "X",
+            "rotation_limits_degrees": [
+              -18,
+              18
+            ],
+            "asset_role": "sculpted_original_launcher_instrument",
+            "binding_state": "Consumer wiring required; action intention only"
+          },
+          "matrix_error": 1.4342838028369442E-08
+        },
+        "CONTROL_MainTuning_pivotY": {
+          "matrix_godot": [
+            [
+              1,
+              0,
+              0,
+              0.2199999988079071
+            ],
+            [
+              0,
+              1,
+              0,
+              0.30300000309944153
+            ],
+            [
+              0,
+              0,
+              1,
+              0.11100000143051147
+            ],
+            [
+              0,
+              0,
+              0,
+              1.0
+            ]
+          ],
+          "extras": {
+            "action": "PreviousGame / NextGame",
+            "rotation_axis_local": "Y",
+            "detent_degrees": 90,
+            "rotation_limits_degrees": [
+              -45,
+              225
+            ],
+            "asset_role": "sculpted_original_launcher_instrument",
+            "binding_state": "Consumer wiring required; action intention only",
+            "wrap_degrees": 360,
+            "axis_conversion": "Blender local +Y = Godot local -Z",
+            "positive_rotation": "CLOCKWISE as viewed from front",
+            "neutral_pointer_front_angle_degrees": 90,
+            "selection_map_json": "[{\"game_id\": \"fallout1\", \"front_angle_degrees\": 135, \"local_rotation_degrees\": -45}, {\"game_id\": \"fallout2\", \"front_angle_degrees\": 45, \"local_rotation_degrees\": 45}, {\"game_id\": \"newvegas\", \"front_angle_degrees\": -45, \"local_rotation_degrees\": 135}, {\"game_id\": \"fallout3\", \"front_angle_degrees\": -135, \"local_rotation_degrees\": 225}]"
+          },
+          "matrix_error": 0.0
+        },
+        "CONTROL_Brightness_pivotY": {
+          "matrix_godot": [
+            [
+              1,
+              0,
+              0,
+              0.17599999904632568
+            ],
+            [
+              0,
+              1,
+              0,
+              0.210999995470047
+            ],
+            [
+              0,
+              0,
+              1,
+              0.11100000143051147
+            ],
+            [
+              0,
+              0,
+              0,
+              1.0
+            ]
+          ],
+          "extras": {
+            "action": "ScreenBrightness",
+            "rotation_axis_local": "Y",
+            "rotation_limits_degrees": [
+              -135,
+              135
+            ],
+            "legacy_alias": "CONTROL_Range_pivotY",
+            "asset_role": "sculpted_original_launcher_instrument",
+            "binding_state": "Consumer wiring required; action intention only"
+          },
+          "matrix_error": 0.0
+        }
+      },
+      "ready_lens_present": true,
+      "embedded_images": 11,
+      "godot_validation": false,
+      "blender_mcp": "Restored existing approved connection; prior v2 Blender inspection passed. This receipt is direct GLB inspection."
+    },
+    "dial_delta": {
+      "method": "Direct consumer glTF/Godot-coordinate matrices and actual pointer vertices; no render",
+      "unchanged_non_dial_meshes": 187,
+      "unchanged_fields": [
+        "world matrices",
+        "positions",
+        "UVs",
+        "indices"
+      ],
+      "selector_rest_basis_preserved": true,
+      "neutral_pointer_front_degrees": 90.0,
+      "alignment": [
+        {
+          "game_id": "fallout1",
+          "rotation_degrees": -45,
+          "pointer_front_degrees": 135.0,
+          "pin_front_degrees": 134.9999871551263,
+          "alignment_error_degrees": 1.2844873708672822E-05
+        },
+        {
+          "game_id": "fallout2",
+          "rotation_degrees": 45,
+          "pointer_front_degrees": 45.0,
+          "pin_front_degrees": 45.0,
+          "alignment_error_degrees": 0.0
+        },
+        {
+          "game_id": "newvegas",
+          "rotation_degrees": 135,
+          "pointer_front_degrees": -45.0,
+          "pin_front_degrees": -45.0,
+          "alignment_error_degrees": 0.0
+        },
+        {
+          "game_id": "fallout3",
+          "rotation_degrees": 225,
+          "pointer_front_degrees": -135.0,
+          "pin_front_degrees": -134.9999871551263,
+          "alignment_error_degrees": -1.2844873708672822E-05
+        }
+      ],
+      "native_godot_acceptance": false
+    },
+    "prior_v2_native": "Coordinator reported Debug/import and independent physical actions through launch request passed; v2 selector mismatch stopped acceptance before POWER. This does not validate v2.1 runtime.",
+    "v21_native": "Pending coordinator serialized selector, CRT ray/UV and POWER checks; worker ran no Godot/build/runtime.",
+    "blender_connection": "Existing approved Blender5.2.3 localhost127.0.0.1:9876 connection restored and benign scene read passed; telemetry disabled. No install or configuration change.",
+    "native_integration": {
+      "debug_build": "PASS zero warnings/errors",
+      "sandbox_non_schema_contract": "PASS",
+      "godot_import": "PASS",
+      "native_input": "PASS all four source game choices, marked selector movement, CRT corners/center production ray/UV alignment, actual brightness/audio/read-camera, cancellation, source picker, separate accessible filter, normal New Vegas request",
+      "physical_power": "PASS physical release requested tree quit; native process exit0 before failure timeout",
+      "gameplay_launched": false,
+      "selected_images": [
+        ".staging/launcher-device-v21/qa/launcher.png",
+        ".staging/launcher-device-v21/qa/launcher-read.png",
+        ".staging/launcher-device-v21/qa/launcher-standard.png"
+      ],
+      "visual_comparison": "Locked concept and actual Godot images inspected; wear, rounded shoulders and feet remain simpler. Not1:1.",
+      "publication_gate": "PASS2026-10-24T18:11:19.9395447Z Gate0/Diff0/Public2585/no source/add/protected-save drift"
+    }
   },
   "files": [
     {
-      "path": "launcher_device.glb",
-      "bytes": 1975820,
-      "sha256": "cdbfa9702cee346d85b905cc7e6bb110b5f4c730ac3c7eefad1baaf5bf6df39d"
-    },
-    {
-      "path": "olive_enamel_basecolor.png",
-      "bytes": 240220,
-      "sha256": "0e52019bf8dfc49a3d2c88600be963b84284ab75c900051911f77824754ccd15"
-    },
-    {
-      "path": "crt_preview_ui.png",
-      "bytes": 30396,
-      "sha256": "a79f8879ca196dc7a978ca51aa302a0c1fd58f0c411a996bc19ebeb96f1a6303"
-    },
-    {
-      "path": "integration_contract.json",
-      "bytes": 7357,
-      "sha256": "83307014d96c6b310c100176dafb7400b1df636e3a666cac9fae8dae36832ac8"
+      "path": "runtime/assets/launcher/device/launcher_device.glb",
+      "producer_filename": "opennv_instrument_mkii_v21.glb",
+      "bytes": 12351912,
+      "sha256": "26f2547dc412fb1a34d1f238ba97c7d9c99a1adc01fcee00f0313f7c98bdcfbd"
     },
     {
       "path": "art/launcher/device/launcher_device.blend",
-      "bytes": 5116248,
-      "sha256": "042760ec95e43ca2e6fdfead3ee0885104b3a1b317989883566be366c7723f8a"
+      "producer_filename": "opennv_instrument_mkii_v21.blend",
+      "bytes": 17608732,
+      "sha256": "9de5a0289ddb1cd2e3861f7a2201d340321f638b06c7376dc9a441c9a3d309d7"
+    },
+    {
+      "path": "runtime/assets/launcher/device/integration_contract.json",
+      "producer_filename": "integration_contract_v21.json",
+      "bytes": 14565,
+      "sha256": "b27083b5bbd918d459874435fce159ffb22a35e6aef04c1428a11a24f01de66a"
+    },
+    {
+      "path": "runtime/assets/launcher/device/crt_readonly_preview.png",
+      "producer_filename": "crt_readonly_preview.png",
+      "bytes": 19677,
+      "sha256": "6d920f208b648ee4d3ee9433d0f857711e9a427cf153a30c5b9b8320918420c7"
+    },
+    {
+      "path": "runtime/assets/launcher/device/olive_basecolor.png",
+      "producer_filename": "olive_basecolor.png",
+      "bytes": 2257550,
+      "sha256": "7d8c0fa982fd506d824f2ea76d19656c1f9ddd4a70168af248437e4af200a327"
+    },
+    {
+      "path": "runtime/assets/launcher/device/olive_roughness.png",
+      "producer_filename": "olive_roughness.png",
+      "bytes": 722136,
+      "sha256": "efd27e89b5fde1c4e080309cf065a933d960c16f25483a609514c6fa88393d17"
+    },
+    {
+      "path": "runtime/assets/launcher/device/ivory_basecolor.png",
+      "producer_filename": "ivory_basecolor.png",
+      "bytes": 2468410,
+      "sha256": "5b81ba46bb51ed2fb25cd46d0b553a8dd8747082bd145616a30292af5f163965"
+    },
+    {
+      "path": "runtime/assets/launcher/device/ivory_roughness.png",
+      "producer_filename": "ivory_roughness.png",
+      "bytes": 451497,
+      "sha256": "0b751b410942d93dce35efeb9c5e7b48ad785ab70d7bc52972f804ac06e8868e"
+    },
+    {
+      "path": "runtime/assets/launcher/device/metal_basecolor.png",
+      "producer_filename": "metal_basecolor.png",
+      "bytes": 551307,
+      "sha256": "bba47e2ad6348ab7688c339b1b44fd89ec66a50f8cca31619cb3f4621bfe83dc"
+    },
+    {
+      "path": "runtime/assets/launcher/device/metal_roughness.png",
+      "producer_filename": "metal_roughness.png",
+      "bytes": 167948,
+      "sha256": "99bacabbc97b7c0b9ed4076fd3534542cc845a8a6ba41bb4ff02b7190d687d31"
+    },
+    {
+      "path": "runtime/assets/launcher/device/brass_basecolor.png",
+      "producer_filename": "brass_basecolor.png",
+      "bytes": 598530,
+      "sha256": "11c269db329faf01a815931a013e149c1171289b9d5edfd279ff646643c766d1"
+    },
+    {
+      "path": "runtime/assets/launcher/device/brass_roughness.png",
+      "producer_filename": "brass_roughness.png",
+      "bytes": 174558,
+      "sha256": "daa7175ed57ebc3cce0aefa4d14faf28d792da3c852c2395517875ee5d02c701"
+    },
+    {
+      "path": "runtime/assets/launcher/device/rubber_basecolor.png",
+      "producer_filename": "rubber_basecolor.png",
+      "bytes": 142416,
+      "sha256": "5e6408643a8fd24757a62b5b24de7df06670d8b6cb6ec303ca3697ded0542c34"
+    },
+    {
+      "path": "runtime/assets/launcher/device/rubber_roughness.png",
+      "producer_filename": "rubber_roughness.png",
+      "bytes": 171019,
+      "sha256": "1eb80e049b54a816305145aa2f6fd9bba76bb7908cce43c67289af5a8d642725"
+    },
+    {
+      "path": "art/launcher/device/source-v2/README.txt",
+      "producer_filename": "README.txt",
+      "bytes": 3171,
+      "sha256": "8de793b1945c1b81b4625711e716cfaf8333554a05b32edd3a1217b2c51c0f85"
+    },
+    {
+      "path": "art/launcher/device/source-v2/manifest.json",
+      "producer_filename": "manifest.json",
+      "bytes": 5126,
+      "sha256": "d90ffb228e38981bff9a05cafc7365dfe7baa4d142f1333c0b53c8925ceea4ba"
+    },
+    {
+      "path": "art/launcher/device/source-v2/validation_report.json",
+      "producer_filename": "validation_report.json",
+      "bytes": 317,
+      "sha256": "5d9b82cb6aaa8a5697ab17b7c4cba42f6cc0f575b10a0ecb98cacb5118320a87"
+    },
+    {
+      "path": "art/launcher/device/source-v21/README.txt",
+      "producer_filename": "README.txt",
+      "bytes": 1801,
+      "sha256": "7e29b266251da518d829007a2ecbc97884db3d21d8eb298c03b0f8a82ff515ca"
+    },
+    {
+      "path": "art/launcher/device/source-v21/manifest.json",
+      "producer_filename": "manifest.json",
+      "bytes": 5040,
+      "sha256": "ac19bc446ad8ab99fc21b77f3b7005003b4cc436dd8f0bc5088deca7b21c56b1"
+    },
+    {
+      "path": "art/launcher/device/source-v21/dial_v21_validation.json",
+      "producer_filename": "dial_v21_validation.json",
+      "bytes": 875,
+      "sha256": "f227cb95824d5671f8b21ab9bee90a6349c90f8fa1bcbf35d2561969e5813eb9"
     }
-  ]
+  ],
+  "selector": {
+    "object": "CONTROL_MainTuning_pivotY",
+    "lever": "Selector_ChunkyBrassLever",
+    "pointer_tip": "Selector_PointerTip_Up",
+    "application_order": [
+      "fallout1",
+      "fallout2",
+      "newvegas",
+      "fallout3"
+    ],
+    "front_angle_definition": "Right=0 degrees; up=90 degrees.",
+    "neutral_pointer_front_angle_degrees": 90,
+    "axis": "Blender local +Y maps to Godot local -Z",
+    "positive_rotation": "CLOCKWISE from front",
+    "detent_degrees": 90,
+    "game_positions": [
+      {
+        "game_id": "fallout1",
+        "label": "FALLOUT",
+        "front_angle_degrees": 135,
+        "local_rotation_degrees": -45
+      },
+      {
+        "game_id": "fallout2",
+        "label": "FALLOUT 2",
+        "front_angle_degrees": 45,
+        "local_rotation_degrees": 45
+      },
+      {
+        "game_id": "newvegas",
+        "label": "NEW VEGAS",
+        "front_angle_degrees": -45,
+        "local_rotation_degrees": 135
+      },
+      {
+        "game_id": "fallout3",
+        "label": "FALLOUT 3",
+        "front_angle_degrees": -135,
+        "local_rotation_degrees": 225
+      }
+    ],
+    "wrap": "360 degrees; FO3 225 -> FO1 315 is equivalent to -45.",
+    "rest_basis_preserved": true,
+    "lever_child_tilt_radians": 0
+  },
+  "authoring_recipes": "Original Python generation recipes remain in the provenance-identified private Library bundles. They are excluded from this product tree under the repository Python policy. The original editable Blender source is shipped."
 }
