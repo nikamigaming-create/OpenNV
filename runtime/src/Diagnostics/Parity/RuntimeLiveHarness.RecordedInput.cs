@@ -204,13 +204,18 @@ internal sealed partial class RuntimeLiveHarness
         switch (input)
         {
             case InputEventKey key when !key.Echo:
+                var physical = key.PhysicalKeycode == Key.None ? key.Keycode : key.PhysicalKeycode;
+                if (key.Location == KeyLocation.Right && physical is Key.Shift or Key.Ctrl or Key.Alt)
+                {
+                    FailInputRecording("Right modifier recording requires a located-key protocol.");
+                    break;
+                }
                 if (key.Unicode != 0 && GetViewport().GuiGetFocusOwner() is LineEdit &&
                     System.Text.Rune.TryCreate((int)key.Unicode, out var rune) && !System.Text.Rune.IsControl(rune))
                 {
                     if (key.Pressed) RecordInput(JsonSerializer.SerializeToElement(new { op = "text", text = rune.ToString() }, Json), scene);
                     break;
                 }
-                var physical = key.PhysicalKeycode == Key.None ? key.Keycode : key.PhysicalKeycode;
                 if (key.Pressed) _recordedHumanKeys[physical] = Time.GetTicksMsec();
                 else _recordedHumanKeys.Remove(physical);
                 RecordInput(JsonSerializer.SerializeToElement(new

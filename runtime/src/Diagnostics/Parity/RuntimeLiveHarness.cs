@@ -359,7 +359,7 @@ internal sealed partial class RuntimeLiveHarness : Node
             }
         }
         else if (!_held.Remove(key)) return;
-        ParseHarnessInput(new InputEventKey { PhysicalKeycode = key, Keycode = key, Pressed = pressed, Echo = false });
+        ParseHarnessInput(new InputEventKey { PhysicalKeycode = key, Keycode = key, Location = HarnessKeyLocation(key), Pressed = pressed, Echo = false });
         RecordInput(JsonSerializer.SerializeToElement(new
         {
             op = "key",
@@ -369,13 +369,18 @@ internal sealed partial class RuntimeLiveHarness : Node
         }, Json), stateKey);
     }
 
+    // The key-name protocol has no side selector. Match NativeScriptKeys.Code's
+    // existing default-left convention so source modifier bindings can match.
+    private static KeyLocation HarnessKeyLocation(Key key) =>
+        key is Key.Shift or Key.Ctrl or Key.Alt ? KeyLocation.Left : KeyLocation.Unspecified;
+
     private void ReleaseAll()
     {
         ReleaseBotCombatInput();
         foreach (var key in _recordedHumanKeys.Keys.ToArray())
         {
             _recordedHumanKeys.Remove(key);
-            ParseHarnessInput(new InputEventKey { PhysicalKeycode = key, Keycode = key, Pressed = false });
+            ParseHarnessInput(new InputEventKey { PhysicalKeycode = key, Keycode = key, Location = HarnessKeyLocation(key), Pressed = false });
             RecordInput(JsonSerializer.SerializeToElement(new
             {
                 op = "key",

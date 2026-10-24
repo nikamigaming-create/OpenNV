@@ -78,8 +78,8 @@ internal sealed partial class NativeGodotLauncher
         foreach (var (id, button) in _campaignButtons)
         {
             var selected = id == _selectedId;
-            button.AddThemeStyleboxOverride("normal", Box(selected ? new Color("293545") : Colors.Transparent,
-                selected ? new Color("a28b65") : Colors.Transparent));
+            button.AddThemeStyleboxOverride("normal", Box(selected ? new Color("243c22") : Colors.Transparent,
+                selected ? new Color("8cbd68") : Colors.Transparent));
             button.AddThemeColorOverride("font_color", selected ? Gold : Ink);
             var linked = _profiles.TryGet(id, out var registered) && Directory.Exists(registered.InstallRoot);
             var mod = FalloutModInstallation.IsMod(id);
@@ -118,8 +118,8 @@ internal sealed partial class NativeGodotLauncher
         foreach (var (title, button) in _filterButtons)
         {
             var selected = title == _libraryFilter;
-            button.AddThemeStyleboxOverride("normal", Box(selected ? new Color("303944") : Colors.Transparent,
-                selected ? new Color("53606e") : Line));
+            button.AddThemeStyleboxOverride("normal", Box(selected ? new Color("294326") : Colors.Transparent,
+                selected ? new Color("638b50") : Line));
         }
     }
 
@@ -145,8 +145,8 @@ internal sealed partial class NativeGodotLauncher
                 : presentation?.Status ?? "Gameplay for this profile is still in development.";
             if (_selectedPresentation == mode)
             {
-                button.AddThemeStyleboxOverride("normal", Box(new Color("35342e"), Gold));
-                button.AddThemeStyleboxOverride("disabled", Box(new Color("2d2d2a"), new Color("796747")));
+                button.AddThemeStyleboxOverride("normal", Box(new Color("33442b"), Gold));
+                button.AddThemeStyleboxOverride("disabled", Box(new Color("283323"), new Color("657756")));
                 button.AddThemeColorOverride("font_color", Gold);
             }
             button.Pressed += () => { _selectedPresentation = mode; Refresh(); };
@@ -203,7 +203,7 @@ internal sealed partial class NativeGodotLauncher
         _launch.Text = _launching ? "Opening…" : !campaign.Launchable ? "In development" : !profileReady ? "Choose a folder to play" :
             presentation?.PreviewOnly == true ? "Open source preview" : "Play  →";
         _launch.TooltipText = routeReady ? "Open this profile · F1" : !profileReady ? profileMessage : campaign.Status;
-        _launch.AddThemeColorOverride("font_color", new Color("141b22"));
+        _launch.AddThemeColorOverride("font_color", new Color("101b0c"));
         _launch.AddThemeStyleboxOverride("normal", Box(Gold, Gold));
         _launch.AddThemeStyleboxOverride("hover", Box(Gold.Lightened(0.15f), Gold));
         _launch.AddThemeStyleboxOverride("pressed", Box(Gold.Darkened(0.12f), Gold));

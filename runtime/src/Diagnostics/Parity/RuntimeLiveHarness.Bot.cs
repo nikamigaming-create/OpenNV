@@ -85,9 +85,10 @@ internal sealed partial class RuntimeLiveHarness
         {
             if (input is InputEventKey key && (key.PhysicalKeycode != Key.None || key.Keycode != Key.None))
             {
-                if (key.Location != KeyLocation.Unspecified)
+                var physical = key.PhysicalKeycode != Key.None ? key.PhysicalKeycode : key.Keycode;
+                if (key.Location != KeyLocation.Unspecified && key.Location != HarnessKeyLocation(physical))
                     throw new NotSupportedException("Ordinary bot keyboard input requires its physical-side adapter: " + action);
-                return new(key.PhysicalKeycode != Key.None ? key.PhysicalKeycode : key.Keycode, MouseButton.None);
+                return new(physical, MouseButton.None);
             }
         }
         throw new NotSupportedException("Ordinary bot action has no native keyboard/mouse binding: " + action);

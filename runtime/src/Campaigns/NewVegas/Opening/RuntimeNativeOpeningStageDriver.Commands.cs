@@ -222,7 +222,8 @@ internal partial class RuntimeNativeOpeningStageDriver
             _scripts.References!.CaptureDetection(), _speech?.CaptureState(), CaptureFinishedSpeechStage(),
             CaptureStageResults(), _stageResultDriverFailure, CaptureTerminalResults(), _skillCatalog, _playerPackage!.CaptureAudio(),
             playerSkillValues: _playerSkills.CaptureValues(), playerAbilityScripts: _playerAbilities.Capture(),
-            transientExplosions: _scripts.References.TransientExplosions.Capture(), fastTravel: FastTravel.State, validate: validate);
+            transientExplosions: _scripts.References.TransientExplosions.Capture(), fastTravel: FastTravel.State, validate: validate,
+            playerSneaking: _player.Activity.Sneaking);
         return state with
         {
             Vitals = vitals,

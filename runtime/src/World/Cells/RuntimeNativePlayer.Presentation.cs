@@ -67,6 +67,11 @@ internal partial class RuntimeNativePlayer
     private bool PresentationInput(InputEvent input)
     {
         if (_modalInput || !_movementEnabled || _furniturePhase != 0 || _sourceCamera is not null) return false;
+        if (_inputControls is not null && input.IsActionPressed(InputSystem.RuntimeNativeInputControls.Action(8), allowEcho: false))
+        {
+            if (SourceControls.Sneaking) Activity.SetMovement(Running, !Activity.Sneaking);
+            return true;
+        }
         if (WeaponInput(input)) return true;
         if ((_inputControls is not null ? input.IsActionPressed(InputSystem.RuntimeNativeInputControls.Action(13), allowEcho: false)
             : input is InputEventKey { Pressed: true, Echo: false, PhysicalKeycode: Key.F }) && GetMeta("opennv_source_pointofview_enabled", true).AsBool())

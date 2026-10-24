@@ -4,12 +4,11 @@ namespace OpenNV.Runtime.Presentation.Ui;
 
 internal sealed partial class NativeGodotLauncher
 {
-    private static readonly Color Ink = new("eff3f6");
-    private static readonly Color Muted = new("a0acb9");
-    private static readonly Color Gold = new("eabb76");
-    private static readonly Color Line = new("2d3947");
-    private static readonly Color Surface = new("141e2b");
-    private const string HeroArtworkPath = "res://assets/launcher/mojave-horizon-v2.png";
+    private static readonly Color Ink = new("c4f6a4");
+    private static readonly Color Muted = new("a3bc91");
+    private static readonly Color Gold = new("b3ee80");
+    private static readonly Color Line = new("3d5939");
+    private static readonly Color Surface = new("101c11");
     private Control _hero = null!;
     private Label _heroContext = null!;
     private Label _saveStatus = null!;
@@ -20,32 +19,34 @@ internal sealed partial class NativeGodotLauncher
     private string? _setupCampaign;
     private bool _setupExpanded;
     private NativeViewportLayout? _launcherLayout;
-    private Texture2D? _heroTexture;
     private LauncherBuildBadge _buildIdentity = new("Development build", "No packaged build metadata was supplied.");
 
     private void BuildBackground()
     {
-        var background = new ColorRect { Name = "LauncherBackdrop", Color = new Color("0a121e"), MouseFilter = MouseFilterEnum.Ignore };
+        var background = new ColorRect { Name = "LauncherBackdrop", Color = new Color("10150f"), MouseFilter = MouseFilterEnum.Ignore };
         background.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
         AddChild(background);
+        var housing = new PipBoyHousing { Name = "PipBoyHousing" };
+        housing.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
+        AddChild(housing);
         Theme = new Theme { DefaultFont = _interfaceFont, DefaultFontSize = 15 };
         Theme.SetColor("font_color", "Label", Ink);
         Theme.SetColor("font_color", "Button", Ink);
         Theme.SetColor("font_hover_color", "Button", Ink);
         Theme.SetColor("font_focus_color", "Button", Ink);
-        Theme.SetColor("font_disabled_color", "Button", new Color("748395"));
+        Theme.SetColor("font_disabled_color", "Button", new Color("84947b"));
         Theme.SetStylebox("normal", "Button", Box(Surface, Line));
-        Theme.SetStylebox("hover", "Button", Box(new Color("223044"), new Color("526176")));
-        Theme.SetStylebox("pressed", "Button", Box(new Color("2d3a4b"), Gold));
-        Theme.SetStylebox("disabled", "Button", Box(new Color("131d2a"), new Color("24303e")));
+        Theme.SetStylebox("hover", "Button", Box(new Color("253c22"), new Color("84b465")));
+        Theme.SetStylebox("pressed", "Button", Box(new Color("314b27"), Gold));
+        Theme.SetStylebox("disabled", "Button", Box(new Color("151d14"), new Color("45523e")));
         Theme.SetStylebox("focus", "Button", Box(Colors.Transparent, Gold, border: 2));
-        Theme.SetStylebox("normal", "LineEdit", Box(new Color("0d1724"), Line));
+        Theme.SetStylebox("normal", "LineEdit", Box(new Color("0a140c"), Line));
         Theme.SetStylebox("focus", "LineEdit", Box(Colors.Transparent, Gold, border: 2));
         Theme.SetColor("font_color", "LineEdit", Ink);
         Theme.SetColor("font_placeholder_color", "LineEdit", Muted);
-        Theme.SetStylebox("panel", "ItemList", Box(new Color("0d1724"), Line));
-        Theme.SetStylebox("selected", "ItemList", Box(new Color("303b48"), Gold));
-        Theme.SetStylebox("selected_focus", "ItemList", Box(new Color("303b48"), Gold));
+        Theme.SetStylebox("panel", "ItemList", Box(new Color("0a140c"), Line));
+        Theme.SetStylebox("selected", "ItemList", Box(new Color("304728"), Gold));
+        Theme.SetStylebox("selected_focus", "ItemList", Box(new Color("304728"), Gold));
         Theme.SetStylebox("focus", "ItemList", Box(Colors.Transparent, Gold, border: 2));
         Theme.SetColor("font_color", "ItemList", Ink);
         Theme.SetColor("font_selected_color", "ItemList", Ink);
@@ -55,14 +56,14 @@ internal sealed partial class NativeGodotLauncher
 
     private void BuildInterface()
     {
-        var margin = Margin("LauncherInterface", 24);
+        var margin = Margin("LauncherInterface", 38);
         margin.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
         AddChild(margin);
-        var stack = Stack("LauncherStack", 18);
+        var stack = Stack("LauncherStack", 14);
         margin.AddChild(stack);
         stack.AddChild(BuildHeader());
         var main = new HBoxContainer { Name = "LauncherMain", SizeFlagsVertical = SizeFlags.ExpandFill };
-        main.AddThemeConstantOverride("separation", 24);
+        main.AddThemeConstantOverride("separation", 16);
         stack.AddChild(main);
         main.AddChild(BuildLibrary());
         var content = Stack("SelectedWorld", 16);
@@ -83,19 +84,21 @@ internal sealed partial class NativeGodotLauncher
         body.AddChild(BuildSetup());
         content.AddChild(BuildLaunchBar());
         stack.AddChild(BuildFooter());
+        TryBuildDevice(margin);
         _launcherLayout = new(this, ResizeLauncher);
         ResizeLauncher();
     }
 
     private void ResizeLauncher()
     {
-        if (_hero is not null) _hero.CustomMinimumSize = new Vector2(0, Mathf.Clamp(GetViewportRect().Size.Y * .4f, 292, 390));
+        ResizeDevice();
+        if (_hero is not null) _hero.CustomMinimumSize = new Vector2(0, Mathf.Clamp(GetViewportRect().Size.Y * .3f, 210, 300));
     }
 
     public override void _ExitTree()
     {
+        RetireDevice();
         _launcherLayout?.Dispose(); _launcherLayout = null;
-        _heroTexture?.Dispose(); _heroTexture = null;
         _headingFont.Dispose();
         _interfaceFont.Dispose();
     }
@@ -106,17 +109,17 @@ internal sealed partial class NativeGodotLauncher
         header.AddThemeConstantOverride("separation", 14);
         var emblem = new PanelContainer { Name = "LauncherMonogram", CustomMinimumSize = new Vector2(48, 48) };
         emblem.AddThemeStyleboxOverride("panel", Box(Gold, Gold, padding: 0));
-        var monogram = Label("ON", 20, new Color("17202c"), heading: true);
+        var monogram = Label("ON", 20, new Color("101b0c"), heading: true);
         monogram.HorizontalAlignment = HorizontalAlignment.Center;
         monogram.VerticalAlignment = VerticalAlignment.Center;
         emblem.AddChild(monogram);
         header.AddChild(emblem);
         var brand = Stack("Brand", 1);
-        brand.AddChild(Label("OpenNV", 28, Ink, heading: true));
-        brand.AddChild(Label("YOUR WASTELAND LIBRARY", 10, Muted));
+        brand.AddChild(Label("OpenNV", 28, new Color("e2e5c7"), heading: true));
+        brand.AddChild(Label("PERSONAL WASTELAND TERMINAL", 10, Muted));
         header.AddChild(brand);
         header.AddChild(new Control { SizeFlagsHorizontal = SizeFlags.ExpandFill });
-        var badge = Label("EXPERIMENTAL PLAYTEST", 11, Gold);
+        var badge = Label("EXPERIMENTAL", 11, Gold);
         badge.VerticalAlignment = VerticalAlignment.Center;
         header.AddChild(badge);
         var exit = ActionButton("Quit", 34);
@@ -130,12 +133,12 @@ internal sealed partial class NativeGodotLauncher
     private Control BuildLibrary()
     {
         var panel = Panel("WorldLibrary");
-        panel.CustomMinimumSize = new Vector2(252, 0);
-        panel.AddThemeStyleboxOverride("panel", Box(new Color("101a27"), Line, padding: 14));
+        panel.CustomMinimumSize = new Vector2(238, 0);
+        panel.AddThemeStyleboxOverride("panel", Box(new Color("0d190f"), Line, padding: 14));
         var library = Stack("LibraryContents", 14);
         panel.AddChild(library);
         var heading = new HBoxContainer();
-        var title = Label("Library", 20, Ink, heading: true);
+        var title = Label("LIBRARY", 18, Ink, heading: true);
         title.SizeFlagsHorizontal = SizeFlags.ExpandFill;
         heading.AddChild(title);
         heading.AddChild(Label("GAMES + MODS", 10, Muted));
@@ -181,47 +184,10 @@ internal sealed partial class NativeGodotLauncher
     private Control BuildHero()
     {
         var hero = _hero = new Control { Name = "WorldHero", CustomMinimumSize = new Vector2(0, 300), ClipContents = true };
-        var baseColor = new ColorRect { Color = new Color("1a2a40"), MouseFilter = MouseFilterEnum.Ignore };
-        baseColor.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
-        hero.AddChild(baseColor);
-        if (ResourceLoader.Exists(HeroArtworkPath))
-        {
-            var texture = _heroTexture = ResourceLoader.Load<Texture2D>(HeroArtworkPath, cacheMode: ResourceLoader.CacheMode.Ignore);
-            if (texture is not null)
-            {
-                var art = new TextureRect
-                {
-                    Name = "MojaveArtwork",
-                    Texture = texture,
-                    ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
-                    StretchMode = TextureRect.StretchModeEnum.KeepAspectCovered,
-                    MouseFilter = MouseFilterEnum.Ignore,
-                };
-                art.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
-                hero.AddChild(art);
-            }
-        }
-        var shade = new TextureRect
-        {
-            Name = "HeroReadabilityShade",
-            Texture = new GradientTexture2D
-            {
-                Width = 256,
-                Height = 2,
-                FillFrom = Vector2.Zero,
-                FillTo = Vector2.Right,
-                Gradient = new Gradient
-                {
-                    Offsets = [0, .57f, 1],
-                    Colors = [new Color(.025f, .045f, .075f, .48f), new Color(.025f, .045f, .075f, .12f), Godot.Colors.Transparent],
-                },
-            },
-            ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
-            StretchMode = TextureRect.StretchModeEnum.Scale,
-            MouseFilter = MouseFilterEnum.Ignore,
-        };
-        shade.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
-        hero.AddChild(shade);
+        var screen = new Panel { Name = "PhosphorDisplay", MouseFilter = MouseFilterEnum.Ignore };
+        screen.AddThemeStyleboxOverride("panel", Box(new Color("0b190e"), new Color("587448"), border: 2));
+        screen.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
+        hero.AddChild(screen);
         var margin = Margin("HeroCopy", 28);
         margin.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
         hero.AddChild(margin);
@@ -231,15 +197,15 @@ internal sealed partial class NativeGodotLauncher
         text.SizeFlagsHorizontal = SizeFlags.ExpandFill;
         text.SizeFlagsStretchRatio = 1.8f;
         columns.AddChild(text);
-        columns.AddChild(new Control { SizeFlagsHorizontal = SizeFlags.ExpandFill, SizeFlagsStretchRatio = 1 });
+        columns.AddChild(new PhosphorReticle { Name = "StaticInstrumentMotif", SizeFlagsHorizontal = SizeFlags.ExpandFill, SizeFlagsStretchRatio = .6f });
         _selectionCategory = Label(string.Empty, 11, Gold);
         _selectionCategory.AutowrapMode = TextServer.AutowrapMode.WordSmart;
         text.AddChild(_selectionCategory);
         text.AddChild(new Control { SizeFlagsVertical = SizeFlags.ExpandFill });
-        _selectionTitle = Label(string.Empty, 38, Ink, heading: true);
+        _selectionTitle = Label(string.Empty, 32, Ink, heading: true);
         _selectionTitle.AutowrapMode = TextServer.AutowrapMode.WordSmart;
         text.AddChild(_selectionTitle);
-        _selectionDetail = Label(string.Empty, 15, new Color("d5dce3"));
+        _selectionDetail = Label(string.Empty, 15, new Color("c4f6a4"));
         _selectionDetail.AutowrapMode = TextServer.AutowrapMode.WordSmart;
         text.AddChild(_selectionDetail);
         _selectionStatus = Label(string.Empty, 11, Gold);
@@ -315,7 +281,8 @@ internal sealed partial class NativeGodotLauncher
     {
         _setupExpanded = expanded;
         _setupBody.Visible = expanded;
-        _setupToggle.Text = expanded ? "Hide folder settings  −" : "Folder settings  +";
+        _setupToggle.TooltipText = expanded ? "Close settings and return to your selected game" : "Configure game files and dependencies";
+        _setupToggle.Text = expanded ? "Back to library  -" : "Folder settings  +";
     }
 
     private Control BuildReadiness()
@@ -332,7 +299,7 @@ internal sealed partial class NativeGodotLauncher
     private Control BuildLaunchBar()
     {
         var panel = Panel("PlayDock");
-        panel.AddThemeStyleboxOverride("panel", Box(new Color("182432"), new Color("3d4c5b"), padding: 18));
+        panel.AddThemeStyleboxOverride("panel", Box(new Color("263021"), new Color("7b8769"), padding: 18));
         var stack = Stack("LaunchBar", 10);
         panel.AddChild(stack);
         var summary = new HBoxContainer();
@@ -393,10 +360,10 @@ internal sealed partial class NativeGodotLauncher
         _launch.CustomMinimumSize = new Vector2(146, 44);
         _launch.SizeFlagsVertical = SizeFlags.ShrinkEnd;
         _launch.Pressed += () => LaunchSelected();
-        _launch.AddThemeColorOverride("font_color", new Color("17202c"));
-        _launch.AddThemeColorOverride("font_hover_color", new Color("17202c"));
-        _launch.AddThemeColorOverride("font_pressed_color", new Color("17202c"));
-        _launch.AddThemeColorOverride("font_focus_color", new Color("17202c"));
+        _launch.AddThemeColorOverride("font_color", new Color("101b0c"));
+        _launch.AddThemeColorOverride("font_hover_color", new Color("101b0c"));
+        _launch.AddThemeColorOverride("font_pressed_color", new Color("101b0c"));
+        _launch.AddThemeColorOverride("font_focus_color", new Color("101b0c"));
         _launch.AddThemeStyleboxOverride("normal", Box(Gold, Gold));
         _launch.AddThemeStyleboxOverride("hover", Box(Gold.Lightened(.12f), Gold));
         _launch.AddThemeStyleboxOverride("pressed", Box(Gold.Darkened(.1f), Gold));
@@ -419,6 +386,9 @@ internal sealed partial class NativeGodotLauncher
         badge.ClipText = true;
         badge.SizeFlagsHorizontal = SizeFlags.ExpandFill;
         footer.AddChild(badge);
+        _deviceAvailability = Label(string.Empty, 11, Muted);
+        _deviceAvailability.Name = "DeviceViewAvailability";
+        footer.AddChild(_deviceAvailability);
         footer.AddChild(Label("Your installed files. Separate OpenNV saves.", 11, Muted));
         return footer;
     }
@@ -462,10 +432,13 @@ internal sealed partial class NativeGodotLauncher
         BorderWidthTop = border,
         BorderWidthRight = border,
         BorderWidthBottom = border,
-        CornerRadiusTopLeft = 8,
-        CornerRadiusTopRight = 8,
-        CornerRadiusBottomLeft = 8,
-        CornerRadiusBottomRight = 8,
+        ShadowColor = new Color(0, 0, 0, .35f),
+        ShadowSize = 2,
+        ShadowOffset = new Vector2(0, 2),
+        CornerRadiusTopLeft = 5,
+        CornerRadiusTopRight = 5,
+        CornerRadiusBottomLeft = 5,
+        CornerRadiusBottomRight = 5,
         ContentMarginLeft = padding,
         ContentMarginRight = padding,
         ContentMarginTop = 8,
