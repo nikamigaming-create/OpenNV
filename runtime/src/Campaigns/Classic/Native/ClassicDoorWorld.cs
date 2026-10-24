@@ -122,6 +122,85 @@ internal sealed partial class ClassicDoorWorld(ClassicPlayerSession player)
             (BinaryPrimitives.ReadUInt32BigEndian(pro.AsSpan(24)) & 0x800) != 0, path, program);
     }
 
+    // Scenery shares this authority with doors. It owns only its script-local
+    // state and animation poses; globals, map variables, exports and clock stay
+    // here. No scenery event can acquire door, inventory or timer authority.
+    internal ClassicIntProcedureState InitialSceneryState(ClassicMapLevel level, Fallout1NativeMapObject row)
+    {
+        if (!_mapVariables.TryGetValue(level.Path, out var variables))
+            _mapVariables.Add(level.Path, variables = ClassicCampaignInitialization.MapVariables(player.Catalog.Read(level.Path, out _)));
+        var slot = level.Map.LiveScripts.Single(item => item.ScriptId == row.ScriptId);
+        if (slot.ObjectId != row.ObjectId) throw new InvalidDataException("Scenery script owner differs from its MAP object.");
+        var bytes = player.Catalog.Read(level.Path, out _);
+        var offset = BinaryPrimitives.ReadInt32BigEndian(bytes.AsSpan(slot.SourceOffset + 24));
+        var count = BinaryPrimitives.ReadInt32BigEndian(bytes.AsSpan(slot.SourceOffset + 28));
+        return new(new Dictionary<int, int>(), new Dictionary<int, int>(), ClassicMapScriptLocals.Read(bytes, offset, count),
+            variables, _globals, [], null);
+    }
+
+    internal ClassicIntProcedureResult SceneryEvent(ClassicMapLevel level, Fallout1NativeMapObject row,
+        ClassicIntProgram program, ClassicIntProcedureState state, int action, bool initializeModule,
+        bool? combatActive, Action<IReadOnlyList<ClassicIntAnimationCommand>> acceptAnimations)
+    {
+        return WorldScriptEvent(level, row, program, state, action, initializeModule, combatActive, acceptAnimations);
+    }
+
+    internal ClassicIntProcedureResult MapUpdateEvent(ClassicIntProgram program, ClassicIntProcedureState state,
+        Action<IReadOnlyList<ClassicIntAnimationCommand>> acceptAnimations) =>
+        WorldScriptEvent(player.Level, null, program, state, 23, false, player.CombatActive?.Invoke(), acceptAnimations);
+
+    private ClassicIntProcedureResult WorldScriptEvent(ClassicMapLevel level, Fallout1NativeMapObject? row,
+        ClassicIntProgram program, ClassicIntProcedureState state, int action, bool initializeModule,
+        bool? combatActive, Action<IReadOnlyList<ClassicIntAnimationCommand>> acceptAnimations)
+    {
+        if (level.Path != player.MapPath) throw new InvalidOperationException("Script event belongs to an inactive map.");
+        const int dude = int.MaxValue;
+        var objects = level.Objects.TopLevelObjects.ToDictionary(item => item.Serial + 1,
+            item => new ClassicIntWorldObject(item.Serial + 1, item.Pid, item.Tile, item.Elevation, (item.Flags & 1) == 0));
+        objects.Add(dude, new(dude, 0x01000000, player.Tile, player.Elevation, true));
+        // Source map scripts have an internal system-script object, not a
+        // presented actor or hand-placed gameplay entity.
+        const int mapController = int.MaxValue - 1;
+        if (row is null) objects.Add(mapController, new(mapController, -1, 1, 0, false));
+        var doors = _entries.Values.Where(item => item.Definition.Level.Path == level.Path)
+            .ToDictionary(item => item.Definition.Object.Serial + 1, item => new ClassicIntDoorObjectState(item.Pose.Open, item.Pose.Locked));
+        var world = ClassicIntWorldObjectState.Empty with { Objects = objects, Doors = doors, Timers = _timers, CombatActive = combatActive };
+        if (!_mapVariables.TryGetValue(level.Path, out var variables))
+            _mapVariables.Add(level.Path, variables = ClassicCampaignInitialization.MapVariables(player.Catalog.Read(level.Path, out _)));
+        state = state with { GlobalVariables = _globals, MapVariables = variables, RandomState = player.CampaignRandom };
+        var stats = Enumerable.Range(0, 7).ToDictionary(stat => (dude, stat), stat => player.Stats.Special[stat]);
+        stats[(dude, 34)] = player.Choice.Character.Female ? 1 : 0;
+        var context = new ClassicIntExpressionContext(state.ProgramVariables, state.LocalVariables, state.ScriptLocalVariables,
+            state.MapVariables, state.GlobalVariables, dude, row is null ? mapController : row.Serial + 1, null, null,
+            stats, new Dictionary<(int, int), int>(), new Dictionary<int, int>(), new Dictionary<(int, int), int>(),
+            _externals, TimerContract is null ? null : _timers.CurrentTick,
+            TimerContract is { } clock ? ClassicIntTimerOwner.GameTimeHour(clock, _timers.CurrentTick) : null, null,
+            new ClassicIntObjectHandleTable(new Dictionary<ClassicIntObjectCreation, int>()),
+            SourceObject: dude, TimerContract: TimerContract, CurrentMapIndex: level.Map.MapIndex,
+            ScriptAction: action, MessageSource: _messages, ExternalOwners: _externalOwners);
+        var result = ClassicIntEvents.Execute(program, player.Choice.Campaign, action, state, context, world, player.RandomContract,
+            initializeModule: initializeModule);
+        var changed = result.WorldObjects;
+        Validate(result with { WorldObjects = changed with { AnimationCommands = [] } }, level.Path);
+        if (changed.ScriptOverrides || changed.CombatActive != combatActive || changed.ItemInstances.Count != 0 ||
+            !changed.Objects.OrderBy(item => item.Key).SequenceEqual(objects.OrderBy(item => item.Key)) ||
+            !changed.Doors.OrderBy(item => item.Key).SequenceEqual(doors.OrderBy(item => item.Key)) ||
+            changed.Timers.CurrentTick != _timers.CurrentTick || changed.Timers.NextSequence != _timers.NextSequence ||
+            !changed.Timers.Pending.SequenceEqual(_timers.Pending) || changed.DialogueReplies.Count != 0 ||
+            changed.DialogueOptions.Count != 0 || changed.DialogueReady)
+            throw new NotSupportedException("Scenery event requires an unbound world-effect owner.");
+        // All effects must validate before either owner changes. The callback
+        // prepares the entire command list before publishing its replacement.
+        player.ValidateRandomCommit(result.State.RandomState);
+        acceptAnimations(changed.AnimationCommands);
+        player.CommitRandom(result.State.RandomState);
+        _globals = new(result.State.GlobalVariables); _mapVariables[level.Path] = new(result.State.MapVariables);
+        _externals = new(result.ExternalVariables, StringComparer.Ordinal);
+        _externalOwners = new(result.ExternalOwners, StringComparer.Ordinal);
+        foreach (var message in result.MessageEffects) _pendingMessages.Enqueue(message.Text!);
+        return result with { State = result.State with { RandomState = null } };
+    }
+
     private ClassicIntProcedureState InitialState(ClassicDoorDefinition definition)
     {
         if (!_mapVariables.TryGetValue(definition.Level.Path, out var variables))
@@ -144,11 +223,12 @@ internal sealed partial class ClassicDoorWorld(ClassicPlayerSession player)
         objects.Add(dude, new(dude, 0x01000000, player.Tile, player.Elevation, true));
         var doors = _entries.Values.Where(row => row.Definition.Level.Path == level.Path).ToDictionary(row => row.Definition.Object.Serial + 1,
             row => new ClassicIntDoorObjectState(row.Pose.Open, row.Pose.Locked));
-        var world = ClassicIntWorldObjectState.Empty with { Objects = objects, Doors = doors, Timers = timerState ?? _timers };
+        var world = ClassicIntWorldObjectState.Empty with { Objects = objects, Doors = doors, Timers = timerState ?? _timers, CombatActive = player.CombatActive?.Invoke() };
         var state = entry.State! with
         {
             GlobalVariables = _globals,
-            MapVariables = _mapVariables[level.Path]
+            MapVariables = _mapVariables[level.Path],
+            RandomState = player.CampaignRandom
         };
         var transaction = new UseTransaction(this, level.Path);
         var result = Invoke(entry with { State = state }, action, world,
@@ -175,15 +255,16 @@ internal sealed partial class ClassicDoorWorld(ClassicPlayerSession player)
             new ClassicIntObjectHandleTable(new Dictionary<ClassicIntObjectCreation, int>()), SourceObject: sourceObject,
             TimerContract: TimerContract, FixedParameter: fixedParameter,
             CurrentMapIndex: level.Map.MapIndex, ScriptAction: action, MessageSource: _messages, ObjectUse: transaction, ExternalOwners: externalOwners);
-        var result = ClassicIntEvents.Execute(entry.Definition.Program!, player.Choice.Campaign, action, state, game, world, null, budget, initializeModule);
+        var result = ClassicIntEvents.Execute(entry.Definition.Program!, player.Choice.Campaign, action, state, game, world, player.RandomContract, budget, initializeModule);
         transaction.States[Key(level.Path, entry.Definition.Object.Serial)] = result.State;
         return result;
     }
 
     private void Validate(ClassicIntProcedureResult result, string map)
     {
+        player.ValidateRandomCommit(result.State.RandomState);
         var world = result.WorldObjects;
-        if (result.State.ValueStack.Count != 0 || result.MessageEffects.Any(row => row.Text is null || row.ObjectHandle is not null || row.Color is not null) || result.SoundEffects.Count != 0 ||
+        if (world.AnimationCommands.Count != 0 || result.State.ValueStack.Count != 0 || result.MessageEffects.Any(row => row.Text is null || row.ObjectHandle is not null || row.Color is not null) || result.SoundEffects.Count != 0 ||
             world.CreatedObjects.Count != 0 || world.Inventory.Count != 0 || world.MapStartOverride is not null ||
             world.AttackRequests.Count != 0 || world.Movements.Count != 0 || world.TraitAssignments.Count != 0 ||
             world.DialogueSystemEntered || world.DialogueStart is not null || world.LightLevel is not null)
@@ -210,13 +291,25 @@ internal sealed partial class ClassicDoorWorld(ClassicPlayerSession player)
         }
         foreach (var (key, update) in updates) _entries[key] = update;
         foreach (var (key, state) in execution.States)
-            _entries[key] = _entries[key] with { State = state, Failure = null };
+            _entries[key] = _entries[key] with { State = state with { RandomState = null }, Failure = null };
+        player.CommitRandom(result.State.RandomState);
         _timers = result.WorldObjects.Timers;
         _globals = new(result.State.GlobalVariables); _mapVariables[entry.Definition.Level.Path] = new(result.State.MapVariables);
         _externals = new(result.ExternalVariables, StringComparer.Ordinal);
         _externalOwners = new(result.ExternalOwners, StringComparer.Ordinal);
         foreach (var message in result.MessageEffects) _pendingMessages.Enqueue(message.Text!);
         PassageChanged?.Invoke();
+    }
+
+    internal void DispatchMapUpdate(int serial)
+    {
+        var entry = Get(serial);
+        if (entry.Failure is not null) throw new NotSupportedException(entry.Failure);
+        if (entry.Definition.Program is null || !ClassicIntEvents.HasHandler(entry.Definition.Program, player.Choice.Campaign, 23)) return;
+        if (entry.State is null) throw new NotSupportedException("Door has no completed startup state.");
+        var execution = Execute(entry, 23);
+        Validate(execution.Result, player.MapPath);
+        Commit(entry, execution);
     }
 
     internal void Use(int serial)

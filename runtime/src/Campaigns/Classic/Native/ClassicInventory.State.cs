@@ -4,7 +4,7 @@ internal sealed partial class ClassicInventory
 {
     internal ClassicInventoryState State => new(_changes.Values.OrderBy(row => row.Origin.Map).ThenBy(row => row.Origin.Serial)
         .Select(row => row with { Stacks = row.Stacks.Select(stack => stack with { InstanceValues = (int[])stack.InstanceValues.Clone() }).ToArray() }).ToArray(),
-        LeftHand, RightHand, Armor, ActiveHand, _nextId);
+        LeftHand, RightHand, Armor, ActiveHand, _nextId, _expenditures.ToArray());
 
     private void Transfer(ClassicInventoryEntry entry, ClassicItemLocation destination, int amount)
     {
@@ -113,7 +113,17 @@ internal sealed partial class ClassicInventory
                 else throw new InvalidDataException("Unknown item location.");
             }
         }
-        if (ammunitionBalance.Values.Any(balance => balance != 0)) throw new InvalidDataException("Saved ammunition and magazines do not conserve rounds.");
+        long previousAction = -1;
+        foreach (var spent in _expenditures)
+        {
+            if (spent.ActionSequence <= previousAction || spent.Rounds <= 0 ||
+                !_changes.ContainsKey(Key(spent.Origin)) || !spent.WeaponId.StartsWith(Key(spent.Origin) + ":", StringComparison.Ordinal) ||
+                Definition(spent.Origin.Pid).Weapon is not { } weapon || Definition(spent.AmmoPid).Ammo?.Caliber != weapon.Caliber)
+                throw new InvalidDataException("Saved shot expenditure has no ordered compatible source weapon.");
+            previousAction = spent.ActionSequence;
+            Ammunition(spent.AmmoPid, spent.Rounds);
+        }
+        if (ammunitionBalance.Values.Any(balance => balance != 0)) throw new InvalidDataException("Saved ammunition, magazines and committed shots do not conserve rounds.");
         // Detect cycles even when neither container is currently carried.
         foreach (var entry in _changes.Values.SelectMany(row => row.Stacks).Select(Entry).Where(row => row.Definition.Subtype == 1))
             _ = WeightOf([entry], []);
@@ -136,6 +146,7 @@ internal sealed partial class ClassicInventory
         foreach (var change in state.Changes)
             _changes.Add(Key(change.Origin), change with { Stacks = change.Stacks.Select(stack => stack with { InstanceValues = (int[])stack.InstanceValues.Clone() }).ToArray() });
         LeftHand = state.LeftHand; RightHand = state.RightHand; Armor = state.Armor; ActiveHand = state.ActiveHand; _nextId = state.NextId;
+        _expenditures.Clear(); _expenditures.AddRange(state.Expenditures ?? []);
     }
     internal void Restore(ClassicInventoryState state)
     {

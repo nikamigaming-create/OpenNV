@@ -7,6 +7,37 @@ internal sealed record ClassicWorldPick(int? Serial = null, string? ItemId = nul
 /// <summary>Resolve visible static item geometry to its original MAP object, without donor physics.</summary>
 internal static class ClassicWorldPicking
 {
+    internal static ClassicWorldPick? Actor(ClassicWorldPreview world, ClassicPlayerSession player, Vector2 point)
+    {
+        // Original sprites need their own alpha/pose pick contract. Do not
+        // replace missing visible geometry with a tile, AABB or metadata hit.
+        if (!world.ShowModels) return null;
+        var eligible = player.Level.Objects.TopLevelObjects.Where(row => row.Prototype.ObjectType == 1 &&
+            row.Elevation == player.Elevation && (row.Flags & 1) == 0 && player.Combat.IsLivingTarget(row.Serial))
+            .Select(row => row.Serial).ToHashSet();
+        var origin = world.Camera.ProjectRayOrigin(point); var direction = world.Camera.ProjectRayNormal(point);
+        var nearest = float.PositiveInfinity; Node3D? selectedRoot = null; int? selected = null;
+        foreach (var root in world.GetChildren().OfType<Node3D>().Where(node => node.HasMeta("source_serial") && node.IsVisibleInTree()))
+        {
+            var serial = root.GetMeta("source_serial").AsInt32();
+            if (!eligible.Contains(serial)) continue;
+            foreach (var mesh in root.FindChildren("*", "MeshInstance3D", true, false).Prepend(root).OfType<MeshInstance3D>())
+            {
+                if (Hit(mesh, origin, direction, nearest, posed: true) is not { } distance) continue;
+                nearest = distance; selected = serial; selectedRoot = root;
+            }
+        }
+        if (selected is null) return null;
+        foreach (var mesh in world.FindChildren("*", "MeshInstance3D", true, false).OfType<MeshInstance3D>())
+        {
+            Node? parent = mesh;
+            while (parent is not null && parent != world && !parent.HasMeta("source_serial")) parent = parent.GetParent();
+            if (parent == selectedRoot) continue;
+            if (Hit(mesh, origin, direction, nearest - .001f, posed: true) is not null) return null;
+        }
+        return new(Serial: selected);
+    }
+
     internal static ClassicWorldPick? Item(ClassicWorldPreview world, ClassicPlayerSession player, Vector2 point)
     {
         if (!world.ShowModels) return null;
@@ -40,15 +71,21 @@ internal static class ClassicWorldPicking
         return selected;
     }
 
-    private static float? Hit(MeshInstance3D mesh, Vector3 origin, Vector3 direction, float nearest)
+    private static float? Hit(MeshInstance3D mesh, Vector3 origin, Vector3 direction, float nearest, bool posed = false)
     {
         if (!mesh.IsVisibleInTree() || (mesh.Layers & (ClassicWorldPreview.ModelLayer | ClassicWorldPreview.SharedLayer)) == 0 ||
-            mesh.Mesh is null || mesh.Skin is not null) return null;
+            mesh.Mesh is null || mesh.Skin is not null && !posed) return null;
         var inverse = mesh.GlobalTransform.AffineInverse();
         var localOrigin = inverse * origin; var localDirection = inverse.Basis * direction;
-        if (!Intersects(mesh.GetAabb(), localOrigin, localDirection, nearest)) return null;
+        if (posed && Enumerable.Range(0, mesh.GetBlendShapeCount()).Any(index => Math.Abs(mesh.GetBlendShapeValue(index)) > .00001f))
+            throw new NotSupportedException("Actor/occluder picking requires its active blend-shape geometry.");
+        using var posedMesh = posed && mesh.Skin is not null ? mesh.BakeMeshFromCurrentSkeletonPose() : null;
+        if (posed && mesh.Skin is not null && posedMesh is null)
+            throw new NotSupportedException("Actor skeleton pose is unavailable for picking.");
+        var geometry = posedMesh ?? mesh.Mesh;
+        if (!Intersects(geometry.GetAabb(), localOrigin, localDirection, nearest)) return null;
         float? result = null;
-        var faces = mesh.Mesh.GetFaces();
+        var faces = geometry.GetFaces();
         for (var index = 0; index + 2 < faces.Length; index += 3)
         {
             var edge1 = faces[index + 1] - faces[index]; var edge2 = faces[index + 2] - faces[index];

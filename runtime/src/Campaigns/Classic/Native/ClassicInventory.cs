@@ -11,7 +11,10 @@ internal sealed record ClassicItemLocation(string Kind, string? Map = null, int?
 }
 internal sealed record ClassicItemStack(string Id, ClassicItemOrigin Origin, ClassicItemLocation Location, int Amount, int[] InstanceValues, int? AmmoPid = null);
 internal sealed record ClassicItemChange(ClassicItemOrigin Origin, ClassicItemStack[] Stacks);
-internal sealed record ClassicInventoryState(ClassicItemChange[] Changes, string? LeftHand, string? RightHand, string? Armor, int ActiveHand, long NextId);
+internal sealed record ClassicAmmoExpenditure(long ActionSequence, string WeaponId, ClassicItemOrigin Origin, int AmmoPid, int Rounds);
+internal sealed record ClassicShotPlan(long ActionSequence, string WeaponId, ClassicItemOrigin Origin, int AmmoPid, int BeforeRounds, int Rounds);
+internal sealed record ClassicInventoryState(ClassicItemChange[] Changes, string? LeftHand, string? RightHand, string? Armor, int ActiveHand, long NextId,
+    ClassicAmmoExpenditure[]? Expenditures = null);
 internal sealed record ClassicInventoryEntry(ClassicItemOrigin Origin, Fallout1NativeMapObject Object, ClassicItemDefinition Definition,
     string Id, ClassicItemLocation Location, int Amount);
 
@@ -23,6 +26,7 @@ internal sealed partial class ClassicInventory(ClassicPlayerSession player)
     private readonly Dictionary<string, ClassicItemChange> _changes = [];
     private readonly List<ClassicItemOrigin> _createdOrigins = [];
     private long _nextId;
+    private readonly List<ClassicAmmoExpenditure> _expenditures = [];
     internal event Action? Changed;
     internal event Action? EquipmentChanged;
     internal string? LeftHand { get; private set; }

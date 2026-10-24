@@ -118,6 +118,12 @@ internal static class ClassicSceneryPlacement
         // bottom at DirectionY. A model centered blindly on the hex drops
         // these offsets (bed5 alone has X=-35), moving the entire prop.
         var bounds = Project(prop, pixelsPerMeter);
+        if (prop.HasMeta("authored_reference_center_px"))
+        {
+            var center = prop.GetMeta("authored_reference_center_px").AsVector2();
+            if (!center.IsFinite()) throw new InvalidDataException("Classic scenery reference center is nonfinite.");
+            bounds = new Rect2(center, Vector2.Zero);
+        }
         var desiredCenter = new Vector2(frame.DirectionX + frame.FrameX,
             frame.DirectionY + frame.FrameY - frame.Height / 2f);
         var delta = desiredCenter - bounds.GetCenter();

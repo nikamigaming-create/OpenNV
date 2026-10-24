@@ -127,7 +127,20 @@ internal sealed partial class ClassicWorldPreview : Node3D
         }
         AddChild(sprite);
         if (sprite is ClassicSourceActorSprite actor) { actor.Configure(art, this, placed, path, frame); actor.BindAnalog(model); }
-        if (sprite is ClassicScenerySprite scenery) scenery.Configure(art, path, placed);
+        if (sprite is ClassicScenerySprite scenery)
+        {
+            scenery.Configure(art, path, placed);
+            if (placed.ScriptId != uint.MaxValue && !ClassicDoorWorld.IsDoor(placed) && decoded.Frame.FramesPerDirection > 1)
+            {
+                // A static analog cannot stand in for a source-owned animated
+                // surface. Keep the live original visible until a 3D adapter
+                // consumes this same pose; do not count a cold prop as fire.
+                model.Visible = false; sprite.Layers = SharedLayer;
+                _spriteGaps[path] = _spriteGaps.GetValueOrDefault(path) + 1;
+                _unresolved.Add($"Animated scenery {placed.Serial}: source frames retained; 3D animation binding unavailable ({path}).");
+                return sprite;
+            }
+        }
         RegisterPair(sprite, model);
         return sprite;
     }

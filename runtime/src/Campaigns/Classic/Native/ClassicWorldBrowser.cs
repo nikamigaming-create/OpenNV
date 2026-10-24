@@ -10,6 +10,8 @@ internal sealed partial class ClassicWorldBrowser : Node
     private ClassicMapCatalog _source = null!;
     private string _campaign = "fallout-1";
     private ClassicRetailRandomContract? _initializationContract;
+    private ClassicAttackModeCatalog? _combatModes;
+    private ClassicCombatContracts? _combatContracts;
     private IReadOnlyList<string> _maps = [];
     private ClassicWorldPreview? _world;
     private OptionButton _map = null!, _elevation = null!;
@@ -35,6 +37,13 @@ internal sealed partial class ClassicWorldBrowser : Node
         {
             using var contract = System.Text.Json.JsonDocument.Parse(Godot.FileAccess.GetFileAsString("res://config/classic-retail-random-fo2-1.02-v1.json"));
             _initializationContract = ClassicRetailRandomContract.Parse(contract.RootElement);
+            using var modes = System.Text.Json.JsonDocument.Parse(Godot.FileAccess.GetFileAsString("res://config/classic-attack-modes-fo2-1.02-v1.json"));
+            _combatModes = ClassicAttackModeCatalog.Parse(modes.RootElement);
+            using var skill = System.Text.Json.JsonDocument.Parse(Godot.FileAccess.GetFileAsString("res://config/classic-skill-fo2-1.02-v1.json"));
+            using var critical = System.Text.Json.JsonDocument.Parse(Godot.FileAccess.GetFileAsString("res://config/classic-critical-selection-fo2-1.02-v1.json"));
+            using var damage = System.Text.Json.JsonDocument.Parse(Godot.FileAccess.GetFileAsString("res://config/classic-retail-damage-fo2-1.02-v1.json"));
+            _combatContracts = new(ClassicSkillContract.Parse(skill.RootElement), ClassicCriticalSelectionContract.Parse(critical.RootElement), ClassicRetailDamageContract.Parse(damage.RootElement));
+            _combatContracts.Validate();
         }
         _savePath = ClassicPlayerSession.SavePathFor(savePath); _appearanceRoot = appearanceRoot;
         _worldAssets = string.IsNullOrWhiteSpace(appearanceRoot) && string.IsNullOrWhiteSpace(fallout3WorldRoot)
@@ -94,10 +103,10 @@ internal sealed partial class ClassicWorldBrowser : Node
         {
             if (File.Exists(_savePath)) throw new InvalidOperationException("A game already occupies this save slot. Use Continue.");
             if (_choice is null) throw new InvalidOperationException("Choose and save a character first.");
-            Enter(ClassicPlayerSession.Begin(_source, _choice, _initializationContract));
+            Enter(ClassicPlayerSession.Begin(_source, _choice, _initializationContract, combatModes: _combatModes, combatContracts: _combatContracts));
             PlayerController!.Player.Save(_savePath); RefreshActions();
         });
-        _continue.Pressed += () => Try(() => Enter(ClassicPlayerSession.Restore(_source, _savePath, _initializationContract)));
+        _continue.Pressed += () => Try(() => Enter(ClassicPlayerSession.Restore(_source, _savePath, _initializationContract, combatModes: _combatModes, combatContracts: _combatContracts)));
         _browse.Pressed += () => Try(() =>
         {
             PlayerController!.Player.Save(_savePath);
@@ -113,7 +122,7 @@ internal sealed partial class ClassicWorldBrowser : Node
                 ClassicPremadeReader.Load(_campaign, path => _source.Read(path, out _))));
         RefreshActions();
         if (DisplayServer.GetName() != "headless" && File.Exists(_savePath))
-            Try(() => Enter(ClassicPlayerSession.Restore(_source, _savePath, _initializationContract)));
+            Try(() => Enter(ClassicPlayerSession.Restore(_source, _savePath, _initializationContract, combatModes: _combatModes, combatContracts: _combatContracts)));
     }
 
     private void RefreshActions()
@@ -144,7 +153,7 @@ internal sealed partial class ClassicWorldBrowser : Node
         controller.MenuRequested += () => SetMenuOpen(true);
         GD.Print($"OPENNV_CLASSIC_PLAYER_ENTER name={player.Choice.Character.Name} map={player.MapPath} tile={player.Tile} " +
               $"rotation={player.Rotation} appearance={player.Choice.Appearance is not null} " +
-              $"scripts={(player.Initialization is null ? "unbound" : "campaign-start-header")} combat=unbound");
+              $"scripts={(player.Initialization is null ? "unbound" : "campaign-start-header")} combat={player.Combat.Phase} combatActive={player.Combat.Active?.ToString() ?? "unknown"}");
     }
 
     private void Try(Action action)
