@@ -123,6 +123,15 @@ internal sealed partial class RuntimeNativeCreature
         _evaluateRequested = true;
     }
 
+    internal void ResumePackagesAfterCombat()
+    {
+        // An external EVP still reports a retained source refusal. Ending an
+        // unrelated engagement returns to that stopped owner without replaying
+        // selection or promoting its existing failure into a combat failure.
+        if (SandboxMotionError is not null || SandboxAdmissionError is not null) return;
+        EvaluatePackages(false);
+    }
+
     private bool _sourceBindingsRetired;
     public override void _ExitTree() => RetireSourceBindings();
 

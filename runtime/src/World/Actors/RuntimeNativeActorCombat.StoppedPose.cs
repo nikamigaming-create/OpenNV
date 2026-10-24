@@ -116,6 +116,7 @@ internal sealed partial class RuntimeNativeActorCombat
         if (PackageOwnsPose || PackageMoving || _state.KnockedDown || _state.Unconscious ||
             ReactingToHit || Error is not null || _engagementError is not null || _assistanceError is not null ||
             _pendingHitscanImpacts != 0 || _routeSearch is not null || _routeDoor is not null ||
+            _enemyMuzzle?.CaptureReady == false || _enemyShotEffects?.CaptureReady == false ||
             _enemySounds?.CanCaptureSilent == false &&
                 !(allowFiniteSoundWait && _enemySounds.CanAwaitFiniteCompletion)) return false;
         if (Dead)

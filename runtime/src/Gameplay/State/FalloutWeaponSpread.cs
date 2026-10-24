@@ -38,6 +38,19 @@ internal sealed class FalloutWeaponSpread
         bool aiming, bool moving, bool running, bool sneaking, bool leftArmCrippled, bool rightArmCrippled,
         IReadOnlyList<FalloutPerkEntry> perks, Func<FalloutCondition, float> evaluateCondition)
     {
+        var playerSpread = ActorPenalty(shot, skill, strength, aiming, moving, running, sneaking,
+            leftArmCrippled, rightArmCrippled, perks, evaluateCondition);
+        var weaponSpread = shot.ResolvedMinimumSpread;
+        var weaponAngle = .0125f * weaponSpread * weaponSpread + .125f * weaponSpread;
+        var median = Math.Max(0, playerSpread + weaponAngle) * SourceSpreadDegreeScale;
+        if (!float.IsFinite(median)) throw new InvalidDataException("Resolved weapon spread is non-finite.");
+        return median;
+    }
+
+    private float ActorPenalty(FalloutWeaponShot shot, float skill, float strength,
+        bool aiming, bool moving, bool running, bool sneaking, bool leftArmCrippled, bool rightArmCrippled,
+        IReadOnlyList<FalloutPerkEntry> perks, Func<FalloutCondition, float> evaluateCondition)
+    {
         ArgumentNullException.ThrowIfNull(shot);
         ArgumentNullException.ThrowIfNull(perks);
         ArgumentNullException.ThrowIfNull(evaluateCondition);
@@ -79,23 +92,26 @@ internal sealed class FalloutWeaponSpread
             };
         }
 
-        var weaponSpread = shot.ResolvedMinimumSpread;
-        var weaponAngle = .0125f * weaponSpread * weaponSpread + .125f * weaponSpread;
-        var median = Math.Max(0, playerSpread + weaponAngle) * SourceSpreadDegreeScale;
-        if (!float.IsFinite(median)) throw new InvalidDataException("Resolved weapon spread is non-finite.");
-        return median;
+        if (!float.IsFinite(playerSpread)) throw new InvalidDataException("Actor spread penalty is non-finite.");
+        return playerSpread;
     }
 
-    internal float NpcMedianDeviationDegrees(FalloutWeaponShot shot, float skill, float strength,
-        bool moving, bool running, bool sneaking, bool leftArmCrippled, bool rightArmCrippled)
+    internal float NpcLaunchExtentRadians(FalloutWeaponShot shot, float skill, float strength,
+        bool moving, bool running, bool sneaking, bool leftArmCrippled, bool rightArmCrippled,
+        FalloutActorProjectileLaunch process, IReadOnlyList<FalloutPerkEntry> perks)
     {
-        var playerBase = PlayerMedianDeviationDegrees(shot, skill, strength, aiming: true,
-            moving: moving, running: running, sneaking: sneaking, leftArmCrippled: leftArmCrippled,
-            rightArmCrippled: rightArmCrippled, Array.Empty<FalloutPerkEntry>(),
-            static _ => throw new InvalidOperationException("NPC weapon spread cannot evaluate player perk conditions."));
-        var median = playerBase * (1 + NpcMaximumGunWobbleAngle());
-        if (!float.IsFinite(median)) throw new InvalidDataException("Resolved NPC weapon spread is non-finite.");
-        return median;
+        ArgumentNullException.ThrowIfNull(process);
+        process.Validate();
+        var penalty = ActorPenalty(shot, skill, strength, true, moving, running, sneaking,
+            leftArmCrippled, rightArmCrippled, perks,
+            static _ => throw new NotSupportedException("NPC launch perk condition evaluation is unbound."));
+        var extent = Mathf.DegToRad(shot.MinimumSpread + shot.Spread * process.LegacySpreadFactor);
+        foreach (var effect in shot.AmmoEffects.Where(effect => effect.Type == FalloutAmmoEffect.Spread))
+            extent = effect.Apply(extent);
+        extent += Mathf.DegToRad(penalty * NpcMaximumGunWobbleAngle());
+        extent += process.AimChaseRadians;
+        if (!float.IsFinite(extent)) throw new InvalidDataException("NPC launch extent is non-finite.");
+        return extent;
     }
 
     // Spread values describe the median radius. Sampling uniformly to twice
@@ -126,6 +142,41 @@ internal sealed class FalloutWeaponSpread
             up * (Mathf.Sin(rotation) * sine);
         if (!IsFinite(result) || result.LengthSquared() <= float.Epsilon)
             throw new InvalidDataException("Weapon spread produced an invalid direction.");
+        return result.Normalized();
+    }
+
+    internal static Vector3 DeviateLaunch(Vector3 center, float angularExtentRadians, Func<float> nextUnit)
+    {
+        ArgumentNullException.ThrowIfNull(nextUnit);
+        if (!IsFinite(center) || center.LengthSquared() <= float.Epsilon ||
+            !float.IsFinite(angularExtentRadians))
+            throw new InvalidDataException("Projectile launch spread input is invalid.");
+
+        var direction = center.Normalized();
+        if (!IsFinite(direction) || direction.LengthSquared() <= float.Epsilon)
+            throw new InvalidDataException("Projectile launch direction cannot be normalized.");
+        // Launch consumes both draws even when the angular extent is zero.
+        var radiusUnit = nextUnit();
+        var azimuthUnit = nextUnit();
+        if (!float.IsFinite(radiusUnit) || radiusUnit is < 0 or > 1 ||
+            !float.IsFinite(azimuthUnit) || azimuthUnit is < 0 or > 1)
+            throw new InvalidDataException("Projectile launch spread random sample is invalid.");
+
+        var radius = angularExtentRadians * radiusUnit;
+        var azimuth = MathF.Tau * azimuthUnit;
+        // Convert the direction into clockwise source pitch/yaw, perturb those
+        // angles, then apply the shared source (X,Z,-Y) coordinate convention.
+        var pitch = -MathF.Asin(Math.Clamp(direction.Y, -1, 1)) + radius * MathF.Sin(azimuth);
+        // The source heading rule chooses -pi/2 when both horizontal components
+        // are zero; retain that choice before applying the random yaw offset.
+        var yaw = direction.X == 0 && direction.Z == 0
+            ? -MathF.PI / 2 : MathF.Atan2(direction.X, -direction.Z);
+        yaw += radius * MathF.Cos(azimuth);
+        var horizontal = MathF.Cos(pitch);
+        var result = new Vector3(MathF.Sin(yaw) * horizontal, -MathF.Sin(pitch),
+            -MathF.Cos(yaw) * horizontal);
+        if (!IsFinite(result) || result.LengthSquared() <= float.Epsilon)
+            throw new InvalidDataException("Projectile launch spread produced an invalid direction.");
         return result.Normalized();
     }
 

@@ -41,10 +41,9 @@ internal sealed partial class RuntimeNativeActorCombat
         if (_enemyWeapon.Model is not null) _enemyObject = new(_enemyWeapon, _skeleton, _content);
         else if (Ranged)
         {
-            var nodes = Enumerable.Range(0, _skeleton.Node.GetBoneCount()).Select(index => _skeleton.Node.GetBoneName(index).ToString())
-                .Where(name => name.StartsWith("ProjectileNode", StringComparison.OrdinalIgnoreCase)).ToArray();
-            if (nodes.Length != 1) throw new NotSupportedException("Embedded actor weapon requires one source ProjectileNode; multiple emitters need attack-node selection.");
-            _embeddedMuzzle = new() { Name = "SourceEmbeddedWeaponMuzzle", BoneName = nodes[0] };
+            var node = _enemyWeapon.ResolveEmbeddedProjectileNode(Enumerable.Range(0, _skeleton.Node.GetBoneCount())
+                .Select(index => _skeleton.Node.GetBoneName(index).ToString()));
+            _embeddedMuzzle = new() { Name = "SourceEmbeddedWeaponMuzzle", BoneName = node };
             _skeleton.Node.AddChild(_embeddedMuzzle);
         }
         _enemyWeaponHandling = new(owned.Contents, nativeNpc: true);

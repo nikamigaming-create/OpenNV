@@ -63,6 +63,7 @@ internal static class WeaponFiringContracts
             }).ToArray();
             File.WriteAllBytes(Path.Combine(directory, "Test.esm"), Record("TES4", 0, Field("HEDR", header))
                 .Concat(Record("WEAP", 1, Field("EDID", Text("TestGun")), Field("MODL", Text("test.nif")),
+                    Field("NNAM", Text("SourceEmitter")),
                     Field("DATA", economics), Field("ETYP", BitConverter.GetBytes(1)), Field("DNAM", weaponData), Field("NAM0", BitConverter.GetBytes(2u)), Field("MOD2", Text("Projectiles/test-case.nif")),
                     Field("INAM", BitConverter.GetBytes(6u))))
                 .Concat(Record("AMMO", 2, Field("EDID", Text("TestAmmo")), Field("DATA", new byte[13]), Field("DAT2", ammo)))
@@ -108,6 +109,16 @@ internal static class WeaponFiringContracts
             using var records = FalloutPluginStack.Load(directory, ["Test.esm"]);
             FalloutFormKey Key(uint id) => new("Test.esm", id);
             var weapon = FalloutWeaponPresentation.Read(records, Key(1));
+            Require(weapon.EmbeddedNodeName == "SourceEmitter" &&
+                weapon.ResolveEmbeddedProjectileNode(["ProjectileNode_Left", "SourceEmitter", "ProjectileNode_Right"]) == "SourceEmitter",
+                "Embedded WEAP declaration lost its exact source node among multiple emitters.");
+            Reject(() => weapon.ResolveEmbeddedProjectileNode(["ProjectileNode_Left", "ProjectileNode_Right"]));
+            Reject(() => weapon.ResolveEmbeddedProjectileNode(["SourceEmitter", "SourceEmitter"]));
+            var unnamed = weapon with { EmbeddedNodeName = null };
+            Require(unnamed.ResolveEmbeddedProjectileNode(["OtherBone", "ProjectileNode_Only"]) == "ProjectileNode_Only",
+                "Undeclared unique embedded emitter lost existing admission.");
+            Reject(() => unnamed.ResolveEmbeddedProjectileNode(["ProjectileNode_Left", "ProjectileNode_Right"]));
+
             Require(weapon.SightFieldOfViewDegrees == 55 && weapon.AimGroup(true, true) == "1hpaim" &&
                 weapon.AimGroup(false, true) == "1hpaimis", "First-person sight exclusion also changed third-person or lost the source angle.");
             CheckSight(records, weapon);

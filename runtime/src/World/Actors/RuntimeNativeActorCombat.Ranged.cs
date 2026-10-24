@@ -70,15 +70,15 @@ internal sealed partial class RuntimeNativeActorCombat
             }
         }
         var resolvedDamage = _enemyDamage!.Resolve(_enemyShot);
-        var spreadDegrees = ResolveNpcShotSpread(_enemyShot);
-        if (FriendlyInsideSpread(player, from, TargetPoint(player), spreadDegrees))
+        var launchExtentRadians = ResolveNpcShotSpread(_enemyShot);
+        if (FriendlyInsideSpread(player, from, TargetPoint(player), launchExtentRadians))
         {
-            _lastAttack = new { kind = "held-friendly-spread", target = _state.Engagement!.Target.ToString(), blocker = _friendlySpreadBlocker, spreadDegrees };
+            _lastAttack = new { kind = "held-friendly-spread", target = _state.Engagement!.Target.ToString(), blocker = _friendlySpreadBlocker, launchExtentRadians };
             return;
         }
         if (!_enemyShot.Projectile.IsInstantRayAttack)
         {
-            ShootProjectileTarget(player, weapon, handling, from, direction, resolvedDamage, spreadDegrees);
+            ShootProjectileTarget(player, weapon, handling, from, direction, resolvedDamage, launchExtentRadians);
             return;
         }
         if (!handling.ConsumeShot(weapon, _enemyShot, _records)) return;
@@ -101,7 +101,7 @@ internal sealed partial class RuntimeNativeActorCombat
         var transparentLayerUnresolvedContacts = 0;
         for (var pellet = 0; pellet < _enemyShot.Projectiles; pellet++)
         {
-            var pelletDirection = FalloutWeaponSpread.Deviate(direction, spreadDegrees, handling.NextShotRandomUnit);
+            var pelletDirection = FalloutWeaponSpread.DeviateLaunch(direction, launchExtentRadians, handling.NextShotRandomUnit);
             var exclusions = new Godot.Collections.Array<Rid>();
             foreach (var body in _enemyRayExclusions!) exclusions.Add(body);
             var end = from + pelletDirection * (_enemyShot.Projectile.Range * _skeleton.UnitsToMetres);
@@ -282,7 +282,7 @@ internal sealed partial class RuntimeNativeActorCombat
             pendingLimbDamage,
             actorLimbDamage,
             pendingActorLimbDamage,
-            spreadDegrees,
+            launchExtentRadians,
             healthBefore = before,
             healthAfter = after,
             pellets,
@@ -448,7 +448,7 @@ internal sealed partial class RuntimeNativeActorCombat
 
     private void ShootProjectileTarget(RuntimeNativePlayer? player, FalloutWeaponPresentation weapon,
         FalloutWeaponHandling handling, Vector3 origin, Vector3 direction, FalloutWeaponDamage damage,
-        float spreadDegrees)
+        float launchExtentRadians)
     {
         var shot = _enemyShot!;
         var effects = _enemyShotEffects!;
@@ -460,8 +460,8 @@ internal sealed partial class RuntimeNativeActorCombat
         {
             for (var pellet = 0; pellet < shot.Projectiles; pellet++)
             {
-                var projectileDirection = FalloutWeaponSpread.Deviate(
-                    direction, spreadDegrees, handling.NextShotRandomUnit);
+                var projectileDirection = FalloutWeaponSpread.DeviateLaunch(
+                    direction, launchExtentRadians, handling.NextShotRandomUnit);
                 var flight = effects.PrepareProjectile(shot.Projectile, _context!.Gravity,
                     origin, projectileDirection, _mask, _enemyRayExclusions!);
                 flight.OnContact = contact => ApplyProjectileTargetContact(player, shot, damage, contact);
@@ -496,7 +496,7 @@ internal sealed partial class RuntimeNativeActorCombat
                 loaded = handling.Loaded(weapon.Form),
                 projectiles = shot.Projectiles,
                 projectileFlights = flights.Count,
-                spreadDegrees,
+                launchExtentRadians,
                 direction = new[] { direction.X, direction.Y, direction.Z },
                 origin = new[] { origin.X, origin.Y, origin.Z },
                 boundary = "missile-lobber-flight;source-speed,gravity,bounce-and-EXPL-radius-damage;distance-attenuation,force,radiation,visuals,ammo-effects,tracer,rotation-and-retail-cadence-unmatched"
@@ -513,6 +513,12 @@ internal sealed partial class RuntimeNativeActorCombat
 
     private float ResolveNpcShotSpread(FalloutWeaponShot shot)
     {
+        if (_state.ProjectileLaunch is null)
+        {
+            _launchRefusal = new(_state.Reference, new(shot.Weapon, FalloutActorFurnitureContinuation.RecordHash(_records.GetEffective(shot.Weapon))),
+                _enemyWeaponHandling!.Capture(), FalloutCorpseLaunchRefusal.UnknownProcess);
+            throw new LaunchAdmissionException(_launchRefusal);
+        }
         var skillValues = _enemySkillValues ?? throw new InvalidOperationException("NPC weapon skill source is absent.");
         if (shot.SkillActorValue is < 32 or > 45 || skillValues.Length != 28)
             throw new NotSupportedException("NPC weapon skill does not resolve to the source skill block.");
@@ -531,10 +537,11 @@ internal sealed partial class RuntimeNativeActorCombat
             throw new NotSupportedException("NPC weapon spread requires source left and right arm parts.");
 
         var running = Activity.Running;
-        return (_enemyWeaponSpread ??= new(_records)).NpcMedianDeviationDegrees(shot,
+        return (_enemyWeaponSpread ??= new(_records)).NpcLaunchExtentRadians(shot,
             skillValues[shot.SkillActorValue - 32], _enemyStrength,
             moving: running, running: running, sneaking: Activity.Sneaking,
-            leftArmCrippled: Crippled(leftArms), rightArmCrippled: Crippled(rightArms));
+            leftArmCrippled: Crippled(leftArms), rightArmCrippled: Crippled(rightArms),
+            _state.ProjectileLaunch, _world.PerkEntries(_state.Reference).ToArray());
     }
 
     private void ApplyProjectileTargetContact(RuntimeNativePlayer? player, FalloutWeaponShot shot,

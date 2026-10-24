@@ -69,7 +69,8 @@ internal sealed record FalloutNativeCampaignRestore(
 
 internal static class FalloutNativeCampaignSave
 {
-    internal const string ExpectedSchema = "opennv-native-fnv-campaign-save/v60";
+    internal const string ExpectedSchema = "opennv-native-fnv-campaign-save/v61";
+    internal const string BeforeProjectileLaunchSchema = "opennv-native-fnv-campaign-save/v60";
     internal const string BeforePendingSandboxStartSchema = "opennv-native-fnv-campaign-save/v59";
     internal const string BeforePlayerNotesSchema = "opennv-native-fnv-campaign-save/v58";
     internal const string BeforeReputationSchema = "opennv-native-fnv-campaign-save/v57";
@@ -538,6 +539,10 @@ internal static class FalloutNativeCampaignSave
 
     internal static FalloutNativeCampaignState AdmitPreviousOwnerSchema(FalloutNativeCampaignState state)
     {
+        if (state.Schema != ExpectedSchema && state.References?.Any(reference => reference.ProjectileLaunch is not null ||
+            reference.CorpseEquipment?.LaunchRefusal is not null) == true)
+            throw new InvalidDataException("Earlier campaign schemas cannot own projectile launch process state.");
+        if (state.Schema == BeforeProjectileLaunchSchema) state = state with { Schema = ExpectedSchema };
         if (state.Schema != ExpectedSchema && state.References?.Any(reference => reference.PendingSandboxStart is not null) == true)
             throw new InvalidDataException("Earlier campaign schemas cannot own a pending native Sandbox start.");
         if (state.Schema == BeforePendingSandboxStartSchema) state = state with { Schema = ExpectedSchema };

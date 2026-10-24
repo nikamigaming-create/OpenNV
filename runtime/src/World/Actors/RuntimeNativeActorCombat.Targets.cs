@@ -85,13 +85,21 @@ internal sealed partial class RuntimeNativeActorCombat
     private void EndEngagement()
     {
         RetireUnusedPursuitSearch();
+        // The target's authoritative departure ends this successful pursuit.
+        // Do not leave its completed waypoints masquerading as package motion;
+        // unresolved door actions and route failures retain their owners.
+        if (_routeDoor is null && _routeError is null && _coarseRouteError is null)
+        {
+            _pursuitPath = [];
+            _pursuitCursor = 0;
+        }
         CaptureEngagement();
         _state.Engagement = null;
         Activity.SetCombat(false); Activity.SetAlerted(false); Activity.SetWeaponDrawn(false);
         Activity.SetMovement(false, false);
         if (_actor is CharacterBody3D body) body.Velocity = Vector3.Zero;
         _context?.DispatchEvent?.Invoke(_state.Reference, "OnCombatEnd");
-        if (_actor is RuntimeNativeCreature creature) creature.EvaluatePackages(false);
+        if (_actor is RuntimeNativeCreature creature) creature.ResumePackagesAfterCombat();
     }
 
     private void StopCombat()
@@ -181,13 +189,14 @@ internal sealed partial class RuntimeNativeActorCombat
 
     private string? _friendlySpreadBlocker;
 
-    private bool FriendlyInsideSpread(RuntimeNativePlayer? player, Vector3 origin, Vector3 target, float medianDegrees)
+    private bool FriendlyInsideSpread(RuntimeNativePlayer? player, Vector3 origin, Vector3 target, float launchExtentRadians)
     {
         _friendlySpreadBlocker = null;
-        if (medianDegrees <= 0) return false;
+        if (!float.IsFinite(launchExtentRadians)) throw new InvalidDataException("Friendly spread extent is invalid.");
+        if (launchExtentRadians == 0) return false;
         var displacement = target - origin;
         var length = displacement.Length();
-        var halfAngle = Mathf.DegToRad(medianDegrees * 2);
+        var halfAngle = MathF.Abs(launchExtentRadians);
         if (halfAngle >= MathF.PI / 2) { _friendlySpreadBlocker = "unbounded-spread"; return true; }
         const int sides = 16;
         // Circumscribe the complete possible source spread, before drawing any

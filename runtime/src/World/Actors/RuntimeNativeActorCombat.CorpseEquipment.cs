@@ -13,6 +13,11 @@ internal sealed partial class RuntimeNativeActorCombat
     private bool _corpseEquipmentRestored;
     private bool? _retiredCorpseEquipmentReady;
     private bool? _retiredCorpseEquipmentFiniteReady;
+    private FalloutCorpseLaunchRefusal? _launchRefusal;
+    private bool _launchRefusalOwnsError;
+    private sealed class LaunchAdmissionException(FalloutCorpseLaunchRefusal refusal)
+        : NotSupportedException(refusal.Error)
+    { internal FalloutCorpseLaunchRefusal Refusal { get; } = refusal; }
 
     private void RetireDeathPursuit()
     {
@@ -50,9 +55,10 @@ internal sealed partial class RuntimeNativeActorCombat
         try
         {
             _ = CaptureCorpseEquipment();
-            foreach (var sounds in new[] { _enemySounds, _hitReactionSounds, _packageSounds })
+            foreach (var (owner, sounds) in new[] { ("combat", _enemySounds), ("hit-reaction", _hitReactionSounds), ("package", _packageSounds) })
                 if (sounds?.CanCaptureSilent == false && !(allowFiniteSoundWait && sounds.CanAwaitFiniteCompletion))
-                    throw new NotSupportedException("Corpse equipment retains an unfinished or unowned source sound continuation.");
+                    throw new NotSupportedException($"Corpse equipment retains an unfinished or unowned source sound continuation: " +
+                        $"owner={owner}; {sounds.CaptureDiagnostic}; unbound=[{string.Join(",", sounds.Unbound)}].");
             _state.SetCorpseEquipmentCaptureBlocker(CaptureCorpseEquipment, null);
             return true;
         }
@@ -73,7 +79,8 @@ internal sealed partial class RuntimeNativeActorCombat
         if (_routeSearch is not null || _routeDoor is not null || PackageOwnsPose || PackageMoving ||
             _state.HitReaction is not null || _pendingHitscanImpacts != 0)
             throw new NotSupportedException("Corpse equipment has a pending route, hit or independent motion continuation.");
-        if (Error is not null || _engagementError is not null || _assistanceError is not null)
+        if (Error is not null || _assistanceError is not null || _engagementError is not null &&
+            (!_launchRefusalOwnsError || _launchRefusal is null || _engagementError != _launchRefusal.Error || _state.ProjectileLaunch is not null))
             throw new NotSupportedException("Corpse equipment retains an unowned combat failure.");
         if (_enemyMuzzle?.CaptureReady == false || _enemyShotEffects?.CaptureReady == false)
             throw new NotSupportedException("Corpse equipment has a pending source attack effect, projectile, decal or effect fault: " +
@@ -96,7 +103,8 @@ internal sealed partial class RuntimeNativeActorCombat
         var root = new float[] { pose.Basis.X.X, pose.Basis.X.Y, pose.Basis.X.Z, pose.Basis.Y.X, pose.Basis.Y.Y, pose.Basis.Y.Z,
             pose.Basis.Z.X, pose.Basis.Z.Y, pose.Basis.Z.Z, pose.Origin.X, pose.Origin.Y, pose.Origin.Z };
         var result = new FalloutActorCorpseEquipment(root, Activity.Capture(), CaptureCorpseResidualPose(), attachments,
-            handlingSource, _enemyWeaponHandling?.Capture(), _embeddedMuzzle?.BoneName.ToString(), _deathRouteRetirement);
+            handlingSource, _enemyWeaponHandling?.Capture(), _embeddedMuzzle?.BoneName.ToString(), _deathRouteRetirement,
+            _launchRefusal?.Copy());
         result.ValidateSource(_records, _state.Inventory?.Contents ??
             throw new NotSupportedException("Corpse equipment has no actual retained reference inventory."));
         return result;
@@ -135,9 +143,8 @@ internal sealed partial class RuntimeNativeActorCombat
 
         if (saved.EmbeddedMuzzleBone is { } muzzle)
         {
-            var names = Enumerable.Range(0, _skeleton.Node.GetBoneCount()).Select(index => _skeleton.Node.GetBoneName(index).ToString())
-                .Where(name => name.StartsWith("ProjectileNode", StringComparison.OrdinalIgnoreCase)).ToArray();
-            if (names.Length != 1 || names[0] != muzzle)
+            if (weapon is null || weapon.ResolveEmbeddedProjectileNode(Enumerable.Range(0, _skeleton.Node.GetBoneCount())
+                .Select(index => _skeleton.Node.GetBoneName(index).ToString())) != muzzle)
                 throw new InvalidDataException("Saved embedded corpse muzzle differs from its source skeleton.");
         }
         var staged = new List<(FalloutCorpseWeaponAttachment Saved, NativeActorWeaponAttachment Native)>();
@@ -173,6 +180,8 @@ internal sealed partial class RuntimeNativeActorCombat
                 _skeleton.Node.AddChild(_embeddedMuzzle);
             }
             _deathRouteRetirement = saved.RouteRetirement;
+            _launchRefusal = saved.LaunchRefusal?.Copy();
+            if (_launchRefusal is not null) { _engagementError = _launchRefusal.Error; _launchRefusalOwnsError = true; }
         }
         catch
         {
