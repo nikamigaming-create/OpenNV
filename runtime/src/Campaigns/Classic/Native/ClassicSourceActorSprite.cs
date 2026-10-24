@@ -20,7 +20,15 @@ internal sealed partial class ClassicSourceActorSprite : Sprite3D
     private ClassicCombatEncounter? _combat;
     private uint _restLayers;
     private string _lastPath = "";
-    internal void BindCombat(ClassicCombatEncounter combat) { _combat = combat; _restLayers = Layers; }
+    internal void BindCombat(ClassicCombatEncounter combat)
+    {
+        _combat = combat; _restLayers = Layers;
+        // Reusing a preview must not consume the fresh source actor's idle
+        // before its gameplay owner binds. Pending actions supply their own
+        // retained pose; the standing fallback starts at its source frame.
+        _frame = _placed.Frame < 0 ? _frames - 1 : _placed.Frame;
+        _clock = 0; _lastFrame = -1; _lastRotation = -1; _lastPath = "";
+    }
     internal void BindAnalog(Node3D model)
     {
         _body = model as ClassicPlayerBody;

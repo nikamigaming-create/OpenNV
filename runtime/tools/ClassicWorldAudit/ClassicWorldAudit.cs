@@ -43,9 +43,8 @@ public sealed partial class ClassicWorldAudit : Node
                                     if (selected.Length == 0) throw new InvalidDataException("Requested authored model group is absent.");
                                     var bounds = ClassicSceneryPlacement.Bounds(selected[0]);
                                     foreach (var node in selected.Skip(1)) bounds = bounds.Merge(ClassicSceneryPlacement.Bounds(node));
-                                    world.Camera.StopShot(); world.Camera.Focus = bounds.GetCenter();
-                                    world.Camera.Distance = Math.Max(4, bounds.Size.Length() * 1.25f);
-                                    world.Camera.Pitch = .65f; world.Camera.SaveView();
+                                    world.Camera.StopShot(); world.Camera.Pitch = .65f;
+                                    world.Camera.FrameLevel(bounds); world.Camera.SaveView();
                                     Directory.CreateDirectory(args[2]);
                                     File.WriteAllText(Path.Combine(args[2], "authored-placement.json"), JsonSerializer.Serialize(selected.Select(node => new
                                     {
@@ -53,7 +52,8 @@ public sealed partial class ClassicWorldAudit : Node
                                         Model = node.GetMeta("authored_model").AsString(),
                                         Position = new[] { node.Position.X, node.Position.Y, node.Position.Z },
                                         Basis = node.Basis.ToString(),
-                                        Bounds = ClassicSceneryPlacement.Bounds(node).ToString()
+                                        Bounds = ClassicSceneryPlacement.Bounds(node).ToString(),
+                                        Materials = MaterialState(node)
                                     })));
                                 }
                                 for (var frame = 0; frame < 4; frame++) await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
@@ -62,28 +62,9 @@ public sealed partial class ClassicWorldAudit : Node
                                 if (image.SavePng(Path.Combine(args[2], Path.GetFileNameWithoutExtension(path.Replace('\\', '/')) + $"-{elevation}.png")) != Error.Ok)
                                     throw new IOException("Could not save the selected private visual diagnostic.");
                             }
-                            var walls = world.FindChild("SourceJoinedWallBlockout", true, false) as MeshInstance3D
-                                ?? throw new InvalidOperationException("Source wall shell is absent.");
-                            if (walls.Mesh.GetSurfaceCount() != 0)
-                            {
-                                var arrays = walls.Mesh.SurfaceGetArrays(0);
-                                var points = arrays[(int)Mesh.ArrayType.Vertex].AsVector3Array();
-                                var indices = arrays[(int)Mesh.ArrayType.Index].AsInt32Array();
-                                var edges = new Dictionary<(int, int), int>();
-                                for (var at = 0; at < indices.Length; at += 3)
-                                {
-                                    var a = points[indices[at]]; var b = points[indices[at + 1]]; var c = points[indices[at + 2]];
-                                    if (!a.IsFinite() || !b.IsFinite() || !c.IsFinite() || (b - a).Cross(c - a).LengthSquared() < 1e-12f)
-                                        throw new InvalidDataException("Joined wall shell contains an invalid triangle.");
-                                    for (var side = 0; side < 3; side++)
-                                    {
-                                        var first = indices[at + side]; var second = indices[at + (side + 1) % 3];
-                                        var edge = first < second ? (first, second) : (second, first);
-                                        edges[edge] = edges.GetValueOrDefault(edge) + 1;
-                                    }
-                                }
-                                if (edges.Values.Any(count => count != 2)) throw new InvalidDataException("Joined wall shell is open or non-manifold.");
-                            }
+                            var walls = world.FindChild("SourceJoinedWallBlockout", true, false) as MeshInstance3D;
+                            ValidateWallShell(world.VisibleWallObjects, walls);
+                            GD.Print($"OPENNV_CLASSIC_WALL_PRESENTATION sourceWallHexes={world.WallHexes} visibleSourceWalls={world.VisibleWallObjects} shell={walls is not null}");
                             elevations++;
                         }
                         finally { RemoveChild(world); world.Free(); }
@@ -98,4 +79,59 @@ public sealed partial class ClassicWorldAudit : Node
         }
         catch (Exception error) { GD.PushError(error.ToString()); GetTree().Quit(1); }
     }
+
+    internal static void ValidateWallShell(int visibleSourceWalls, MeshInstance3D? walls)
+    {
+        if (visibleSourceWalls < 0 || visibleSourceWalls > 0 && walls is null)
+            throw new InvalidDataException("Visible source wall shell is absent.");
+        if (walls is null) return; // Only transparent source navigation markers.
+        if (walls.Mesh is null || visibleSourceWalls > 0 && walls.Mesh.GetSurfaceCount() == 0)
+            throw new InvalidDataException("Visible source wall shell has no geometry.");
+        for (var surface = 0; surface < walls.Mesh.GetSurfaceCount(); surface++)
+        {
+            var arrays = walls.Mesh.SurfaceGetArrays(surface);
+            var points = arrays[(int)Mesh.ArrayType.Vertex].AsVector3Array();
+            var indices = arrays[(int)Mesh.ArrayType.Index].AsInt32Array();
+            if (indices.Length == 0 || indices.Length % 3 != 0)
+                throw new InvalidDataException("Joined wall shell has no complete indexed triangles.");
+            var edges = new Dictionary<(int, int), int>();
+            for (var at = 0; at < indices.Length; at += 3)
+            {
+                var a = points[indices[at]]; var b = points[indices[at + 1]]; var c = points[indices[at + 2]];
+                if (!a.IsFinite() || !b.IsFinite() || !c.IsFinite() || (b - a).Cross(c - a).LengthSquared() < 1e-12f)
+                    throw new InvalidDataException("Joined wall shell contains an invalid triangle.");
+                for (var side = 0; side < 3; side++)
+                {
+                    var first = indices[at + side]; var second = indices[at + (side + 1) % 3];
+                    var edge = first < second ? (first, second) : (second, first);
+                    edges[edge] = edges.GetValueOrDefault(edge) + 1;
+                }
+            }
+            if (edges.Values.Any(count => count != 2)) throw new InvalidDataException("Joined wall shell is open or non-manifold.");
+        }
+    }
+    private static object[] MaterialState(Node3D root) => root.FindChildren("*", "MeshInstance3D", true, false)
+        .OfType<MeshInstance3D>().SelectMany(mesh => Enumerable.Range(0, mesh.Mesh.GetSurfaceCount()).Select(surface =>
+        {
+            var material = mesh.GetActiveMaterial(surface) as BaseMaterial3D;
+            var arrays = mesh.Mesh.SurfaceGetArrays(surface);
+            var colors = arrays[(int)Mesh.ArrayType.Color].VariantType == Variant.Type.Nil
+                ? [] : arrays[(int)Mesh.ArrayType.Color].AsColorArray();
+            var mean = colors.Length == 0 ? Colors.White : new Color(colors.Average(color => color.R),
+                colors.Average(color => color.G), colors.Average(color => color.B));
+            return (object)new
+            {
+                Mesh = mesh.Name.ToString(),
+                Surface = surface,
+                Material = mesh.GetActiveMaterial(surface)?.ResourceName,
+                Shader = (mesh.GetActiveMaterial(surface) as ShaderMaterial)?.Shader?.ResourcePath,
+                Albedo = material?.AlbedoColor.ToString(),
+                material?.VertexColorUseAsAlbedo,
+                material?.VertexColorIsSrgb,
+                material?.Roughness,
+                material?.ShadingMode,
+                ColorCount = colors.Length,
+                MeanColor = new[] { mean.R, mean.G, mean.B }
+            };
+        })).ToArray();
 }

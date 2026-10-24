@@ -1,0 +1,811 @@
+{
+  "schema": "opennv-original-classic-art-handoff/v1",
+  "status": "Integrated original source-bound main meshes; native scene and ordinary fresh-player entry/walk accepted; campaign/parity incomplete",
+  "library_file_id": "libfile_9254712e6d748191a0b1372008969873",
+  "library_version": 0,
+  "bundle_bytes": 21850943,
+  "bundle_sha256": "f2454244819634fe1cef12336175b2c227fb9d7d4831c46c0b3c76462414dca0",
+  "provenance": "Original authored geometry and materials. No retail mesh, texture or private reference pixels included.",
+  "scale": "Metres; Blender Z-up to glTF/Godot Y-up via (x,y,z)->(x,z,-y). Temple main meshes share an authored origin.",
+  "materials": "Original GLB materials; no external image dependencies. Source-paint projection disabled for these candidate bindings.",
+  "dependencies": [
+    "Optional reference-canvas loader cut for TEMPLE01-08",
+    "Owned source FRM/MAP read live; never packaged"
+  ],
+  "lod": "Separate LOD1 files are not wired into runtime selection. TEMPLE01/04/07/08 retain full-detail geometry: exact decoded positions, bounds and triangle counts match their respective main mesh. This is seam preservation, not optimization; remaining LODs unchanged.",
+  "collision_navigation": "Unchanged source authority. Mesh passage dimensions are not navigation or collision acceptance.",
+  "unbound_master": "art/classic/arroyo/arroyo_shared_original_v5.blend is editable source only, never a canonical composite runtime placement.",
+  "remaining_visual_limits": [
+    "Carved relief, materials and complete scene likeness remain simplified/unverified.",
+    "Dynamic fire retains source FRM animation; an animated 3D adapter is still absent.",
+    "LOD1 files are not selected by the runtime; passage collision/navigation remains source MAP authority."
+  ],
+  "assets": {
+    "temple01": {
+      "binding": {
+        "Art": "temple01.frm",
+        "Model": "arroyo/temple01.glb",
+        "UseSourcePalette": false,
+        "VisualPlacement": {
+          "Schema": "opennv-classic-reference-canvas/v1",
+          "Canvas": {
+            "X": -136.0,
+            "Y": -169.0,
+            "Width": 248,
+            "Height": 196
+          },
+          "AuthoredElevationMeters": 0.0,
+          "SourceFrame": {
+            "Width": 248,
+            "Height": 196,
+            "DirectionX": 48,
+            "DirectionY": 2,
+            "FrameX": 0,
+            "FrameY": 0,
+            "FramesPerDirection": 1,
+            "Rotation": 0
+          },
+          "SourceRotation": 0,
+          "PixelsPerMeter": 43.114646,
+          "YawDegrees": 0
+        }
+      },
+      "geometry": {
+        "vertices": 51268,
+        "triangles": 32416,
+        "bounds_godot": [
+          [
+            -4.341673851013184,
+            4.855477333068848
+          ],
+          [
+            0.0,
+            4.526453971862793
+          ],
+          [
+            -3.315237283706665,
+            0.5710150599479675
+          ]
+        ],
+        "scene_roots_identity": true,
+        "lod1": {
+          "vertices": 51268,
+          "triangles": 32416,
+          "bounds_godot": [
+            [
+              -4.341673851013184,
+              4.855477333068848
+            ],
+            [
+              0.0,
+              4.526453971862793
+            ],
+            [
+              -3.315237283706665,
+              0.5710150599479675
+            ]
+          ],
+          "scene_roots_identity": true
+        },
+        "scale": 1.0,
+        "authored_elevation_m": 0.0,
+        "computed_common_origin": [
+          76.28240431667932,
+          0.0,
+          80.875
+        ],
+        "common_origin_error_m": 1.4210854715202004E-14,
+        "old_loader_scale": 0.9999998096185218
+      }
+    },
+    "temple02": {
+      "binding": {
+        "Art": "temple02.frm",
+        "Model": "arroyo/temple02.glb",
+        "UseSourcePalette": false,
+        "VisualPlacement": {
+          "Schema": "opennv-classic-reference-canvas/v1",
+          "Canvas": {
+            "X": -282.5,
+            "Y": -298.0,
+            "Width": 151,
+            "Height": 121
+          },
+          "AuthoredElevationMeters": 3.841400623321533,
+          "SourceFrame": {
+            "Width": 151,
+            "Height": 121,
+            "DirectionX": -19,
+            "DirectionY": 38,
+            "FrameX": 0,
+            "FrameY": 0,
+            "FramesPerDirection": 1,
+            "Rotation": 0
+          },
+          "SourceRotation": 0,
+          "PixelsPerMeter": 43.114646,
+          "YawDegrees": 0
+        }
+      },
+      "geometry": {
+        "vertices": 30459,
+        "triangles": 12887,
+        "bounds_godot": [
+          [
+            3.1482057571411133,
+            8.797202110290527
+          ],
+          [
+            3.841400623321533,
+            7.5732550621032715
+          ],
+          [
+            -3.016035318374634,
+            -0.4526368975639343
+          ]
+        ],
+        "scene_roots_identity": true,
+        "lod1": {
+          "vertices": 20947,
+          "triangles": 7087,
+          "bounds_godot": [
+            [
+              3.1482057571411133,
+              8.797202110290527
+            ],
+            [
+              3.841400623321533,
+              7.5732550621032715
+            ],
+            [
+              -3.016035318374634,
+              -0.4526368975639343
+            ]
+          ],
+          "scene_roots_identity": true
+        },
+        "scale": 1.0,
+        "authored_elevation_m": 3.841400623321533,
+        "computed_common_origin": [
+          76.2824043166793,
+          0.0,
+          80.875
+        ],
+        "common_origin_error_m": 0.0,
+        "old_loader_scale": 0.9999993749674319
+      }
+    },
+    "temple03": {
+      "binding": {
+        "Art": "temple03.frm",
+        "Model": "arroyo/temple03.glb",
+        "UseSourcePalette": false,
+        "VisualPlacement": {
+          "Schema": "opennv-classic-reference-canvas/v1",
+          "Canvas": {
+            "X": -282.5,
+            "Y": -177.0,
+            "Width": 151,
+            "Height": 164
+          },
+          "AuthoredElevationMeters": 0.0,
+          "SourceFrame": {
+            "Width": 151,
+            "Height": 164,
+            "DirectionX": -19,
+            "DirectionY": 82,
+            "FrameX": 0,
+            "FrameY": 0,
+            "FramesPerDirection": 1,
+            "Rotation": 0
+          },
+          "SourceRotation": 0,
+          "PixelsPerMeter": 43.114646,
+          "YawDegrees": 0
+        }
+      },
+      "geometry": {
+        "vertices": 49972,
+        "triangles": 21834,
+        "bounds_godot": [
+          [
+            2.8310444355010986,
+            8.774051666259766
+          ],
+          [
+            0.0,
+            4.82945442199707
+          ],
+          [
+            -3.510540008544922,
+            0.06484368443489075
+          ]
+        ],
+        "scene_roots_identity": true,
+        "lod1": {
+          "vertices": 35641,
+          "triangles": 12008,
+          "bounds_godot": [
+            [
+              2.8310444355010986,
+              8.774051666259766
+            ],
+            [
+              0.0,
+              4.82945442199707
+            ],
+            [
+              -3.5092759132385254,
+              0.06484368443489075
+            ]
+          ],
+          "scene_roots_identity": true
+        },
+        "scale": 1.0,
+        "authored_elevation_m": 0.0,
+        "computed_common_origin": [
+          76.2824043166793,
+          0.0,
+          80.875
+        ],
+        "common_origin_error_m": 0.0,
+        "old_loader_scale": 0.9999997399159112
+      }
+    },
+    "temple04": {
+      "binding": {
+        "Art": "temple04.frm",
+        "Model": "arroyo/temple04.glb",
+        "UseSourcePalette": false,
+        "VisualPlacement": {
+          "Schema": "opennv-classic-reference-canvas/v1",
+          "Canvas": {
+            "X": -131.5,
+            "Y": -298.0,
+            "Width": 241,
+            "Height": 198
+          },
+          "AuthoredElevationMeters": 3.259999990463257,
+          "SourceFrame": {
+            "Width": 241,
+            "Height": 198,
+            "DirectionX": 17,
+            "DirectionY": 115,
+            "FrameX": 0,
+            "FrameY": 0,
+            "FramesPerDirection": 1,
+            "Rotation": 0
+          },
+          "SourceRotation": 0,
+          "PixelsPerMeter": 43.114646,
+          "YawDegrees": 0
+        }
+      },
+      "geometry": {
+        "vertices": 38360,
+        "triangles": 37243,
+        "bounds_godot": [
+          [
+            -5.38018274307251,
+            4.498182773590088
+          ],
+          [
+            3.259999990463257,
+            7.368460178375244
+          ],
+          [
+            -2.793933629989624,
+            0.19999994337558746
+          ]
+        ],
+        "scene_roots_identity": true,
+        "lod1": {
+          "vertices": 38360,
+          "triangles": 37243,
+          "bounds_godot": [
+            [
+              -5.38018274307251,
+              4.498182773590088
+            ],
+            [
+              3.259999990463257,
+              7.368460178375244
+            ],
+            [
+              -2.793933629989624,
+              0.19999994337558746
+            ]
+          ],
+          "scene_roots_identity": true
+        },
+        "scale": 1.0,
+        "authored_elevation_m": 3.259999990463257,
+        "computed_common_origin": [
+          76.2824043166793,
+          0.0,
+          80.875
+        ],
+        "common_origin_error_m": 0.0,
+        "old_loader_scale": 0.9999998727265144
+      }
+    },
+    "temple05": {
+      "binding": {
+        "Art": "temple05.frm",
+        "Model": "arroyo/temple05.glb",
+        "UseSourcePalette": false,
+        "VisualPlacement": {
+          "Schema": "opennv-classic-reference-canvas/v1",
+          "Canvas": {
+            "X": 109.5,
+            "Y": -298.0,
+            "Width": 67,
+            "Height": 183
+          },
+          "AuthoredElevationMeters": 3.259999990463257,
+          "SourceFrame": {
+            "Width": 67,
+            "Height": 183,
+            "DirectionX": 11,
+            "DirectionY": 76,
+            "FrameX": 0,
+            "FrameY": 0,
+            "FramesPerDirection": 1,
+            "Rotation": 0
+          },
+          "SourceRotation": 0,
+          "PixelsPerMeter": 43.114646,
+          "YawDegrees": 0
+        }
+      },
+      "geometry": {
+        "vertices": 3923,
+        "triangles": 5307,
+        "bounds_godot": [
+          [
+            -7.321523666381836,
+            -4.216822147369385
+          ],
+          [
+            3.259999990463257,
+            5.728540420532227
+          ],
+          [
+            -2.4749999046325684,
+            -0.46000003814697266
+          ]
+        ],
+        "scene_roots_identity": true,
+        "lod1": {
+          "vertices": 2482,
+          "triangles": 2917,
+          "bounds_godot": [
+            [
+              -7.321523666381836,
+              -4.216822147369385
+            ],
+            [
+              3.259999990463257,
+              5.728540420532227
+            ],
+            [
+              -2.4749999046325684,
+              -0.46000003814697266
+            ]
+          ],
+          "scene_roots_identity": true
+        },
+        "scale": 1.0,
+        "authored_elevation_m": 3.259999990463257,
+        "computed_common_origin": [
+          76.2824043166793,
+          0.0,
+          80.875
+        ],
+        "common_origin_error_m": 0.0,
+        "old_loader_scale": 0.999999571518621
+      }
+    },
+    "temple06": {
+      "binding": {
+        "Art": "temple06.frm",
+        "Model": "arroyo/temple06.glb",
+        "UseSourcePalette": false,
+        "VisualPlacement": {
+          "Schema": "opennv-classic-reference-canvas/v1",
+          "Canvas": {
+            "X": 172.0,
+            "Y": -298.0,
+            "Width": 282,
+            "Height": 166
+          },
+          "AuthoredElevationMeters": 0.0,
+          "SourceFrame": {
+            "Width": 282,
+            "Height": 166,
+            "DirectionX": -11,
+            "DirectionY": 59,
+            "FrameX": 0,
+            "FrameY": 0,
+            "FramesPerDirection": 1,
+            "Rotation": 0
+          },
+          "SourceRotation": 0,
+          "PixelsPerMeter": 43.114646,
+          "YawDegrees": 0
+        }
+      },
+      "geometry": {
+        "vertices": 81885,
+        "triangles": 37387,
+        "bounds_godot": [
+          [
+            -18.048418045043945,
+            -7.097708702087402
+          ],
+          [
+            0.0,
+            5.445194721221924
+          ],
+          [
+            -3.3993077278137207,
+            0.30833327770233154
+          ]
+        ],
+        "scene_roots_identity": true,
+        "lod1": {
+          "vertices": 61035,
+          "triangles": 20561,
+          "bounds_godot": [
+            [
+              -18.048418045043945,
+              -7.097708702087402
+            ],
+            [
+              0.0,
+              5.445194721221924
+            ],
+            [
+              -3.3993077278137207,
+              0.30833327770233154
+            ]
+          ],
+          "scene_roots_identity": true
+        },
+        "scale": 1.0,
+        "authored_elevation_m": 0.0,
+        "computed_common_origin": [
+          76.28240431667932,
+          0.0,
+          80.875
+        ],
+        "common_origin_error_m": 1.4210854715202004E-14,
+        "old_loader_scale": 0.9999994609561491
+      }
+    },
+    "temple07": {
+      "binding": {
+        "Art": "temple07.frm",
+        "Model": "arroyo/temple07.glb",
+        "UseSourcePalette": false,
+        "VisualPlacement": {
+          "Schema": "opennv-classic-reference-canvas/v1",
+          "Canvas": {
+            "X": 0.0,
+            "Y": -127.0,
+            "Width": 110,
+            "Height": 103
+          },
+          "AuthoredElevationMeters": 0.0,
+          "SourceFrame": {
+            "Width": 110,
+            "Height": 103,
+            "DirectionX": -13,
+            "DirectionY": 23,
+            "FrameX": 0,
+            "FrameY": 0,
+            "FramesPerDirection": 1,
+            "Rotation": 0
+          },
+          "SourceRotation": 0,
+          "PixelsPerMeter": 43.114646,
+          "YawDegrees": 0
+        }
+      },
+      "geometry": {
+        "vertices": 768,
+        "triangles": 376,
+        "bounds_godot": [
+          [
+            -2.0199999809265137,
+            0.20000004768371582
+          ],
+          [
+            0.0,
+            2.6499998569488525
+          ],
+          [
+            -3.2150001525878906,
+            -0.1549999713897705
+          ]
+        ],
+        "scene_roots_identity": true,
+        "lod1": {
+          "vertices": 768,
+          "triangles": 376,
+          "bounds_godot": [
+            [
+              -2.0199999809265137,
+              0.20000004768371582
+            ],
+            [
+              0.0,
+              2.6499998569488525
+            ],
+            [
+              -3.2150001525878906,
+              -0.1549999713897705
+            ]
+          ],
+          "scene_roots_identity": true
+        },
+        "scale": 1.0,
+        "authored_elevation_m": 0.0,
+        "computed_common_origin": [
+          76.2824043166793,
+          0.0,
+          80.875
+        ],
+        "common_origin_error_m": 0.0,
+        "old_loader_scale": 0.6228586182986164
+      }
+    },
+    "temple08": {
+      "binding": {
+        "Art": "temple08.frm",
+        "Model": "arroyo/temple08.glb",
+        "UseSourcePalette": false,
+        "VisualPlacement": {
+          "Schema": "opennv-classic-reference-canvas/v1",
+          "Canvas": {
+            "X": 0.0,
+            "Y": -122.0,
+            "Width": 110,
+            "Height": 98
+          },
+          "AuthoredElevationMeters": 0.0,
+          "SourceFrame": {
+            "Width": 110,
+            "Height": 98,
+            "DirectionX": -13,
+            "DirectionY": -1,
+            "FrameX": 0,
+            "FrameY": 0,
+            "FramesPerDirection": 1,
+            "Rotation": 0
+          },
+          "SourceRotation": 0,
+          "PixelsPerMeter": 43.114646,
+          "YawDegrees": 0
+        }
+      },
+      "geometry": {
+        "vertices": 768,
+        "triangles": 376,
+        "bounds_godot": [
+          [
+            -4.239999771118164,
+            -2.0199999809265137
+          ],
+          [
+            0.0,
+            2.6499998569488525
+          ],
+          [
+            -3.2150001525878906,
+            -0.1549999713897705
+          ]
+        ],
+        "scene_roots_identity": true,
+        "lod1": {
+          "vertices": 768,
+          "triangles": 376,
+          "bounds_godot": [
+            [
+              -4.239999771118164,
+              -2.0199999809265137
+            ],
+            [
+              0.0,
+              2.6499998569488525
+            ],
+            [
+              -3.2150001525878906,
+              -0.1549999713897705
+            ]
+          ],
+          "scene_roots_identity": true
+        },
+        "scale": 1.0,
+        "authored_elevation_m": 0.0,
+        "computed_common_origin": [
+          76.2824043166793,
+          0.0,
+          80.875
+        ],
+        "common_origin_error_m": 0.0,
+        "old_loader_scale": 0.6533944501834401
+      }
+    },
+    "sklpole3": {
+      "binding": {
+        "Art": "sklpole3.frm",
+        "Model": "arroyo/sklpole3.glb",
+        "UseSourcePalette": false
+      },
+      "geometry": {
+        "vertices": 10937,
+        "triangles": 10846,
+        "bounds_godot": [
+          [
+            -0.6016964052478215,
+            0.33440723850912946
+          ],
+          [
+            0.0,
+            1.716456651687622
+          ],
+          [
+            -0.520746697554614,
+            0.4947995727079615
+          ]
+        ],
+        "scene_roots_identity": false,
+        "lod1": {
+          "vertices": 7361,
+          "triangles": 6490,
+          "bounds_godot": [
+            [
+              -0.565711026968529,
+              0.33440723850912946
+            ],
+            [
+              -5.7373312301933765E-05,
+              1.716456651687622
+            ],
+            [
+              -0.520746697554614,
+              0.49939399727873024
+            ]
+          ],
+          "scene_roots_identity": false
+        }
+      }
+    }
+  },
+  "files": [
+    {
+      "path": "runtime/assets/classic/arroyo/sklpole3.glb",
+      "bytes": 425572,
+      "sha256": "f738a55c270442abdd5d2cc065927d1df5f9adb2d9e06b2239d881e49761a50f"
+    },
+    {
+      "path": "runtime/assets/classic/arroyo/sklpole3_lod1.glb",
+      "bytes": 294616,
+      "sha256": "e48e36e8b3ad630d316f532ffb284b31b1b72083f8500dc338aab6708ff11316"
+    },
+    {
+      "path": "runtime/assets/classic/arroyo/temple01.glb",
+      "bytes": 2451824,
+      "sha256": "6453400a2b00a2d066c7bf04c49fe2cef7d76cedfd751471338f90f0bbc615ce"
+    },
+    {
+      "path": "runtime/assets/classic/arroyo/temple01_lod1.glb",
+      "bytes": 2451828,
+      "sha256": "57bb5d8769f8abbdf0389f985abdc35bb0d9c467532c825caadf3828414b722a"
+    },
+    {
+      "path": "runtime/assets/classic/arroyo/temple02.glb",
+      "bytes": 1419068,
+      "sha256": "fbdcb15aaafe49a3006b2d9f8e7b25b8d1258b9efec56fd8f25a046fde65ee82"
+    },
+    {
+      "path": "runtime/assets/classic/arroyo/temple02_lod1.glb",
+      "bytes": 965744,
+      "sha256": "d1a1f2ef1f130d36df9b84c799a4b14a89e880b7e9abf6fa1f14879114e209e1"
+    },
+    {
+      "path": "runtime/assets/classic/arroyo/temple03.glb",
+      "bytes": 2331304,
+      "sha256": "fa6de456b21484798152639afae2765ef9cebc33e47e7281bbcd6fed1f5c9bbc"
+    },
+    {
+      "path": "runtime/assets/classic/arroyo/temple03_lod1.glb",
+      "bytes": 1641788,
+      "sha256": "487e64faac6be99907e522606d83eadd5c900de5701b3bf264cc409651087c70"
+    },
+    {
+      "path": "runtime/assets/classic/arroyo/temple04.glb",
+      "bytes": 1912848,
+      "sha256": "8437c8b1b2db2e3f6e6e43c39b9ad39d58f5fcbcfd830c9a7ef9582847c726fd"
+    },
+    {
+      "path": "runtime/assets/classic/arroyo/temple04_lod1.glb",
+      "bytes": 1912852,
+      "sha256": "aff78d0fecc39dd0638146de53f8af2110fd923982f4a2b1c5f013b13456ef9c"
+    },
+    {
+      "path": "runtime/assets/classic/arroyo/temple05.glb",
+      "bytes": 205964,
+      "sha256": "7e48fd1207c6880f2a0d933ad83d08e03cf884b02a7a002934fe5902c3153b78"
+    },
+    {
+      "path": "runtime/assets/classic/arroyo/temple05_lod1.glb",
+      "bytes": 128224,
+      "sha256": "ff2b0d92e58bf55c8b01d246f60298f647930c8014c205a97ed17852e392b714"
+    },
+    {
+      "path": "runtime/assets/classic/arroyo/temple06.glb",
+      "bytes": 4053124,
+      "sha256": "748e641a03a17c952b0032d8e4f44b23d0283b5fc7593b75f7a407c06cd92381"
+    },
+    {
+      "path": "runtime/assets/classic/arroyo/temple06_lod1.glb",
+      "bytes": 2810452,
+      "sha256": "f78a44ed3e1ff0c4f8457a55bfd62b9a6b3496b6fa07dbaaa4c872b3280591cb"
+    },
+    {
+      "path": "runtime/assets/classic/arroyo/temple07.glb",
+      "bytes": 37524,
+      "sha256": "4785c162279fffbd0809c9224feba6ab9e4671244fec2f135ee0d5104c2cf7bf"
+    },
+    {
+      "path": "runtime/assets/classic/arroyo/temple07_lod1.glb",
+      "bytes": 37528,
+      "sha256": "05712d982612f76c7bea17db0615b886893819501939100b7b8d0a32925dcf52"
+    },
+    {
+      "path": "runtime/assets/classic/arroyo/temple08.glb",
+      "bytes": 37524,
+      "sha256": "c9810363279ea1bc016c2a5efc805c504217891e83e5fdf100a94cfdd3081a46"
+    },
+    {
+      "path": "runtime/assets/classic/arroyo/temple08_lod1.glb",
+      "bytes": 37528,
+      "sha256": "73bf25d0cb5c97217e55933bdfd14737e8294e2baae96977a8be913ec6668f6c"
+    },
+    {
+      "path": "art/classic/arroyo/arroyo_corrected_fragments_v5.blend",
+      "bytes": 10410704,
+      "sha256": "4093bdf05131c936abd196c3e1c8e45630e51b01c1845fc5792090c2d81a942f"
+    },
+    {
+      "path": "art/classic/arroyo/arroyo_shared_original_v5.blend",
+      "bytes": 14533828,
+      "sha256": "c10f72dba72aa90e2c6fbce2041741685fcfbf11c81d502aa033578e353526fb"
+    },
+    {
+      "path": "art/classic/arroyo/skullpole_original_corrected_v5.blend",
+      "bytes": 1763576,
+      "sha256": "0ebf2321725236a6e681035d1e9ebf6b9a537a04debd1b74309653a8fc998c4a"
+    }
+  ],
+  "repair_version": "5.1",
+  "placement_contract_unchanged": true,
+  "native_validation": {
+    "Renderer": "Godot Compatibility",
+    "Map": "maps/artemple.map",
+    "OriginalModels": 9,
+    "SourceWallHexes": 45,
+    "VisibleSourceWalls": 0,
+    "SourceBlockingUnchanged": true,
+    "OrdinaryEntry": "source premade picker -> Begin",
+    "PointerWalkFrom": 17488,
+    "PointerWalkTo": 17487,
+    "RendererErrors": 0,
+    "NativeCombatAccepted": false,
+    "FullCampaignAccepted": false,
+    "ColorAdapter": "linear COLOR_0 -> renderer input encoding; opaque untextured double-sided materials only",
+    "SceneLifetime": "reuse matching source MAP hash/elevation on Begin"
+  }
+}

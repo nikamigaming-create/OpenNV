@@ -68,6 +68,19 @@ public sealed partial class ClassicSceneryFitAudit : Node
             mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
             var child = new MeshInstance3D { Mesh = mesh, Position = new(0.4f, 0, -0.2f), Scale = new(2, 1, 3) };
             root.AddChild(child);
+            ClassicWorldAudit.ValidateWallShell(0, null);
+            try
+            {
+                ClassicWorldAudit.ValidateWallShell(1, null);
+                throw new InvalidOperationException("Visible source walls passed without their shell.");
+            }
+            catch (InvalidDataException) { }
+            try
+            {
+                ClassicWorldAudit.ValidateWallShell(1, child);
+                throw new InvalidOperationException("An open triangle passed the wall-shell contract.");
+            }
+            catch (InvalidDataException) { }
             root.AddChild(new MeshInstance3D { Mesh = new BoxMesh { Size = Vector3.One * 100 }, Visible = false });
             var exact = ExactProjection(root);
             var measured = ClassicSceneryPlacement.Project(root, 32);

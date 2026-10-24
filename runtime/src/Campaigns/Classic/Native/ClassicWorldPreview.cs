@@ -33,6 +33,8 @@ internal sealed partial class ClassicWorldPreview : Node3D
     private Vector3? _playerPosition;
     internal int PresentedObjects { get; private set; }
     internal int WallHexes { get; private set; }
+    internal int VisibleWallObjects { get; private set; }
+    internal string SourceSha256 { get; private set; } = "";
     internal string MapName { get; private set; } = "";
     internal IReadOnlyList<string> Unresolved => _unresolved;
     internal int SpriteFallbackObjects => _spriteGaps.Values.Sum();
@@ -179,6 +181,7 @@ internal sealed partial class ClassicWorldPreview : Node3D
         {
             Name = "ClassicOwnedWorld",
             MapName = map.Name,
+            SourceSha256 = level?.Sha256 ?? ClassicPremadeReader.Hash(resource!),
             Policy = policy,
             Navigation = new(map, graph, elevation)
         };
@@ -227,6 +230,7 @@ internal sealed partial class ClassicWorldPreview : Node3D
             // Transparent collision markers such as block.frm are part of
             // navigation, not the room's visible material population.
             var visibleWalls = levelWalls.Where(VisibleWall).ToArray();
+            result.VisibleWallObjects = visibleWalls.Length;
             var caveGround = assets is not null && visibleWalls.Count(CaveWall) > visibleWalls.Length / 2;
             var tileNames = Fallout1NativeLists.Read(art.Read("art/tiles/tiles.lst"));
             result._roofs = new ClassicRoofPresentation(); result.AddChild(result._roofs);
@@ -405,6 +409,7 @@ internal sealed partial class ClassicWorldPreview : Node3D
                 BackgroundMode = Godot.Environment.BGMode.Color,
                 BackgroundColor = new Color("111516"),
                 AmbientLightSource = Godot.Environment.AmbientSource.Color,
+                AmbientLightSkyContribution = 0,
                 AmbientLightColor = new Color("b7afa0"),
                 AmbientLightEnergy = policy.AmbientEnergy,
                 TonemapMode = Godot.Environment.ToneMapper.Filmic,

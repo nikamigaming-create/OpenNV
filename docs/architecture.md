@@ -40,6 +40,12 @@ Implement missing behavior at its real owner and keep unsupported behavior visib
 Use bounded, relevant checks and ordinary gameplay to assess the result. Record
 counts and plausible images do not establish campaign completion or parity.
 
+Original classic glTF meshes keep their linear vertex colors. Plain opaque
+double-sided vertex-painted surfaces use a PBR render-input adapter for
+Compatibility; source-palette and textured materials retain their existing owners.
+Starting a player reuses a preview only when its source MAP hash, path and
+elevation match, avoiding a duplicate world.
+
 The incomplete mandatory source-Main/Player model was removed during the October
 17 recovery. Its prior work remains in Git history. New mechanics must integrate
 with the playable implementation rather than recreate a compulsory unfinished
