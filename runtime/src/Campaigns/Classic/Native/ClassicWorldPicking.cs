@@ -41,7 +41,7 @@ internal static class ClassicWorldPicking
     internal static ClassicWorldPick? Item(ClassicWorldPreview world, ClassicPlayerSession player, Vector2 point)
     {
         if (!world.ShowModels) return null;
-        var eligible = player.Level.Objects.TopLevelObjects.Where(row => (ClassicInventory.IsLootHost(row) || ClassicDoorWorld.IsDoor(row)) &&
+        var eligible = player.Level.Objects.TopLevelObjects.Where(row => (ClassicInventory.IsLootHost(row) || player.Combat.Dead(row.Serial) || ClassicDoorWorld.IsDoor(row)) &&
             row.Elevation == player.Elevation && (row.Flags & 1) == 0 && !player.Inventory.Taken(player.MapPath, row.Serial))
             .Select(row => row.Serial).ToHashSet();
         var origin = world.Camera.ProjectRayOrigin(point); var direction = world.Camera.ProjectRayNormal(point);

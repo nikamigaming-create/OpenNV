@@ -56,8 +56,7 @@ internal sealed partial class ClassicCreatureBody : Node3D
         _skeleton.Node.Scale = Vector3.One * scale;
         _skeleton.Node.Position = Vector3.Up * -bounds.Position.Y * scale;
         PresentationHeight = bounds.Size.Y * scale;
-        foreach (var mesh in part.Root.GetChildren().OfType<MeshInstance3D>())
-            mesh.SetInstanceShaderParameter("source_ambient", new Vector3(0.22f, 0.23f, 0.20f));
+        ClassicDonorPresentation.BindEnvironment(part.Root, new Vector3(0.22f, 0.23f, 0.20f));
         _animation = animations[role];
         _idle = role == "idle" && frame.StoredFps > 0 && frame.FramesPerDirection > 1;
         _staticSourceIdle = role == "idle" && !_idle;

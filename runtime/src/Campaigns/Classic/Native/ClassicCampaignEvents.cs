@@ -76,7 +76,9 @@ internal sealed class ClassicCampaignEvents(ClassicPlayerSession player)
                 if (!ClassicIntEvents.HasHandler(program, player.Choice.Campaign, 23)) continue;
                 var source = level.Objects.TopLevelObjects.SingleOrDefault(row => row.ScriptId == slot.ScriptId && row.ObjectId == slot.ObjectId)
                     ?? throw new NotSupportedException($"Map-update script {slot.ScriptId} has no bound source object owner.");
+                if (source.Prototype.ObjectType == 1 && player.Combat.Dead(source.Serial)) continue;
                 if (ClassicDoorWorld.IsDoor(source)) player.Doors.DispatchMapUpdate(source.Serial);
+                else if (player.Actors.Contains(source.Serial)) player.Actors.Dispatch(source.Serial, 23);
                 else if (player.Animations.Contains(source.Serial)) player.Animations.DispatchMapUpdate(source.Serial);
                 else throw new NotSupportedException($"Map-update script {slot.ScriptId} requires its {source.Prototype.ObjectType} object lifecycle owner.");
                 receipt = receipt with { ConsumedScripts = [.. receipt.ConsumedScripts, slot.ScriptId] }; Publish(receipt);

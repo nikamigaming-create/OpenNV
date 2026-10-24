@@ -149,9 +149,17 @@ internal sealed partial class ClassicDoorWorld(ClassicPlayerSession player)
         Action<IReadOnlyList<ClassicIntAnimationCommand>> acceptAnimations) =>
         WorldScriptEvent(player.Level, null, program, state, 23, false, player.CombatActive?.Invoke(), acceptAnimations);
 
+    internal ClassicIntProcedureResult ActorEvent(ClassicMapLevel level, Fallout1NativeMapObject row,
+        ClassicIntProgram program, ClassicIntProcedureState state, int action, bool initializeModule,
+        int? fixedParameter, int sourceObject, ClassicIntTimerState? timers, int? hitPoints) =>
+        WorldScriptEvent(level, row, program, state, action, initializeModule, player.CombatActive?.Invoke(),
+            commands => { if (commands.Count != 0) throw new NotSupportedException("Actor script animation sequence is unbound."); },
+            actorEvent: true, fixedParameter: fixedParameter, sourceObject: sourceObject, timerState: timers, actorHitPoints: hitPoints);
+
     private ClassicIntProcedureResult WorldScriptEvent(ClassicMapLevel level, Fallout1NativeMapObject? row,
         ClassicIntProgram program, ClassicIntProcedureState state, int action, bool initializeModule,
-        bool? combatActive, Action<IReadOnlyList<ClassicIntAnimationCommand>> acceptAnimations)
+        bool? combatActive, Action<IReadOnlyList<ClassicIntAnimationCommand>> acceptAnimations,
+        bool actorEvent = false, int? fixedParameter = null, int sourceObject = int.MaxValue, ClassicIntTimerState? timerState = null, int? actorHitPoints = null)
     {
         if (level.Path != player.MapPath) throw new InvalidOperationException("Script event belongs to an inactive map.");
         const int dude = int.MaxValue;
@@ -164,35 +172,55 @@ internal sealed partial class ClassicDoorWorld(ClassicPlayerSession player)
         if (row is null) objects.Add(mapController, new(mapController, -1, 1, 0, false));
         var doors = _entries.Values.Where(item => item.Definition.Level.Path == level.Path)
             .ToDictionary(item => item.Definition.Object.Serial + 1, item => new ClassicIntDoorObjectState(item.Pose.Open, item.Pose.Locked));
-        var world = ClassicIntWorldObjectState.Empty with { Objects = objects, Doors = doors, Timers = _timers, CombatActive = combatActive };
+        var world = ClassicIntWorldObjectState.Empty with { Objects = objects, Doors = doors, Timers = timerState ?? _timers, CombatActive = combatActive };
         if (!_mapVariables.TryGetValue(level.Path, out var variables))
             _mapVariables.Add(level.Path, variables = ClassicCampaignInitialization.MapVariables(player.Catalog.Read(level.Path, out _)));
         state = state with { GlobalVariables = _globals, MapVariables = variables, RandomState = player.CampaignRandom };
         var stats = Enumerable.Range(0, 7).ToDictionary(stat => (dude, stat), stat => player.Stats.Special[stat]);
         stats[(dude, 34)] = player.Choice.Character.Female ? 1 : 0;
+        stats[(dude, 35)] = player.HitPoints;
+        var critterStates = new Dictionary<int, int> { [dude] = player.HitPoints == 0 ? 1 : 0 };
+        foreach (var actor in level.Objects.TopLevelObjects.Where(item => item.Prototype.ObjectType == 1))
+        {
+            var bytes = player.Catalog.Read(actor.Prototype.LogicalPath!, out _);
+            if (bytes.Length is not (412 or 416)) throw new InvalidDataException("Actor stat source has an unsupported extent.");
+            for (var stat = 0; stat < 35; stat++)
+                stats[(actor.Serial + 1, stat)] = checked(BinaryPrimitives.ReadInt32BigEndian(bytes.AsSpan(48 + stat * 4)) +
+                    BinaryPrimitives.ReadInt32BigEndian(bytes.AsSpan(188 + stat * 4)));
+            stats[(actor.Serial + 1, 35)] = actor.Serial == row?.Serial && actorHitPoints is { } proposed ? proposed :
+                player.Combat.ActorHitPoints(actor.Serial) ?? actor.InstanceValues[8];
+            critterStates[actor.Serial + 1] = ClassicCritterInstance.ScriptState(
+                player.Combat.ActorResults(actor.Serial) ?? ClassicCritterInstance.Read(actor).Results,
+                stats[(actor.Serial + 1, 35)], (int)((actor.Fid >> 16) & 0xff));
+        }
+
         var context = new ClassicIntExpressionContext(state.ProgramVariables, state.LocalVariables, state.ScriptLocalVariables,
             state.MapVariables, state.GlobalVariables, dude, row is null ? mapController : row.Serial + 1, null, null,
             stats, new Dictionary<(int, int), int>(), new Dictionary<int, int>(), new Dictionary<(int, int), int>(),
             _externals, TimerContract is null ? null : _timers.CurrentTick,
             TimerContract is { } clock ? ClassicIntTimerOwner.GameTimeHour(clock, _timers.CurrentTick) : null, null,
             new ClassicIntObjectHandleTable(new Dictionary<ClassicIntObjectCreation, int>()),
-            SourceObject: dude, TimerContract: TimerContract, CurrentMapIndex: level.Map.MapIndex,
-            ScriptAction: action, MessageSource: _messages, ExternalOwners: _externalOwners);
+            SourceObject: sourceObject, TimerContract: TimerContract, CurrentMapIndex: level.Map.MapIndex,
+            FixedParameter: fixedParameter, Traits: actorEvent ? player.Actors.TraitValues : null,
+            ScriptAction: action, MessageSource: _messages, ExternalOwners: _externalOwners, CritterStates: critterStates);
         var result = ClassicIntEvents.Execute(program, player.Choice.Campaign, action, state, context, world, player.RandomContract,
             initializeModule: initializeModule);
         var changed = result.WorldObjects;
-        Validate(result with { WorldObjects = changed with { AnimationCommands = [] } }, level.Path);
-        if (changed.ScriptOverrides || changed.CombatActive != combatActive || changed.ItemInstances.Count != 0 ||
+        Validate(result with { WorldObjects = changed with { AnimationCommands = [], TraitAssignments = actorEvent ? [] : changed.TraitAssignments } }, level.Path);
+        if ((!actorEvent && changed.ScriptOverrides) || changed.CombatActive != combatActive || changed.ItemInstances.Count != 0 ||
             !changed.Objects.OrderBy(item => item.Key).SequenceEqual(objects.OrderBy(item => item.Key)) ||
             !changed.Doors.OrderBy(item => item.Key).SequenceEqual(doors.OrderBy(item => item.Key)) ||
-            changed.Timers.CurrentTick != _timers.CurrentTick || changed.Timers.NextSequence != _timers.NextSequence ||
-            !changed.Timers.Pending.SequenceEqual(_timers.Pending) || changed.DialogueReplies.Count != 0 ||
+            (!actorEvent && (changed.Timers.CurrentTick != _timers.CurrentTick || changed.Timers.NextSequence != _timers.NextSequence ||
+            !changed.Timers.Pending.SequenceEqual(_timers.Pending))) || changed.DialogueReplies.Count != 0 ||
             changed.DialogueOptions.Count != 0 || changed.DialogueReady)
             throw new NotSupportedException("Scenery event requires an unbound world-effect owner.");
         // All effects must validate before either owner changes. The callback
         // prepares the entire command list before publishing its replacement.
+        var commitTraits = actorEvent ? player.Actors.PrepareTraits(changed.TraitAssignments) : null;
         player.ValidateRandomCommit(result.State.RandomState);
         acceptAnimations(changed.AnimationCommands);
+        commitTraits?.Invoke();
+        if (actorEvent) _timers = changed.Timers;
         player.CommitRandom(result.State.RandomState);
         _globals = new(result.State.GlobalVariables); _mapVariables[level.Path] = new(result.State.MapVariables);
         _externals = new(result.ExternalVariables, StringComparer.Ordinal);
@@ -268,9 +296,15 @@ internal sealed partial class ClassicDoorWorld(ClassicPlayerSession player)
             world.CreatedObjects.Count != 0 || world.Inventory.Count != 0 || world.MapStartOverride is not null ||
             world.AttackRequests.Count != 0 || world.Movements.Count != 0 || world.TraitAssignments.Count != 0 ||
             world.DialogueSystemEntered || world.DialogueStart is not null || world.LightLevel is not null)
-            throw new NotSupportedException("Door event reached an effect whose runtime owner is still unavailable.");
+            throw new NotSupportedException("Source event requires runtime effect owners: " +
+                $"animation={world.AnimationCommands.Count}, messages={result.MessageEffects.Count}, sounds={result.SoundEffects.Count}, " +
+                $"created={world.CreatedObjects.Count}, inventory={world.Inventory.Count}, mapStart={world.MapStartOverride is not null}, " +
+                $"attacks=[{string.Join(';', world.AttackRequests.Select(row => row.ActorHandle + "->" + row.TargetHandle + "(" + string.Join(',', row.SourceArguments) + ")"))}], " +
+                $"moves=[{string.Join(';', world.Movements.Select(row => row.ObjectHandle + "->" + row.DestinationTile + "/" + row.Speed))}], " +
+                $"traits={world.TraitAssignments.Count}, dialogue={world.DialogueSystemEntered || world.DialogueStart is not null}, light={world.LightLevel}.");
         foreach (var pending in world.Timers.Pending)
-            if (!_entries.TryGetValue(Key(map, pending.TargetHandle - 1), out var target) || target.Definition.Program is null)
+            if ((!_entries.TryGetValue(Key(map, pending.TargetHandle - 1), out var target) || target.Definition.Program is null) &&
+                player.Actors?.Contains(pending.TargetHandle - 1) != true)
                 throw new NotSupportedException("Script timer target has no native event owner.");
     }
 

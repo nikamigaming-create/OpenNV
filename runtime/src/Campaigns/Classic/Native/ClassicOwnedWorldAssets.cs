@@ -128,14 +128,15 @@ internal sealed class ClassicOwnedWorldAssets : IDisposable
                     if (node is MeshInstance3D mesh && mesh.Mesh is not null)
                     {
                         var box = transform * ClassicSceneryPlacement.MeshBounds(mesh); bounds = first ? box : bounds.Merge(box); first = false;
-                        mesh.SetInstanceShaderParameter("source_ambient", new Vector3(0.22f, 0.23f, 0.20f));
                     }
                     foreach (var child in node.GetChildren().OfType<Node3D>()) Visit(child, transform);
                 }
                 Visit(root, Transform3D.Identity);
                 if (first || bounds.Size.Y <= 0 || Math.Max(bounds.Size.X, bounds.Size.Z) <= 0)
                     throw new InvalidDataException("Owned cave prop has no complete 3D bounds: " + model);
-                return (root, bounds, root.FindChildren("*", "", true, false).Any(node => node is RuntimeNifControllerPlayer or RuntimeNifParticleSystem));
+                var live = !ClassicDonorPresentation.CanShareStatic(root);
+                ClassicDonorPresentation.BindEnvironment(root, new Vector3(0.22f, 0.23f, 0.20f));
+                return (root, bounds, live);
             }
             catch { root.Free(); throw; }
         }
@@ -161,7 +162,7 @@ internal sealed class ClassicOwnedWorldAssets : IDisposable
         {
             // Godot duplicates node properties, not a C# controller's bound
             // delegates. Animated appearances need their own live assembly.
-            var meshRoot = prototype.Live ? BuildPrototype().Root : (Node3D)prototype.Root.Duplicate(); assembly.AddChild(meshRoot);
+            var meshRoot = prototype.Live ? BuildPrototype().Root : ClassicDonorPresentation.CloneStatic(prototype.Root); assembly.AddChild(meshRoot);
             meshRoot.Scale = Vector3.One * scale;
             meshRoot.Position = new(-center.X * scale,
                 (-prototype.Bounds.Position.Y + size.Y * index) * scale -

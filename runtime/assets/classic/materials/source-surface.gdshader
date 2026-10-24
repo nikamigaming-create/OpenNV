@@ -22,12 +22,12 @@ uniform float specular_value;
 
 // Mesh-to-assembly coordinates in meters, fixed when the source object binds.
 // These follow the prop, independent of camera/world translation and mesh UVs.
-instance uniform vec4 surface_x : instance_index(0);
-instance uniform vec4 surface_y : instance_index(1);
-instance uniform vec4 surface_z : instance_index(2);
-instance uniform vec4 source_u : instance_index(3);
-instance uniform vec4 source_v : instance_index(4);
-instance uniform vec3 source_view : instance_index(5);
+uniform vec4 surface_x;
+uniform vec4 surface_y;
+uniform vec4 surface_z;
+uniform vec4 source_u;
+uniform vec4 source_v;
+uniform vec3 source_view;
 varying vec3 surface_position;
 varying vec3 surface_normal;
 varying vec2 paint_uv;

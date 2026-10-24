@@ -11,7 +11,8 @@ internal sealed partial class ClassicWorldCamera : Camera3D
     internal float MinimumDistance = 1.25f;
     internal float FramePadding = 1.15f;
     internal float SubjectHeight = 1.875f;
-    private float _yaw = MathF.PI;
+    internal DirectionalLight3D? ShadowLight;
+    private float _yaw;
     private (Vector3 Focus, float Distance, float Pitch, float Yaw, float SubjectHeight)? _savedView;
     private double _shotSeconds = -1;
     internal void SaveView() { _savedView = (Focus, Distance, Pitch, _yaw, SubjectHeight); _shotSeconds = -1; }
@@ -100,5 +101,9 @@ internal sealed partial class ClassicWorldCamera : Camera3D
     {
         Position = Focus + new Vector3(0, MathF.Sin(Pitch), MathF.Cos(Pitch)).Rotated(Vector3.Up, _yaw) * Distance;
         LookAt(Focus, Vector3.Up);
+        // Inspection can pull back far beyond the gameplay view. Keep the
+        // focused geometry inside the real-time shadow cascades at that range.
+        if (ShadowLight is not null)
+            ShadowLight.DirectionalShadowMaxDistance = Math.Max(65, Distance + SubjectHeight * 2);
     }
 }

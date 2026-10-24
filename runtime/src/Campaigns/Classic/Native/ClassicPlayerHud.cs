@@ -91,7 +91,7 @@ internal sealed partial class ClassicPlayerHud : Control
         // Exploration does not spend combat AP. Its combat owner will supply
         // remaining AP when restored; never drain this for ordinary walking.
         var dot = _art.Frame("art/intrface/hlgrn.frm").Texture;
-        for (var index = 0; index < Math.Min(10, _player.Stats.ActionPoints); index++) DrawTexture(dot, new(316 + index * 9, 14));
+        for (var index = 0; index < Math.Min(10, _player.Combat.Active == true ? _player.Combat.PlayerActionPoints : _player.Stats.ActionPoints); index++) DrawTexture(dot, new(316 + index * 9, 14));
         var historyStart = Math.Max(0, _history.Count - VisibleHistoryLines - _historyOffset);
         _font.Draw(this, string.Join('\n', _history.Skip(historyStart).Take(VisibleHistoryLines)), new(23, 24), 167, VisibleHistoryLines);
         var held = _player.Inventory.Held;
@@ -124,7 +124,7 @@ internal sealed partial class ClassicPlayerHud : Control
         panel.DialogText = $"{profile.Name}  ·  Age {profile.Age}\n\n" + string.Join('\n',
             profile.Special.Select((value, index) => $"{Content.ClassicCharacterProfile.SpecialNames[index]}  {_player.Stats.Special[index]}")) +
             $"\n\nHit points {_player.HitPoints}/{_player.Stats.HitPoints}  ·  Armor class {_player.ArmorClass}\n" +
-            $"Action points {_player.Stats.ActionPoints}\n\nTags: " + string.Join(", ", profile.TaggedSkills.Select(value => Content.ClassicCharacterProfile.SkillNames[value])) +
+            $"Action points {_player.Stats.ActionPoints}  ·  Experience {_player.Experience}\n\nTags: " + string.Join(", ", profile.TaggedSkills.Select(value => Content.ClassicCharacterProfile.SkillNames[value])) +
             "\nTraits: " + string.Join(", ", profile.Traits.Select(value => Content.ClassicCharacterProfile.TraitNames[value]));
         var previousPause = GetTree().Paused; GetTree().Paused = true;
         AddChild(panel); panel.TreeExiting += () => GetTree().Paused = previousPause;

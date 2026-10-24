@@ -15,7 +15,7 @@ internal sealed class ClassicAuthoredMaterials(ClassicAuthoredMaterialRecipe rec
     private readonly record struct ProjectionKey(string Model, Basis Orientation, float Scale, float PixelsPerMeter, int Width, int Height);
     private readonly Dictionary<string, ImageTexture> _paint = [];
     private readonly Dictionary<ProjectionKey, ImageTexture> _depth = [];
-    private readonly Dictionary<(string Art, ProjectionKey Projection, string Material), ShaderMaterial> _materials = [];
+    private readonly Dictionary<(string Art, ProjectionKey Projection, string Material, Transform3D Meters, Transform3D Source), ShaderMaterial> _materials = [];
     private readonly Shader _shader = GD.Load<Shader>("res://assets/classic/materials/source-surface.gdshader");
 
     internal void Apply(Node3D instance, Transform3D orientation, ClassicAuthoredSceneryBinding binding,
@@ -35,7 +35,7 @@ internal sealed class ClassicAuthoredMaterials(ClassicAuthoredMaterialRecipe rec
             {
                 var source = part.Mesh.GetActiveMaterial(surface) as BaseMaterial3D;
                 var name = source?.ResourceName ?? "";
-                var materialKey = (colorKey, key, name);
+                var materialKey = (colorKey, key, name, part.Meters, part.Source);
                 if (!_materials.TryGetValue(materialKey, out var material))
                 {
                     material = new ShaderMaterial { Shader = _shader, ResourceName = "Classic source surface: " + name };
@@ -57,11 +57,11 @@ internal sealed class ClassicAuthoredMaterials(ClassicAuthoredMaterialRecipe rec
                     material.SetShaderParameter("detail_range", new Vector2(recipe.DetailMinimum, recipe.DetailMaximum));
                     material.SetShaderParameter("roughness_variation", recipe.RoughnessVariation);
                     material.SetShaderParameter("specular_value", recipe.Specular);
+                    projection.Bind(part, material);
                     _materials.Add(materialKey, material);
                 }
                 part.Mesh.SetSurfaceOverrideMaterial(surface, material);
             }
-            projection.Bind(part);
         }
     }
 

@@ -162,7 +162,7 @@ internal sealed partial class ClassicInventory(ClassicPlayerSession player)
         return host;
     }
     internal static bool IsLootHost(Fallout1NativeMapObject row) => row.Prototype.ObjectType == 0 && row.Prototype.LogicalPath is not null ||
-        row.Prototype.ObjectType == 1 && row.InstanceValues.Count == 11 && (row.InstanceValues[3] & 0x80) != 0;
+        row.Prototype.ObjectType == 1 && row.InstanceValues.Count == 11 && ClassicCritterInstance.Read(row).Dead;
     internal string HostName(int serial)
     {
         var host = Host(serial);
@@ -174,8 +174,8 @@ internal sealed partial class ClassicInventory(ClassicPlayerSession player)
     {
         var host = Host(serial);
         if (player.Moving || ClassicHexGrid.Distance(player.Tile, host.Tile) > 1) throw new InvalidOperationException("Walk next to the object first.");
-        if (!IsLootHost(host)) throw new InvalidOperationException("That character is alive.");
-        if (host.ScriptId != uint.MaxValue) throw new NotSupportedException("This interaction requires its source script.");
+        if (!IsLootHost(host) && !player.Combat.Dead(host.Serial)) throw new InvalidOperationException("That character is alive.");
+        if (host.ScriptId != uint.MaxValue && !player.Combat.Dead(host.Serial)) throw new NotSupportedException("This interaction requires its source script.");
         if (host.Prototype.ObjectType == 1) return;
         var definition = Definition(host);
         if (definition.Script != -1) throw new NotSupportedException("This interaction requires its source script.");

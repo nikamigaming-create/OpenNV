@@ -426,7 +426,7 @@ internal sealed partial class ClassicWorldPreview : Node3D
                 VolumetricFogAnisotropy = 0.45f,
             };
             result.AddChild(new WorldEnvironment { Environment = environment });
-            result.AddChild(new DirectionalLight3D
+            var sun = new DirectionalLight3D
             {
                 RotationDegrees = new(-48, -28, 0),
                 LightColor = new Color("eedcbd"),
@@ -436,7 +436,8 @@ internal sealed partial class ClassicWorldPreview : Node3D
                 DirectionalShadowMaxDistance = 65,
                 ShadowBias = 0.02f,
                 ShadowNormalBias = 0.18f
-            });
+            };
+            result.AddChild(sun);
             result.Camera = new ClassicWorldCamera
             {
                 Name = "ClassicWorldCamera",
@@ -448,6 +449,7 @@ internal sealed partial class ClassicWorldPreview : Node3D
                 MaximumDistance = policy.CameraMaximumDistance,
                 MinimumDistance = policy.CameraMinimumDistance,
                 FramePadding = policy.CameraFramePadding,
+                ShadowLight = sun,
             };
             result.Camera.ToggleGrid += () => grid.Visible = !grid.Visible;
             result.Camera.ToggleRoofs += result._roofs.Toggle;
@@ -475,8 +477,12 @@ internal sealed partial class ClassicWorldPreview : Node3D
             var authored = result.GetChildren().OfType<Node3D>().Where(node => node.HasMeta("authored_model"))
                 .GroupBy(node => node.GetMeta("authored_model").AsString()).ToDictionary(group => group.Key, group => group.Count());
             var creatures = result.GetChildren().OfType<ClassicCreatureBody>().ToArray();
+            var instanceShaders = result.FindChildren("*", "MeshInstance3D", true, false).OfType<MeshInstance3D>()
+                .SelectMany(mesh => Enumerable.Range(0, mesh.Mesh.GetSurfaceCount()).Select(mesh.GetActiveMaterial))
+                .OfType<ShaderMaterial>().Where(material => material.Shader.Code.Contains("instance uniform", StringComparison.Ordinal))
+                .GroupBy(material => material.ResourceName).ToDictionary(group => group.Key, group => group.Count());
             GD.Print($"OPENNV_CLASSIC_MODELS map={map.Name} elevation={elevation} authored={JsonSerializer.Serialize(authored)} " +
-                $"creatures={creatures.Length} spriteReferences={result.SpriteFallbackObjects}");
+                $"creatures={creatures.Length} spriteReferences={result.SpriteFallbackObjects} instanceShaderSurfaces={JsonSerializer.Serialize(instanceShaders)}");
             if (result._spriteGaps.Count != 0)
                 GD.Print($"OPENNV_CLASSIC_3D_GAPS map={map.Name} elevation={elevation} assets={JsonSerializer.Serialize(result._spriteGaps)}");
             GD.Print($"OPENNV_FO1_WORLD_PREVIEW map={map.Name} elevation={elevation} objects={result.PresentedObjects} " +

@@ -50,26 +50,26 @@ internal sealed record ClassicCombatAction(long Sequence, string Map, int Target
     int ActionPointsBefore, int ActionPointsAfter, int AmmunitionSpent,
     int Chance, int HitRoll, int? DamageRoll, int DamageThreshold, int DamageResistance,
     ClassicActionClip Attack, ClassicActionClip Reaction, double ReactionDelay,
-    double Elapsed, bool Committed, string? Boundary)
+    double Elapsed, bool Committed, string? Boundary, int ActorHandle = int.MaxValue, int MaximumDamage = 0, long TurnNumber = 1)
 {
     internal bool Hit => HitRoll <= Chance;
     internal double Duration => Math.Max(Attack.Duration, ReactionDelay + Reaction.Duration);
     internal ClassicActionPose PlayerPose => new(Attack.Path, Attack.Frame(Elapsed), PlayerRotation);
     internal ClassicActionPose? TargetPose => Elapsed < ReactionDelay ? null :
-        new(Reaction.Path, Reaction.Frame(Elapsed - ReactionDelay), TargetRotation);
+        new(Reaction.Path, Reaction.Frame(Elapsed - ReactionDelay), ActorHandle == int.MaxValue ? TargetRotation : PlayerRotation);
 
     internal void Validate(ClassicCombatContracts contracts, int maximumAp, int maximumDamage)
     {
         contracts.Validate();
-        if (Sequence < 0 || string.IsNullOrWhiteSpace(Map) || TargetSerial < 0 ||
+        if (Sequence < 0 || string.IsNullOrWhiteSpace(Map) || TargetSerial < -1 || ActorHandle < 1 || (ActorHandle == int.MaxValue) != (TargetSerial >= 0) ||
             PlayerRotation is < 0 or >= 6 || TargetRotation is < 0 or >= 6 ||
             HitPointsBefore <= 0 || HitPointsAfter < 0 || HitPointsAfter > HitPointsBefore ||
             ActionPointsBefore > maximumAp || ActionPointsAfter < 0 || ActionPointsBefore - ActionPointsAfter != 3 ||
-            AmmunitionSpent != 0 || Chance > 95 || HitRoll is < 1 or > 100 ||
+            AmmunitionSpent != 0 || MaximumDamage != maximumDamage || TurnNumber <= 0 || Chance > 95 || HitRoll is < 1 or > 100 ||
             !double.IsFinite(Elapsed) || Elapsed < 0 || Elapsed > Duration ||
             !double.IsFinite(ReactionDelay) || ReactionDelay < 0 ||
             Hit != (DamageRoll is not null) || DamageRoll is { } rolled && (rolled < 1 || rolled > maximumDamage) ||
-            Committed && (Elapsed != Duration || Boundary is not null || HitPointsAfter == 0))
+            Committed && (Elapsed != Duration || Boundary is not null))
             throw new InvalidDataException("Retained basic-punch transaction is inconsistent.");
         foreach (var clip in new[] { Attack, Reaction })
             if (clip.Frames <= 0 || clip.Fps <= 0 || clip.ContactFrame < 0 || clip.ContactFrame >= clip.Frames ||
@@ -78,8 +78,17 @@ internal sealed record ClassicCombatAction(long Sequence, string Map, int Target
         var expected = DamageRoll is { } damage
             ? ClassicRetailDamageOwner.Resolve(contracts.Damage, new(damage, 2, 1, 1, 100,
                 DamageThreshold, DamageResistance, HitPointsBefore)).TargetHitPoints : HitPointsBefore;
-        if (expected != HitPointsAfter || (HitPointsAfter == 0) != (Boundary is not null))
+        if (expected != HitPointsAfter || Boundary is not null)
             throw new InvalidDataException("Retained action damage or unresolved death boundary changed.");
+    }
+
+    internal static int PlayerMaximumDamage(ClassicPlayerSession player) =>
+        Math.Max(player.Stats.Special[0] - 5, 1) + (player.Choice.Character.Traits.Contains(6) ? 4 : 0) + 2;
+
+    internal static void RequirePlayerTraits(ClassicPlayerSession player)
+    {
+        if (player.Choice.Character.Traits.Any(trait => trait is 4 or 8 or 9 or 13))
+            throw new NotSupportedException("Selected trait requires its finesse, special death, jinxed or time-dependent combat owner.");
     }
 
     internal static (ClassicCombatAction Action, ClassicRetailRandomLifecycleState Random) PreparePunch(
@@ -92,7 +101,8 @@ internal sealed record ClassicCombatAction(long Sequence, string Map, int Target
             mode.DamageType != 0 || mode.ActionPointCost != 3 || mode.AmmunitionPerAttack != 0 ||
             mode.MaximumDamageDerivedStat != "melee-damage")
             throw new NotSupportedException("Native execution requires the qualified basic-punch contract.");
-        if (player.Inventory.Held is not null || player.Choice.Character.Traits.Length != 0)
+        RequirePlayerTraits(player);
+        if (player.Inventory.Held is not null)
             throw new NotSupportedException("Held attacks and trait-adjusted attacks need their source execution owner.");
         var clock = player.Doors.CurrentGameTime ?? throw new NotSupportedException("Attack has no shared campaign clock.");
         if (clock / contracts.Critical.TicksPerDay >= contracts.Critical.CriticalUpgradeEnabledAfterDays)
@@ -104,22 +114,24 @@ internal sealed record ClassicCombatAction(long Sequence, string Map, int Target
         var random = player.CampaignRandom ?? throw new NotSupportedException("Attack has no shared campaign RNG.");
         var randomContract = player.RandomContract ?? throw new NotSupportedException("Campaign RNG contract is absent.");
         var source = player.Level.Objects.TopLevelObjects.Single(row => row.Serial == target.Serial);
-        if (source.ScriptId != uint.MaxValue || source.Inventory.Count != 0 || target.Results != 0 ||
-            ((source.Fid >> 16) & 0xff) != 0 || ClassicHexGrid.Distance(player.Tile, target.Tile) != 1 ||
-            ClassicHexGrid.Neighbor(target.Tile, source.Rotation) != player.Tile)
-            throw new NotSupportedException("Attack requires an adjacent frontal standing source target without unowned scripts, equipment or status.");
+        if (source.Inventory.Count != 0) throw new NotSupportedException("Target inventory requires equipped-item combat execution.");
+        if (target.Results != 0) throw new NotSupportedException($"Target status 0x{target.Results:x} requires its source status owner.");
+        if (((source.Fid >> 16) & 0xff) != 0) throw new NotSupportedException("Target source pose is not standing.");
+        if (ClassicHexGrid.Distance(player.Tile, target.Tile) != 1) throw new InvalidOperationException("Basic punch target is not adjacent.");
+        if (ClassicHexGrid.Neighbor(target.Tile, target.Rotation) != player.Tile)
+            throw new NotSupportedException($"Target facing {target.Rotation} requires its non-frontal reaction sequence (actor {target.Tile}, player {player.Tile}).");
+        _ = new ClassicCombatant(player, target);
         var bytes = player.Catalog.Read(source.Prototype.LogicalPath!, out _);
-        if (ClassicPremadeReader.Hash(bytes) != target.PrototypeSha256 || BinaryPrimitives.ReadInt32BigEndian(bytes.AsSpan(44)) != 0 ||
-            BinaryPrimitives.ReadInt32BigEndian(bytes.AsSpan(28)) != -1)
+        if (ClassicPremadeReader.Hash(bytes) != target.PrototypeSha256 || (BinaryPrimitives.ReadInt32BigEndian(bytes.AsSpan(44)) & ~0x60) != 0)
             throw new NotSupportedException("Target prototype changed or has unowned combat flags.");
         int Stat(int index) => checked(BinaryPrimitives.ReadInt32BigEndian(bytes.AsSpan(48 + index * 4)) +
             BinaryPrimitives.ReadInt32BigEndian(bytes.AsSpan(188 + index * 4)));
         var profile = player.Choice.Character;
-        var skill = ClassicSkillOwner.Resolve(contracts.Skill, "Unarmed", new(profile.Special,
-            profile.SkillBonuses[3], profile.TaggedSkills.Contains(3), 0, 0, ClassicSkillDifficulty.Normal));
+        var skill = ClassicSkillOwner.Resolve(contracts.Skill, "Unarmed", new(player.Stats.Special,
+            profile.SkillBonuses[3], profile.TaggedSkills.Contains(3), (profile.Traits.Contains(15) ? -10 : 0) + (profile.Traits.Contains(10) ? -10 : 0), 0, ClassicSkillDifficulty.Normal));
         if (contracts.Skill.Skills.Single(row => row.Id == "Unarmed").DifficultyAdjusted)
             throw new NotSupportedException("Difficulty-adjusted unarmed needs a supplied difficulty owner.");
-        var attackSource = ClassicAttackModeOwner.PrepareSource(mode, Math.Max(profile.Special[0] - 5, 1));
+        var attackSource = ClassicAttackModeOwner.PrepareSource(mode, PlayerMaximumDamage(player) - 2);
         var intent = ClassicAttackOwner.Prepare("player", target.Map + ":" + target.Serial, 1, ap, attackSource);
         if (intent.Boundary != ClassicAttackBoundary.HitRollRequired)
             throw new InvalidOperationException("Attack refused: " + intent.Boundary);
@@ -137,7 +149,7 @@ internal sealed record ClassicCombatAction(long Sequence, string Map, int Target
         if (threshold < 0 || resistance is < 0 or > 100 || Stat(9) < 0)
             throw new InvalidDataException("Target source armor values are invalid.");
         var chance = Math.Min(95, checked(skill - Stat(9) - target.ActionPoints));
-        var roll = ClassicRetailAttackRollOwner.Roll(random.RandomState, randomContract, contracts.Critical, chance, profile.Special[6], clock);
+        var roll = ClassicRetailAttackRollOwner.Roll(random.RandomState, randomContract, contracts.Critical, chance, player.Stats.Special[6], clock);
         if (roll.UpgradeRoll is not null) throw new InvalidOperationException("Unexpected critical RNG consumption.");
         var hitRoll = chance - roll.Margin;
         random = random with
@@ -162,12 +174,13 @@ internal sealed record ClassicCombatAction(long Sequence, string Map, int Target
             hp = ClassicRetailDamageOwner.Resolve(contracts.Damage,
                 new(damageRoll.Value, 2, 1, 1, 100, threshold, resistance, hp)).TargetHitPoints;
         }
-        var reaction = damageRoll is null ? dodge : hit;
+        var reaction = damageRoll is null ? dodge : hp == 0
+            ? ClassicActionClip.Read(Read, ReactionPath(20)) : hit;
         var delay = attack.ContactSeconds - (damageRoll is null ? dodge.ContactSeconds : 0);
         var action = new ClassicCombatAction(sequence, player.MapPath, target.Serial,
-            ClassicHexGrid.Rotation(player.Tile, target.Tile), source.Rotation, target.HitPoints, hp,
+            ClassicHexGrid.Rotation(player.Tile, target.Tile), target.Rotation, target.HitPoints, hp,
             ap, ap - mode.ActionPointCost, mode.AmmunitionPerAttack, chance, hitRoll, damageRoll, threshold, resistance,
-            attack, reaction, delay, 0, false, hp == 0 ? "Lethal result retained; death/XP/script consequences require their connected owner." : null);
+            attack, reaction, delay, 0, false, null, MaximumDamage: attackSource.MaximumDamage);
         action.Validate(contracts, player.Stats.ActionPoints, attackSource.MaximumDamage); player.ValidateRandomCommit(random);
         return (action, random);
     }

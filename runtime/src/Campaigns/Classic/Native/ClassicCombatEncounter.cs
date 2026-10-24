@@ -4,16 +4,19 @@ using OpenNV.Runtime.Content;
 
 namespace OpenNV.Runtime.Campaigns.Classic.Native;
 
-internal enum ClassicCombatPhase { Unknown, Exploration, PlayerTurn, AttackPending, ActorTurn, Blocked }
+internal enum ClassicCombatPhase { Unknown, Exploration, PlayerTurn, AttackPending, ActorTurn, Blocked, Defeated }
 internal sealed record ClassicCombatParticipant(string Map, string MapSha256, int Serial, int ObjectId,
     int Pid, string PrototypeSha256, int Tile, int Elevation, int HitPoints, int ActionPoints,
-    int MaximumActionPoints, int Results, int AiPacket, int Team);
+    int MaximumActionPoints, int Results, int AiPacket, int Team, int Rotation = 0);
 internal sealed record ClassicCombatRequest(long Sequence, string Map, int ActorHandle, int TargetHandle,
     ClassicAttackIntent? Intent, string Boundary);
+internal sealed record ClassicCombatTurnReceipt(long Number, int Handle, int StartingAp, int EndingAp);
+internal sealed record ClassicCombatDeath(string Map, int Serial, long ActionSequence, int Experience, int KillType);
 internal sealed record ClassicCombatEncounterSave(string Schema, string? ContractIdentity, ClassicCombatPhase Phase,
     int PlayerActionPoints, int TurnHandle, long TurnNumber, long NextRequest,
     ClassicCombatParticipant[] Participants, ClassicCombatRequest[] Requests, string? Failure,
-    ClassicCombatAction[]? Actions = null);
+    ClassicCombatAction[]? Actions = null, ClassicCombatTurnReceipt[]? Turns = null,
+    ClassicCombatDeath[]? Deaths = null, int PendingExperience = 0, int PlayerHitPoints = -1, int AwardedExperience = 0, string[]? Engaged = null);
 
 /// <summary>Source participants, admitted attack transactions and retained boundaries.
 /// Gameplay resolves damage; presentation consumes the owned action clock.</summary>
@@ -26,12 +29,33 @@ internal sealed class ClassicCombatEncounter
     private readonly string? _contractIdentity;
     private readonly ClassicCombatContracts? _execution;
     private readonly List<ClassicCombatAction> _actions = [];
+    private readonly List<ClassicCombatTurnReceipt> _turns = [];
+    private readonly List<ClassicCombatDeath> _deaths = [];
+    private readonly HashSet<string> _engaged = new(StringComparer.Ordinal);
+    private int _pendingExperience;
+    private int _awardedExperience;
+    internal int? ActorRotation(int serial) => _participants.TryGetValue(Key(_player.MapPath, serial), out var row) ? row.Rotation : null;
+    internal IReadOnlyList<ClassicCombatDeath> Deaths => _deaths;
+    internal int? ActorHitPoints(int serial) => _participants.TryGetValue(Key(_player.MapPath, serial), out var row) ? row.HitPoints : null;
+    internal int? ActorResults(int serial) => _participants.TryGetValue(Key(_player.MapPath, serial), out var row) ? row.Results : null;
+    internal bool Dead(int serial) => Dead(_player.MapPath, serial);
+    internal bool Dead(string map, int serial) => _participants.TryGetValue(Key(map, serial), out var actor) && actor.HitPoints == 0;
+    internal event Action? WorldChanged;
     private Func<string>? _playerIdle;
     private Func<uint, string>? _resolveCritter;
     internal ClassicCombatAction? PendingAction => _actions.LastOrDefault(row => !row.Committed);
-    internal ClassicActionPose? PlayerActionPose => Phase == ClassicCombatPhase.AttackPending ? PendingAction?.PlayerPose : null;
-    internal ClassicActionPose? ActorActionPose(int serial) => Phase == ClassicCombatPhase.AttackPending && PendingAction is { } action &&
-        action.Map == _player.MapPath && action.TargetSerial == serial ? action.TargetPose : null;
+    internal ClassicActionPose? PlayerActionPose => Phase == ClassicCombatPhase.AttackPending && PendingAction is { } action
+        ? action.ActorHandle == PlayerHandle ? action.PlayerPose : action.TargetPose
+        : _player.HitPoints == 0 ? _actions.LastOrDefault(row => row.ActorHandle != PlayerHandle && row.Committed && row.HitPointsAfter == 0)?.TargetPose : null;
+    internal ClassicActionPose? ActorActionPose(int serial)
+    {
+        if (Phase == ClassicCombatPhase.AttackPending && PendingAction is { } action && action.Map == _player.MapPath)
+        {
+            if (action.ActorHandle == serial + 1) return new(action.Attack.Path, action.Attack.Frame(action.Elapsed), action.TargetRotation);
+            if (action.ActorHandle == PlayerHandle && action.TargetSerial == serial) return action.TargetPose;
+        }
+        return Dead(serial) ? _actions.Last(row => row.Map == _player.MapPath && row.TargetSerial == serial && row.Committed && row.HitPointsAfter == 0).TargetPose : null;
+    }
     internal event Action<string>? ActionChanged;
     private readonly Dictionary<string, ClassicCombatParticipant> _participants = new(StringComparer.Ordinal);
     private readonly List<ClassicCombatRequest> _requests = [];
@@ -90,24 +114,68 @@ internal sealed class ClassicCombatEncounter
         action = action with { Elapsed = Math.Min(action.Duration, action.Elapsed + seconds) };
         _actions[^1] = action;
         if (action.Elapsed < action.Duration) return;
-        var key = Key(action.Map, action.TargetSerial);
-        var target = _participants[key];
-        if (target.HitPoints != action.HitPointsBefore || _player.Inventory.Held is not null ||
-            _playerIdle()[..^6] + "aq.frm" != action.Attack.Path)
+        if (_player.Inventory.Held is not null)
+        { Block("Held item changed before prepared attack completion."); return; }
+        try
         {
-            Phase = ClassicCombatPhase.Blocked;
-            Failure = "Prepared attack target or held-item state changed before completion.";
-            ActionChanged?.Invoke(Failure); return;
+            if (action.ActorHandle == PlayerHandle)
+            {
+                var key = Key(action.Map, action.TargetSerial); var target = _participants[key];
+                if (target.HitPoints != action.HitPointsBefore) { Block("Target changed before attack completion."); return; }
+                if (action.HitPointsAfter < action.HitPointsBefore)
+                    _player.Actors.Dispatch(target.Serial, 14, action.HitPointsBefore - action.HitPointsAfter, PlayerHandle, hitPoints: action.HitPointsAfter);
+                if (action.HitPointsAfter == 0 && _player.Actors.Dispatch(target.Serial, 18, sourceObject: PlayerHandle, hitPoints: action.HitPointsAfter))
+                { Block("Source destroy callback overrides unowned lethal consequences."); return; }
+                _participants[key] = target with { HitPoints = action.HitPointsAfter, Results = action.HitPointsAfter == 0 ? target.Results | 0x80 : target.Results };
+                if (action.HitPointsAfter == 0)
+                {
+                    var declaration = new ClassicCombatant(_player, target);
+                    _deaths.Add(new(action.Map, action.TargetSerial, action.Sequence, declaration.Experience, declaration.KillType));
+                    _pendingExperience = checked(_pendingExperience + declaration.Experience);
+                    _player.Doors.RemoveActorTimers(target.Serial);
+                    _player.Actors.Retire(target.Serial);
+                }
+            }
+            else _player.CommitCombatHitPoints(action.HitPointsBefore, action.HitPointsAfter);
         }
-        // Actual queued source frames complete before HP is published. Basic
-        // punch consumes zero ammunition; firearm expenditure is not claimed.
-        _participants[key] = target with { HitPoints = action.HitPointsAfter };
+        catch (Exception error) when (error is InvalidDataException or InvalidOperationException or NotSupportedException or FileNotFoundException or OverflowException)
+        { Block("Attack consequence: " + error.Message); return; }
         _actions[^1] = action with { Committed = true };
         var request = _requests.FindIndex(row => row.Sequence == action.Sequence);
         _requests[request] = _requests[request] with { Boundary = "completed" };
-        Phase = ClassicCombatPhase.PlayerTurn;
+        Phase = action.ActorHandle == PlayerHandle ? ClassicCombatPhase.PlayerTurn : ClassicCombatPhase.ActorTurn;
         Failure = null;
-        ActionChanged?.Invoke(action.Hit ? $"Hit for {action.HitPointsBefore - action.HitPointsAfter}. Target HP {action.HitPointsAfter}. AP {PlayerActionPoints}." : $"Miss. AP {PlayerActionPoints}.");
+        WorldChanged?.Invoke();
+        ActionChanged?.Invoke(action.Hit ? $"{(action.ActorHandle == PlayerHandle ? "Hit" : "Enemy hit")} for {action.HitPointsBefore - action.HitPointsAfter}. HP {action.HitPointsAfter}." : "Attack missed.");
+        if (_player.HitPoints == 0) { Phase = ClassicCombatPhase.Defeated; ActionChanged?.Invoke("You have died. Return to the menu to start or load a game."); return; }
+        if (action.ActorHandle != PlayerHandle) ContinueEnemyTurn();
+        else if (_engaged.All(key => _participants[key].HitPoints == 0))
+        {
+            try { CommitCompletedExit(); }
+            catch (NotSupportedException error) { Block(error.Message); }
+        }
+    }
+
+    private void Block(string reason)
+    { Phase = ClassicCombatPhase.Blocked; Failure = reason; ActionChanged?.Invoke(reason); }
+
+    private void StartTurn(int handle, int ap)
+    {
+        TurnHandle = handle; TurnNumber = _turns.Count + 1;
+        _turns.Add(new(TurnNumber, handle, ap, ap));
+        if (handle == PlayerHandle) PlayerActionPoints = ap;
+        Phase = handle == PlayerHandle ? ClassicCombatPhase.PlayerTurn : ClassicCombatPhase.ActorTurn;
+    }
+
+    private void SpendTurnAp(int ap)
+    {
+        _turns[^1] = _turns[^1] with { EndingAp = ap };
+        if (TurnHandle == PlayerHandle) PlayerActionPoints = ap;
+        else
+        {
+            var key = Key(_player.MapPath, TurnHandle - 1);
+            _participants[key] = _participants[key] with { ActionPoints = ap };
+        }
     }
 
     internal ClassicCombatParticipant SourceParticipant(int serial)
@@ -142,13 +210,19 @@ internal sealed class ClassicCombatEncounter
             throw new NotSupportedException("Source critter PRO layout/identity is not admitted.");
         int Stat(int index) => checked(BinaryPrimitives.ReadInt32BigEndian(pro.AsSpan(48 + index * 4)) +
             BinaryPrimitives.ReadInt32BigEndian(pro.AsSpan(188 + index * 4)));
-        var words = source.InstanceValues;
+        var instance = ClassicCritterInstance.Read(source);
         var maximum = Stat(8);
-        if (maximum <= 0 || words[2] < 0 || words[2] > maximum || words[8] < 0 || words[5] < 0 || words[6] < 0)
-            throw new InvalidDataException("Source critter AP, HP, AI packet or team is invalid.");
+        var ai = _player.Actors?.Trait(source.Serial, 5, instance.AiPacket) ?? instance.AiPacket;
+        var team = _player.Actors?.Trait(source.Serial, 6, instance.Team) ?? instance.Team;
+        // Authored MAPs can retain AP above the current PRO maximum (the
+        // owned temple scorpions retain6 with maximum5). Preserve that prefix;
+        // entering an actual turn refills through the turn owner.
+        if (maximum <= 0 || instance.ActionPoints < 0 || instance.HitPoints < 0 || ai < 0 || team < 0)
+            throw new InvalidDataException($"Source critter {source.Serial} AP {instance.ActionPoints}/{maximum}, HP {instance.HitPoints}, AI {ai} or team {team} is invalid.");
         return new(level.Path, level.Sha256, source.Serial, source.ObjectId, source.Pid,
-            ClassicPremadeReader.Hash(pro), source.Tile, source.Elevation, words[8], words[2],
-            maximum, words[3], words[5], words[6]);
+            ClassicPremadeReader.Hash(pro), source.Tile, source.Elevation, instance.HitPoints, instance.ActionPoints,
+            maximum, instance.Results, ai, team,
+            _player.Actors?.Trait(source.Serial, 10, source.Rotation) ?? source.Rotation);
     }
 
     internal string RequestPlayerAttack(int serial)
@@ -174,7 +248,7 @@ internal sealed class ClassicCombatEncounter
         else
         {
             var mode = _modes!.Require("basic-punch");
-            var source = ClassicAttackModeOwner.PrepareSource(mode, Math.Max(_player.Stats.Special[0] - 5, 1));
+            var source = ClassicAttackModeOwner.PrepareSource(mode, ClassicCombatAction.PlayerMaximumDamage(_player) - 2);
             intent = ClassicAttackOwner.Prepare("player", Key(target.Map, target.Serial),
                 ClassicHexGrid.Distance(_player.Tile, target.Tile), PlayerActionPoints, source);
             boundary = intent.Boundary.ToString();
@@ -187,43 +261,36 @@ internal sealed class ClassicCombatEncounter
         Phase = ClassicCombatPhase.Blocked;
         try
         {
-            var liveActors = _player.Level.Objects.TopLevelObjects.Where(row => row.Prototype.ObjectType == 1 &&
-                row.Elevation == _player.Elevation && (row.Flags & 1) == 0).ToArray();
-            // Scripted starts and additional acquisition cannot be approximated
-            // by a two-person duel. Preserve the request without that start.
-            if (liveActors.Any(row => row.ScriptId != uint.MaxValue) || liveActors.Count(row => IsLivingTarget(row.Serial)) != 1)
-                throw new NotSupportedException("Source combat-start scripts or additional participant acquisition are not yet owned.");
+            _player.Actors.RequireReady(serial);
             if (entering)
             {
                 PlayerActionPoints = ClassicCombatTurnOwner.BeginPlayerTurn(PlayerActionPoints, _player.Stats.ActionPoints);
-                // The initial combat lifecycle clears participant AP before its
-                // first turn. Later turns must be supplied by the actual AI owner.
-                foreach (var actor in liveActors)
-                {
-                    var participant = SourceParticipant(actor.Serial);
-                    _participants[Key(participant.Map, participant.Serial)] = participant with { ActionPoints = 0 };
-                }
+                _engaged.Clear(); _engaged.Add(Key(target.Map, target.Serial));
+                _participants[Key(target.Map, target.Serial)] = target with { ActionPoints = 0 };
                 target = SourceParticipant(serial);
             }
+            else if (!_engaged.Contains(Key(target.Map, target.Serial)))
+                throw new NotSupportedException("Attacking another actor requires the additional-participant acquisition owner.");
         }
         catch (Exception error) when (error is InvalidDataException or InvalidOperationException or NotSupportedException or FileNotFoundException or OverflowException)
         {
             Failure = "Attack retained; encounter admission refused: " + error.Message;
             return Failure;
         }
-        TurnHandle = PlayerHandle; if (entering) TurnNumber = 1;
+        if (entering) StartTurn(PlayerHandle, PlayerActionPoints);
         Phase = ClassicCombatPhase.PlayerTurn;
         if (intent?.Boundary is ClassicAttackBoundary.OutOfRange or ClassicAttackBoundary.InsufficientActionPoints)
             return Failure = boundary;
         try
         {
+            _player.Actors.RequireReady(serial);
             if (_execution is null || _playerIdle is null || _resolveCritter is null)
                 throw new NotSupportedException("Attack execution contracts and source animation binding are required.");
             var prepared = ClassicCombatAction.PreparePunch(_player, target, _modes!.Require("basic-punch"),
                 _execution, request.Sequence, PlayerActionPoints, _playerIdle, _resolveCritter);
             _player.CommitRandom(prepared.Random);
-            _actions.Add(prepared.Action);
-            PlayerActionPoints = prepared.Action.ActionPointsAfter;
+            _actions.Add(prepared.Action with { TurnNumber = TurnNumber });
+            SpendTurnAp(prepared.Action.ActionPointsAfter);
             _player.FaceCombatTarget(target.Tile);
             Failure = prepared.Action.Boundary;
             Phase = Failure is null ? ClassicCombatPhase.AttackPending : ClassicCombatPhase.Blocked;
@@ -238,99 +305,209 @@ internal sealed class ClassicCombatEncounter
         }
     }
 
+    internal void ApplyActorTraits(string map, IReadOnlyList<ClassicIntTraitAssignment> changes)
+    {
+        foreach (var row in changes)
+        {
+            var key = Key(map, row.ObjectHandle - 1);
+            if (!_participants.TryGetValue(key, out var actor)) continue;
+            _participants[key] = row.Trait switch
+            {
+                5 => actor with { AiPacket = row.Amount },
+                6 => actor with { Team = row.Amount },
+                10 => actor with { Rotation = row.Amount },
+                _ => actor,
+            };
+        }
+    }
+
     internal void RequireExploration()
     {
-        if (Active == true || Phase == ClassicCombatPhase.Blocked)
+        if (Active == true || Phase == ClassicCombatPhase.Blocked || Phase == ClassicCombatPhase.Defeated)
             throw new NotSupportedException(Failure ?? "Finish the active encounter before exploration or a map transition.");
     }
 
     internal string EndTurn()
     {
-        if (Phase is ClassicCombatPhase.Unknown or ClassicCombatPhase.Blocked)
+        if (Phase is ClassicCombatPhase.Unknown or ClassicCombatPhase.Blocked || Phase == ClassicCombatPhase.Defeated)
             throw new NotSupportedException(Failure ?? "Combat state is unknown.");
         if (Phase == ClassicCombatPhase.Exploration) return "No active combat turn.";
         if (Phase != ClassicCombatPhase.PlayerTurn)
             throw new NotSupportedException(Failure ?? "Complete the pending action before ending the turn.");
-        // Being selected by the player is not itself an NPC attack request.
-        // BeginTargetTurn's attackRequested argument needs the actual AI/script
-        // owner; supplying true or false here would invent that decision.
-        throw new NotSupportedException("Source target hostility/attack intent and AI packet execution are required before its turn can begin.");
+        if (!_actions.Any(row => row.ActorHandle == PlayerHandle && row.Committed && row.Map == _player.MapPath))
+            throw new NotSupportedException("A refused selection has not established an executed attack/retaliation prefix.");
+        var opponent = _engaged.Select(key => _participants[key]).SingleOrDefault(row => row.HitPoints > 0);
+        if (opponent is null) { CommitCompletedExit(); return "Combat ended."; }
+        var declaration = new ClassicCombatant(_player, opponent);
+        if (declaration.Stat(13) > (2 * _player.Stats.Special[1] + (_player.Choice.Character.Traits.Contains(5) ? 5 : 0)) ||
+            declaration.Stat(13) == (2 * _player.Stats.Special[1] + (_player.Choice.Character.Traits.Contains(5) ? 5 : 0)) && declaration.Stat(6) > _player.Stats.Special[6])
+            throw new NotSupportedException("Next-round initiative needs the faster enemy's consecutive-turn scheduling owner.");
+        var turn = ClassicCombatTurnOwner.BeginTargetTurn(opponent.ActionPoints, opponent.MaximumActionPoints,
+            opponent.AiPacket, opponent.Team, true, opponent.Tile, _player.Tile, ClassicHexGrid.Neighbors(opponent.Tile).ToHashSet());
+        // The retained player's actual attack is the retaliation source. No neutral actor is acquired here.
+        _participants[Key(opponent.Map, opponent.Serial)] = opponent with { ActionPoints = turn.ActionPoints };
+        if (_player.Actors.Dispatch(opponent.Serial, 13, 4))
+            throw new NotSupportedException("Source actor overrides its ordinary AI turn.");
+        StartTurn(opponent.Serial + 1, turn.ActionPoints);
+        ContinueEnemyTurn();
+        return Failure ?? "Enemy turn.";
+    }
+
+    private void ContinueEnemyTurn()
+    {
+        var actor = _participants[Key(_player.MapPath, TurnHandle - 1)];
+        if (actor.ActionPoints < 3)
+        {
+            try { RequireAcquisition(); }
+            catch (NotSupportedException error) { Block(error.Message); return; }
+            _player.Doors.CompleteCombatRound();
+            StartTurn(PlayerHandle, _player.Stats.ActionPoints);
+            ActionChanged?.Invoke($"Your turn. AP {PlayerActionPoints}."); return;
+        }
+        try
+        {
+            if (_execution is null || _playerIdle is null || _resolveCritter is null)
+                throw new NotSupportedException("Enemy turn has no execution/source art binding.");
+            var prepared = ClassicEnemyAttack.Prepare(_player, actor, _execution, _nextRequest, PlayerActionPoints, _playerIdle, _resolveCritter);
+            _player.CommitRandom(prepared.Random);
+            _requests.Add(new(_nextRequest++, _player.MapPath, actor.Serial + 1, PlayerHandle, null, "executing"));
+            _actions.Add(prepared.Action with { TurnNumber = TurnNumber });
+            SpendTurnAp(prepared.Action.ActionPointsAfter);
+            _participants[Key(actor.Map, actor.Serial)] = _participants[Key(actor.Map, actor.Serial)] with { Rotation = prepared.Action.TargetRotation };
+            Phase = ClassicCombatPhase.AttackPending;
+        }
+        catch (Exception error) when (error is InvalidDataException or InvalidOperationException or NotSupportedException or FileNotFoundException or OverflowException)
+        { Block("Enemy turn: " + error.Message); }
+    }
+
+    private void RequireAcquisition()
+    {
+        foreach (var source in _player.Level.Objects.TopLevelObjects.Where(row => row.Prototype.ObjectType == 1 &&
+            row.Elevation == _player.Elevation && (row.Flags & 1) == 0))
+            if (!_engaged.Contains(Key(_player.MapPath, source.Serial)) && IsLivingTarget(source.Serial))
+                throw new NotSupportedException("Combat sequence requires source perception/hostility acquisition for additional living actors.");
     }
 
     internal void CommitCompletedExit()
     {
-        // Only a connected action/AI owner may reach this once all source
-        // participants have completed combat; no input shortcut forces exit.
-        if (Phase != ClassicCombatPhase.ActorTurn || _requests.Any(row => row.Boundary != "completed"))
-            throw new NotSupportedException("Combat exit has no completed source turn/action prefix.");
-        if (_participants.Values.Any(row => row.Map == _player.MapPath && row.Elevation == _player.Elevation &&
-            row.HitPoints > 0 && (row.Results & 0x80) == 0))
-            throw new NotSupportedException("Combat-end eligibility for surviving participants is unresolved.");
+        if (Phase is not (ClassicCombatPhase.PlayerTurn or ClassicCombatPhase.ActorTurn) || PendingAction is not null ||
+            _engaged.Any(key => _participants[key].HitPoints > 0))
+            throw new NotSupportedException("Combat exit still has a living opponent or unresolved action.");
+        RequireAcquisition();
+        _player.Doors.CompleteCombatRound();
+        _player.AwardCombatExperience(_pendingExperience);
+        _awardedExperience = checked(_awardedExperience + _pendingExperience); _pendingExperience = 0;
         Phase = ClassicCombatPhase.Exploration; TurnHandle = 0; TurnNumber = 0; Failure = null;
         PlayerActionPoints = _player.Stats.ActionPoints;
-        CommittedExit?.Invoke();
+        CommittedExit?.Invoke(); WorldChanged?.Invoke();
+        ActionChanged?.Invoke("Combat ended.");
     }
 
     internal ClassicCombatEncounterSave Save() => new(Schema, _contractIdentity, Phase, PlayerActionPoints,
         TurnHandle, TurnNumber, _nextRequest, _participants.Values.OrderBy(row => row.Map, StringComparer.Ordinal)
-            .ThenBy(row => row.Serial).ToArray(), _requests.ToArray(), Failure, _actions.ToArray());
+            .ThenBy(row => row.Serial).ToArray(), _requests.ToArray(), Failure, _actions.ToArray(), _turns.ToArray(), _deaths.ToArray(), _pendingExperience, _player.HitPoints, _awardedExperience, _engaged.Order(StringComparer.Ordinal).ToArray());
 
-    private void Restore(ClassicCombatEncounterSave saved)
+    internal void Restore(ClassicCombatEncounterSave saved)
     {
         if (saved.Schema != Schema || saved.ContractIdentity != _contractIdentity || !Enum.IsDefined(saved.Phase) ||
             saved.Participants is null || saved.Requests is null || saved.PlayerActionPoints < 0 ||
             saved.PlayerActionPoints > _player.Stats.ActionPoints || saved.NextRequest < 0 || saved.TurnNumber < 0 ||
-            saved.Phase is ClassicCombatPhase.Unknown or ClassicCombatPhase.Blocked && saved.Failure is null)
+            saved.PendingExperience < 0 || saved.AwardedExperience < 0 || saved.Phase is ClassicCombatPhase.Unknown or ClassicCombatPhase.Blocked && saved.Failure is null)
             throw new InvalidDataException("Saved combat lifecycle/contract is invalid.");
+        var originals = new Dictionary<string, ClassicCombatParticipant>(StringComparer.Ordinal);
         foreach (var row in saved.Participants)
         {
             var level = _player.Catalog.Load(row.Map);
             var source = level.Objects.TopLevelObjects.SingleOrDefault(item => item.Serial == row.Serial)
                 ?? throw new InvalidDataException("Saved combat participant disappeared.");
             var original = ReadParticipant(level, source);
-            if (original with { ActionPoints = row.ActionPoints, HitPoints = row.HitPoints } != row || row.HitPoints <= 0 || row.HitPoints > original.HitPoints ||
-                row.ActionPoints < 0 || row.ActionPoints > original.MaximumActionPoints ||
+            if (original with { ActionPoints = row.ActionPoints, HitPoints = row.HitPoints, Results = row.Results, Rotation = row.Rotation } != row ||
+                row.HitPoints < 0 || row.HitPoints > original.HitPoints || row.Rotation is < 0 or >= 6 ||
+                row.Results != (row.HitPoints == 0 ? original.Results | 0x80 : original.Results) ||
+                row.ActionPoints < 0 || row.ActionPoints > original.MaximumActionPoints && row.ActionPoints != original.ActionPoints ||
                 !_participants.TryAdd(Key(row.Map, row.Serial), row))
                 throw new InvalidDataException("Saved combat participant differs from its source identity/state.");
+            originals.Add(Key(row.Map, row.Serial), original);
         }
+        foreach (var key in saved.Engaged ?? [])
+            if (!_participants.ContainsKey(key) || !_engaged.Add(key)) throw new InvalidDataException("Saved engaged actor identity is invalid.");
         long sequence = 0;
         foreach (var request in saved.Requests)
         {
-            if (request.Sequence != sequence++ || request.ActorHandle != PlayerHandle ||
-                !_participants.ContainsKey(Key(request.Map, request.TargetHandle - 1)) || string.IsNullOrWhiteSpace(request.Boundary))
+            if (request.Sequence != sequence++ || string.IsNullOrWhiteSpace(request.Boundary) ||
+                (request.ActorHandle == PlayerHandle
+                    ? !_participants.ContainsKey(Key(request.Map, request.TargetHandle - 1))
+                    : request.TargetHandle != PlayerHandle || !_participants.ContainsKey(Key(request.Map, request.ActorHandle - 1))))
                 throw new InvalidDataException("Saved attack request prefix is invalid.");
             _requests.Add(request);
         }
         if (sequence != saved.NextRequest) throw new InvalidDataException("Saved combat request cursor differs from its prefix.");
-        var expectedHp = _participants.Values.ToDictionary(row => Key(row.Map, row.Serial), row =>
-            ReadParticipant(_player.Catalog.Load(row.Map), _player.Catalog.Load(row.Map).Objects.TopLevelObjects.Single(item => item.Serial == row.Serial)).HitPoints);
+        var hp = originals.ToDictionary(row => row.Key, row => row.Value.HitPoints);
+        var playerHp = _player.Stats.HitPoints;
+        var expectedDeaths = new List<ClassicCombatDeath>();
+        var actions = saved.Actions ?? [];
         long previousAction = -1;
-        var expectedAp = _player.Stats.ActionPoints;
-        foreach (var action in saved.Actions ?? [])
+        long turnNumber = 0;
+        foreach (var turn in saved.Turns ?? [])
         {
-            if (_execution is null) throw new InvalidDataException("Saved attacks require execution contracts.");
-            action.Validate(_execution, _player.Stats.ActionPoints, Math.Max(_player.Stats.Special[0] - 5, 1) + 2);
-            var request = _requests.SingleOrDefault(row => row.Sequence == action.Sequence);
-            var key = Key(action.Map, action.TargetSerial);
-            if (action.Sequence <= previousAction || _actions.Any(row => !row.Committed) || request is null ||
-                request.Map != action.Map || request.TargetHandle != action.TargetSerial + 1 ||
-                !expectedHp.TryGetValue(key, out var hp) || hp != action.HitPointsBefore ||
-                action.Committed != (request.Boundary == "completed") || action.ActionPointsBefore != expectedAp)
-                throw new InvalidDataException("Saved attack result prefix differs from its source participant.");
-            if (action.Committed) expectedHp[key] = action.HitPointsAfter;
-            expectedAp = action.ActionPointsAfter;
-            _actions.Add(action); previousAction = action.Sequence;
+            if (turn.Number != ++turnNumber || turn.Handle != PlayerHandle && !originals.ContainsKey(Key(_player.MapPath, turn.Handle - 1)))
+                throw new InvalidDataException("Saved turn cursor or actor is invalid.");
+            var maximumAp = turn.Handle == PlayerHandle ? _player.Stats.ActionPoints : originals[Key(_player.MapPath, turn.Handle - 1)].MaximumActionPoints;
+            if (turn.StartingAp != maximumAp || turn.EndingAp < 0 || turn.EndingAp > maximumAp)
+                throw new InvalidDataException("Saved turn AP does not match its source maximum.");
+            var ap = turn.StartingAp;
+            foreach (var action in actions.Where(row => row.TurnNumber == turn.Number))
+            {
+                if (_execution is null) throw new InvalidDataException("Saved attack has no execution contract.");
+                var maximumDamage = action.ActorHandle == PlayerHandle ? ClassicCombatAction.PlayerMaximumDamage(_player) :
+                    new ClassicCombatant(_player, originals[Key(action.Map, action.ActorHandle - 1)]).Stat(11) + 2;
+                action.Validate(_execution, maximumAp, maximumDamage);
+                var request = _requests.SingleOrDefault(row => row.Sequence == action.Sequence);
+                var target = action.ActorHandle == PlayerHandle ? Key(action.Map, action.TargetSerial) : null;
+                if (action.Sequence <= previousAction || _actions.Any(row => !row.Committed) || action.ActorHandle != turn.Handle ||
+                    request is null || request.ActorHandle != action.ActorHandle || request.Map != action.Map ||
+                    request.TargetHandle != (target is null ? PlayerHandle : action.TargetSerial + 1) ||
+                    action.HitPointsBefore != (target is null ? playerHp : hp.GetValueOrDefault(target, -1)) ||
+                    action.ActionPointsBefore != ap || action.Committed != (request.Boundary == "completed"))
+                    throw new InvalidDataException("Saved action result differs from its HP/AP/request prefix.");
+                ap = action.ActionPointsAfter;
+                if (action.Committed)
+                {
+                    if (target is null) playerHp = action.HitPointsAfter;
+                    else
+                    {
+                        hp[target] = action.HitPointsAfter;
+                        if (action.HitPointsAfter == 0)
+                        {
+                            var declaration = new ClassicCombatant(_player, originals[target]);
+                            expectedDeaths.Add(new(action.Map, action.TargetSerial, action.Sequence, declaration.Experience, declaration.KillType));
+                        }
+                    }
+                }
+                _actions.Add(action); previousAction = action.Sequence;
+            }
+            if (ap != turn.EndingAp) throw new InvalidDataException("Saved turn AP has no action prefix.");
+            _turns.Add(turn);
         }
-        if (_participants.Values.Any(row => row.HitPoints != expectedHp[Key(row.Map, row.Serial)]))
-            throw new InvalidDataException("Saved target HP has no committed attack prefix.");
-        if (_actions.Count != 0 && saved.PlayerActionPoints != _actions[^1].ActionPointsAfter ||
-            saved.Phase == ClassicCombatPhase.AttackPending && PendingAction is null)
-            throw new InvalidDataException("Saved action/AP cursor is inconsistent.");
-        var active = saved.Phase is ClassicCombatPhase.PlayerTurn or ClassicCombatPhase.AttackPending or ClassicCombatPhase.ActorTurn;
-        if (active && (saved.TurnNumber <= 0 || saved.Requests.Length == 0 ||
-            saved.TurnHandle != PlayerHandle && !_participants.ContainsKey(Key(_player.MapPath, saved.TurnHandle - 1))) ||
-            !active && saved.Phase != ClassicCombatPhase.Blocked && (saved.TurnHandle != 0 || saved.TurnNumber != 0))
-            throw new InvalidDataException("Saved combat turn cursor is inconsistent.");
+        if (_actions.Count != actions.Length || _participants.Values.Any(row => row.HitPoints != hp[Key(row.Map, row.Serial)]) ||
+            saved.PlayerHitPoints >= 0 && saved.PlayerHitPoints != playerHp ||
+            !(saved.Deaths ?? []).SequenceEqual(expectedDeaths) ||
+            saved.PendingExperience + saved.AwardedExperience != expectedDeaths.Sum(row => row.Experience) ||
+            saved.Phase == ClassicCombatPhase.Exploration && saved.PendingExperience != 0)
+            throw new InvalidDataException("Saved HP/death/reward prefix is inconsistent.");
+        _deaths.AddRange(expectedDeaths); _pendingExperience = saved.PendingExperience; _awardedExperience = saved.AwardedExperience;
+        var active = saved.Phase is ClassicCombatPhase.PlayerTurn or ClassicCombatPhase.AttackPending or ClassicCombatPhase.ActorTurn or ClassicCombatPhase.Defeated;
+        if (active && (_turns.Count == 0 || saved.TurnNumber != _turns[^1].Number || saved.TurnHandle != _turns[^1].Handle) ||
+            saved.Phase == ClassicCombatPhase.AttackPending && PendingAction is null ||
+            PendingAction is not null && saved.Phase is not (ClassicCombatPhase.AttackPending or ClassicCombatPhase.Blocked) ||
+            saved.Phase == ClassicCombatPhase.Defeated != (playerHp == 0) ||
+            saved.Phase == ClassicCombatPhase.Exploration && (saved.TurnHandle != 0 || saved.TurnNumber != 0) ||
+            _turns.LastOrDefault(row => row.Handle == PlayerHandle) is { } playerTurn &&
+            saved.PlayerActionPoints != (saved.Phase == ClassicCombatPhase.Exploration ? _player.Stats.ActionPoints : playerTurn.EndingAp))
+            throw new InvalidDataException("Saved phase/turn/action cursor is inconsistent.");
+        foreach (var actor in _participants.Values)
+            if (_turns.LastOrDefault(row => row.Handle == actor.Serial + 1) is { } actorTurn && actor.ActionPoints != actorTurn.EndingAp)
+                throw new InvalidDataException("Saved actor AP differs from its last turn.");
         Phase = saved.Phase; PlayerActionPoints = saved.PlayerActionPoints; TurnHandle = saved.TurnHandle;
         TurnNumber = saved.TurnNumber; _nextRequest = saved.NextRequest; Failure = saved.Failure;
     }

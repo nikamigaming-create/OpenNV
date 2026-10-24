@@ -8,8 +8,12 @@ unverified. See [current-work.md](current-work.md) for the active owner.
 The current classic scene batch integrates nine original source-bound Arroyo
 models, corrects linear vertex-color presentation and avoids duplicate world
 allocations on Begin. Ordinary FO2 premade selection, source entry and mouse-floor
-movement pass in the native product path. Enemy turns, lethal consequences,
-complete campaign execution and full scene likeness remain unverified.
+movement pass in the native product path. The current followthrough batch repairs
+classic shader-instance exhaustion and the rear-facing default entrance view;
+native FO1 entry and FO2 temple transition have zero renderer errors. The complete
+Arroyo scene is visually unaccepted and source actor movement still blocks the
+reached encounter. Enemy turns/lethal consequences have a synthetic transaction
+check, not ordinary native acceptance. Full campaign/scene likeness is unverified.
 
 The following FNV inventory is active repair work. FO3 and classic work are preserved.
 The user rejected package g's physical FNV VR playtest. It is not a playable or

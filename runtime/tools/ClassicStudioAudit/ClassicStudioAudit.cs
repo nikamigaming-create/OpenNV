@@ -20,8 +20,8 @@ public sealed partial class ClassicStudioAudit : Node
         try
         {
             var args = OS.GetCmdlineUserArgs();
-            if (args.Length is not (4 or 5) || args.Length == 5 && args[4] != "--walk")
-                throw new ArgumentException("Provide classic install, New Vegas Data, campaign, private output directory and optional --walk.");
+            if (args.Length is not (4 or 5) || args.Length == 5 && args[4] is not ("--walk" or "--encounter"))
+                throw new ArgumentException("Provide classic install, New Vegas Data, campaign, private output directory and optional --walk or --encounter.");
             var campaign = args[2]; var save = Path.Combine(temporary, "campaign.json");
             if (campaign == "fallout-1")
             {
@@ -106,6 +106,80 @@ public sealed partial class ClassicStudioAudit : Node
                     if (image.SavePng(Path.Combine(args[3], campaign + "-walk.png")) != Error.Ok)
                         throw new IOException("Native walk image could not be saved.");
                 GD.Print($"OPENNV_CLASSIC_NATIVE_WALK_PASS campaign={campaign} sourceStart=true sourcePremade=true pointer=true from={origin} to={player.Tile} steps={player.CompletedSteps} blocking=unchanged presentationFailures={world.Unresolved.Count} campaignComplete=false");
+                if (args[4] == "--encounter")
+                {
+                    async Task MoveTo(int tile, bool expectExit = false)
+                    {
+                        var active = GetTree().Root.FindChild("ClassicPlayerController", true, false) as ClassicPlayerController
+                            ?? throw new InvalidOperationException("Native player controller disappeared.");
+                        var scene = active.GetParent() as ClassicWorldPreview
+                            ?? throw new InvalidOperationException("Native controller has no source world.");
+                        scene.Camera.StopShot(); scene.Camera.Focus = Fo1HexMath.Center(tile) + Vector3.Up * .7f;
+                        await Settle();
+                        var point = scene.Camera.UnprojectPosition(Fo1HexMath.Center(tile));
+                        foreach (var pressed in new[] { true, false }) GetViewport().PushInput(new InputEventMouseButton
+                        { Position = point, GlobalPosition = point, ButtonIndex = MouseButton.Left, Pressed = pressed }, true);
+                        var deadline = Time.GetTicksMsec() + 90000;
+                        while (IsInstanceValid(active) && active.IsInsideTree() && (active.Player.Tile != tile || active.Player.Moving))
+                        {
+                            if (Time.GetTicksMsec() >= deadline) throw new InvalidOperationException("Ordinary source approach timed out: " + active.Player.Status);
+                            await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+                        }
+                        if (expectExit) for (var frame = 0; frame < 12; frame++) await Settle();
+                    }
+                    var exits = player.Level.Objects.TopLevelObjects.Where(row => row.Elevation == player.Elevation &&
+                        Fallout1NativeObjectGraphReader.IsExitGrid(row.Prototype) && row.InstanceValues.Count == 4 && row.InstanceValues[0] > 0)
+                        .Where(row => player.Walkable.Contains(row.Tile))
+                        .Select(row => (Object: row, Path: ClassicHexGrid.Path(player.Tile, row.Tile, player.Walkable),
+                            Destination: player.Catalog.Load(player.Catalog.ResolveMap(row.InstanceValues[0]))))
+                        .Where(row => row.Path.Length > 0 && row.Destination.Objects.TopLevelObjects.Any(actor =>
+                            actor.Prototype.ObjectType == 1 && actor.Inventory.Count == 0 && actor.InstanceValues.Count == 11 && !ClassicCritterInstance.Read(actor).Dead))
+                        .OrderBy(row => row.Path.Length).ToArray();
+                    if (exits.Length == 0) throw new NotSupportedException("No ordinary source exit reaches the next combat area.");
+                    var next = exits[0]; await MoveTo(next.Object.Tile, expectExit: true);
+                    var live = GetTree().Root.FindChild("ClassicPlayerController", true, false) as ClassicPlayerController
+                        ?? throw new InvalidOperationException("Source exit did not publish its next player controller.");
+                    if (live.Player.MapPath != next.Destination.Path) throw new InvalidOperationException("Source exit did not reach its authored destination.");
+                    var combatWorld = (ClassicWorldPreview)live.GetParent();
+                    var targets = live.Player.Level.Objects.TopLevelObjects.Where(row => row.Prototype.ObjectType == 1 &&
+                        row.Elevation == live.Player.Elevation && row.Inventory.Count == 0 && row.InstanceValues.Count == 11 && !ClassicCritterInstance.Read(row).Dead)
+                        .Select(row => (Source: row, Front: ClassicHexGrid.Neighbor(row.Tile, live.Player.Combat.SourceParticipant(row.Serial).Rotation)))
+                        .Where(row => live.Player.Walkable.Contains(row.Front))
+                        .Select(row => (row.Source, row.Front, Path: ClassicHexGrid.Path(live.Player.Tile, row.Front, live.Player.Walkable)))
+                        .Where(row => row.Path.Length > 0).OrderBy(row => row.Path.Length).ToArray();
+                    if (targets.Length == 0) throw new NotSupportedException("No source target has an ordinary reachable frontal hex.");
+                    var chosen = targets[0]; await MoveTo(chosen.Front);
+                    var actorRoot = combatWorld.GetChildren().OfType<Node3D>().First(row => row.HasMeta("source_serial") &&
+                        row.GetMeta("source_serial").AsInt32() == chosen.Source.Serial && row is not Sprite3D);
+                    var bounds = ClassicSceneryPlacement.Bounds(actorRoot);
+                    var aim = combatWorld.Camera.UnprojectPosition(bounds.GetCenter());
+                    if (ClassicWorldPicking.Actor(combatWorld, live.Player, aim)?.Serial != chosen.Source.Serial)
+                        throw new NotSupportedException("The source target is not visible through the actual geometry pick.");
+                    foreach (var pressed in new[] { true, false }) GetViewport().PushInput(new InputEventMouseButton
+                    { Position = aim, GlobalPosition = aim, ButtonIndex = MouseButton.Left, Pressed = pressed, CtrlPressed = true }, true);
+                    await Settle();
+                    var deadline = Time.GetTicksMsec() + 20000;
+                    while (live.Player.Combat.Phase == ClassicCombatPhase.AttackPending && Time.GetTicksMsec() < deadline)
+                        await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+                    if (live.Player.Combat.Phase == ClassicCombatPhase.PlayerTurn) { Key(Godot.Key.Space); await Settle(); }
+                    deadline = Time.GetTicksMsec() + 20000;
+                    while (live.Player.Combat.Phase == ClassicCombatPhase.AttackPending && Time.GetTicksMsec() < deadline)
+                        await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+                    var encounter = live.Player.Combat.Save();
+                    GD.Print("OPENNV_CLASSIC_NATIVE_ENCOUNTER_CHECKPOINT " + JsonSerializer.Serialize(new
+                    {
+                        live.Player.MapPath,
+                        target = chosen.Source.Serial,
+                        live.Player.HitPoints,
+                        phase = encounter.Phase.ToString(),
+                        encounter.Failure,
+                        sourceActorFailures = live.Player.Actors.Failures.ToArray(),
+                        actions = encounter.Actions?.Length,
+                        deaths = encounter.Deaths?.Length,
+                        live.Player.Experience
+                    }));
+                    GetTree().Quit(encounter.Phase == ClassicCombatPhase.Exploration && encounter.Deaths?.Length > 0 ? 0 : 2); return;
+                }
                 GetTree().Quit(); return;
             }
             var open = FindChild("ClassicCharacterStudio", true, false) as Button ?? throw new InvalidOperationException("World appearance button is missing.");
