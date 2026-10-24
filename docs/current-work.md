@@ -8,8 +8,7 @@ inputs are read-only. No campaign, physical XR or retail parity completion claim
 
 Accepted main is 7760357aa81f7d352e49c73ad107b6234e32444b (PR304), verified equal
 to local main, origin/main and live remote after all five hosted checks passed.
-Current branch is codex/fnv-fresh-tutorial. Remote checkpoint8324d61c contains
-the tested launcher scaffold; no PR yet. Unrelated held PR242/269 remain alone.
+Current branch is codex/fnv-fresh-tutorial. PR305 carries the source Sneak and original device batch; the repaired full local gate passed16:02:57.9800863Z, Gate0/Diff0/Public2542/no source or save drift. Updated-head hosted checks are next.
 One coordinator owns builds, gameplay input, Git and this document. No competing
 runtime or build job. Denied optional old-writer messaging is not retried.
 
@@ -36,7 +35,7 @@ Meat1, both Injury.Dead=true and DeathEventPending=false; save/cleanup errors nu
 and publicationFailures0. No quest state or survival was fabricated. Two earlier
 shots hit real rock107107; native routing subsequently cleared the obstruction.
 The game normally quit through observed requests74/75; runner8382 exit0, PID absent.
-No game remains active. Next ordinary Continue uses this earned fresh checkpoint,
+Smoke32 PID18736 / runner77566 used ordinary Continue from this earned fresh checkpoint. Its return-to-Sunny capsule search exhausted against actual canyon rocks. It normally quit through observed requests4/5, runner exit0, for the serialized device window. No game is active. Next play continues the same earned stage50 save,
 then Sunny's remaining wells and ingredients/campfire. No duplicate runtime.
 ## Connected input repair
 
@@ -68,26 +67,36 @@ unbound ownership/crime effect; normal front saloon entry worked. No collision
 or access guard was weakened. Fresh campfire crafting/quest completion remains
 unaccepted, despite existing shared recipe/inventory rollback support.
 
-## Parallel launcher delivery
+## Original device delivery
 
-Writer01a16e13 owns Layout.cs/PipBoy.cs/new Device.cs, original device assets under
-runtime/assets/launcher/device and optional .blend under art/launcher/device.
-Coordinator owns Actions.cs readiness and Build-OpenNVPlaytest.ps1. Legacy desktop
-JS is not the product target. The user requires a believable physical3D device;
-the working vector green-screen scaffold is not that finished deliverable.
+Original GLB/textures/contract/manifest are installed under runtime/assets/launcher/device;
+editable original Blender source is under art/launcher/device. No retail art is
+included. The writer verified all delivered bundle hashes and Library provenance.
+Godot import passed, and settled native pixels show the live green interface on
+actual curved CRT geometry. The existing preview now waits for the two-viewport
+composition instead of capturing its first empty target. Phosphor backing and
+lighting preserve readable green controls; Read screen and F2 provide larger views.
 
-Scaffold native preview passed bounded still review and its full gate finished
-13:45:05.5002781Z, Gate0/Diff0/Public2527/no source or save drift. Later Device.cs
-and actual1200x900 UI SubViewport, curved-screen ray/UV input and accessible F2
-fallback compile, but actual model/import/render/picking acceptance is blocked.
-The unchanged Windows Library helper failed at os.setxattr. Automatic transfer now
-succeeds in the writer's dedicated delivery environment; original bundles are
-being verified in ignored staging. No original device assets are installed in
-the product tree yet. Import remains frozen until this checkpoint is pinned.
-Do not retry transfer, install tools or bypass metadata in the gameplay lane.
-Absent assets retain a visible standard-UI fallback. Final device package readiness
-requires actual physical construction via -RequirePhysicalDevice. Ordinary gameplay packages may use the truthful working standard launcher, keeping independent delivery unblocked. The script syntax check and diff check pass; its changed behavior is covered by the completed full gate. No3D delivery credit is claimed.
+The actual native input check passed: four CRT corners plus center, real keyboard
+filtering, tuning/range constrained to visible library choices, pointer cancellation,
+settings/back, both cosmetic toggles, F2 reparenting of the same live interface,
+and normal launch-request/quit callbacks through all four physical function keys.
+The private preview subscribed to the real launch request; it started no game.
+Selected diagnostics are .staging/pipboy-launcher/qa/launcher.png, launcher-read.png
+and launcher-standard.png. Recording is off. This is launcher acceptance only,
+not campaign or XR readiness. No preview image is used as gameplay/menu authority.
 
+PR305's first hosted head passed modifier bindings but failed the existing recording
+audit's physical-hold renewal assertion. Its short SceneTree timer did not use the
+monotonic clock that owns real leases. The fixture now waits through that clock's
+hold span and retains all previous renewal/release assertions; the focused native
+audit passes. No production timing, diagnostics or refusal was waived. The related original-device and fixture repair tree passed its full required integrated gate16:02:57.9800863Z, Gate0/Diff0/Public2542/no drift; updated-head checked publication is next.
+
+Classic writer01a16e13 owns only a staged patch for generic source object-animation
+execution plus the exact classic config/Arroyo original-asset reservation. Existing
+kits do not match temple/sculpture source pieces, so no forced classic mappings or
+canonical placement claims were added. Public classic edits remain held until this
+checkpoint is pinned. No competing builds/runtime/Git ownership is delegated.
 ## Next integrated boundary
 
 Continue ordinary later lessons from the earned stage50 checkpoint, gather ingredients and

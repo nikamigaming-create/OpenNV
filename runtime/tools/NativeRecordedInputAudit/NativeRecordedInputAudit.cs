@@ -111,7 +111,12 @@ public partial class NativeRecordedInputAudit : Node
             await Send(new { op = "key", key = "W", pressed = true, leaseMilliseconds = 1000 });
             await Send(new { op = "key", key = "W", pressed = true, leaseMilliseconds = 1000 });
             Input.ParseInputEvent(new InputEventKey { PhysicalKeycode = Key.A, Keycode = Key.A, Pressed = true });
-            await ToSignal(GetTree().CreateTimer(.45), SceneTreeTimer.SignalName.Timeout);
+            // Physical leases use monotonic wall time. A SceneTree timer can
+            // include the preceding long frame and finish before that lease span.
+            var holdUntil = Time.GetTicksMsec() + 500;
+            while (Time.GetTicksMsec() < holdUntil)
+                await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
             await Send(new { op = "button", path = button.GetPath().ToString() });
             await Send(new { op = "pointer", x = 60, y = 60, button = "left", pressed = true });
             await Send(new { op = "input.record.stop" });

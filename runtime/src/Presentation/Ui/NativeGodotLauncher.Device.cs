@@ -76,6 +76,14 @@ internal sealed partial class NativeGodotLauncher
                 HandleInputLocally = true,
             };
             AddChild(_deviceCanvas);
+            var phosphor = new ColorRect
+            {
+                Name = "DeviceCanvasBackdrop",
+                Color = new Color("071109"),
+                MouseFilter = MouseFilterEnum.Ignore,
+            };
+            phosphor.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
+            _deviceCanvas.AddChild(phosphor);
             var screenMaterial = new StandardMaterial3D
             {
                 ResourceName = "Live launcher viewport",
@@ -107,14 +115,14 @@ internal sealed partial class NativeGodotLauncher
                     BackgroundColor = new Color("101410"),
                     AmbientLightSource = Godot.Environment.AmbientSource.Color,
                     AmbientLightColor = new Color("b8c1ac"),
-                    AmbientLightEnergy = .65f,
+                    AmbientLightEnergy = .45f,
                     TonemapMode = Godot.Environment.ToneMapper.Filmic,
                 },
             };
             _deviceView.AddChild(environment);
-            var key = new DirectionalLight3D { RotationDegrees = new Vector3(-35, -28, 0), LightEnergy = 1.8f, ShadowEnabled = true };
+            var key = new DirectionalLight3D { RotationDegrees = new Vector3(-35, -28, 0), LightEnergy = .8f, ShadowEnabled = true };
             _deviceView.AddChild(key);
-            var fill = new OmniLight3D { Position = new Vector3(-.45f, .3f, .5f), LightColor = new Color("9eb4a2"), LightEnergy = .5f, OmniRange = 2 };
+            var fill = new OmniLight3D { Position = new Vector3(-.45f, .3f, .5f), LightColor = new Color("9eb4a2"), LightEnergy = .25f, OmniRange = 2 };
             _deviceView.AddChild(fill);
             _deviceImage = new TextureRect
             {
@@ -380,10 +388,13 @@ internal sealed partial class NativeGodotLauncher
             case "CONTROL_FunctionKey_3": PressDeviceButton(FindChild("QuitLauncher", true, false) as Button); break;
             case "CONTROL_MainTuning_pivotY":
             case "CONTROL_Range_pivotY":
-                var games = _campaigns.Where(campaign => FallbackCampaigns.ContainsKey(campaign.Id)).Select(campaign => campaign.Id).ToArray();
+                var games = _campaigns.Where(campaign => FallbackCampaigns.ContainsKey(campaign.Id) &&
+                    _campaignButtons.TryGetValue(campaign.Id, out var button) && button.IsVisibleInTree() && !button.Disabled)
+                    .Select(campaign => campaign.Id).ToArray();
                 var index = Array.IndexOf(games, _selectedGameId);
-                if (games.Length == 0 || index < 0) return;
-                PressDeviceButton(_campaignButtons[games[(index + direction + games.Length) % games.Length]]);
+                if (games.Length == 0) return;
+                var nextIndex = index < 0 ? direction > 0 ? 0 : games.Length - 1 : (index + direction + games.Length) % games.Length;
+                PressDeviceButton(_campaignButtons[games[nextIndex]]);
                 var angle = direction * 30f;
                 if (name == "CONTROL_Range_pivotY")
                 {
