@@ -60,7 +60,8 @@ internal sealed record FalloutNativeCampaignState(
     FalloutFastTravelSnapshot? FastTravel = null,
     FalloutReputationsSnapshot? Reputations = null,
     FalloutPlayerNotesSnapshot? PlayerNotes = null,
-    FalloutPlayerAdvancementSnapshot? PlayerAdvancement = null);
+    FalloutPlayerAdvancementSnapshot? PlayerAdvancement = null,
+    bool PlayerSneaking = false);
 
 internal sealed record FalloutNativeCampaignRestore(
     FalloutNativeCampaignState State,
@@ -170,7 +171,7 @@ internal static class FalloutNativeCampaignSave
         FalloutPlayerSkillValuesSnapshot? playerSkillValues = null,
         FalloutPlayerAbilityScriptsSnapshot? playerAbilityScripts = null,
         FalloutTransientExplosionsSnapshot? transientExplosions = null,
-        FalloutFastTravelSnapshot? fastTravel = null, bool validate = true)
+        FalloutFastTravelSnapshot? fastTravel = null, bool validate = true, bool playerSneaking = false)
     {
         ArgumentNullException.ThrowIfNull(grant);
         if (playerActorValues is null) FalloutNativeVigorResolver.Validate(vigorContract ??
@@ -220,7 +221,8 @@ internal static class FalloutNativeCampaignSave
             TerminalResults: references is null ? terminalResults : terminalResults ?? [], PlayerPackageAudio: playerPackageAudio,
             PlayerSkillValues: playerSkillValues, PlayerAbilityScripts: playerAbilityScripts,
             TransientExplosions: transientExplosions,
-            FastTravel: references is not null && playerPackageAudio is not null ? fastTravel ?? FalloutFastTravelSnapshot.Initial : null);
+            FastTravel: references is not null && playerPackageAudio is not null ? fastTravel ?? FalloutFastTravelSnapshot.Initial : null,
+            PlayerSneaking: playerSneaking);
         if (validate) Validate(state, saveCompatibilityId);
         return state;
     }

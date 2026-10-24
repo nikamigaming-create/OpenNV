@@ -1,92 +1,99 @@
 # Current work
 
-Updated 2026-10-24. Active milestone: fresh ordinary flat New Vegas through Doc,
-Sunny's wells, gathering, campfire cooking, access interactions and save/resume.
-Follow docs/implementation-plan.md. Recording is off. Owned retail inputs remain
-read-only. No campaign, physical XR or retail parity completion is claimed.
+Updated 2026-10-24. Deliver fresh ordinary flat New Vegas through Doc, Sunny's
+wells, ingredients and campfire, then Primm/ED-E. Recording is off. Owned retail
+inputs are read-only. No campaign, physical XR or retail parity completion claim.
 
 ## Baseline and ownership
 
-Accepted main is 7760357aa81f7d352e49c73ad107b6234e32444b (PR304).
-Local main, origin/main and live remote were verified equal after normal merge;
-all five hosted checks passed on exact head f29e633d before merge. The required
-local gate passed13:05:12 UTC, Gate0/Diff0 with no public-source or save drift.
-Current branch is codex/fnv-fresh-tutorial. Unrelated held PR242/269 remain alone.
-
-One coordinator owns gameplay input, builds, Git and this document. Launcher
-writer 01a16e13 handed off/froze NativeGodotLauncher.Layout.cs and new
-NativeGodotLauncher.PipBoy.cs. Coordinator owns connected Actions.cs readiness
-and Build-OpenNVPlaytest.ps1 caller repairs. No duplicate workers or runtime.
-Denied optional old-writer messages are not retried. The separate approved Blender setup now reports a real local MCP scene read;
-cloud production owns original device modeling, and the local launcher writer owns import/presentation.
+Accepted main is 7760357aa81f7d352e49c73ad107b6234e32444b (PR304), verified equal
+to local main, origin/main and live remote after all five hosted checks passed.
+Current branch is codex/fnv-fresh-tutorial. Remote checkpoint8324d61c contains
+the tested launcher scaffold; no PR yet. Unrelated held PR242/269 remain alone.
+One coordinator owns builds, gameplay input, Git and this document. No competing
+runtime or build job. Denied optional old-writer messaging is not retried.
 
 ## Fresh playable checkpoint
 
-The user replaced old-save continuity with a clean New Game. At13:13:15 UTC,
-the active canonical save and entire 30-file slot directory were reversibly
-moved to local/opennv-save-reset-20261024T131315Z, outside the active scan.
-Retail and unrelated profiles were untouched. Do not restore those checkpoints.
-Only saves earned by the fresh character belong to the active profile.
+The user reset the active OpenNV profile on13:13:15Z. Canonical save and30 slots
+were reversibly moved to local/opennv-save-reset-20261024T131315Z, outside the
+active scan. Never restore those files. Retail/other profiles were untouched.
+All subsequent progress belongs to the fresh character CourierCourier.
 
-Ordinary New/Yes in smoke27 began VCG00 stage0, the intro and Doc. It accepted
-name/appearance/SPECIAL and reached the questionnaire/tag menu. Execution
-transport disconnected; PID8324 was later confirmed absent, without a terminal
-exit/crash diagnosis. The bounded questionnaire loop completed through request50;
-no uncertain command was resent. Smoke28 recovered only the fresh source autosave.
+Fresh ordinary play completed Doc at VCG01 stage200, with SPECIAL allocation,
+Guns/Repair/Speech tags, no optional traits and normal farewell. Actual front
+saloon entry10636f, Sunny's initial choice, exterior transition and three bottle
+hits completed the shooting lesson. The real next-lesson choice advanced VCG02
+to25. F5 committed a586f849745a4f4a8f6fdc7c343f5e26 at14:57:17.6207402Z:
+v61,120HP, exterior0daeb8, PlayerSneaking=true, no pending procedure owners or
+save/cleanup/publication errors. No quest state was forced.
 
-Fresh ordinary play has now completed Doc at VCG01 stage200: actual creation,
-Vigor allocation, couch questionnaire, Guns/Repair/Speech tags, no optional
-traits and the normal farewell/Hardcore choice. Genuine F5 committed slot
-6d3881d89f7945c5be6b064f57421314 at 13:33:38.3642373 UTC, schema61, 120HP,
-interior 103df9. Save/cleanup errors were null, pending procedure owners empty,
-publicationFailures0. The saved name is CourierCourier (text appended the default).
-Smoke28 PID27328 normally quit through observed requests52/53; runner13988 exit0.
-No gameplay runtime is active during the launcher compilation/preview window.
+Smoke31 PID36656 / runner8382 completed the ordinary first-well instructions and
+combat. Real rifle contacts killed10a1fd and10a1fe, including a normal reload;
+Sunny's/source death scripts advanced VCG02 to50. Corpse inventory supplied one
+Gecko Meat. F5 committed c96b2ea991424621b434955d5f1dbd1e: schema61,120HP,
+Meat1, both Injury.Dead=true and DeathEventPending=false; save/cleanup errors null
+and publicationFailures0. No quest state or survival was fabricated. Two earlier
+shots hit real rock107107; native routing subsequently cleared the obstruction.
+The game normally quit through observed requests74/75; runner8382 exit0, PID absent.
+No game remains active. Next ordinary Continue uses this earned fresh checkpoint,
+then Sunny's remaining wells and ingredients/campfire. No duplicate runtime.
+## Connected input repair
 
-## Connected launcher delivery
+Source control8 now toggles authoritative Sneaking activity through source
+permissions and modal/furniture/camera guards. Existing movement/spread owners
+consume it; campaign state retains PlayerSneaking. Camera/capsule/body crouch
+remains explicitly unbound. Harness named Ctrl/Shift/Alt now carry matching Left
+location; bot bindings admit that exact side and refuse unrepresented Right
+modifiers. Existing native recorded-input audit tests real press/release.
 
-The product target is NativeGodotLauncher, not the legacy desktop renderer.
-The user requires a believable physical 3D device. The checked vector UI is functional scaffolding, not that finished deliverable.
-The handed-off UI uses original vector olive housing, green screen, focused
-controls and a static instrument motif. Existing selection, launch and settings
-callbacks remain. The coordinator also normalized only Library.cs selection color literals after the native preview. Desktop renderer files are unchanged. No retail
-art is added. Local staging content is not a public delivery or asset input.
+Connected Debug build passed with zero warnings/errors. Existing native input
+and bot-binding audit passed, including Left modifier and Right refusal. Actual
+new-DLL Ctrl toggled Sneak, two further bottle hits completed the objective, and
+F5 retained the flag. Cold restoration awaits a natural later Continue. The full required gate passed15:28:26.3145949Z: Gate0/Diff0,2528 public files, no source/add/save drift. This receipt covers the frozen input/device-source/fallback batch; checked publication is next.
 
-The first integrated compile found stale raster-hero readiness references in
-Actions.cs. The connected repair reports actual vector-display construction and
-updates the package startup check to that identity. No dummy artwork or fake
-texture readiness is used. The corrected build passed0warnings/errors. Final native preview exit0 shows the actual installed-game profile with New Game/Play enabled, unconfigured games marked clearly and the folder-settings action present. No gameplay was launched by the preview. Next: the required gate and checked publication. Existing action callbacks remain unchanged; the preview alone does not certify all interaction/gameplay routes. The1280x800 native still passed bounded visual review. The required local gate finished13:45:05.5002781 UTC: Gate0/Diff0,2527 public files, no source or fresh-save drift. This scaffold may be checkpointed on the feature branch; final launcher publication waits for actual3D device integration.
+## Related gameplay owners
 
-## Gameplay capability and remaining owners
+PR304 delivered basic source NPC dart emission/damage and process continuation;
+exact visual/RNG/aim parity remains unclaimed. Same-world dialogue admission
+keeps native floor/routes and distinct interior/world identities.
 
-PR304 delivered source NPC launch extent and Euler sampling, independent saved
-process angular state, current strict INI settings and conservative friendly-fire
-admission. Prior ordinary dart flights damaged 1073e8 through actual death and a
-save succeeded. This is basic firing/continuation support, not exact RNG, aim,
-visual, player-camera or retail parity. Corpse retention accepts only the typed
-source-bound pre-launch unknown-state refusal; generic faults remain refused.
-Fresh actor construction initializes its genuinely new process, rather than
-backfilling an unknown old snapshot.
+Fresh Doc PACK10b756 uses PLDT current-location type2/radius1024, which Sandbox
+currently refuses. Implement a latched persistent package-start anchor and the
+actual continue-near semantics, rather than recentering every wander. Actor Eat
+also needs actor-owned inventory, effects and procedure persistence; do not use
+the player ingestible instance or suppress the source candidate1210c9 refusal.
+Neither has been fixed in this batch. Side door10aedc independently refused its
+unbound ownership/crime effect; normal front saloon entry worked. No collision
+or access guard was weakened. Fresh campfire crafting/quest completion remains
+unaccepted, despite existing shared recipe/inventory rollback support.
 
-Actor Eat inventory/consumption/effects and persistent execution remain missing.
-The actual previously reached world-food candidate was 1210c9/base0ec01d.
-The player-only ingestible owner is not reused and food is not silently removed.
-This does not prevent independent recipe/quest/dialogue work. Source Healing
-Powder uses actual Broc Flower and Xander Root through shared crafting/rollback;
-its authored required skill is-1. Physical fresh campfire/recipe/quest completion
-is not yet accepted. Same-world dialogue admission preserves floor/routes and
-keeps different interiors/worlds distinct.
+## Parallel launcher delivery
 
-## Next action
+Writer01a16e13 owns Layout.cs/PipBoy.cs/new Device.cs, original device assets under
+runtime/assets/launcher/device and optional .blend under art/launcher/device.
+Coordinator owns Actions.cs readiness and Build-OpenNVPlaytest.ps1. Legacy desktop
+JS is not the product target. The user requires a believable physical3D device;
+the working vector green-screen scaffold is not that finished deliverable.
 
-The native launcher scaffold build/preview/gate passed. Continue the fresh stage200 character through the
-ordinary exterior door, Sunny, wells, ingredient ACTIs and campfire. Implement
-related reached gameplay owners together, collect failures in one broad pass,
-and repair as a group. Do not return to old checkpoint compatibility or optional
-proof-only research. The next campaign loop remains Primm/ED-E after the durable
-campfire milestone, without claiming the whole game from this selected route.
+Scaffold native preview passed bounded still review and its full gate finished
+13:45:05.5002781Z, Gate0/Diff0/Public2527/no source or save drift. Later Device.cs
+and actual1200x900 UI SubViewport, curved-screen ray/UV input and accessible F2
+fallback compile, but actual model/import/render/picking acceptance is blocked.
+The unchanged Windows Library helper failed at os.setxattr. Automatic transfer now
+succeeds in the writer's dedicated delivery environment; original bundles are
+being verified in ignored staging. No original device assets are installed in
+the product tree yet. Import remains frozen until this checkpoint is pinned.
+Do not retry transfer, install tools or bypass metadata in the gameplay lane.
+Absent assets retain a visible standard-UI fallback. Final device package readiness
+requires actual physical construction via -RequirePhysicalDevice. Ordinary gameplay packages may use the truthful working standard launcher, keeping independent delivery unblocked. The script syntax check and diff check pass; its changed behavior is covered by the completed full gate. No3D delivery credit is claimed.
 
-Post-gate reservation: launcher Layout.cs/PipBoy.cs, new Device.cs, original
-GLB/textures/manifest under runtime/assets/launcher/device/ and optional .blend
-source under art/launcher/device/. No other input/runtime/Git/build ownership.
-Coordinator retains readiness/package caller integration and serialized preview.
+## Next integrated boundary
+
+Continue ordinary later lessons from the earned stage50 checkpoint, gather ingredients and
+craft through source interactions. Collect related runtime failures as one repair
+batch. Keep independent gameplay publication moving if model delivery remains
+blocked; preserve the writer's changes. Run the required exact-tree publication
+gate and diff check before push/checked PR, then wait all five exact-head hosted
+successes before normal merge. No repeated full gates per small edit, optional
+proof-only research, old-save compatibility or fabricated progress.

@@ -483,6 +483,8 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
     internal object InputState => new
     {
         alive = IsDefeated?.Invoke() != true,
+        sneaking = Activity.Sneaking,
+        sneakingBoundary = "source-activity-movement-and-shot-modifiers;camera-capsule-and-body-posture-unbound",
         forward = Input.GetActionStrength(_configuration.Player.DesktopInput.MoveForward.Action),
         backward = Input.GetActionStrength(_configuration.Player.DesktopInput.MoveBackward.Action),
         left = Input.GetActionStrength(_configuration.Player.DesktopInput.MoveLeft.Action),

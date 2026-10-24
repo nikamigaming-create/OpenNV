@@ -191,6 +191,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         _scripts = scripts;
         BindSourceManualSaves();
         _scripts.References!.BindActorAlert(_pluginStack.RuntimeFormKey(0x14), _player.Activity);
+        _player.Activity.Restore(_player.Activity.Capture() with { Sneaking = restore?.State.PlayerSneaking ?? false });
         _restoreFinishedSpeech = restore?.State.FinishedSpeech;
         _restoreFinishedSpeechStage = restore?.State.FinishedSpeechStage;
         _restoreStageResults = restore?.State.QuestStageResults ?? bootstrapStageResults;

@@ -86,6 +86,24 @@ public partial class NativeRecordedInputAudit : Node
                 Require(receipt.RootElement.GetProperty("delivered").GetBoolean(),
                     "A queued publication query lost its exact ordinary request receipt.");
             }
+            foreach (var (key, code) in new[] { (Key.Ctrl, 29), (Key.Shift, 42), (Key.Alt, 56) })
+            {
+                var action = "opennv_native_modifier_" + code;
+                Require(!InputMap.HasAction(action), "Modifier fixture already has an input owner.");
+                InputMap.AddAction(action);
+                try
+                {
+                    using var sourceBinding = NativeScriptKeys.Create(code);
+                    InputMap.ActionAddEvent(action, sourceBinding);
+                    await Send(new { op = "key", key = key.ToString(), pressed = true, leaseMilliseconds = 1000 });
+                    await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                    Require(Input.IsActionPressed(action), "Named modifier did not reach its source physical binding: " + key);
+                    await Send(new { op = "key", key = key.ToString(), pressed = false, leaseMilliseconds = 20 });
+                    await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                    Require(!Input.IsActionPressed(action), "Named modifier release left its source action held: " + key);
+                }
+                finally { InputMap.EraseAction(action); }
+            }
             await Send(new { op = "input.record.start", path = tapePath }, false);
             Require(!File.Exists(tapePath), "A blocked save owner emitted a replayable segment.");
             blocked = false;
@@ -169,10 +187,15 @@ public partial class NativeRecordedInputAudit : Node
             Require(RuntimeLiveHarness.PhysicalBotAction(action) is { Key: Key.None, Mouse: MouseButton.Right },
                 "Bot aim lost the source mouse binding to an unsupported side-specific keyboard event.");
             InputMap.ActionEraseEvent(action, mouse);
+            Require(RuntimeLiveHarness.PhysicalBotAction(action) is { Key: Key.Alt, Mouse: MouseButton.None },
+                "The source left modifier lost its declared native location.");
+            InputMap.ActionEraseEvents(action);
+            using var right = NativeScriptKeys.Create(184);
+            InputMap.ActionAddEvent(action, right);
             var rejected = false;
             try { RuntimeLiveHarness.PhysicalBotAction(action); }
             catch (NotSupportedException error) { rejected = error.Message.Contains("physical-side", StringComparison.Ordinal); }
-            Require(rejected, "A side-specific keyboard binding was silently delivered without its native location.");
+            Require(rejected, "A right modifier was silently rewritten as a left modifier.");
             InputMap.ActionEraseEvents(action);
             using var reload = NativeScriptKeys.Create(19);
             InputMap.ActionAddEvent(action, reload);
@@ -180,7 +203,7 @@ public partial class NativeRecordedInputAudit : Node
                 "Ordinary source keyboard input was replaced by a guessed mouse binding.");
         }
         finally { InputMap.EraseAction(action); }
-        GD.Print("OPENNV_NATIVE_BOT_ACTION_BINDINGS_PASS sourceDualBinding=true mappedMousePreferred=true sideSpecificKeyRefused=true ordinaryKeyboardRetained=true");
+        GD.Print("OPENNV_NATIVE_BOT_ACTION_BINDINGS_PASS sourceDualBinding=true mappedMousePreferred=true leftModifier=true rightModifierRefused=true ordinaryKeyboardRetained=true");
     }
     private static FalloutPluginStack LoadRecords(string directory)
     {

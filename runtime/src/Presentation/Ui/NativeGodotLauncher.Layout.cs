@@ -84,17 +84,20 @@ internal sealed partial class NativeGodotLauncher
         body.AddChild(BuildSetup());
         content.AddChild(BuildLaunchBar());
         stack.AddChild(BuildFooter());
+        TryBuildDevice(margin);
         _launcherLayout = new(this, ResizeLauncher);
         ResizeLauncher();
     }
 
     private void ResizeLauncher()
     {
+        ResizeDevice();
         if (_hero is not null) _hero.CustomMinimumSize = new Vector2(0, Mathf.Clamp(GetViewportRect().Size.Y * .3f, 210, 300));
     }
 
     public override void _ExitTree()
     {
+        RetireDevice();
         _launcherLayout?.Dispose(); _launcherLayout = null;
         _headingFont.Dispose();
         _interfaceFont.Dispose();
@@ -383,6 +386,9 @@ internal sealed partial class NativeGodotLauncher
         badge.ClipText = true;
         badge.SizeFlagsHorizontal = SizeFlags.ExpandFill;
         footer.AddChild(badge);
+        _deviceAvailability = Label(string.Empty, 11, Muted);
+        _deviceAvailability.Name = "DeviceViewAvailability";
+        footer.AddChild(_deviceAvailability);
         footer.AddChild(Label("Your installed files. Separate OpenNV saves.", 11, Muted));
         return footer;
     }
