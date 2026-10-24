@@ -14,6 +14,7 @@ internal sealed partial class ClassicCreatureBody : Node3D
     private double _cycleSeconds;
     private bool _idle;
     private bool _staticSourceIdle;
+    private float _forwardYaw;
     internal float PresentationHeight { get; private set; }
 
     internal void Configure(ClassicCreatureBinding binding, RuntimeLiveContentSource library,
@@ -48,7 +49,8 @@ internal sealed partial class ClassicCreatureBody : Node3D
         var neighbor = ClassicHexGrid.Neighbor(placed.Tile, placed.Rotation);
         if (neighbor < 0) throw new InvalidDataException("Creature facing leaves the source grid.");
         var facing = Fo1HexMath.Center(neighbor) - Fo1HexMath.Center(placed.Tile);
-        _skeleton.Node.Basis = Basis.LookingAt(facing, Vector3.Up) * new Basis(Vector3.Up, Mathf.DegToRad(binding.ForwardYawDegrees));
+        _forwardYaw = Mathf.DegToRad(binding.ForwardYawDegrees);
+        Face(facing);
         var bounds = PosedBounds(part.Root);
         var projected = ClassicSceneryPlacement.Project(_skeleton.Node.Transform * bounds, policy.PixelsPerMeter);
         var scale = Math.Min(reference.Width / projected.Size.X, reference.Height / projected.Size.Y);
@@ -84,6 +86,12 @@ internal sealed partial class ClassicCreatureBody : Node3D
         var seconds = sequence.StartTime + (float)_phase * (sequence.StopTime - sequence.StartTime);
         _animation.ApplySourceTime(seconds);
         SetMeta("owned_animation_seconds", seconds);
+    }
+
+    internal void Face(Vector3 facing)
+    {
+        var scale = _skeleton.Node.Scale;
+        _skeleton.Node.Basis = (Basis.LookingAt(facing, Vector3.Up) * new Basis(Vector3.Up, _forwardYaw)).Scaled(scale);
     }
 
     internal void PublishPhase(double phase)

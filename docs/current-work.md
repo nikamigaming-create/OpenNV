@@ -8,10 +8,10 @@ permanently deleted. Recording is off; owned retail inputs remain read-only.
 
 ## Baseline and ownership
 
-Accepted main is69cff8626c0c72458dd697300d74fce99e70e583 (PR308), merged20:51:04Z
-after all five exact785a591d checks passed. Local main, origin/main and live remote
-were verified equal and clean; tested/merge trees bothf3a0313f2b5f8db4dc30396888acab25aae9d403.
-Current branch is codex/classic-combat-followthrough. One coordinator owns all source,
+Accepted main is39d95f457b0b2294fe43270abea8e9f33607da5e (PR309), after all five
+checks passed on exact ed201772ce49cdea51322fa3c7778dbd83a1f343. Local main,
+origin/main and live remote were verified equal with a clean tree.
+Current branch is codex/classic-actor-locomotion. One coordinator owns all source,
 input, builds, Git and this file. No gameplay, build or writer job remains active.
 Unrelated held PR242/269 are untouched.
 
@@ -54,12 +54,12 @@ The required publication gate passed20:37:05.0651114Z: Gate0/Diff0/Public2630,
 Drift[], Added[], ProtectedSaveDrift[]. PR308 is merged; the next broad owner is
 classic encounter execution: enemy turns and lethal consequences.
 
-## Active broad batch — not yet published
+## Delivered actor-event and renderer batch
 
 Required publication gate completed 2026-10-24T22:33:51.4342609Z with Gate0/Diff0;
 the log ends OPENNV_CSHARP_GODOT_GATE_PASS. The selected owned-data combat
 transaction and the bounded native runs below are separate evidence. Publication
-is pending checked remote acceptance; no complete native encounter is claimed.
+completed through PR309; no complete native encounter is claimed.
 
 Coordinator-owned code now connects adjacent unarmed enemy turns, source action
 frames, shared RNG/AP, HP/death poses, deferred encounter XP and exit, generic
@@ -124,7 +124,22 @@ unverified. The new enemy/lethal subset above remains under integration. Armed
 attacks, acquisition/AI movement, critical/status/light and full corpse behavior
 remain unsupported. Do not invent them or skip enemies to reach a successful end state.
 
-Next gameplay batch: consume actual actor move requests through source FRM clocks,
+Classic work is now parked by owner direction. Preserve this uncommitted cut;
+resume New Vegas gameplay first, Fallout3 afterward. No further classic-only
+implementation or captures are selected.
+
+The last fixed-view diagnosis confirmed a flat architectural temple image on the
+ground beneath the upright facade. Six native views and updated private diagnosis
+are in Library. This is not repaired; black-edge contribution remains unresolved.
+The integrated actor walk owner compiles with zero warnings/errors. Its one native
+encounter pass reached the next refusal, actor animation registration, before any
+walk/attack committed. HP44/actions0/deaths0/XP0; no native encounter completion.
+
+The paused next batch would diagnose floor-image registration from fixed overhead and
+front/back/side views, separating true tile/world mapping errors from architectural
+paint flattened onto ground. Keep source landmarks fixed; no filler or guessed
+heights. Cloud owns original architecture repairs, not floor or navigation changes.
+The preserved actor-locomotion cut consumes actual actor move requests through source FRM clocks,
 paths, live hex occupancy and source query bindings; connect per-map header entry,
 first-run and source light context. Do not teleport, invent effects or clear failed
 actor events to make the encounter pass. The cloud art lane owns coherent original

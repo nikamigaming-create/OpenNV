@@ -5,7 +5,7 @@ namespace OpenNV.Runtime.Campaigns.Classic.Native;
 internal sealed record ClassicActorScriptSave(string Map, string MapSha256, int Serial, string Program,
     string ProgramSha256, ClassicIntProcedureState State, int[] Events, string? Failure, bool Retired = false);
 internal sealed record ClassicActorScriptsSave(ClassicActorScriptSave[] Entries,
-    IReadOnlyDictionary<string, ClassicIntTraitAssignment[]> Traits);
+    IReadOnlyDictionary<string, ClassicIntTraitAssignment[]> Traits, ClassicActorWalk[]? Walks = null);
 
 /// <summary>Source actor event prefixes. Shared globals, timers and RNG remain in DoorWorld/session.</summary>
 internal sealed class ClassicActorScripts(ClassicPlayerSession player)
@@ -19,7 +19,8 @@ internal sealed class ClassicActorScripts(ClassicPlayerSession player)
     internal bool Contains(int serial) => _entries.TryGetValue(Key(player.MapPath, serial), out var entry) && !entry.Retired;
     internal void Retire(int serial)
     { var key = Key(player.MapPath, serial); if (_entries.TryGetValue(key, out var entry)) _entries[key] = entry with { Retired = true }; }
-    internal int Trait(int serial, int trait, int fallback) => _traits.TryGetValue((player.MapPath, serial + 1, 1, trait), out var value) ? value.Amount : fallback;
+    internal int Trait(int serial, int trait, int fallback) => Trait(player.MapPath, serial, trait, fallback);
+    internal int Trait(string map, int serial, int trait, int fallback) => _traits.TryGetValue((map, serial + 1, 1, trait), out var value) ? value.Amount : fallback;
     internal IReadOnlyDictionary<(int, int, int), int> TraitValues => _traits.Where(row => row.Key.Map == player.MapPath).ToDictionary(row => (row.Key.Handle, row.Key.Type, row.Key.Trait), row => row.Value.Amount);
 
     private Entry Read(ClassicMapLevel level, Fallout1NativeMapObject source)
@@ -86,17 +87,18 @@ internal sealed class ClassicActorScripts(ClassicPlayerSession player)
         map ??= player.MapPath;
         foreach (var row in changes)
             if (!_entries.ContainsKey(Key(map, row.ObjectHandle - 1)) || row.TraitType != 1 || row.Trait is not (5 or 6 or 10) ||
-                row.Amount < 0 || row.Trait == 10 && row.Amount >= 6)
+                row.Amount < 0 || row.Trait == 10 && (row.Amount >= 6 || map == player.MapPath && player.ActorMotion.Moving(row.ObjectHandle - 1)))
                 throw new NotSupportedException("Actor script changes an unowned trait or foreign target.");
         return () =>
         {
             foreach (var row in changes) _traits[(map, row.ObjectHandle, row.TraitType, row.Trait)] = row;
+            foreach (var row in changes.Where(row => row.Trait == 10)) player.ActorMotion.Rotate(map, row.ObjectHandle - 1, row.Amount);
             player.Combat.ApplyActorTraits(map, changes);
         };
     }
 
     internal ClassicActorScriptsSave Save() => new(_entries.Values.Select(row => new ClassicActorScriptSave(
-        row.Level.Path, row.Level.Sha256, row.Source.Serial, row.Path, row.Hash, row.State, row.Events, row.Failure, row.Retired)).ToArray(), _traits.GroupBy(row => row.Key.Map).ToDictionary(group => group.Key, group => group.Select(row => row.Value).ToArray()));
+        row.Level.Path, row.Level.Sha256, row.Source.Serial, row.Path, row.Hash, row.State, row.Events, row.Failure, row.Retired)).ToArray(), _traits.GroupBy(row => row.Key.Map).ToDictionary(group => group.Key, group => group.Select(row => row.Value).ToArray()), player.ActorMotion.Save());
 
     internal void Restore(ClassicActorScriptsSave saved)
     {
@@ -110,5 +112,6 @@ internal sealed class ClassicActorScripts(ClassicPlayerSession player)
                 throw new InvalidDataException("Actor script source or consumed prefix changed.");
         }
         foreach (var (map, traits) in saved.Traits) PrepareTraits(traits, map)();
+        player.ActorMotion.Restore(saved.Walks ?? []);
     }
 }

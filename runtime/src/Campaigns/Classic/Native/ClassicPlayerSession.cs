@@ -61,6 +61,7 @@ internal sealed class ClassicPlayerSession
     internal ClassicInventory Inventory { get; }
     internal ClassicDoorWorld Doors { get; }
     internal ClassicActorScripts Actors { get; }
+    internal ClassicActorMotion ActorMotion { get; }
     internal ClassicObjectAnimation Animations { get; }
     internal ClassicCombatEncounter Combat { get; }
     internal ClassicCampaignEvents CampaignEvents { get; }
@@ -132,6 +133,7 @@ internal sealed class ClassicPlayerSession
         var map = _level.Map;
         Elevation = elevation ?? map.EnteringElevation; Tile = tile ?? map.EnteringTile; Rotation = rotation ?? map.EnteringRotation;
         _navigation = new(map, _level.Objects, Elevation);
+        ActorMotion = new ClassicActorMotion(this);
         Combat = new ClassicCombatEncounter(this, combatModes, freshCampaign, null, combatContracts);
         CombatActive = combatActive ?? (() => Combat.Active);
         Inventory = new ClassicInventory(this);
@@ -146,13 +148,15 @@ internal sealed class ClassicPlayerSession
         if (savedCampaignEvents is not null) CampaignEvents.Restore(savedCampaignEvents);
         Combat.CommittedExit += CampaignEvents.CommittedCombatExit;
         Combat.WorldChanged += RefreshNavigation;
+        ActorMotion.Changed += RefreshNavigation;
         Doors.PassageChanged += RefreshNavigation; RefreshNavigation();
         if (!Walkable.Contains(Tile)) throw new InvalidDataException("Source MAP entry is blocked; map initialization must resolve it before player admission.");
     }
 
     private void RefreshNavigation()
     {
-        _navigation = new(_level.Map, _level.Objects, Elevation, row => Combat.Dead(row.Serial) ? false : Doors.Blocks(row));
+        _navigation = new(_level.Map, _level.Objects, Elevation, row => Combat.Dead(row.Serial) ? false : Doors.Blocks(row),
+            row => ActorMotion.Tile(MapPath, row));
         if (Moving && StepFraction == 0 && !Walkable.Contains(NextTile))
         { _path.Clear(); _redirect = null; Status = "The passage is blocked."; }
         Changed?.Invoke();

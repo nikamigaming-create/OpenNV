@@ -106,7 +106,7 @@ internal sealed partial class ClassicPlayerController : Node3D
     private void BindScenery(Node node)
     {
         if (node is ClassicScenerySprite sprite) sprite.BindOwner(Player.Animations);
-        if (node is ClassicSourceActorSprite actor) actor.BindCombat(Player.Combat);
+        if (node is ClassicSourceActorSprite actor) actor.BindCombat(Player.Combat, Player.ActorMotion);
         foreach (var child in node.GetChildren()) BindScenery(child);
     }
 
@@ -114,7 +114,7 @@ internal sealed partial class ClassicPlayerController : Node3D
 
     private void ReportSceneryFailures()
     {
-        foreach (var failure in Player.Actors.Failures.Concat(Player.Animations.Failures))
+        foreach (var failure in Player.Actors.Failures.Concat(Player.Animations.Failures).Concat(Player.ActorMotion.Failures))
             if (_reportedSceneryFailures.Add(failure)) _world.ReportPresentationFailure("Source scenery event: " + failure);
     }
 
@@ -234,6 +234,7 @@ internal sealed partial class ClassicPlayerController : Node3D
     {
         if (Player is null) return;
         Player.Doors.Advance(delta);
+        Player.ActorMotion.Advance(delta);
         Player.Animations.Advance(delta);
         Player.Combat.AdvanceAction(delta);
         ReportSceneryFailures();

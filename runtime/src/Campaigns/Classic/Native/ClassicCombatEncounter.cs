@@ -181,7 +181,16 @@ internal sealed class ClassicCombatEncounter
     internal ClassicCombatParticipant SourceParticipant(int serial)
     {
         var key = Key(_player.MapPath, serial);
-        if (_participants.TryGetValue(key, out var current)) return current;
+        if (_participants.TryGetValue(key, out var current))
+        {
+            var original = _player.Level.Objects.TopLevelObjects.Single(row => row.Serial == serial);
+            current = current with
+            {
+                Tile = _player.ActorMotion.Tile(_player.MapPath, original),
+                Rotation = _player.ActorMotion.Moving(serial) ? _player.ActorMotion.Pose(serial)!.Rotation : current.Rotation
+            };
+            _participants[key] = current; return current;
+        }
         var source = _player.Level.Objects.TopLevelObjects.SingleOrDefault(row => row.Serial == serial)
             ?? throw new InvalidDataException("Combat target is absent from the active source MAP.");
         current = ReadParticipant(_player.Level, source);
@@ -212,21 +221,23 @@ internal sealed class ClassicCombatEncounter
             BinaryPrimitives.ReadInt32BigEndian(pro.AsSpan(188 + index * 4)));
         var instance = ClassicCritterInstance.Read(source);
         var maximum = Stat(8);
-        var ai = _player.Actors?.Trait(source.Serial, 5, instance.AiPacket) ?? instance.AiPacket;
-        var team = _player.Actors?.Trait(source.Serial, 6, instance.Team) ?? instance.Team;
+        var ai = _player.Actors?.Trait(level.Path, source.Serial, 5, instance.AiPacket) ?? instance.AiPacket;
+        var team = _player.Actors?.Trait(level.Path, source.Serial, 6, instance.Team) ?? instance.Team;
         // Authored MAPs can retain AP above the current PRO maximum (the
         // owned temple scorpions retain6 with maximum5). Preserve that prefix;
         // entering an actual turn refills through the turn owner.
         if (maximum <= 0 || instance.ActionPoints < 0 || instance.HitPoints < 0 || ai < 0 || team < 0)
             throw new InvalidDataException($"Source critter {source.Serial} AP {instance.ActionPoints}/{maximum}, HP {instance.HitPoints}, AI {ai} or team {team} is invalid.");
         return new(level.Path, level.Sha256, source.Serial, source.ObjectId, source.Pid,
-            ClassicPremadeReader.Hash(pro), source.Tile, source.Elevation, instance.HitPoints, instance.ActionPoints,
+            ClassicPremadeReader.Hash(pro), _player.ActorMotion.Tile(level.Path, source), source.Elevation, instance.HitPoints, instance.ActionPoints,
             maximum, instance.Results, ai, team,
-            _player.Actors?.Trait(source.Serial, 10, source.Rotation) ?? source.Rotation);
+            _player.ActorMotion.Rotation(level.Path, source));
     }
 
     internal string RequestPlayerAttack(int serial)
     {
+        if (_player.ActorMotion.Pose(serial) is { Remaining.Length: > 0 } walk)
+            throw new InvalidOperationException(walk.Failure ?? "Actor is still completing its source walk.");
         if (_player.Moving) throw new InvalidOperationException("Finish the current hex before attacking.");
         if (Active != false && Phase != ClassicCombatPhase.PlayerTurn)
             throw new NotSupportedException(Failure ?? "The current encounter still owns its pending action.");
@@ -303,6 +314,12 @@ internal sealed class ClassicCombatEncounter
             _requests[^1] = request with { Boundary = "preflight-refused: " + Failure };
             return Failure;
         }
+    }
+
+    internal void PublishActorLocation(int serial, int tile, int rotation)
+    {
+        var key = Key(_player.MapPath, serial);
+        if (_participants.TryGetValue(key, out var row)) _participants[key] = row with { Tile = tile, Rotation = rotation };
     }
 
     internal void ApplyActorTraits(string map, IReadOnlyList<ClassicIntTraitAssignment> changes)
