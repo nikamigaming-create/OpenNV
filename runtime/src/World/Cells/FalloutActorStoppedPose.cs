@@ -6,7 +6,7 @@ internal static class FalloutActorStoppedPose
 {
     internal static void Validate(FalloutReferenceSnapshot snapshot)
     {
-        if (snapshot.PackageBindingFailure is null && snapshot.SelectionFailure is null && snapshot.PendingPackageSelection is null && snapshot.SandboxAdmissionFailure is null) return;
+        if (snapshot.PackageBindingFailure is null && snapshot.SelectionFailure is null && snapshot.PendingPackageSelection is null && snapshot.SandboxAdmissionFailure is null && snapshot.PendingSandboxStart is null) return;
         if (snapshot.PackageBindingFailure?.IndependentIdle is not null &&
             (snapshot.Injury?.Dead == true || snapshot.Engagement is not null || snapshot.Ragdoll is not null))
             throw new NotSupportedException("Stopped independent IDLE cannot replace an active combat or physical pose owner.");
@@ -24,7 +24,7 @@ internal static class FalloutActorStoppedPose
 
     internal static void ValidateTarget(FalloutPluginStack records, FalloutReferenceSnapshot snapshot)
     {
-        if (snapshot.PackageBindingFailure is null && snapshot.SelectionFailure is null && snapshot.PendingPackageSelection is null ||
+        if (snapshot.PackageBindingFailure is null && snapshot.SelectionFailure is null && snapshot.PendingPackageSelection is null && snapshot.PendingSandboxStart is null ||
             snapshot.Engagement is not { } engagement) return;
         if (records.RuntimeFormId(engagement.Target) != 0x14 && records.GetEffective(engagement.Target).Signature is not ("ACHR" or "ACRE"))
             throw new InvalidDataException("Stopped AI combat history has no source actor target.");

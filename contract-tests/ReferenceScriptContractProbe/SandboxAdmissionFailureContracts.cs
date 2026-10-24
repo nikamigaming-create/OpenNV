@@ -43,6 +43,35 @@ internal static class SandboxAdmissionFailureContracts
             var live = new FalloutPackageEvents(Dispatch);
             live.Change(FalloutScriptPackage.Read(records.GetEffective(Key(0x20))));
             Require(effects == 1 && !live.Done && live.Error is null, "POBA effect did not execute exactly once.");
+            var pendingActor = new FalloutReferenceInstance(records.GetEffective(Key(0x900)), null)
+            {
+                PackageAssignment = new(Key(0x20), Hash(0x20), false),
+                ProcedureCaptureBlocker = FalloutActorPendingSandboxStart.CaptureBlocker,
+            };
+            pendingActor.Animation.Restore(new("meshes/fixture/idle.kf", new('a', 64), 7.25, false));
+            var pendingStart = new FalloutActorPendingSandboxStart(Key(0x900), Key(0x10), Hash(0x10),
+                Key(0x20), Hash(0x20), [1, 0, 0, 0, 1, 0, 0, 0, 1, 3, 4, 5],
+                123, .25, new(1, 10, 3, 9), 4, 0, new(false, false, false, false, false, false, 0),
+                live.Revision, live.LastEvent!, live.LastPackage!.Value, []);
+            pendingStart.Validate(records, pendingActor);
+            pendingActor.PendingSandboxStart = pendingStart;
+            var pendingSnapshot = pendingActor.Capture();
+            FalloutReferenceSnapshot.Validate([pendingSnapshot]);
+            var pendingCold = JsonSerializer.Deserialize<FalloutActorPendingSandboxStart>(JsonSerializer.Serialize(pendingStart))!;
+            var pendingEvents = new FalloutPackageEvents(Dispatch);
+            pendingCold.RestoreEvents(records, pendingActor, pendingEvents);
+            pendingCold.RestoreEvents(records, pendingActor, pendingEvents);
+            Require(effects == 1 && pendingEvents.Revision == live.Revision &&
+                pendingEvents.LastEvent == "POBA" && pendingActor.PackageMotion is null &&
+                pendingActor.Animation.ElapsedSeconds == 7.25 && pendingCold.RandomState == 123,
+                "Pending Sandbox cold binding replayed Start, reset its clock or fabricated motion.");
+            var pendingCopy = pendingStart.Copy(); pendingCopy.Pose[9]++;
+            Require(pendingStart.Pose[9] == 3, "Pending Sandbox pose aliases a copied receipt.");
+            var untouchedEvents = new FalloutPackageEvents(Dispatch);
+            Reject(() => (pendingStart with { PackageSha256 = new('0', 64) }).RestoreEvents(records, pendingActor, untouchedEvents));
+            Require(untouchedEvents.Revision == 0 && effects == 1, "Rejected pending Sandbox source mutated events.");
+            Reject(() => (pendingStart with { EventRevision = 0 }).Validate());
+            Reject(() => pendingStart.ValidateShape(pendingSnapshot with { ScriptError = "independent source failure" }));
             var saved = new FalloutActorSandboxAdmissionFailure(Key(0x20), Hash(0x20),
                 FalloutActorSandboxAdmissionFailure.AdmissionErrorPrefix + "IdleMarker reference=Admission.esm:000901 base=Admission.esm:000030 inventory=False",
                 [3, 4, 5], [1, 0, 0, 0, 1, 0, 0, 0, 1],

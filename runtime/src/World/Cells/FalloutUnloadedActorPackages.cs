@@ -56,6 +56,7 @@ internal sealed class FalloutUnloadedActorPackages(FalloutPluginStack records, F
         FalloutReferencePackageEvents.RequireActor(records, actor);
         if (state.ScriptError is { } failure) throw new NotSupportedException(failure);
         if (state.PendingPackageSelection is { } pending) return pending.Package;
+        if (state.PendingSandboxStart is { } pendingStart) return pendingStart.Package;
         if (state.PackageBindingFailure is { } stopped) return stopped.Package;
         if (state.SandboxAdmissionFailure is { } sandbox) return sandbox.Package;
         if (state.SandboxMotionFailure is { } motionFailure) return motionFailure.Package;
@@ -124,6 +125,13 @@ internal sealed class FalloutUnloadedActorPackages(FalloutPluginStack records, F
                     events.LastEvent != motionFailure.LastEvent || events.LastPackage != motionFailure.LastPackage)
                     throw new InvalidDataException("Retiring Sandbox motion differs from its stopped lifecycle.");
             }
+            if (world.Get(actor).PendingSandboxStart is { } pendingStart)
+            {
+                pendingStart.Validate(records, world.Get(actor));
+                if (active.Form != pendingStart.Package || events.Done || events.Revision != pendingStart.EventRevision ||
+                    events.LastEvent != pendingStart.LastEvent || events.LastPackage != pendingStart.LastPackage)
+                    throw new InvalidDataException("Retiring pending Sandbox start differs from its consumed lifecycle.");
+            }
         }
         if (events.Error is null) retained.RestoreHistory(events.Revision, events.LastEvent, events.LastPackage);
         var state = world.Get(actor);
@@ -154,6 +162,17 @@ internal sealed class FalloutUnloadedActorPackages(FalloutPluginStack records, F
     internal void BindNative(FalloutFormKey actor, FalloutPackageEvents events)
     {
         var state = world.Get(actor);
+        if (state.PendingSandboxStart is { } pendingStart)
+        {
+            pendingStart.Validate(records, state);
+            if (_actors.TryGetValue(actor, out var prior) && (prior.Error is not null || prior.Done ||
+                prior.Active?.Form != pendingStart.Package || prior.Revision != pendingStart.EventRevision ||
+                prior.LastEvent != pendingStart.LastEvent || prior.LastPackage != pendingStart.LastPackage))
+                throw new InvalidDataException("Unloaded pending Sandbox start differs from its consumed lifecycle.");
+            _actors.Remove(actor); _deferred.Remove(actor);
+            pendingStart.RestoreEvents(records, state, events);
+            return;
+        }
         if (state.SandboxMotionFailure is { } motionFailure)
         {
             motionFailure.Validate(records, state);

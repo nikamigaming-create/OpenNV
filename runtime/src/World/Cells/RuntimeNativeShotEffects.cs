@@ -26,6 +26,7 @@ internal sealed partial class RuntimeNativeShotEffects : Node3D
         internal Action? Completed { get; init; }
         internal Action<string>? Failed { get; init; }
         internal bool Faulted { get; set; }
+        internal string? Error { get; set; }
     }
     private readonly NativeOwnedAnimationSoundPlayer _sounds;
     private RuntimeNativeImpactDecals? _decals;
@@ -41,8 +42,27 @@ internal sealed partial class RuntimeNativeShotEffects : Node3D
     private string? _decalError;
     internal bool CaptureReady => _effects.Count == 0 && _projectiles.Count == 0 && _projectileErrors == 0 &&
         _decals?.Count is not > 0 && _sounds.CanCaptureSilent && _decalError is null;
+    internal string? CaptureBlocker
+    {
+        get
+        {
+            if (CaptureReady) return null;
+            var blockers = new List<string>();
+            if (_effects.Count != 0)
+                blockers.Add(FormattableString.Invariant(
+                    $"effects={_effects.Count}; faultedEffects={_effects.Count(effect => effect.Faulted)}; maximumRemainingSeconds={_effects.Max(effect => effect.Remaining):R}; activePlaybacks={_effects.Count(effect => effect.Playback?.Active == true)}; firstEffectError={_effects.FirstOrDefault(effect => effect.Error is not null)?.Error ?? "none-recorded"}"));
+            if (_projectiles.Count != 0) blockers.Add($"projectileFlights={_projectiles.Count}");
+            if (_projectileErrors != 0) blockers.Add($"projectileErrors={_projectileErrors}");
+            if (_decals?.Count is > 0) blockers.Add($"decals={_decals.Count}");
+            if (!_sounds.CanCaptureSilent) blockers.Add("sourceSoundsNotSilent=true");
+            if (_decalError is not null) blockers.Add("decalError=" + _decalError);
+            return string.Join(" | ", blockers);
+        }
+    }
     internal object State => new
     {
+        captureReady = CaptureReady,
+        captureBlocker = CaptureBlocker,
         casings = _casings,
         impacts = _impacts,
         active = _effects.Count,
@@ -244,6 +264,7 @@ internal sealed partial class RuntimeNativeShotEffects : Node3D
             catch (Exception error) when (effect.Failed is not null)
             {
                 effect.Faulted = true;
+                effect.Error = error.Message;
                 effect.Failed(error.Message);
                 GD.PushError("OPENNV_TRANSIENT_EXPLOSION_FAILED " + error.Message);
                 continue;

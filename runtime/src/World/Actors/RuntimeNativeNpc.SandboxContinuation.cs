@@ -27,6 +27,7 @@ internal partial class RuntimeNativeNpc
     // prepared actor or report publication failure to its constructing caller.
     internal void RequireSourcePublication()
     {
+        PublishPendingSandboxStartSource();
         if (_sandboxAdmissionStaging is not { } staging) return;
         try
         {

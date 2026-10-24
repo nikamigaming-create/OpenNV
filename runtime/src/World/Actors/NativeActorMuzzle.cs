@@ -14,8 +14,12 @@ internal sealed class NativeActorMuzzle(FalloutPluginStack records, RuntimeLiveC
     private FalloutFormKey? _lightForm;
     internal string? LightError { get; private set; }
     internal bool CaptureReady => _playback?.Active != true;
+    internal string? CaptureBlocker => CaptureReady ? null : FormattableString.Invariant(
+        $"source-muzzle path={_path ?? "unbound"}; active={_playback?.Active}; remainingSeconds={_playback?.Remaining:R}; activeParticles={_playback?.Particles.Sum(value => (long)value.ActiveCount)}; emittingSystems={_playback?.Particles.Count(value => value.EmissionEnabled)}; lightError={LightError ?? "none"}");
     internal object State => new
     {
+        captureReady = CaptureReady,
+        captureBlocker = CaptureBlocker,
         path = _path,
         visible = _root?.Visible ?? false,
         seconds = _playback?.Remaining,
