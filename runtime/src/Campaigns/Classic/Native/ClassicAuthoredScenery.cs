@@ -78,7 +78,9 @@ internal sealed class ClassicAuthoredScenery : IDisposable
         try
         {
             var assembly = new Node3D { RotationDegrees = new(0, binding.YawDegrees, 0) }; result.AddChild(assembly);
-            var instance = (Node3D)prototype.Root.Duplicate(); assembly.AddChild(instance);
+            var instance = ClassicDonorPresentation.CanShareStatic(prototype.Root)
+                ? ClassicDonorPresentation.CloneStatic(prototype.Root) : (Node3D)prototype.Root.Duplicate();
+            assembly.AddChild(instance);
             var bounds = prototype.Bounds;
             var orientation = new Transform3D(new Basis(Vector3.Up, -sourceRotation * Mathf.Pi / 3), Vector3.Zero);
             var visual = binding.VisualPlacement;

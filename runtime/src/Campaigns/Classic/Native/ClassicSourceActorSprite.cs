@@ -63,7 +63,7 @@ internal sealed partial class ClassicSourceActorSprite : Sprite3D
             while (_clock >= 1.0 / _fps) { _clock -= 1.0 / _fps; _frame = (_frame + 1) % _frames; }
             frame = _frame;
         }
-        var direction = ClassicHexGrid.Neighbor(_placed.Tile, action?.Rotation ?? _placed.Rotation);
+        var direction = ClassicHexGrid.Neighbor(_placed.Tile, action?.Rotation ?? _combat?.ActorRotation(_placed.Serial) ?? _placed.Rotation);
         var facing = direction < 0 ? Vector3.Forward : Fo1HexMath.Center(direction) - Fo1HexMath.Center(_placed.Tile);
         var phase = _idle ? (_frame + _clock * _fps) / _frames : (_frames <= 1 ? 0 : (double)_frame / (_frames - 1));
         _body?.Publish(false, phase, facing);

@@ -42,18 +42,18 @@ internal sealed class ClassicSceneryPaintProjection
         Depth = sharedDepth ?? BuildDepth(width, height);
     }
 
-    internal void Bind(Part part)
+    internal void Bind(Part part, ShaderMaterial material)
     {
         Vector4 Row(Vector3 screen, float size, float center) => new(
             screen.Dot(part.Source.Basis.X) / size, screen.Dot(part.Source.Basis.Y) / size,
             screen.Dot(part.Source.Basis.Z) / size, (screen.Dot(part.Source.Origin) - center) / size + 0.5f);
         var meters = part.Meters;
-        part.Mesh.SetInstanceShaderParameter("surface_x", new Vector4(meters.Basis.X.X, meters.Basis.Y.X, meters.Basis.Z.X, meters.Origin.X));
-        part.Mesh.SetInstanceShaderParameter("surface_y", new Vector4(meters.Basis.X.Y, meters.Basis.Y.Y, meters.Basis.Z.Y, meters.Origin.Y));
-        part.Mesh.SetInstanceShaderParameter("surface_z", new Vector4(meters.Basis.X.Z, meters.Basis.Y.Z, meters.Basis.Z.Z, meters.Origin.Z));
-        part.Mesh.SetInstanceShaderParameter("source_u", Row(_screenX, _size.X, _center.X));
-        part.Mesh.SetInstanceShaderParameter("source_v", Row(_screenY, _size.Y, _center.Y));
-        part.Mesh.SetInstanceShaderParameter("source_view", View);
+        material.SetShaderParameter("surface_x", new Vector4(meters.Basis.X.X, meters.Basis.Y.X, meters.Basis.Z.X, meters.Origin.X));
+        material.SetShaderParameter("surface_y", new Vector4(meters.Basis.X.Y, meters.Basis.Y.Y, meters.Basis.Z.Y, meters.Origin.Y));
+        material.SetShaderParameter("surface_z", new Vector4(meters.Basis.X.Z, meters.Basis.Y.Z, meters.Basis.Z.Z, meters.Origin.Z));
+        material.SetShaderParameter("source_u", Row(_screenX, _size.X, _center.X));
+        material.SetShaderParameter("source_v", Row(_screenY, _size.Y, _center.Y));
+        material.SetShaderParameter("source_view", View);
     }
 
     private ImageTexture BuildDepth(int width, int height)

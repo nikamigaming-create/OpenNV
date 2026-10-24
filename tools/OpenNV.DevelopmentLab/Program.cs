@@ -3,6 +3,9 @@ using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Campaigns.Classic.Native;
 using OpenNV.Runtime.Formats.Gamebryo;
 
+if (args is ["classic-combat-contract", var combatInstall]) return ClassicCombatProbe.Contract(combatInstall);
+if (args is ["classic-combat-source", var combatSource]) return ClassicCombatProbe.Run(combatSource);
+if (args is ["classic-map-space", var spaceInstall, var spaceCampaign, var spaceOutput]) return ClassicCombatProbe.MapSpace(spaceInstall, spaceCampaign, spaceOutput);
 if (args is ["classic-fo1-start", var fo1StartInstall]) return ClassicFo1StartProbe.Run(fo1StartInstall);
 if (args.Length >= 3 && args[0] == "classic-interactions") return ClassicInteractionProbe.Run(args[1], args[2], args[3..]);
 if (args.Length >= 3 && args[0] == "classic-audio") return ClassicAudioProbe.Run(args[1], args[2], args[3..]);

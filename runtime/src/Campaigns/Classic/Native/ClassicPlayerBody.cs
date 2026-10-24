@@ -51,8 +51,7 @@ internal sealed partial class ClassicPlayerBody : Node3D
             (npc, part, nif, geometry) => ClassicPropMaterials.Surface(
                 NativeNpcMaterial.Resolve(npc, part, nif, geometry, records, new Color(0.22f, 0.24f, 0.22f), source), nif, geometry, palette));
         AddChild(_actor); _actor.SetProcess(false);
-        foreach (var mesh in _actor.FindChildren("*", "", true, false).OfType<MeshInstance3D>())
-            mesh.SetInstanceShaderParameter("source_ambient", new Vector3(0.22f, 0.24f, 0.22f));
+        ClassicDonorPresentation.BindEnvironment(_actor, new Vector3(0.22f, 0.24f, 0.22f));
         var skeleton = resolved.SkeletonPath.Replace('\\', '/'); var directory = skeleton[..skeleton.LastIndexOf('/')];
         RuntimeNativeNifAnimation Load(string path, bool moving)
         {

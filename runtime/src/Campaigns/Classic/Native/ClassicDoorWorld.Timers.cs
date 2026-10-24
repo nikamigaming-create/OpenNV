@@ -13,6 +13,17 @@ internal sealed partial class ClassicDoorWorld
     private double _timerElapsed;
     private string? _timerFailure;
 
+    internal void RemoveActorTimers(int serial) => _timers = _timers with
+    { Pending = _timers.Pending.Where(row => row.TargetHandle != serial + 1).ToArray() };
+
+    internal void CompleteCombatRound()
+    {
+        if (player.Choice.Campaign != "fallout-2" || CurrentGameTime is null || player.Combat.Active != true)
+            throw new NotSupportedException("Combat round requires the active shared FO2 clock.");
+        // The source sequence boundary adds five seconds, not wall-clock animation time.
+        _timers = _timers with { CurrentTick = checked(_timers.CurrentTick + 50) };
+    }
+
     internal void Leave(string destination)
     {
         if (destination == player.MapPath) return;
@@ -34,7 +45,8 @@ internal sealed partial class ClassicDoorWorld
                 saved.Timers.NextSequence != 0 || saved.Elapsed != 0 || saved.Failure is not null))
             throw new InvalidDataException("Saved script clock no longer matches its active campaign/map.");
         foreach (var timer in saved.Timers.Pending)
-            if (!_entries.TryGetValue(Key(saved.Map, timer.TargetHandle - 1), out var target) || target.Definition.Program is null)
+            if ((!_entries.TryGetValue(Key(saved.Map, timer.TargetHandle - 1), out var target) || target.Definition.Program is null) &&
+                !player.Level.Objects.TopLevelObjects.Any(row => row.Serial == timer.TargetHandle - 1 && row.Prototype.ObjectType == 1 && row.ScriptId != uint.MaxValue))
                 throw new InvalidDataException("Saved timer has no source-bound native event owner.");
         _timers = saved.Timers; _timerElapsed = saved.Elapsed; _timerFailure = saved.Failure;
         if (_timerFailure is not null) _pendingMessages.Enqueue(_timerFailure);
@@ -58,6 +70,12 @@ internal sealed partial class ClassicDoorWorld
             while (_timers.Pending.Count != 0 && _timers.Pending[0].DueTick <= through)
             {
                 var delivery = ClassicIntTimerOwner.TakeNextDue(_timers, through);
+                if (player.Actors.Contains(delivery.Event.TargetHandle - 1))
+                {
+                    player.Actors.Dispatch(delivery.Event.TargetHandle - 1, 22, delivery.Event.FixedParameter, timers: delivery.State);
+                    budget--;
+                    continue;
+                }
                 var entry = _entries[Key(player.MapPath, delivery.Event.TargetHandle - 1)];
                 if (entry.Failure is not null) throw new NotSupportedException(entry.Failure);
                 if (entry.State is null || entry.Definition.Program is null)

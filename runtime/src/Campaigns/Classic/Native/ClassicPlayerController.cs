@@ -114,7 +114,7 @@ internal sealed partial class ClassicPlayerController : Node3D
 
     private void ReportSceneryFailures()
     {
-        foreach (var failure in Player.Animations.Failures)
+        foreach (var failure in Player.Actors.Failures.Concat(Player.Animations.Failures))
             if (_reportedSceneryFailures.Add(failure)) _world.ReportPresentationFailure("Source scenery event: " + failure);
     }
 
@@ -313,7 +313,7 @@ internal sealed partial class ClassicPlayerController : Node3D
                 else
                 {
                     var host = Player.Level.Objects.TopLevelObjects.FirstOrDefault(row => row.Tile == tile && row.Elevation == Player.Elevation &&
-                        (ClassicInventory.IsLootHost(row) || ClassicDoorWorld.IsDoor(row)) && (row.Flags & 1) == 0 && !Player.Inventory.Taken(Player.MapPath, row.Serial));
+                        (ClassicInventory.IsLootHost(row) || Player.Combat.Dead(row.Serial) || ClassicDoorWorld.IsDoor(row)) && (row.Flags & 1) == 0 && !Player.Inventory.Taken(Player.MapPath, row.Serial));
                     if (host is not null) picked = new(Serial: host.Serial);
                 }
             }

@@ -538,6 +538,7 @@ internal static class ClassicIntProcedureVm
     private const ushort AnimateMoveObjectToTile = 0x80CE;
     private const ushort Attack = 0x80D0;
     private const ushort TileDistanceObjects = 0x80D3;
+    private const ushort TileInDirection = 0x80D5;
     private const ushort TileNumber = 0x80D4;
     private const ushort ObjectCanSeeObject = 0x80DC;
     private const ushort SetObjectVisibility = 0x80E3;
@@ -553,6 +554,7 @@ internal static class ClassicIntProcedureVm
     private const ushort SetLightLevel = 0x80E9;
     private const ushort GameTime = 0x80EA;
     private const ushort ObjectElevation = 0x80EC;
+    private const ushort CritterState = 0x80FB;
     private const ushort GameTimeHour = 0x80F6;
     private const ushort AddTimerEvent = 0x80F0;
     private const ushort RemoveTimerEvent = 0x80F1;
@@ -1097,6 +1099,29 @@ internal static class ClassicIntProcedureVm
                     {
                         var handle = Pop(stack, program, procedure, offset);
                         stack.Add(handle == 0 ? 0 : WorldObject(handle).Elevation);
+                        break;
+                    }
+                case TileInDirection:
+                    {
+                        var distance = Pop(stack, program, procedure, offset);
+                        var rotation = Pop(stack, program, procedure, offset);
+                        var origin = Pop(stack, program, procedure, offset);
+                        if (origin == -1 || rotation is < 0 or >= 6 || distance == 0) { stack.Add(-1); break; }
+                        if (origin is < 0 or >= 40000 || distance < 0)
+                            throw Failure(program, procedure, offset, "invalid-directional-tile-query");
+                        var tile = origin;
+                        for (var step = 0; step < distance && tile >= 0; step++) tile = ClassicHexGrid.Neighbor(tile, rotation);
+                        stack.Add(tile);
+                        break;
+                    }
+                case CritterState:
+                    {
+                        var handle = Pop(stack, program, procedure, offset);
+                        if (handle == 0 || WorldObject(handle).Pid is not { } pid || (uint)pid >> 24 != 1)
+                        { stack.Add(1); break; }
+                        if (game.CritterStates is null || !game.CritterStates.TryGetValue(handle, out var value))
+                            throw Failure(program, procedure, offset, "missing-critter-state-owner");
+                        stack.Add(value);
                         break;
                     }
                 case HasSkill:

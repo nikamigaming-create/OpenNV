@@ -8,7 +8,7 @@ internal sealed record ClassicPlayerSave(string Schema, string Campaign, string 
     ClassicItemOrigin[]? Inventory = null, ClassicInventoryState? Items = null, string? InitializationHash = null,
     ClassicDoorWorldSave? Doors = null, ClassicObjectAnimationSave? Animations = null,
     ClassicCombatEncounterSave? Combat = null, ClassicCampaignEventSave? CampaignEvents = null,
-    ClassicRetailRandomLifecycleState? CampaignRandom = null);
+    ClassicRetailRandomLifecycleState? CampaignRandom = null, int Experience = 0, ClassicActorScriptsSave? ActorScripts = null);
 
 /// <summary>The classic player owns movement and persistence; cameras, meshes and HUDs consume it.</summary>
 internal sealed class ClassicPlayerSession
@@ -45,6 +45,7 @@ internal sealed class ClassicPlayerSession
     internal int Tile { get; private set; }
     internal int Rotation { get; private set; }
     internal int HitPoints { get; private set; }
+    internal int Experience { get; private set; }
     internal long CompletedSteps { get; private set; }
     internal double StepFraction { get; private set; }
     internal bool Moving => _path.Count != 0;
@@ -59,6 +60,7 @@ internal sealed class ClassicPlayerSession
     internal ClassicMapLevel Level => _level;
     internal ClassicInventory Inventory { get; }
     internal ClassicDoorWorld Doors { get; }
+    internal ClassicActorScripts Actors { get; }
     internal ClassicObjectAnimation Animations { get; }
     internal ClassicCombatEncounter Combat { get; }
     internal ClassicCampaignEvents CampaignEvents { get; }
@@ -98,7 +100,7 @@ internal sealed class ClassicPlayerSession
         Func<bool?>? combatActive = null, ClassicAttackModeCatalog? combatModes = null,
         bool freshCampaign = false, ClassicCombatEncounterSave? savedCombat = null,
         ClassicCampaignEventSave? savedCampaignEvents = null, ClassicRetailRandomContract? randomContract = null,
-        ClassicRetailRandomLifecycleState? savedRandom = null, ClassicCombatContracts? combatContracts = null)
+        ClassicRetailRandomLifecycleState? savedRandom = null, ClassicCombatContracts? combatContracts = null, ClassicActorScriptsSave? savedActors = null)
     {
         _catalog = source as ClassicMapCatalog ?? new ClassicMapCatalog(source, choice.Campaign);
         _premades = ClassicPremadeReader.Load(_catalog.Campaign, path => _catalog.Read(path, out _));
@@ -130,23 +132,27 @@ internal sealed class ClassicPlayerSession
         var map = _level.Map;
         Elevation = elevation ?? map.EnteringElevation; Tile = tile ?? map.EnteringTile; Rotation = rotation ?? map.EnteringRotation;
         _navigation = new(map, _level.Objects, Elevation);
-        Combat = new ClassicCombatEncounter(this, combatModes, freshCampaign, savedCombat, combatContracts);
+        Combat = new ClassicCombatEncounter(this, combatModes, freshCampaign, null, combatContracts);
         CombatActive = combatActive ?? (() => Combat.Active);
         Inventory = new ClassicInventory(this);
         Doors = new ClassicDoorWorld(this);
         if (savedDoors is null) Doors.Enter(); else Doors.Restore(savedDoors);
+        Actors = new ClassicActorScripts(this);
+        if (savedActors is null) Actors.Enter(); else Actors.Restore(savedActors);
+        if (savedCombat is not null) Combat.Restore(savedCombat);
         Animations = new ClassicObjectAnimation(this);
         if (savedAnimations is null) Animations.Enter(); else Animations.Restore(savedAnimations);
         CampaignEvents = new ClassicCampaignEvents(this);
         if (savedCampaignEvents is not null) CampaignEvents.Restore(savedCampaignEvents);
         Combat.CommittedExit += CampaignEvents.CommittedCombatExit;
+        Combat.WorldChanged += RefreshNavigation;
         Doors.PassageChanged += RefreshNavigation; RefreshNavigation();
         if (!Walkable.Contains(Tile)) throw new InvalidDataException("Source MAP entry is blocked; map initialization must resolve it before player admission.");
     }
 
     private void RefreshNavigation()
     {
-        _navigation = new(_level.Map, _level.Objects, Elevation, Doors.Blocks);
+        _navigation = new(_level.Map, _level.Objects, Elevation, row => Combat.Dead(row.Serial) ? false : Doors.Blocks(row));
         if (Moving && StepFraction == 0 && !Walkable.Contains(NextTile))
         { _path.Clear(); _redirect = null; Status = "The passage is blocked."; }
         Changed?.Invoke();
@@ -173,13 +179,13 @@ internal sealed class ClassicPlayerSession
         var next = _catalog.Load(mapPath);
         if (!next.Map.Elevations.ContainsKey(elevation) || rotation is < 0 or >= 6)
             throw new InvalidDataException("Source exit destination elevation or rotation is invalid.");
-        var navigation = new ClassicMapNavigation(next.Map, next.Objects, elevation, row => Doors.BlocksAt(next.Path, row));
+        var navigation = new ClassicMapNavigation(next.Map, next.Objects, elevation, row => Combat.Dead(next.Path, row.Serial) ? false : Doors.BlocksAt(next.Path, row));
         if (!navigation.Walkable.Contains(tile)) throw new InvalidDataException("Source exit arrival is blocked; its map initialization is still required.");
         Animations.Leave(next.Path);
         Doors.Leave(next.Path);
         _level = next; _navigation = navigation; _mapSha256 = next.Sha256;
         MapPath = next.Path; Elevation = elevation; Tile = tile; Rotation = rotation; StepFraction = 0; _redirect = null;
-        Doors.Enter(); Animations.Enter(); RefreshNavigation();
+        Doors.Enter(); Actors.Enter(); Animations.Enter(); RefreshNavigation();
         CampaignEvents.CommittedElevation(previousMap, previousElevation);
         Status = "Click a floor hex to walk."; Changed?.Invoke(); LevelChanged?.Invoke();
     }
@@ -213,6 +219,19 @@ internal sealed class ClassicPlayerSession
         if (Moving && StepFraction > 0) _redirect = NextTile;
         else { _path.Clear(); _redirect = null; }
         Status = "Stopping at the next hex."; Changed?.Invoke();
+    }
+
+    internal void CommitCombatHitPoints(int before, int after)
+    {
+        if (HitPoints != before || after < 0 || after > before)
+            throw new InvalidDataException("Prepared enemy damage no longer matches player HP.");
+        HitPoints = after; Changed?.Invoke();
+    }
+
+    internal void AwardCombatExperience(int experience)
+    {
+        if (experience < 0 || HitPoints <= 0) throw new InvalidOperationException("Invalid combat reward commit.");
+        Experience = checked(Experience + experience); Changed?.Invoke();
     }
 
     internal void FaceCombatTarget(int tile)
@@ -259,7 +278,7 @@ internal sealed class ClassicPlayerSession
         if (Moving) throw new InvalidOperationException("Finish the current walk before saving.");
         var save = new ClassicPlayerSave(SaveSchema, Choice.Campaign, Choice.ClassicProfileId, MapPath, _mapSha256,
             Elevation, Choice, Tile, Rotation, HitPoints, CompletedSteps, Items: Inventory.State, InitializationHash: Initialization?.Identity, Doors: Doors.Save(), Animations: Animations.Save(),
-            Combat: Combat.Save(), CampaignEvents: CampaignEvents.Save(), CampaignRandom: CampaignRandom);
+            Combat: Combat.Save(), CampaignEvents: CampaignEvents.Save(), CampaignRandom: CampaignRandom, Experience: Experience, ActorScripts: Actors.Save());
         var target = Path.GetFullPath(path); Directory.CreateDirectory(Path.GetDirectoryName(target)!);
         if (_sourceRecoveryBackup is { } recovered)
         {
@@ -297,15 +316,15 @@ internal sealed class ClassicPlayerSession
             throw new InvalidDataException("The current save requires its combat lifecycle and campaign event prefix.");
         var result = new ClassicPlayerSession(sourceCatalog, save.MapPath, save.Choice, save.Elevation, save.Tile, save.Rotation,
             save.Doors, initialization, save.Animations, combatActive, combatModes, savedCombat: save.Combat,
-            savedCampaignEvents: save.CampaignEvents, randomContract: initializationContract, savedRandom: save.CampaignRandom, combatContracts: combatContracts);
+            savedCampaignEvents: save.CampaignEvents, randomContract: initializationContract, savedRandom: save.CampaignRandom, combatContracts: combatContracts, savedActors: save.ActorScripts);
         if (sourceChanged) result._sourceRecoveryBackup = originalBytes;
         if (save.Schema is SaveSchema or AnimationSaveSchema or ExportSaveSchema or ClockSaveSchema or DoorSaveSchema && save.Doors is null) throw new InvalidDataException("The current save requires its complete door state.");
         if (save.Schema is SaveSchema or AnimationSaveSchema or ExportSaveSchema && save.Doors?.ExternalOwners is null) throw new InvalidDataException("The current save requires exported-variable ownership.");
         if (save.Schema is SaveSchema or AnimationSaveSchema or ExportSaveSchema or ClockSaveSchema && save.Doors?.Clock is null) throw new InvalidDataException("The current save requires its script clock and pending events.");
         if (save.MapSha256 != result._mapSha256 || save.Elevation != result.Elevation || !result.Walkable.Contains(save.Tile) ||
-            save.Rotation is < 0 or >= 6 || save.HitPoints is < 0 || save.HitPoints > result.Stats.HitPoints || save.CompletedSteps < 0)
+            save.Rotation is < 0 or >= 6 || save.HitPoints is < 0 || save.HitPoints > result.Stats.HitPoints || save.CompletedSteps < 0 || save.Experience < 0 || save.Combat is not null && save.Combat.AwardedExperience != save.Experience || save.Combat?.PlayerHitPoints is >= 0 && save.Combat.PlayerHitPoints != save.HitPoints)
             throw new InvalidDataException("Saved player state no longer matches the owned map or character.");
-        result.Tile = save.Tile; result.Rotation = save.Rotation; result.HitPoints = save.HitPoints; result.CompletedSteps = save.CompletedSteps;
+        result.Tile = save.Tile; result.Rotation = save.Rotation; result.HitPoints = save.HitPoints; result.CompletedSteps = save.CompletedSteps; result.Experience = save.Experience;
         if (initialization is not null)
         {
             // Older native saves contained exploration and MAP item changes only.

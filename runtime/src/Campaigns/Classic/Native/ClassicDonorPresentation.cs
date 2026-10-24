@@ -1,4 +1,5 @@
 using Godot;
+using System.Text.RegularExpressions;
 using OpenNV.Runtime.Formats.Gamebryo;
 
 namespace OpenNV.Runtime.Campaigns.Classic.Native;
@@ -6,6 +7,68 @@ namespace OpenNV.Runtime.Campaigns.Classic.Native;
 /// <summary>Classic MAP/PRO state owns collision and movement, including held inventory.</summary>
 internal static class ClassicDonorPresentation
 {
+    internal static void BindEnvironment(Node3D root, Vector3 ambient)
+    {
+        // BuildState owns these material objects and its controller channels
+        // retain their identity. Replace only their shared compiled shader;
+        // material animation continues to address the same live uniforms.
+        var converted = new HashSet<ShaderMaterial>();
+        var meshes = root.FindChildren("*", "", true, false).OfType<MeshInstance3D>();
+        if (root is MeshInstance3D own) meshes = meshes.Prepend(own);
+        foreach (var mesh in meshes)
+        {
+            for (var surface = 0; surface < mesh.Mesh.GetSurfaceCount(); surface++)
+            {
+                if (mesh.GetActiveMaterial(surface) is not ShaderMaterial material || !converted.Add(material) ||
+                    !material.Shader.Code.Contains("instance uniform vec3 source_ambient", StringComparison.Ordinal)) continue;
+                var code = Regex.Replace(material.Shader.Code,
+                    @"instance uniform (\w+) ((?:source_\w+)|opennv_detail_kind)\s*: instance_index\(\d+\)(\s*=\s*[^;]+)?;",
+                    match => "uniform " + match.Groups[1].Value + " " + match.Groups[2].Value + match.Groups[3].Value + ";",
+                    RegexOptions.CultureInvariant);
+                material.Shader = new Shader { Code = code };
+                // Classic world lighting/fog uses Godot. These reference-only
+                // inputs retain their original zero/false shader defaults.
+                material.SetShaderParameter("source_ambient", ambient);
+                material.SetShaderParameter("source_exterior_environment", false);
+            }
+        }
+    }
+
+    internal static bool CanShareStatic(Node3D root) =>
+        (root.GetType() == typeof(Node3D) || root.GetType() == typeof(MeshInstance3D) && ((MeshInstance3D)root).Skin is null) &&
+        root.GetChildren().All(child => child is Node3D spatial && CanShareStatic(spatial));
+
+    internal static Node3D CloneStatic(Node3D source)
+    {
+        if (!CanShareStatic(source)) throw new InvalidOperationException("Static appearance has a live node owner.");
+        Node3D result;
+        if (source is MeshInstance3D mesh)
+        {
+            var copy = new MeshInstance3D
+            {
+                Mesh = mesh.Mesh,
+                Layers = mesh.Layers,
+                CastShadow = mesh.CastShadow,
+                GIMode = mesh.GIMode,
+                LodBias = mesh.LodBias,
+                ExtraCullMargin = mesh.ExtraCullMargin,
+                CustomAabb = mesh.CustomAabb,
+                IgnoreOcclusionCulling = mesh.IgnoreOcclusionCulling,
+                Transparency = mesh.Transparency,
+                MaterialOverride = mesh.MaterialOverride,
+                MaterialOverlay = mesh.MaterialOverlay
+            };
+            for (var index = 0; index < mesh.Mesh.GetSurfaceCount(); index++) copy.SetSurfaceOverrideMaterial(index, mesh.GetSurfaceOverrideMaterial(index));
+            result = copy;
+        }
+        else result = new Node3D();
+        if (source.Name.ToString().Length != 0) result.Name = source.Name;
+        result.Transform = source.Transform; result.Visible = source.Visible;
+        foreach (var key in source.GetMetaList()) result.SetMeta(key, source.GetMeta(key));
+        foreach (var child in source.GetChildren().OfType<Node3D>()) result.AddChild(CloneStatic(child));
+        return result;
+    }
+
     internal static void Prepare(Node3D root)
     {
         // A dropped donor item's Havok body otherwise publishes a world-space
@@ -29,7 +92,6 @@ internal static class ClassicDonorPresentation
         var animated = root.FindChildren("*", "", true, false).OfType<RuntimeNifControllerPlayer>().Any();
         foreach (var mesh in root.FindChildren("*", "", true, false).OfType<MeshInstance3D>())
         {
-            mesh.SetInstanceShaderParameter("source_ambient", new Vector3(0.22f, 0.23f, 0.20f));
             for (var surface = 0; !animated && surface < mesh.Mesh.GetSurfaceCount(); surface++)
             {
                 var material = mesh.Mesh.SurfaceGetMaterial(surface);
