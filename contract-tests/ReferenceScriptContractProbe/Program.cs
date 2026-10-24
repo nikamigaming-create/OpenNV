@@ -523,6 +523,11 @@ if (args is ["--package-data-contracts"])
     TravelContracts.Run();
     return;
 }
+if (args is ["--idle-transition-contracts"])
+{
+    IdleTransitionContracts.Run();
+    return;
+}
 if (args.Length >= 9 && args[0] == "--audit-owned-package-data")
 {
     var invariant = System.Globalization.CultureInfo.InvariantCulture;
@@ -1348,6 +1353,7 @@ InputControlContracts.Run();
 PlayerMoveContracts.Run();
 LoadingScreenContracts.Run();
 CharacterGenerationContracts.Run();
+IdleTransitionContracts.Run();
 RewardXpContracts.Run();
 PlayerScriptPackageContracts.Run();
 PackageEventContracts.Run();

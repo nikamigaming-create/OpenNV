@@ -5,10 +5,12 @@ using OpenNV.Runtime.World.Cells;
 
 namespace OpenNV.Runtime.World.Actors;
 
-internal sealed partial class RuntimeNativeCreature
+internal sealed partial class RuntimeNativeCreature : IGamebryoReferenceEnableLifecycle
 {
     private RuntimeNativeNifAnimation? _scriptIdleAnimation;
     private FalloutIdleAnimationPlayback? _scriptIdleClock;
+    private FalloutIdleTransition? _scriptIdleTransition;
+    private IReadOnlyList<FalloutNifAnimationSample>? _scriptIdleSnapshot;
     private long _scriptIdleRevision;
     private bool _scriptIdlePosePublished;
     private bool _scriptIdleSourceCancelled;
@@ -30,6 +32,9 @@ internal sealed partial class RuntimeNativeCreature
         var idle = FalloutActorIdleSource.Resolve(stack, record);
         var source = ReadIdle(idle);
         var timing = FalloutIdleAnimationData.Read(record);
+        var transition = PrepareScriptIdleTransition(source.Animation, timing);
+        var snapshotPose = CaptureScriptIdlePose();
+        var snapshotSamples = ReadScriptIdleSnapshot(snapshotPose);
         var revision = checked(_scriptIdleRevision + 1);
         if (revision == long.MaxValue) throw new InvalidOperationException("Creature script idle revision overflowed.");
         var sequence = source.Animation.Sequence;
@@ -37,11 +42,13 @@ internal sealed partial class RuntimeNativeCreature
             sequence.CycleType, source.Animation.TextKeys.Select(key => (key.Time, key.Value)).ToArray(),
             timing.SelectAdditionalLoops(state.SoundRandom.NextBounded));
         combat.StopPackageMotion();
-        RuntimeNativeNifAnimation.ApplyLayers((_animation, SourceSeconds), (source.Animation, clock.SourceSeconds));
+        source.Animation.ApplySnapshotTransition(clock.SourceSeconds, snapshotSamples, 1, 0);
         var saved = new FalloutActorStoppedIdleAnimation("script", new(record.FormKey, Hash(record.ReadData()),
-            idle.AnimationPath, source.Hash, clock.Capture(), revision, CaptureScriptIdlePose(), []));
+            idle.AnimationPath, source.Hash, clock.Capture(), revision, CaptureScriptIdlePose(), []),
+            new(transition.Capture(), ScriptIdleTransitionSettings(), snapshotPose));
         saved.Validate(stack);
         _scriptIdleAnimation = source.Animation; _scriptIdleClock = clock;
+        _scriptIdleTransition = transition; _scriptIdleSnapshot = snapshotSamples;
         _scriptIdleRevision = revision; _scriptIdlePosePublished = true;
         state.CreatureScriptIdle = saved;
     }
@@ -58,6 +65,7 @@ internal sealed partial class RuntimeNativeCreature
         Error is null && _eventIdleClock is null && _conversationTarget is null &&
         Combat is { Dead: false, OwnsPose: false, PackageMoving: false, PackageOwnsPose: false, AnimationWeapon: null, StoppedAiPoseCaptureReady: true } &&
         _scriptIdleClock is { Complete: false } && _scriptIdleAnimation is not null &&
+        _scriptIdleTransition is not null && _scriptIdleSnapshot is not null && state.CreatureScriptIdle.Transition is not null &&
         OpenNV.Runtime.SceneGraph.NodeTraversal.SelfAndDescendants<NativeOwnedAnimationSoundPlayer>(this)
             .All(sound => sound.CanCaptureSilent);
 
@@ -69,7 +77,8 @@ internal sealed partial class RuntimeNativeCreature
         var result = saved with
         {
             Animation = saved.Animation with
-            { Clock = _scriptIdleClock!.Capture(), ResidualPose = CaptureScriptIdlePose() }
+            { Clock = _scriptIdleClock!.Capture(), ResidualPose = CaptureScriptIdlePose() },
+            Transition = saved.Transition! with { Phase = _scriptIdleTransition!.Capture() }
         };
         result.Validate(_aiRecords!);
         return result.Copy();
@@ -88,6 +97,52 @@ internal sealed partial class RuntimeNativeCreature
         return new(Appearance.SkeletonPath, Skeleton.Source.Sha256, bones);
     }
 
+    private FalloutIdleTransition.Settings ScriptIdleTransitionSettings()
+    {
+        var settings = FalloutInstallationSettings.Read(_content);
+        return new(settings.Number("General", "fAnimationDefaultBlend"), settings.Number("General", "fAnimationMult"));
+    }
+
+    private FalloutIdleTransition PrepareScriptIdleTransition(RuntimeNativeNifAnimation animation,
+        FalloutIdleAnimationData timing, FalloutActorIdleSnapshotTransition? restore = null)
+    {
+        var keys = GroupKeys(animation);
+        if (!keys.Group.Equals("SpecialIdle", StringComparison.OrdinalIgnoreCase) || animation.Sequence.StartTime != 0)
+            throw new NotSupportedException("Creature snapshot transition requires its admitted zero-start SpecialIdle source group.");
+        animation.RequireSnapshotTransitionOver(_animation);
+        var slot = FalloutIdleTransition.ExecutionSlot.FromRecord(timing.Group);
+        // The only other admitted native animation owner here is the base
+        // slot. Active script/package-event owners are excluded by the caller.
+        var admission = new FalloutIdleTransition.Admission(timing.Group, slot.Index == 0,
+            keys.HasSynchronization, restore is null && GetTree().Paused, false, false);
+        var settings = ScriptIdleTransitionSettings();
+        if (restore is null) return FalloutIdleTransition.CreateSnapshot(admission, keys.Blend, null, settings);
+        restore.Validate();
+        if (restore.Settings != settings)
+            throw new InvalidDataException("Saved script transition differs from its retained animation settings.");
+        return FalloutIdleTransition.Restore(restore.Phase, admission, keys.Blend, null, settings);
+    }
+
+    private void ValidateScriptIdleSnapshotPose(FalloutActorResidualPose pose) =>
+        pose.ValidateBinding(Appearance.SkeletonPath, Skeleton.Source.Sha256,
+            Enumerable.Range(0, Skeleton.Node.GetBoneCount()).Select(index =>
+                (Skeleton.Node.GetBoneName(index).ToString(), FalloutNifTransformComponents.None)).ToArray());
+
+    private IReadOnlyList<FalloutNifAnimationSample> ReadScriptIdleSnapshot(FalloutActorResidualPose pose)
+    {
+        ValidateScriptIdleSnapshotPose(pose);
+        var result = new FalloutNifAnimationSample[pose.Bones.Count];
+        foreach (var bone in pose.Bones)
+        {
+            var p = bone.Position!; var q = bone.Rotation!; var s = bone.Scale!;
+            if (s[0] != s[1] || s[0] != s[2])
+                throw new NotSupportedException("Snapshot transition requires source-representable uniform local scale.");
+            var units = Skeleton.UnitsToMetres;
+            result[bone.Index] = new(new(p[0] / units, -p[2] / units, p[1] / units), new(q[3], q[0], -q[2], q[1]), s[0]);
+        }
+        return Array.AsReadOnly(result);
+    }
+
     private void RestoreScriptIdle()
     {
         if (_aiState?.CreatureScriptIdle is not { } saved) return;
@@ -99,12 +154,17 @@ internal sealed partial class RuntimeNativeCreature
         if (!source.Hash.Equals(saved.Animation.Sha256, StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException("Creature script idle differs from its winning KF.");
         ValidateScriptIdlePose(saved);
+        var snapshot = saved.Transition ?? throw new NotSupportedException("Saved creature idle has unknown transition history.");
+        ValidateScriptIdleSnapshotPose(snapshot.Pose);
+        var restoredTransition = PrepareScriptIdleTransition(source.Animation,
+            FalloutIdleAnimationData.Read(_aiRecords!.GetEffective(saved.Animation.Idle)), snapshot);
         var sequence = source.Animation.Sequence;
         var clock = new FalloutIdleAnimationPlayback(sequence.StartTime, sequence.StopTime, sequence.Frequency,
             sequence.CycleType, source.Animation.TextKeys.Select(key => (key.Time, key.Value)).ToArray(),
             saved.Animation.Clock.SelectedAdditionalLoops);
         clock.Restore(saved.Animation.Clock);
         _scriptIdleAnimation = source.Animation; _scriptIdleClock = clock;
+        _scriptIdleTransition = restoredTransition; _scriptIdleSnapshot = ReadScriptIdleSnapshot(snapshot.Pose);
         _scriptIdleRevision = saved.Animation.Revision;
         Combat?.StopPackageMotion();
         if (IsNodeReady()) PublishScriptIdlePose();
@@ -119,7 +179,8 @@ internal sealed partial class RuntimeNativeCreature
     {
         if (!ScriptIdleActive || _scriptIdlePosePublished || _aiState?.CreatureScriptIdle is not { } saved) return;
         ValidateScriptIdlePose(saved);
-        RuntimeNativeNifAnimation.ApplyLayers((_animation, SourceSeconds), (_scriptIdleAnimation!, _scriptIdleClock!.SourceSeconds));
+        var factors = _scriptIdleTransition!.Factors;
+        _scriptIdleAnimation!.ApplySnapshotTransition(_scriptIdleClock!.SourceSeconds, _scriptIdleSnapshot!, factors.SnapshotWeight, factors.IncomingWeight);
         foreach (var bone in saved.Animation.ResidualPose!.Bones)
         {
             var p = bone.Position!; var q = bone.Rotation!; var s = bone.Scale!;
@@ -139,8 +200,20 @@ internal sealed partial class RuntimeNativeCreature
         var advanced = false;
         try
         {
-            clock.Advance(delta, interval => DispatchIdleInterval(animation, interval, saved.Animation.Idle));
-            RuntimeNativeNifAnimation.ApplyLayers((_animation, SourceSeconds), (animation, clock.SourceSeconds));
+            var transition = _scriptIdleTransition ?? throw new InvalidDataException("Script idle has no transition phase owner.");
+            // Refuse the unqualified finite-end handoff before replacing the
+            // current pose or consuming this update's independent effects.
+            if (transition.Complete && !clock.Endless && clock.AdditionalLoops == 0 &&
+                delta >= (animation.Sequence.StopTime - clock.Capture().SourceSeconds) / animation.Sequence.Frequency)
+                throw new NotSupportedException("Creature script idle requires its source completion/return owner before releasing the execution slot.");
+            AdvanceBaseSource(delta);
+            if (transition.Advance(delta))
+                clock.DispatchHeldBoundary(interval => DispatchIdleInterval(animation, interval, saved.Animation.Idle));
+            else clock.Advance(delta, interval => DispatchIdleInterval(animation, interval, saved.Animation.Idle));
+            if (clock.Complete)
+                throw new NotSupportedException("Creature script idle requires its source completion/return owner before releasing the execution slot.");
+            var factors = transition.Factors;
+            animation.ApplySnapshotTransition(clock.SourceSeconds, _scriptIdleSnapshot!, factors.SnapshotWeight, factors.IncomingWeight);
             advanced = true;
         }
         catch (Exception error) when (error is InvalidDataException or NotSupportedException or InvalidOperationException)
@@ -152,11 +225,31 @@ internal sealed partial class RuntimeNativeCreature
         {
             if (clock.Complete && advanced)
             {
-                _scriptIdleAnimation = null; _scriptIdleClock = null; state.CreatureScriptIdle = null;
+                _scriptIdleAnimation = null; _scriptIdleClock = null; _scriptIdleTransition = null; _scriptIdleSnapshot = null; state.CreatureScriptIdle = null;
             }
-            else if (!clock.Complete) state.CreatureScriptIdle = saved with { Animation = saved.Animation with { Clock = clock.Capture() } };
+            else if (!clock.Complete) state.CreatureScriptIdle = saved with
+            {
+                Animation = saved.Animation with { Clock = clock.Capture() },
+                Transition = saved.Transition! with { Phase = _scriptIdleTransition!.Capture() }
+            };
         }
         return true;
+    }
+
+    void IGamebryoReferenceEnableLifecycle.BeforeReferenceDisabled()
+    {
+        try
+        {
+            // Apply(false) is also used for source staging. Only the existing
+            // authoritative Disabled/Deleted gate may cancel a source phase.
+            CancelDisabledScriptIdle();
+        }
+        catch (Exception error)
+        {
+            if (_aiState is { } state)
+                state.ScriptError ??= $"Script idle disable cancellation: {error.Message}";
+            throw;
+        }
     }
 
     private bool CancelDisabledScriptIdle()
@@ -169,7 +262,7 @@ internal sealed partial class RuntimeNativeCreature
         GD.Print($"OPENNV_CREATURE_SCRIPT_IDLE_CANCEL reference={state.Reference} idle={saved.Animation.Idle} " +
             $"revision={saved.Animation.Revision} sourceSeconds={_scriptIdleClock!.SourceSeconds:R} owner=reference-disabled-or-deleted");
         _scriptIdleSourceCancelled = true;
-        _scriptIdleAnimation = null; _scriptIdleClock = null; state.CreatureScriptIdle = null;
+        _scriptIdleAnimation = null; _scriptIdleClock = null; _scriptIdleTransition = null; _scriptIdleSnapshot = null; state.CreatureScriptIdle = null;
         return true;
     }
 

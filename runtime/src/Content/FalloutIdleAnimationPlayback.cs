@@ -76,6 +76,14 @@ internal sealed class FalloutIdleAnimationPlayback
     internal FalloutIdleAnimationPlaybackSnapshot Capture() => new(_phase, SelectedAdditionalLoops,
         AdditionalLoops, CompletedRepeats, _includeStart, Complete);
 
+    internal void DispatchHeldBoundary(Action<FalloutIdleAnimationInterval> traversed)
+    {
+        ArgumentNullException.ThrowIfNull(traversed);
+        if (!_includeStart || Complete) return;
+        _includeStart = false;
+        traversed(new((float)_phase, (float)_phase, true));
+    }
+
     internal void Restore(FalloutIdleAnimationPlaybackSnapshot saved)
     {
         saved.Validate();

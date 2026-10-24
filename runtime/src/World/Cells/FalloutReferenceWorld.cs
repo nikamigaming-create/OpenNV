@@ -108,6 +108,7 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
             snapshot.SandboxMotionFailure?.Validate();
             snapshot.CreatureScriptIdle?.Validate();
             if (snapshot.CreatureScriptIdle is { } scriptIdle && (scriptIdle.Owner != "script" ||
+                scriptIdle.Transition is null ||
                 snapshot.Animation is null || snapshot.SoundRandomState is null || snapshot.PackageIdle is not null ||
                 snapshot.Engagement is not null || snapshot.Ragdoll is not null || snapshot.Injury?.Dead == true))
                 throw new InvalidDataException("Creature script idle has conflicting or missing continuation owners.");

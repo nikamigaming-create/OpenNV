@@ -8,14 +8,16 @@ claimed.
 
 ## Accepted main and active batch
 
-Main/origin-main is a59ed26d46a4498d107b0d973254da653056a957 (PR296), accepted after
-independent exact-head review and five hosted checks. Locked terminal activation
+Main/origin-main is 8643852ea03de5814ea66f33a3742b4d58b270e1 (PR297), accepted after
+independent exact-head review, the local required gate and five hosted checks.
+The merged batch connects the advancement and continuation owners listed below.
+Locked terminal activation
 connects the owned dictionary, interactive hacking transaction, shared RNG, XP,
 Computers Hacked/CHAL and delayed terminal contents. Cancel and UI retirement release
 input without teardown saves. Unsupported ownership/history/presentation remain
 explicit. The completed branch has a verified recovery bundle and was cleaned.
 
-Active branch: codex/fnv-hacking-science-perks. This is a broad gameplay batch, not
+Active branch: codex/fnv-creature-idle-transitions. This is a broad gameplay batch, not
 a separate publication for each small command. Implement connected owners, freeze,
 run an integrated smoke, collect failures, fix blocking failures together and
 iterate. Run the required gate before checked publication; synchronize clean main
@@ -60,36 +62,78 @@ advanced. Separate-process Continue restores that save; a separate-process
 no-replay/resave comparison is not complete. These receipts preserve unsupported
 walking; they do not implement raven locomotion. Original saves are unchanged.
 
-The reached blocker is the authored creature fly-away IDLE. Creature PlayIdle now
-starts through its real source owner. Single certain auxiliary sounds and declared
-null sounds have strict readers and real audio/silent dispatch. Native endpoint
-gate RNG consumption remains explicitly unqualified. The same clip also requires
-a nonnull20% sound and Attach/Blend event owners. Those behaviors remain refused;
-no invented probability, substitute animation or skipped stateful event is used.
-Both normal entrance approaches reached the same clip. The alternate back-door
-approach was stopped before repeating a doomed transition. No teleport, actor
-change, branch bypass or front-entrance repair is claimed. The lookup budget was
-a workflow stop-loss, not a permission denial. With the shared dependency now
-proven, the existing writer completed the initial bounded static pass: Blend is
-load-time sequence metadata, not a timestamped gameplay callback, but its runtime
-consumer required a second bounded pass. That pass is now complete: the finite
-transition duration and linear ease-weight kernel are qualified, but synchronized
-phase mapping, caller overrides, Attach classification and chance selection remain
-open. No complete transition API or gameplay replay is cleared. The writer is
-stopped with all findings handed off; no live retail launch, new worker or unchanged
-gameplay replay is running.
+The reached blocker is the authored creature fly-away IDLE. Creature PlayIdle
+starts through its source owner. The single-candidate auxiliary sound reader and
+per-event shared process RNG gate are implemented and handed back. Declared-null
+candidates consume no draw; nonnull candidates consume one even at 0%/100%.
+The coordinator added source-name/group marker classification for the reached
+SpecialIdle Attach disposition. The connected branch compiles with zero warnings
+and errors. Focused contracts pass for the retained origin, held source cursor,
+cold restoration, group marker classification and shared sound gate.
+
+The remaining finite transition caller qualification is complete. IDLE execution
+slot and source animation group are independent: the reached DATA low-six-bit
+slot is 7, while SpecialIdle's default slot is 0. An empty/inactive selected slot
+uses a snapshot of current target-local transforms, fades that snapshot against
+the incoming start pose, and holds incoming source phase at zero until the blend
+finishes. An active outgoing slot uses the distinct ordinary easing path.
+Sequence weight and entry ease are separate factors; source events must follow
+actual clip phase. The direct-activation duration threshold is approximately
+0.01 seconds, not zero. The selected snapshot transition has no synchronization
+pointer and does not require synchronized marker phase mapping. Pending instant,
+menu/application overrides, other controller types and unqualified priority
+composition remain explicit admission boundaries. The private caller contract
+and hashed ranges are retained with the other creature-idle evidence.
+
+Both normal entrance approaches reached the same clip. Smoke07 stopped before
+repeating the transition and exited normally; no route bypass is accepted.
+The connection is restored and the preserved edits were reconciled. The coordinator
+owns all handed-back code and build/runtime/Git work; the writer is read-only.
+The integrated smoke08 process376776 reached the saloon through the ordinary
+front door (10636f to interior106185). F5 committed genuine slot
+7899b990a17d4fbea50dcd82b4384de6 at 01:47:24 UTC without save or cleanup error.
+Sunny's survival-training response advanced Back in the Saddle to stage10 and
+her source package exited through the real door. F5 committed slot
+d8e5b2afcd764081ab32c39ec988f1a6 at 01:52:30 UTC without errors.
+Smoke08 then exited through normal Quit/Yes with exit0. Recording remains off.
+
+The reached fly-away ran both actual Auxiliary3 outcomes: roll0 selected the
+20-percent sound, and roll40 missed it. Both actors then reached authored Disable.
+An exterior F5 exposed two pending capture owners because disabling processing
+prevented their next idle-cancellation tick. The enable lifecycle hook now cancels
+source-disabled idle owners before presentation processing is disabled, retaining
+faults and guaranteeing collision/visibility retirement. The corrected Debug build
+passed with zero warnings/errors (27.79 seconds).
+
+Smoke09 loaded the immutable pre-fly-away daebbfaf6425420e966d4b90269eb1bf slot
+through normal Load. A short ordinary approach triggered actor14c44a's source
+script. The new hook cancelled its idle at sourceSeconds4.338921 while the exterior
+0daebb remained resident. Pending procedure captures were zero, and ordinary F5
+committed slot19eb067689b440379f254d8e4840a4ed at 01:59:14 UTC with no save or
+cleanup error, before any door transition. Smoke09 exited normally with exit0.
+This verifies the reached resident Disable/save path; it does not add raven
+walking or qualify all animation transitions. The broader batch passed the required full runtime gate and git diff --check on
+2026-10-24 after this replay. Checked PR publication is next. All writer code is
+handed back and read-only.
+The later Sunny stage10 save d8e5b2afcd764081ab32c39ec988f1a6 is preserved for
+tutorial continuation after publication; the earlier input slot is unchanged.
+The snapshot transition retains its first-update origin and source cursor, and
+explicitly refuses the still-unqualified clip-end/return handoff. The authored
+script's independent timer drives Disable/Delete before that clip end; this real
+cancellation path is the current ordinary gameplay target, not an end bypass.
 
 The latest grouped Debug build passes with zero warnings/errors and includes the
 reached GetDestroyed query in both frontends using the existing destroyed flag.
-All writer production code is handed off; no build/game is active. Smoke07 exited
+All writer production code is handed off. Smoke07 exited
 through normal Quit/Yes with exit0 and unchanged input save
 B0FDA62E180D6092BA6B70DDD6842801684EEE9D2A9C3070E28BC083CBAE8857.
 Local code checkpoint8ea6601b contains the broad batch. Publication repairs fix
 formatting, avoid requiring advancement settings below the earned XP threshold,
 and preserve portal failure causes while allowing admitted alternative routes.
 Both reached contract probes pass, followed by the full required runtime gate
-with OPENNV_CSHARP_GODOT_GATE_PASS. The feature checkpoint is being published;
-it is not accepted main or a finished tutorial. Sunny shooting,
+with OPENNV_CSHARP_GODOT_GATE_PASS. PR297 is merged; local main and origin/main
+were verified equal and clean, with the completed branch recovered and removed.
+This is implementation acceptance, not a finished tutorial. Sunny shooting,
 campfire, XP-driven allocation and access results remain pending. Private current
 run evidence is under local/fnv-wells-fixed/broad-tutorial-batch-20261023/.
 
