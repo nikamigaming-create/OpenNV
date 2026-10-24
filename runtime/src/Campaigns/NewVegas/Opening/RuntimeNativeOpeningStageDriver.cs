@@ -116,6 +116,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
     internal object? VigorState => _vigorEntry?.State;
     internal IEnumerable<uint> ActiveMenus()
     {
+        if (_levelUpMenu is not null) yield return NativeOwnedLevelUpMenu.MenuId;
         if (_nameEntry is not null) yield return 1051;
         if (_raceSexEntry is not null) yield return 1036;
         if (_vigorEntry is not null) yield return 1074;
@@ -244,6 +245,12 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         _vitals = FalloutPlayerVitals.FromActorValues(pluginStack, _playerActorValues, restore?.State.Vitals);
         _experience = new(pluginStack, _vitals, () => _playerSkills.PerkEntries);
         _experience.BindPerkConditions(PlayerExperienceCondition);
+        if (!FalloutNativeTagSkillResolver.UsesFallout3Skills(pluginStack))
+            ConfigurePlayerAdvancement(FalloutPlayerAdvancementSource.Bind(_playerActorValues.Source,
+                FalloutLevelUpSkillRate.NewVegas, FalloutLevelUpSkillBudget.SourceContractSha256),
+                (intelligence, level) => FalloutLevelUpSkillBudget.ReadBudget(intelligence, level,
+                    _playerSkills.PerkEntries, PlayerExperienceCondition),
+                (before, derived) => before.WithDerivedMaximums(derived), restore?.State.PlayerAdvancement);
         _ingestibles = new(pluginStack, inventory, _vitals,
             FalloutBodyPartData.Read(pluginStack.GetEffective(pluginStack.RuntimeFormKey(0x1d))),
             _playerSkills.Value, _playerSkills.HasPerk, () => _scripts.Session.Hardcore);
@@ -308,6 +315,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
             RefreshRadioStations();
             _ingestibles.Advance(delta);
             _stageResults?.Continue();
+            AdvancePlayerAdvancement();
             if (_saveRequested && Vitals.HitPoints > 0 && SaveContinuationBlocker is null && SourceAnimationSoundSaveBlocker is null &&
                 !_scripts.References!.PlayerMoves.Pending)
                 SaveCurrentState();
@@ -320,7 +328,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
             return;
         }
         if (_machine is not null && !_moviePlaying && _nameEntry is null && _raceSexEntry is null && _vigorEntry is null && _specialBookEntry is null &&
-            _tagSkillEntry is null && _traitEntry is null && _recipeMenu is null && _barterMenu is null)
+            _tagSkillEntry is null && _traitEntry is null && _recipeMenu is null && _barterMenu is null && _levelUpMenu is null)
         {
             try { _scripts.AdvanceClaimed(_controls.Stage(QuestEditorId, Stage).Quest, delta, _scriptHost); }
             catch (Exception error) when (error is InvalidDataException or NotSupportedException or InvalidOperationException or KeyNotFoundException or OverflowException)

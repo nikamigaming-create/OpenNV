@@ -1243,6 +1243,13 @@ public partial class RuntimeCoordinator
             // from the grid selected by their XTEL arrival coordinates.
             _botInteractions.CommitPortal(reference.FormKey.ToString(), portalRequest, targetScene.Cell.FormKey.ToString());
         }
+        catch (Exception error) when (targetRoot is not null && ReferenceEquals(_nativeCurrentCellRoot, targetRoot))
+        {
+            _nativeOpeningStageDriver!.RetainDriverFailure(error);
+            foreach (var (body, mode) in arrivalCollision) body.DisableMode = mode;
+            GetTree().Paused = true;
+            throw;
+        }
         catch
         {
             targetRoot?.Free();

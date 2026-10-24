@@ -1,193 +1,109 @@
 # Current work
 
-Updated 2026-10-23. Priority: fully playable vanilla Fallout: New Vegas flat mode
-before repeated deep optimization. Follow docs/implementation-plan.md, including
-terminals, lockpicking, hacking and all 13 skills. Owned retail inputs stay read-only;
-no campaign or parity completion is claimed. The coordinator owns builds, native
-input and Git; no competing jobs are permitted. The existing writer is explicitly authorized.
+Updated 2026-10-24. Priority: one playable flat New Vegas milestone, from fresh
+New Game through Doc Mitchell, Sunny/tutorial/campfire, admitted access interactions
+and save/resume. Follow docs/implementation-plan.md. Original owned files and saves
+remain read-only. Recording is off. No campaign, XR or retail parity completion is
+claimed.
 
-## Active block
+## Accepted main and active batch
 
-Accepted main/origin-main is b6836fecb8847f2d743c3561c959db003bbce92c (PR295),
-merged after exact-head independent review and all five hosted checks. Both script
-executors now share GetDestructionStage with explicit known/unknown object-health
-presence, separate from rendering Stage/ModelStage. Actor maximum health, complete
-trap activation and DamageObject scheduling remain outside that query repair.
-Local main was synchronized; the completed branch has a verified complete Git
-bundle with an identical tree to the accepted squash commit and is removed.
+Main/origin-main is a59ed26d46a4498d107b0d973254da653056a957 (PR296), accepted after
+independent exact-head review and five hosted checks. Locked terminal activation
+connects the owned dictionary, interactive hacking transaction, shared RNG, XP,
+Computers Hacked/CHAL and delayed terminal contents. Cancel and UI retirement release
+input without teardown saves. Unsupported ownership/history/presentation remain
+explicit. The completed branch has a verified recovery bundle and was cleaned.
 
-Active branch: codex/fnv-terminal-hacking. Locked keyless TERM activation now
-connects to the existing owned-dictionary/shared-RNG hacking transaction through
-a first-party mouse/keyboard character grid. Both columns, word/bracket selection,
-dud removal, attempts, cancel and terminal outcomes remain transaction-owned.
-Success publishes the independent terminal high bit, shared player XP and the
-Computers Hacked statistic/CHAL handoff, then opens actual terminal contents after
-the source success delay. Lockout increments the retained result byte once.
-Generic Unlock and row-zero result execution are not substitutes. Active puzzles
-block saves; cancellation and external layer retirement release input and restore
-pause/mouse state, including teardown during the success delay. Teardown neither
-opens contents nor saves a retiring campaign. Outcome failures retain consumed
-state and diagnostics instead of replaying XP/statistic callbacks.
+Active branch: codex/fnv-hacking-science-perks. This is a broad gameplay batch, not
+a separate publication for each small command. Implement connected owners, freeze,
+run an integrated smoke, collect failures, fix blocking failures together and
+iterate. Run the required gate before checked publication; synchronize clean main
+and recover/clean the completed branch afterward.
 
-Initial admission is flat, effectively unowned, nonleveled/non-overridden TERM,
-known result/stat history, ASCII dictionary and no acquired generation perk
-entries. Crime/witness, Science-bonus entry context, unknown legacy history and XR
-remain visible refusals. IgnoreLockedTerminal uses entry20 only at failure count1.
-Fresh statistic counts start at zero; missing saved counts stay unknown through
-restore/resave. Existing saves are not inferred from CHAL progress or inventory.
+Connected code includes:
 
-The existing writer delivered NativeHackingMenu.cs and FalloutMiscStatistics.cs;
-the coordinator owns integration, Git and serialized builds. The connected runtime
-compiled with zero warnings/errors. Selected hacking contracts, including new
-statistic prefix/cold/unknown controls, pass; changed-file formatting passes.
-Earlier local NU1900 failures were package advisory transport,
-not gameplay failures. The required publication gate passed; a final menu-retirement
-guard is being closed against the amended runtime. No capture or route-only audit stream is
-introduced. No ordinary hacking, campaign, XR or retail presentation acceptance is
-claimed. Recording is off; original saves remain unchanged. Private receipts:
-local/fnv-wells-fixed/hacking-integration-20261023/.
+- Hacking Science entry30 adjustment evaluated once before generation RNG, with
+  ordinary Science admission kept separate from generation adjustment.
+- XP-driven advancement, deferred level-up UI, allocation through existing skill
+  pools, source perk declarations and guarded first-rank acquisition. Unsupported
+  effects remain visible and refuse before rank publication. The authenticated
+  integer-INT budget and entry10 adjustment are bound; fractional permanent INT
+  remains refused. Current-level readers use authoritative vitals.
+- Level changes reuse derived maxima while preserving HP/AP deficits, fractional
+  HP, limbs and radiation. Complete retail healing timing is not established.
+- Crafting/barter/level-up modal leases retire on close, removal and failure.
+- Presentation bindings retire while outgoing nodes are live. Post-commit
+  retirement failures preserve the incoming world, retain the driver fault and
+  refuse saving instead of rolling back onto partially retired owners.
+- Campaign-controller routing composes source-world exterior travel with directed
+  XTEL doors and read-only effective lock/key admission. It neither teleports nor
+  proves physical traversal. The WRLD signature regression is corrected for the
+  grouped build.
+- Combat defense now distinguishes DamageResist18 from ActionPoints12 in acquired
+  abilities, inherent actor spells and equipped armor effects. Threshold76 and
+  existing condition/pool admission remain unchanged. This correction awaits the
+  grouped build. Ordinary combat effects are not yet exercised in this batch.
 
-Static ACTI trap activation remains a separate parked owner. A real production
-DefaultActivate route exists, but the selected controller-free trap cannot supply
-its currently required Open/Close motion. Source default activation deliberately
-can suppress attached-script dispatch; no forced OnActivate, no-op or guessed
-actor propagation substitutes for the unqualified base action/lifetime effects.
-Ordinary physical NOTE pickup/transfers likewise retain their separate reached
-ownership/Karma and immediate reversible reference/relationship requirements.
-Neither Taken=true nor queued SetEnabled(false) is substituted.
+## Integrated smoke and current blocker
 
-The coordinator owns serialized Git/build/native work. No denied outbound writer
-contact, competing job, retail launch or third combat admission is introduced.
-Recording remains off. Private receipts are under
-local/fnv-wells-fixed/owned-jukebox-composition-20261023/ and
-local/fnv-wells-fixed/lockpick-runtime-20261023/.
-Shared reputation state retains source-hashed float axes in schema v58. Fresh axes
-are zero; absent legacy history stays unknown per axis. CTDA573/574/575 share that
-owner through native quest/message, conversation, speech and NPC/creature/unloaded
-package adapters. Selection and package lifecycle are unchanged. Component and
-owned query proofs do not establish ordinary campaign or package execution.
-All three getters preserve known/unknown history and canonical source identity.
-Null context is source-permitted; malformed nonzero explicit references refuse
-because raw-ID frontend fixup stays unqualified; run-on3+ stays unbound. Nonfinite
-ratio/setting values fail visibly; exceptional retail/FPU behavior is unclaimed.
-The separate SCTX threshold command and broader rank/disguise remain unbound.
-Existing latched errors are neither cleared nor replayed.
+Fresh normal input completed chargen with Guns/Lockpick/Science tags, Doc stage200
+and authored rewards. Ordinary exterior/interior movement, Sunny's offered tutorial
+dialogue and her source package exit have run. The disposed outgoing physics callback
+is repaired; captures retire while bodies are live and post-commit faults retain
+the incoming authoritative world. This is not complete tutorial acceptance.
 
-Generator reference MenuMode scheduling is parked after two bounded approaches.
-Selection publishes a consumptive button result; source closure has a separate
-transition owner. The common-frame ordering of reference execution, input and
-visibility retirement is unqualified. No synchronous click callback or guessed
-closing timer is substituted. Snuffles remains parked at its distinct base/damage
-history and locomotion-resource transition boundaries; no scalar setter bypass.
+Genuine F5 slot4a223dfa46174df48ab14db617539cf6 retains two stopped raven motion
+receipts. Normal menu load and F5 slot daebbfaf6425420e966d4b90269eb1bf preserved
+their selected activity/wander/RNG prefix and POBA revision while idle clocks
+advanced. Separate-process Continue restores that save; a separate-process
+no-replay/resave comparison is not complete. These receipts preserve unsupported
+walking; they do not implement raven locomotion. Original saves are unchanged.
 
-Notification/witness qualification remains parked after two approaches. Missing
-owners include retained combat-group membership/counts, UI transition predicates,
-nested player serialization/warm-load ordering, witness membership, detection and
-concrete process responses. No generic in-combat/modal substitute, empty witness
-set, guessed history or omitted side effect is added. Add/Remove, crime-triggered
-reputation and native hacking remain closed. No ordinary dialogue/speech/radio,
-campaign, final-pixel or retail parity completion is claimed.
+The reached blocker is the authored creature fly-away IDLE. Creature PlayIdle now
+starts through its real source owner. Single certain auxiliary sounds and declared
+null sounds have strict readers and real audio/silent dispatch. Native endpoint
+gate RNG consumption remains explicitly unqualified. The same clip also requires
+a nonnull20% sound and Attach/Blend event owners. Those behaviors remain refused;
+no invented probability, substitute animation or skipped stateful event is used.
+Both normal entrance approaches reached the same clip. The alternate back-door
+approach was stopped before repeating a doomed transition. No teleport, actor
+change, branch bypass or front-entrance repair is claimed. The lookup budget was
+a workflow stop-loss, not a permission denial. With the shared dependency now
+proven, the existing writer has one bounded authenticated static pass on the
+specific Attach/Blend and single-candidate chance owner. No live retail launch,
+new worker or unchanged gameplay replay is running.
 
-## Gameplay and test-control checkpoint
+The latest grouped Debug build passes with zero warnings/errors and includes the
+reached GetDestroyed query in both frontends using the existing destroyed flag.
+All writer production code is handed off; no build/game is active. Smoke07 exited
+through normal Quit/Yes with exit0 and unchanged input save
+B0FDA62E180D6092BA6B70DDD6842801684EEE9D2A9C3070E28BC083CBAE8857.
+The coordinator is making a local recoverable code checkpoint. The broad batch
+is unpublished and has not run its final required gate. Sunny shooting,
+campfire, XP-driven allocation and access results remain pending. Private current
+run evidence is under local/fnv-wells-fixed/broad-tutorial-batch-20261023/.
 
-The best committed checkpoint is v56 slot 4dc878ab017f4e75a41f80d213387284:
-120 HP/eight Stimpaks after ordinary Aid/Use and F5. SHA256:
-7B366B739C51102CCF62AD2C8CEE25D878EE8FAC7032A2C00B56AE36C9655F14.
-Fresh-process Continue verifies its HP, inventory and paused Resume menu. The
-original post-kill source remains unchanged. Actual delayed OnDeath reaches the
-source two-second timer and changes well-2 counter 0 -> 1 exactly once. Later
-unsaved fights reach counter 2, but the player is defeated before F5. Those kills
-are run evidence, not committed tutorial progress; objective 50 remains incomplete.
+## Preserved holds and known limits
 
-The changed bounded-bot attempt uses the existing in-engine ordinary-input combat
-owner, actual reload readiness and a reviewed private outer watchdog. Resume must
-settle before starting the bot because subsequent external ordinary input stops it.
-Cleanup cannot overtake an uncertain command; save acceptance requires a new
-matching generation/slot completed while paused. PID365524 reaches gameplay at
-120 HP and zero publication losses, then stops on an observation older than the
-private watchdog's 500 ms bound. Stop acknowledgement takes 1,401.9 ms. Pause,
-bot-inactive and 120 HP are observed; normal exit is 0 at 23:20:06 UTC. Source and
-copy hashes remain unchanged; recording is off. One discharge hits terrain with
-no verified contact, kill or new save. Review finds no concrete aiming mismatch:
-readiness rays are unspread, while normal firing applies source spread and muzzle
-parallax. The exact miss is not attributed to spread versus target motion.
-Evidence: local/fnv-wells-fixed/tutorial-well2-bounded-bot-20261022/acceptance.json.
-
-No identical combat retry. External observation/control cadence is a test-control
-blocker, distinct from the unchanged 250 ms atomic-publication loss guard. Prior
-747/942 ms atomic-write delays remain unexplained. A healthy Temp run is not their
-fix. Do not relax deadlines, clear loss, force hits or write player/quest state.
-Escape can dismiss a completed save notice without pausing; verify actual UI
-ownership and pause separately. Retail startup remains held after two failed
-attempts and normal cleanup; no third blind launch.
-
-## Implemented owners and remaining integration
-
-- Wander search uses source edge permutations, newest-first ties, noncumulative
-  cost, best avoidance fallback, barycentric sampling and clearance35. Regional
-  queries start from current spatial placement. Accepted requests retain NAVM
-  identity, destination and arrival through package motion, saves and interruption.
-  The separate movement request timer and traversal-state lifecycle remain open.
-- Search-door access uses source empty-context rules and DOOR FNAM bit8 cost100.
-  Linked ownership reads destination-local fields without reciprocal XTEL; lock
-  inheritance keeps its separate reciprocal rule. General ownership rank/global
-  fallback and explicit overrides have selected contracts. Search does not unlock.
-- Candidate collection uses resident source references, current position, region,
-  radius and activity exclusions. Food admission reads ALCH/INGR food flags and
-  ALCH effect classification without executing effects. Inventory contributes one
-  eating candidate. Owned ingestible and existing Stimpak checks pass
-  (sandbox-food-owned.log); package-data/travel checks pass (sandbox-food-contracts.log).
-  Furniture/marker usability, complete ownership admission and eating execution
-  remain open. Unknown activities are still explicit failures.
-- Conversation suppression initializes from source GMSTs, advances through zero
-  and persists. Recent-partner history retains both participants before an attempt,
-  including no-voice/no-INFO outcomes; its separate timer advances on source candidate
-  evaluation, not unconditional frame ticks. These states survive actor retirement.
-- Shared conversation admission binds disabled/dead/knockdown/combat, physical
-  sitting, current-package restrictions and bidirectional hostility using live
-  aggression independently of confidence. Teammate/perk branches remain explicit
-  failures. Commanding actor, greeting, paralysis, geometry/detection/process gates
-  and temporary engine-generated package overlays remain unfinished.
-- Shared NPC opening selection uses built-in HELLO and applicable GOODBYE fallback,
-  preserving default versus explicit-topic semantics and passing selected INFO once
-  to playback. TryStartNpcConversation resets social/history state before voice/INFO
-  refusal. Sandbox now calls this owner. Ambient exchanges are distinct from
-  scripted/package commands and emit no invented SayToDone receipt or package
-  completion. Linked GOODBYE resolves the built-in identity. Started voiced
-  exchanges and their interruption/cold lifecycle still need live validation.
-- Daily sleep/meal windows and six-category preferences/duration/weighted ticket
-  owners exist. Daily-window runtime lifecycle and non-dialogue activity execution
-  still need binding. Dialogue search includes the source extra range. Actor energy comes from the effective AIDT template owner.
-
-## Remaining completion gates
-
-- Current P0: connect and validate the owned lock/pin presentation and
-  validate ordinary admitted DOOR/CONT interaction, then close the next reached
-  gameplay owner. Collected-note integration is already on main. Hacking outcome admission remains closed.
-  Shared faction arbitration is implemented; actual eligible/ineligible assistance
-  remains unverified. Do not repeat the retired encounter admission.
-- Tutorial: complete remaining wells, delayed death counters, loot, ingredients
-  and campfire cooking through ordinary input, F5 and separate-process Continue.
-- NPC packages: marker current/queued/outgoing animation and physical occupancy
-  owners remain missing. Furniture and eating execution, voiced/cold behavior,
-  admission and movement-request clocks remain open. Never substitute clip
-  completion for qualified native readiness.
-- Access: the working lockpick slice connects admitted keyless DOOR/CONT input,
-  manual/Force outcomes and shared XP/activation; ordinary campaign acceptance
-  and its explicit unsupported lanes remain open. Missing terminal passwords
-  still stop before native hacking. Candidate/attempt/bracket primitives are
-  prerequisites; hacking UI/admission and complete outcome ownership need integration.
-- Combat: extend actual attack families, hit reactions, embedded emitters,
-  assistance and survivable encounters. Selected gecko damage/kills do not
-  establish complete combat.
-- World/UI/save: continue authored transitions, inventory scrolling, bottle
-  destruction and all reached crafting/menu paths. Preserve scripts, targets,
-  RNG, sound/animation, cell semantics and exactly-once results across saves.
-- Visual parity: corrected Strip shells and selected controller/particle owners
-  have bounded proof; the Vault21 missing-shader preparation state remains
-  unqualified. Do not fabricate a material or skip geometry for a prettier scene.
-  Matched retail telemetry, audio and final pixels remain separate acceptance lanes.
-
-Use docs/implementation-plan.md for the broader dependency ledger. Do not replace
-implementation with perpetual telemetry or optimization audits. FO1/FO2 work is
-preserved; physical FNV VR package g remains rejected and unaccepted.
+- The original tutorial slot 4dc878ab017f4e75a41f80d213387284 is unchanged at
+  7B366B739C51102CCF62AD2C8CEE25D878EE8FAC7032A2C00B56AE36C9655F14.
+  Its prior well-2 combat receipts do not establish a newly committed kill or
+  complete tutorial. No identical retired combat retry or third blind retail
+  launch is authorized by this batch. First-party milestone smoke is separate.
+- Unique held PR242/PR269 work is preserved. Website copy is outside this batch
+  and remains unapplied. No competing workers or native jobs.
+- Physical NOTE pickup/transfers need their ownership/Karma and immediate
+  reversible reference/relationship owners. Taken=true or queued disable is not
+  a substitute. Static controller-free ACTI default behavior remains parked;
+  forced OnActivate or a successful no-op is not an implementation.
+- Notification/witness/crime effects, Generator MenuMode closure ordering and
+  Snuffles' distinct history/locomotion owners remain parked at their recorded
+  boundaries. Existing faults are not cleared or replayed.
+- Actor maximum-health destruction queries, DamageObject scheduling and complete
+  trap activation remain separate from the accepted nonactor query.
+- Sandbox furniture/eating/marker execution, additional combat families,
+  assistance, world materials/LOD, full UI/audio and XR remain incomplete.
+  Retail visual/camera/pixel acceptance is separate from component or headless
+  gameplay receipts. FO1/FO2 work is preserved; FO3/TTW/mod compatibility and
+  physical FNV VR package g are not accepted by this milestone.

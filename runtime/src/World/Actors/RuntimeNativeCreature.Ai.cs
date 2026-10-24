@@ -87,19 +87,28 @@ internal sealed partial class RuntimeNativeCreature
         _aiState.QuerySitting = _sittingQuery = () => _aiState.FurnitureContinuation is null ? 0 :
             throw new NotSupportedException("Creature furniture continuation has no physical sitting owner.");
         _packageEvents = new(DispatchPackageEvent);
-        if (world.UnloadedPackages is { } unloaded)
+        if (_aiState.SandboxMotionFailure is { } stoppedSandbox)
+        {
+            world.UnloadedPackages?.BindNative(Appearance.Reference!.Value, _packageEvents);
+            RestoreSandboxMotionFailure(stoppedSandbox);
+        }
+        else if (world.UnloadedPackages is { } unloaded)
             unloaded.BindNative(Appearance.Reference!.Value, _packageEvents);
         else if (_aiState.DeferredPackageContinuation is { } deferred)
             deferred.BindNative(records, _aiState, _packageEvents);
         _aiState.CapturePackageAssignment = _packageAssignmentCapture = () => _initialPackageSelected
             ? FalloutActorPackageAssignment.Capture(records, _packageEvents) : _aiState.PackageAssignment;
         RestoreEventIdle();
+        RestoreScriptIdle();
+        BindScriptIdleCapture();
+        BindSandboxMotionFailureCapture();
     }
 
     internal void EvaluatePackages(bool reset)
     {
         if (_aiRecords is null) throw new NotSupportedException("Creature has no package owner.");
         if (_aiState?.ScriptError is { } error) throw new NotSupportedException(error);
+        if (SandboxMotionError is { } stopped) throw new NotSupportedException(stopped);
         _aiError = null;
         // Script evaluation may precede native enable/materialization in the
         // same source event. Evaluate on the next resident physics step.
@@ -112,6 +121,11 @@ internal sealed partial class RuntimeNativeCreature
     internal void RetireSourceBindings()
     {
         if (_sourceBindingsRetired) return;
+        Exception? retirementFailure = null;
+        try { RetireScriptIdleCapture(); }
+        catch (Exception error) { retirementFailure = error; }
+        try { RetireSandboxMotionFailureCapture(); }
+        catch (Exception error) { retirementFailure ??= error; }
         _sourceBindingsRetired = true;
         if (_aiState is { } state && ReferenceEquals(state.QueryCurrentPackage, _currentPackageQuery))
         {
@@ -119,6 +133,7 @@ internal sealed partial class RuntimeNativeCreature
             {
                 if (_packageEvents is not null) _aiWorld?.UnloadedPackages?.Retain(Appearance.Reference!.Value, _packageEvents);
             }
+            catch (Exception error) { retirementFailure ??= error; }
             finally
             {
                 state.QueryCurrentPackage = null;
@@ -126,6 +141,8 @@ internal sealed partial class RuntimeNativeCreature
                 if (ReferenceEquals(state.CapturePackageAssignment, _packageAssignmentCapture)) state.CapturePackageAssignment = null;
             }
         }
+        if (retirementFailure is not null)
+            throw new InvalidOperationException("Creature source retirement could not retain its continuation.", retirementFailure);
     }
 
     internal void RestoreSourceBindings()
@@ -327,6 +344,8 @@ internal sealed partial class RuntimeNativeCreature
         using var frameWork = OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Measure(OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Owner.CreaturePackages);
         Combat?.StopPackageMotion();
         _waitingForTarget = null;
+        if (ScriptIdleActive) return;
+        if (SandboxMotionError is not null) return;
         if (_aiRecords is null || Combat is null || Combat.OwnsPose ||
             !Combat.PackageMovementReady || _conversationTarget is not null) return;
         if (_aiState?.ScriptError is { } scriptError) { _aiError = scriptError; return; }
@@ -409,6 +428,9 @@ internal sealed partial class RuntimeNativeCreature
             if (_guardPackage is not null) _guardProgress = Combat.PackageMotion?.Guard ?? _guardProgress;
             if (_sandboxPackage is not null)
                 _aiState!.ProcedureCaptureBlocker = FalloutSandboxPackage.CaptureBlockerPrefix + error.Message;
+            if (!selecting && _sandboxPackage is not null && error is FalloutSandboxMotionException stopped &&
+                stopped.Package == _aiPackage?.FormKey)
+                _sandboxMotionException = stopped;
             if (!selecting) _failedPackage = _aiPackage?.FormKey;
             if (changed) GD.PushError($"OPENNV_CREATURE_AI_DIVERGENCE reference={Appearance.Reference}: {_aiError}");
         }

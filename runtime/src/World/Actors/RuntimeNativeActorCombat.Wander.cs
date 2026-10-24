@@ -19,11 +19,14 @@ internal sealed partial class RuntimeNativeActorCombat
         if (busy(_state.Reference)) { StopPackageMotion(); return progress; }
         var hour = context.Globals.Get(FalloutGameTimeBindings.Read(_records).Hour);
         var activity = _state.PackageMotion?.Package == package.FormKey ? _state.PackageMotion.Sandbox : null;
-        if (activity is null || activity.Expired(hour))
+        var randomBeforeSelection = _state.SoundRandom.State;
+        var selectedActivity = activity is null || activity.Expired(hour);
+        if (selectedActivity)
         {
             activity = SelectSandboxActivity(source, activity, hour, delta, context);
             progress = null;
         }
+        if (activity is null) throw new InvalidOperationException("Sandbox has no selected activity.");
         if (activity.Activity == FalloutSandboxActivity.Dialogue)
         {
             // A refused opening retains this selection. A successful attempt
@@ -42,7 +45,8 @@ internal sealed partial class RuntimeNativeActorCombat
             }
             return null;
         }
-        if (progress is null || progress.Arrived)
+        var selectedDestination = progress is null || progress.Arrived;
+        if (selectedDestination)
         {
             var location = source.Location(_records, _world, _state.Reference);
             if (_world.TravelRegion(location.Cell) != _world.TravelRegion(_world.Placement(_state.Reference).Cell))
@@ -51,7 +55,18 @@ internal sealed partial class RuntimeNativeActorCombat
                 new Vector3(location.Location[0], location.Location[1], location.Location[2]), source.Radius,
                 _records.NumericSettings, context.Globals, _skeleton.UnitsToMetres);
         }
-        progress = AdvancePackageWander(package, progress, source.Running, source.WeaponDrawn, delta);
+        if (progress is null) throw new InvalidOperationException("Sandbox has no accepted wander request.");
+        var randomBeforeMotion = _state.SoundRandom.State;
+        try { progress = AdvancePackageWander(package, progress, source.Running, source.WeaponDrawn, delta); }
+        catch (FileNotFoundException error) when (FalloutSandboxMotionException.IsMissingMovement(error.Message) &&
+            randomBeforeMotion == _state.SoundRandom.State)
+        {
+            // Preserve the accepted request and consumed selection prefix. A
+            // later capture may retain this fault, never replay those draws.
+            throw new FalloutSandboxMotionException(package.FormKey,
+                new(activity, progress, selectedActivity, selectedDestination, randomBeforeSelection,
+                    randomBeforeMotion, _state.SoundRandom.State), error);
+        }
         _state.PackageMotion = _state.PackageMotion! with { Sandbox = activity };
         return progress;
     }

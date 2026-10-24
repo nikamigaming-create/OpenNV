@@ -11,6 +11,25 @@ internal sealed record GameplayVitals(
     IReadOnlyDictionary<byte, float>? LimbDamage = null, float RadiationRads = 0)
 {
     internal float ExactHitPoints => HitPoints - HitPointFraction;
+
+    // A derived maximum is not a healing command. Preserve the authoritative
+    // damage/AP deficits and the independent injury/radiation owners.
+    internal GameplayVitals WithDerivedMaximums(GameplayVitals derived)
+    {
+        ArgumentNullException.ThrowIfNull(derived);
+        var health = Math.Clamp(derived.MaximumHitPoints - (MaximumHitPoints - ExactHitPoints), 0, derived.MaximumHitPoints);
+        var displayed = checked((int)MathF.Ceiling(health));
+        var result = derived with
+        {
+            HitPoints = displayed,
+            HitPointFraction = displayed - health,
+            ActionPoints = Math.Clamp(derived.MaximumActionPoints - (MaximumActionPoints - ActionPoints), 0, derived.MaximumActionPoints),
+            LimbDamage = LimbDamage is null ? null : new Dictionary<byte, float>(LimbDamage),
+            RadiationRads = RadiationRads
+        };
+        result.Validate();
+        return result;
+    }
     internal GameplayVitals Damage(float amount)
     {
         if (!float.IsFinite(amount) || amount < 0) throw new ArgumentOutOfRangeException(nameof(amount));

@@ -279,6 +279,9 @@ internal partial class RuntimeNativeOpeningStageDriver
     {
         get
         {
+            // ACBS is only the bootstrap level. Progression and restored vitals
+            // own the current value used by scripts, recipes and leveled lists.
+            if (_vitals is not null) return _vitals.State.Level;
             var data = _pluginStack.GetEffective(_raceSexContract.Player).ReadSubrecords().Single(subrecord => subrecord.Signature == "ACBS").Data;
             if (data.Length != 24) throw new InvalidDataException("Player ACBS extent is invalid.");
             var level = System.Buffers.Binary.BinaryPrimitives.ReadInt16LittleEndian(data.Span[8..]);

@@ -37,14 +37,12 @@ internal partial class RuntimeNativeOpeningStageDriver
                 20, 0, _playerSkills.PerkEntries, PlayerExperienceCondition)))
             throw new InvalidOperationException("This terminal is locked out.");
         RequireHackingConsequences(reference);
-        // Generation's Science entry-point context remains separate from the
-        // qualified lockout entry. Do not silently ignore acquired effects.
-        if (_playerSkills.PerkEntries.Count != 0)
-            throw new NotSupportedException("Hacking generation with acquired perk entries needs its Science bonus owner.");
         var request = FalloutHackingRequest.Read(_pluginStack, instance.Base, terminal.Difficulty, PlayerSkillValue("Science"));
         if (!float.IsFinite(request.CurrentScience) || request.CurrentScience < request.MinimumScience)
             throw new InvalidOperationException("Current Science is below this terminal's requirement.");
-        _ = request.RequestedWords(value => value);
+        var generationScience = FalloutHackingPerkEffects.ApplyScienceBonus(request.CurrentScience,
+            _playerSkills.PerkEntries, PlayerExperienceCondition);
+        _ = request.RequestedWords(_ => generationScience);
         var result = -1; var fallback = 0;
         foreach (var name in new[] { "VeryEasy", "Easy", "Average", "Hard", "VeryHard" })
         {
@@ -60,7 +58,7 @@ internal partial class RuntimeNativeOpeningStageDriver
         if (dictionary.Words.Any(word => word.Bytes.ToArray().Any(value => value is < (byte)'A' or > (byte)'Z')))
             throw new NotSupportedException("Hacking dictionary requires its non-ASCII character classification owner.");
         _ = FalloutSourceMilliseconds.Read();
-        var candidates = FalloutHackingCandidates.GenerateFromProcess(dictionary, request, value => value);
+        var candidates = FalloutHackingCandidates.GenerateFromProcess(dictionary, request, _ => generationScience);
         var session = FalloutHackingLayout.CreateFromProcess(candidates)
             .CreateTransaction(value => value is >= (byte)'A' and <= (byte)'Z' or >= (byte)'a' and <= (byte)'z');
         _hackingReference = reference; _hackingSession = session; _hackingOutcomeApplied = false;

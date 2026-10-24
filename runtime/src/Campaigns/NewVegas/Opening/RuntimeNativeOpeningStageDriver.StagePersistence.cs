@@ -39,7 +39,7 @@ internal partial class RuntimeNativeOpeningStageDriver
         RestoreTerminalResults();
     }
 
-    private void RetainDriverFailure(Exception error)
+    internal void RetainDriverFailure(Exception error)
     {
         ExecutionError = error.Message;
         // Exact exception identity proves this failed invocation came through

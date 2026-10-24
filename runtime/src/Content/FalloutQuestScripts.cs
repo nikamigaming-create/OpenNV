@@ -800,6 +800,19 @@ internal sealed partial class FalloutQuestScripts
                         _ => _records.PerkParameters.Get(form, index, operation == "getnthperkentryvalue2" ? 1 : 0),
                     };
                 });
+            if (parts.Length <= 2 && operation == "getdestroyed")
+                return new([], _ =>
+                {
+                    var target = caller?.FormKey(_records) ?? (parts.Length == 1
+                        ? (FalloutFormKey?)null : instance.Bindings.Reference(parts[0]));
+                    if (target is not { } reference) return 0;
+                    if (_records.RuntimeFormId(reference) != 0x14 &&
+                        _records.GetEffective(reference).Signature is not ("REFR" or "ACHR" or "ACRE"))
+                        throw new InvalidDataException("GetDestroyed caller is not a placed reference.");
+                    return (References ?? throw new NotSupportedException("GetDestroyed has no world owner."))
+                        .Get(reference).Destroyed ? 1 : 0;
+                })
+                { ReadOnly = true };
             if (parts.Length <= 2 && operation == "getdestructionstage")
                 return new([], _ => (References ?? throw new NotSupportedException("Destruction query has no world owner."))
                     .DestructionStage(caller?.FormKey(_records) ?? (parts.Length == 1

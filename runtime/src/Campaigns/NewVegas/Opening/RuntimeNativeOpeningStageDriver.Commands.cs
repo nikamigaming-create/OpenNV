@@ -18,8 +18,11 @@ internal partial class RuntimeNativeOpeningStageDriver
     private NativeOwnedRecipeMenu? _recipeMenu;
     private CanvasLayer? _barterLayer;
     private NativeOwnedBarterMenu? _barterMenu;
+    private Action? _releaseRecipeInput;
+    private Action? _releaseBarterInput;
     private readonly HashSet<CanvasItem> _screenSplatters = [];
     private string? SaveContinuationBlocker =>
+        PlayerAdvancementSaveBlocker is { } advancement ? advancement :
         _moviePlaying ? "movie" : _player.FurnitureActive ? "furniture" :
         _conversation?.Active == true ? "conversation" : _speech is { CanCaptureState: false } ? "speech" :
         _nameEntry is not null ? "name-menu" : _raceSexEntry is not null ? "race-menu" :
@@ -46,8 +49,6 @@ internal partial class RuntimeNativeOpeningStageDriver
         var parts = command.Split('.');
         var operation = parts[^1].ToLowerInvariant();
         var target = parts.Length == 2 ? bindings.Reference(parts[0]) : source;
-        RuntimeNativeNpc Actor() => GetTree().Root.FindChildren("*", "", true, false).OfType<RuntimeNativeNpc>()
-            .Single(actor => actor.Appearance.Reference == target);
         switch (operation)
         {
             case "startradioconversation" when arguments.Count <= 1:
@@ -95,7 +96,15 @@ internal partial class RuntimeNativeOpeningStageDriver
             case "playidle" when arguments.Count == 1:
                 // PlayIdle's animation name is encoded as a string argument,
                 // not a SCRO form slot in the result program.
-                Actor().PlayIdle(_pluginStack, arguments[0].Trim('"'));
+                var idleActor = SceneGraph.NodeTraversal.SelfAndDescendants<Node3D>(GetTree().Root)
+                    .Where(node => node.IsInsideTree() && !node.IsQueuedForDeletion() && (node switch
+                    {
+                        RuntimeNativeNpc npc => npc.Appearance.Reference == target,
+                        RuntimeNativeCreature creature => creature.Appearance.Reference == target,
+                        _ => false
+                    })).Single();
+                if (idleActor is RuntimeNativeNpc idleNpc) idleNpc.PlayIdle(_pluginStack, arguments[0].Trim('"'));
+                else ((RuntimeNativeCreature)idleActor).PlayIdle(_pluginStack, arguments[0].Trim('"'));
                 break;
             case "resetai" when arguments.Count == 0:
                 EvaluateActorPackages(target, true);
@@ -223,6 +232,7 @@ internal partial class RuntimeNativeOpeningStageDriver
             FactionRelations = _scripts.References.CaptureFactionRelations(),
             Reputations = _scripts.References.CaptureReputations(),
             PlayerNotes = _scripts.References.PlayerNotes.Capture(),
+            PlayerAdvancement = _advancement?.CaptureSettled(),
             EncounterZones = _scripts.References.CaptureEncounterZones(),
             ExplosionExposure = _player.CaptureExplosionExposure(),
             Music = _scriptMusic?.Capture()
@@ -234,7 +244,7 @@ internal partial class RuntimeNativeOpeningStageDriver
     private void OpenRecipeMenu(FalloutFormKey categoryForm)
     {
         if (_recipeMenu is not null) throw new InvalidOperationException("A recipe menu is already active.");
-        if (_player.FurnitureActive || _conversation?.Active == true || _speech?.Active == true ||
+        if (_barterMenu is not null || _levelUpMenu is not null || _player.FurnitureActive || _conversation?.Active == true || _speech?.Active == true ||
             _nameEntry is not null || _raceSexEntry is not null || _vigorEntry is not null || _specialBookEntry is not null ||
             _tagSkillEntry is not null || _traitEntry is not null)
             throw new InvalidOperationException("Crafting cannot open while another player interaction owns input.");
@@ -247,10 +257,21 @@ internal partial class RuntimeNativeOpeningStageDriver
             CloseRecipeMenu);
         _recipeLayer = layer;
         _recipeMenu = menu;
-        AddChild(layer);
-        layer.AddChild(menu);
-        _player.SetModalInput(true);
-        if (DisplayServer.GetName() != "headless") Input.MouseMode = Input.MouseModeEnum.Visible;
+        try
+        {
+            _releaseRecipeInput = AcquireInteractionInput();
+            layer.TreeExiting += CloseRecipeMenu;
+            menu.TreeExiting += CloseRecipeMenu;
+            AddChild(layer);
+            layer.AddChild(menu);
+        }
+        catch
+        {
+            CloseRecipeMenu();
+            if (menu.GetParent() is null) menu.Free();
+            if (!layer.IsInsideTree()) layer.Free();
+            throw;
+        }
         GD.Print($"OPENNV_NATIVE_RECIPE_MENU_OPEN category={category.Form} recipes={recipes.Count} source=RCCT-RCPE owner=shared-inventory parity=unverified");
     }
 
@@ -263,6 +284,7 @@ internal partial class RuntimeNativeOpeningStageDriver
         if (condition.Function == 74)
             return (_globals ?? throw new InvalidOperationException("Recipe condition has no global state owner.")).Get(condition.FormArgument1);
         if (condition.Function == 84) return _scripts.References!.GetDeadCount(condition.FormArgument1);
+        if (condition.Function == 80 && FalloutInventoryConditions.TargetsPlayer(_pluginStack, condition)) return SourcePlayerLevel;
         if (condition.Function == 492 && condition.RunOn == 2)
             return _scripts.References!.MapMarkerVisibility(condition.Owner.Plugin.AdjustFormId(condition.Reference));
         if (FalloutInventoryConditions.Evaluate(_pluginStack, _inventory, _playerSkills.HasPerk, condition) is { } inventory) return inventory;
@@ -286,17 +308,19 @@ internal partial class RuntimeNativeOpeningStageDriver
     private void CloseRecipeMenu()
     {
         if (_recipeMenu is null) return;
-        _recipeLayer?.QueueFree();
+        var layer = _recipeLayer;
         _recipeLayer = null;
         _recipeMenu = null;
-        _player.SetModalInput(false);
-        if (DisplayServer.GetName() != "headless") Input.MouseMode = Input.MouseModeEnum.Captured;
+        var release = _releaseRecipeInput;
+        _releaseRecipeInput = null;
+        try { release?.Invoke(); }
+        finally { if (layer is not null && !layer.IsQueuedForDeletion()) layer.QueueFree(); }
     }
 
     private void OpenBarterMenu(FalloutFormKey actorReference, int discount)
     {
         if (_barterMenu is not null) throw new InvalidOperationException("A barter menu is already active.");
-        if (_moviePlaying || _player.FurnitureActive || _recipeMenu is not null || _nameEntry is not null ||
+        if (_moviePlaying || _levelUpMenu is not null || _player.FurnitureActive || _recipeMenu is not null || _nameEntry is not null ||
             _raceSexEntry is not null || _vigorEntry is not null || _specialBookEntry is not null || _tagSkillEntry is not null || _traitEntry is not null)
             throw new InvalidOperationException("Barter cannot open while another player interaction owns input.");
 
@@ -331,9 +355,21 @@ internal partial class RuntimeNativeOpeningStageDriver
             pricing, () => _playerSkills.Value("Barter"), transfers => _inventory.Exchange(merchantInventory, transfers),
             CloseBarterMenu);
         _barterLayer = layer; _barterMenu = menu;
-        AddChild(layer); layer.AddChild(menu);
-        _player.SetModalInput(true);
-        if (DisplayServer.GetName() != "headless") Input.MouseMode = Input.MouseModeEnum.Visible;
+        try
+        {
+            _releaseBarterInput = AcquireInteractionInput();
+            layer.TreeExiting += CloseBarterMenu;
+            menu.TreeExiting += CloseBarterMenu;
+            AddChild(layer);
+            layer.AddChild(menu);
+        }
+        catch
+        {
+            CloseBarterMenu();
+            if (menu.GetParent() is null) menu.Free();
+            if (!layer.IsInsideTree()) layer.Free();
+            throw;
+        }
         GD.Print($"OPENNV_NATIVE_BARTER_MENU_OPEN actor={actorReference} merchant={merchantContainer} discount={discount} " +
             $"items={_inventory.Items.Count}/{merchantInventory.Items.Count} source=ACHR-XMRC-GMST owner=shared-inventory " +
             "price-modifiers-restock-matched-ui-physical-xr-acceptance=unverified");
@@ -342,10 +378,30 @@ internal partial class RuntimeNativeOpeningStageDriver
     private void CloseBarterMenu()
     {
         if (_barterMenu is null) return;
-        _barterLayer?.QueueFree(); _barterLayer = null; _barterMenu = null;
-        var conversationActive = _conversation?.Active == true;
-        _player.SetModalInput(conversationActive);
-        if (DisplayServer.GetName() != "headless")
-            Input.MouseMode = conversationActive ? Input.MouseModeEnum.Visible : Input.MouseModeEnum.Captured;
+        var layer = _barterLayer;
+        _barterLayer = null;
+        _barterMenu = null;
+        var release = _releaseBarterInput;
+        _releaseBarterInput = null;
+        try { release?.Invoke(); }
+        finally { if (layer is not null && !layer.IsQueuedForDeletion()) layer.QueueFree(); }
+    }
+
+    private Action AcquireInteractionInput()
+    {
+        var previousMouse = Input.MouseMode;
+        var release = _player.AcquireModalInput();
+        if (DisplayServer.GetName() != "headless") Input.MouseMode = Input.MouseModeEnum.Visible;
+        var released = false;
+        return () =>
+        {
+            if (released) return;
+            released = true;
+            try { release(); }
+            finally
+            {
+                if (DisplayServer.GetName() != "headless") Input.MouseMode = previousMouse;
+            }
+        };
     }
 }

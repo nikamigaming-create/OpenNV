@@ -1,6 +1,6 @@
 # Product status
 
-Updated 2026-10-21. User priority: **fully playable flat Fallout: New Vegas**.
+Updated 2026-10-24. User priority: **fully playable flat Fallout: New Vegas**.
 FO1 remains an incomplete classic preview with selected movement, inventory,
 equipment, door and save flows. Complete campaign execution and 1:1 3D art are
 unverified. See [current-work.md](current-work.md) for the active owner.
@@ -12,7 +12,7 @@ the evidence-backed repair inventory and work order.
 
 | Area | Current state |
 | --- | --- |
-| Terminals, lockpicking and hacking | Terminal pages, passwords and authored results have runtime owners. Current DOOR/CONT/TERM activation stops without a key/password; lockpicking does not start and hacking is explicitly unbound. Ordinary success, failure, lockout, skill/perk effects and quest consequences remain required. |
+| Terminals, lockpicking and hacking | Accepted manual/Force lockpicking connects admitted keyless DOOR/CONT activation to input, unlock/XP and resident activation. Locked TERM activation connects owned puzzle generation, selection, lockout admission, XP/statistics and delayed contents. Unsupported ownership, scripts, histories, variants and effects remain explicit. Ordinary campaign, full presentation and XR acceptance remain open. |
 | All skills | All 13 NV skill values have a shared player owner. This does not establish complete mechanics: progression, modifiers, dialogue, crafting, combat and access checks must work through ordinary play. The user explicitly requires every skill. |
 | Flat UI lifetime | Loading tips now retain borrowed shared font atlases. Normal cold Continue, an exterior/interior/exterior door cycle and F5 pass without the former disposed-image HUD/message failure. HP/AP, reticle and activation text draw. Full runtime checks pass. |
 | Flat interaction recovery | An aimed source failure no longer permanently disables HUD updates or later valid prompts. Merged PR #249 uses the local lock first, otherwise its linked side's actual lock. Source/key, dynamic mutation and both cold orders pass. Ordinary walking reaches the affected door with visible E Open / Door / Locked; E respects its real lock, F5 commits, and separate-process Continue, ordinary re-aiming and another F5 pass. Full local and hosted runtime checks pass. Lockpicking, locked traversal and retail parity remain open. |
