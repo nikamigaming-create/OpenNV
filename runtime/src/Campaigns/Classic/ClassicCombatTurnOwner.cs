@@ -15,6 +15,13 @@ internal sealed record ClassicTargetTurnResult(
 
 internal static class ClassicCombatTurnOwner
 {
+    internal static int BeginPlayerTurn(int currentActionPoints, int maximumActionPoints)
+    {
+        if (currentActionPoints < 0 || maximumActionPoints <= 0 || currentActionPoints > maximumActionPoints)
+            throw new InvalidOperationException("Classic player-turn source AP is invalid.");
+        return maximumActionPoints;
+    }
+
     internal static ClassicTargetTurnResult BeginTargetTurn(
         int sourceCurrentActionPoints,
         int sourceMaximumActionPoints,

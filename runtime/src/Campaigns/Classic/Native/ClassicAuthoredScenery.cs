@@ -5,7 +5,13 @@ using OpenNV.Runtime.Content;
 namespace OpenNV.Runtime.Campaigns.Classic.Native;
 
 internal sealed record ClassicAuthoredSceneryBinding(string Art, string Model, float YawDegrees = 0, bool UseSourcePalette = true,
-    string? OwnedSurface = null);
+    string? OwnedSurface = null, ClassicAuthoredVisualPlacement? VisualPlacement = null);
+internal sealed record ClassicAuthoredReferenceCanvas(float X, float Y, float Width, float Height);
+internal sealed record ClassicAuthoredSourceFrame(int Width, int Height, int DirectionX, int DirectionY,
+    int FrameX, int FrameY, int FramesPerDirection, int Rotation);
+internal sealed record ClassicAuthoredVisualPlacement(string Schema, ClassicAuthoredReferenceCanvas Canvas,
+    float AuthoredElevationMeters, ClassicAuthoredSourceFrame SourceFrame, int SourceRotation,
+    float PixelsPerMeter, float YawDegrees = 0);
 internal sealed record ClassicAuthoredSceneryRecipe(string Schema, ClassicAuthoredSceneryBinding[] Bindings,
     ClassicAuthoredMaterialRecipe Materials);
 
@@ -14,11 +20,14 @@ internal sealed class ClassicAuthoredScenery : IDisposable
 {
     private readonly ClassicAuthoredSceneryRecipe _recipe;
     private readonly ClassicAuthoredMaterials _materials;
+    private readonly string _modelRoot;
     private readonly Dictionary<string, (Node3D Root, Aabb Bounds)> _models = [];
 
-    internal ClassicAuthoredScenery()
+    internal ClassicAuthoredScenery(ClassicAuthoredSceneryRecipe? recipe = null,
+        string modelRoot = "res://assets/classic")
     {
-        _recipe = JsonSerializer.Deserialize<ClassicAuthoredSceneryRecipe>(
+        _modelRoot = modelRoot;
+        _recipe = recipe ?? JsonSerializer.Deserialize<ClassicAuthoredSceneryRecipe>(
             Godot.FileAccess.GetFileAsString("res://config/classic-authored-scenery-v1.json"))
             ?? throw new InvalidDataException("Classic authored scenery bindings are absent.");
         if (_recipe.Schema != "opennv-classic-authored-scenery/v1" || _recipe.Materials is not { } material)
@@ -44,12 +53,14 @@ internal sealed class ClassicAuthoredScenery : IDisposable
         var binding = _recipe.Bindings.FirstOrDefault(row => row.Art.Equals(name, StringComparison.OrdinalIgnoreCase));
         if (binding is null) return null;
         if (binding.OwnedSurface is not null && ownedAssets is null) return null;
+        if (binding.VisualPlacement is { } qualification)
+            QualifyVisualPlacement(binding, qualification, frame, pixelsPerMeter, sourceRotation);
         if (!_models.TryGetValue(binding.Model, out var prototype))
         {
             using var document = new GltfDocument();
             using var state = new GltfState();
             // Godot's resource namespace works in both development and a PCK.
-            var resourcePath = "res://assets/classic/" + binding.Model;
+            var resourcePath = _modelRoot.PathJoin(binding.Model);
             var bytes = Godot.FileAccess.GetFileAsBytes(resourcePath);
             if (bytes.Length == 0) throw new FileNotFoundException("Classic authored mesh is absent: " + resourcePath);
             var error = document.AppendFromBuffer(bytes, resourcePath.GetBaseDir(), state);
@@ -66,12 +77,31 @@ internal sealed class ClassicAuthoredScenery : IDisposable
             var instance = (Node3D)prototype.Root.Duplicate(); assembly.AddChild(instance);
             var bounds = prototype.Bounds;
             var orientation = new Transform3D(new Basis(Vector3.Up, -sourceRotation * Mathf.Pi / 3), Vector3.Zero);
-            var projected = ClassicSceneryPlacement.Project(prototype.Root, pixelsPerMeter, orientation * assembly.Transform);
+            var visual = binding.VisualPlacement;
+            var projected = visual is null
+                ? ClassicSceneryPlacement.Project(prototype.Root, pixelsPerMeter, orientation * assembly.Transform)
+                : new Rect2(visual.Canvas.X, visual.Canvas.Y, visual.Canvas.Width, visual.Canvas.Height);
             if (projected.Size.X <= 0 || projected.Size.Y <= 0) throw new InvalidDataException("Classic authored mesh has no projected extent.");
             var scale = Math.Min(frame.Width / projected.Size.X, frame.Height / projected.Size.Y);
             if (!float.IsFinite(scale) || scale <= 0) throw new InvalidDataException("Classic authored mesh scale is invalid.");
             instance.Scale = Vector3.One * scale;
             instance.Position = new(-bounds.GetCenter().X * scale, -bounds.Position.Y * scale, -bounds.GetCenter().Z * scale);
+            if (visual is not null)
+            {
+                if (!prototype.Root.Transform.IsEqualApprox(Transform3D.Identity) ||
+                    MathF.Abs(bounds.Position.Y - visual.AuthoredElevationMeters) > .0001f)
+                    throw new InvalidDataException("Authored reference-canvas elevation or model origin differs from its geometry.");
+                // Restore the genuine minimum authored height, not an invented
+                // world placement or hidden below-ground geometry. The model's
+                // shared origin survives the existing horizontal centering.
+                instance.Position += Vector3.Up * (visual.AuthoredElevationMeters * scale);
+                var translation = (orientation * assembly.Transform).Basis * instance.Position;
+                var referenceCenter = projected.GetCenter() * scale + new Vector2(
+                    ClassicSceneryPlacement.ScreenX.Dot(translation),
+                    ClassicSceneryPlacement.ScreenY(pixelsPerMeter).Dot(translation));
+                if (!referenceCenter.IsFinite()) throw new InvalidDataException("Authored reference-canvas center is nonfinite.");
+                result.SetMeta("authored_reference_center_px", referenceCenter);
+            }
             if (binding.UseSourcePalette)
                 _materials.Apply(instance, orientation * assembly.Transform, binding, sourceTexture, frame, pixelsPerMeter);
             if (binding.OwnedSurface is not null)
@@ -93,6 +123,31 @@ internal sealed class ClassicAuthoredScenery : IDisposable
             return result;
         }
         catch { result.Free(); throw; }
+    }
+
+    private static void QualifyVisualPlacement(ClassicAuthoredSceneryBinding binding, ClassicAuthoredVisualPlacement visual,
+        Fallout1NativeFrmFrame frame, float pixelsPerMeter, int sourceRotation)
+    {
+        if (visual.Schema != "opennv-classic-reference-canvas/v1" || visual.Canvas is not { } canvas ||
+            visual.SourceFrame is not { } source)
+            throw new InvalidDataException("Authored visual placement contract is absent or unsupported.");
+        var values = new[] { canvas.X, canvas.Y, canvas.Width, canvas.Height, visual.AuthoredElevationMeters,
+            visual.PixelsPerMeter, visual.YawDegrees, binding.YawDegrees, pixelsPerMeter };
+        if (values.Any(value => !float.IsFinite(value)) || canvas.Width <= 0 || canvas.Height <= 0 ||
+            visual.AuthoredElevationMeters < 0 || visual.PixelsPerMeter <= 0 || pixelsPerMeter <= 0 ||
+            visual.SourceRotation is < 0 or > 5 || source.Rotation is < 0 or > 5)
+            throw new InvalidDataException("Authored visual placement dimensions, projection or rotation are invalid.");
+        if (source.Width != frame.Width || source.Height != frame.Height ||
+            source.DirectionX != frame.DirectionX || source.DirectionY != frame.DirectionY ||
+            source.FrameX != frame.FrameX || source.FrameY != frame.FrameY ||
+            source.FramesPerDirection != frame.FramesPerDirection || source.Rotation != frame.Rotation ||
+            sourceRotation != visual.SourceRotation || MathF.Abs(binding.YawDegrees - visual.YawDegrees) > .0001f ||
+            MathF.Abs(pixelsPerMeter - visual.PixelsPerMeter) > .0001f)
+            throw new NotSupportedException("Authored reference canvas does not qualify this source frame, rotation or projection; original FRM required.");
+        // Source-paint projection still uses actual visible mesh bounds. Do not
+        // silently apply that different projection to a reference-canvas model.
+        if (binding.UseSourcePalette)
+            throw new NotSupportedException("Reference-canvas placement requires original model materials; live source-paint projection is unbound.");
     }
 
     public void Dispose()

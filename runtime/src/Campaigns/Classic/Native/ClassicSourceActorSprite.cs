@@ -17,6 +17,10 @@ internal sealed partial class ClassicSourceActorSprite : Sprite3D
     private bool _idle;
     private ClassicPlayerBody? _body;
     private ClassicCreatureBody? _creature;
+    private ClassicCombatEncounter? _combat;
+    private uint _restLayers;
+    private string _lastPath = "";
+    internal void BindCombat(ClassicCombatEncounter combat) { _combat = combat; _restLayers = Layers; }
     internal void BindAnalog(Node3D model)
     {
         _body = model as ClassicPlayerBody;
@@ -39,12 +43,19 @@ internal sealed partial class ClassicSourceActorSprite : Sprite3D
     public override void _Process(double delta)
     {
         if (_art is null || _world.Camera is null) return;
-        if (_idle)
+        var action = _combat?.ActorActionPose(_placed.Serial);
+        var path = action?.Path ?? _path;
+        var frame = action?.Frame ?? _frame;
+        if (_combat is not null) Layers = action is null ? _restLayers : ClassicWorldPreview.ModelLayer | ClassicWorldPreview.SpriteLayer;
+        if (_body is not null) _body.Visible = action is null;
+        if (_creature is not null) _creature.Visible = action is null;
+        if (_idle && action is null)
         {
             _clock += delta;
             while (_clock >= 1.0 / _fps) { _clock -= 1.0 / _fps; _frame = (_frame + 1) % _frames; }
+            frame = _frame;
         }
-        var direction = ClassicHexGrid.Neighbor(_placed.Tile, _placed.Rotation);
+        var direction = ClassicHexGrid.Neighbor(_placed.Tile, action?.Rotation ?? _placed.Rotation);
         var facing = direction < 0 ? Vector3.Forward : Fo1HexMath.Center(direction) - Fo1HexMath.Center(_placed.Tile);
         var phase = _idle ? (_frame + _clock * _fps) / _frames : (_frames <= 1 ? 0 : (double)_frame / (_frames - 1));
         _body?.Publish(false, phase, facing);
@@ -53,20 +64,21 @@ internal sealed partial class ClassicSourceActorSprite : Sprite3D
         var projected = camera.UnprojectPosition(GlobalPosition + facing) - camera.UnprojectPosition(GlobalPosition);
         Vector2[] directions = [new(16, -12), new(32, 0), new(16, 12), new(-16, 12), new(-32, 0), new(-16, -12)];
         var rotation = Enumerable.Range(0, 6).MaxBy(index => directions[index].Normalized().Dot(projected.Normalized()));
-        if (_lastRotation == rotation && _lastFrame == _frame) return;
+        if (_lastRotation == rotation && _lastFrame == frame && _lastPath == path) return;
         (ImageTexture Texture, Fallout1NativeFrmFrame Frame) image;
-        try { image = _art.Frame(_path, rotation, _frame); }
+        try { image = _art.Frame(path, rotation, frame); }
         catch (Exception error) when (error is InvalidDataException or FileNotFoundException or NotSupportedException)
         {
-            var failure = $"serial={_placed.Serial} art={_path} direction={rotation} frame={_frame}: {error.Message}";
+            var failure = $"serial={_placed.Serial} art={path} direction={rotation} frame={frame}: {error.Message}";
             SetMeta("presentation_unbound", failure);
             _world.ReportPresentationFailure(failure);
             SetProcess(false);
             return;
         }
         Texture = image.Texture;
-        Offset = new(image.Frame.DirectionX + (_idle ? 0 : image.Frame.FrameX),
-            image.Frame.Height / 2f - image.Frame.DirectionY - (_idle ? 0 : image.Frame.FrameY));
-        _lastRotation = rotation; _lastFrame = _frame;
+        var idle = _idle && action is null;
+        Offset = new(image.Frame.DirectionX + (idle ? 0 : image.Frame.FrameX),
+            image.Frame.Height / 2f - image.Frame.DirectionY - (idle ? 0 : image.Frame.FrameY));
+        _lastRotation = rotation; _lastFrame = frame; _lastPath = path;
     }
 }

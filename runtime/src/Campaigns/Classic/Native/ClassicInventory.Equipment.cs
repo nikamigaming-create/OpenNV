@@ -2,6 +2,40 @@ namespace OpenNV.Runtime.Campaigns.Classic.Native;
 
 internal sealed partial class ClassicInventory
 {
+    internal ClassicShotPlan PrepareShot(long actionSequence, int rounds)
+    {
+        var entry = Held ?? throw new InvalidOperationException("A shot requires the actual held weapon.");
+        CheckItem(entry);
+        var weapon = entry.Definition.Weapon ?? throw new InvalidOperationException("The held item is not a weapon.");
+        if (actionSequence < 0 || _expenditures.Count != 0 && actionSequence <= _expenditures[^1].ActionSequence ||
+            rounds <= 0 || entry.Amount != 1 || weapon.Capacity <= 0 || entry.Object.InstanceValues.Count != 2)
+            throw new InvalidOperationException("Shot identity, quantity or magazine is invalid.");
+        var loaded = entry.Object.InstanceValues[0]; var pid = entry.Object.InstanceValues[1];
+        if (loaded < rounds || loaded > weapon.Capacity || Definition(pid).Ammo?.Caliber != weapon.Caliber)
+            throw new InvalidOperationException("The held magazine lacks compatible rounds.");
+        return new(actionSequence, entry.Id, entry.Origin, pid, loaded, rounds);
+    }
+
+    // Called only after the shared action owner has prepared all HP/AP/RNG
+    // effects. Notifications are separate so observers cannot see half a shot.
+    internal void CommitShot(ClassicShotPlan plan)
+    {
+        if (PrepareShot(plan.ActionSequence, plan.Rounds) != plan)
+            throw new InvalidOperationException("The held weapon or magazine changed before the action committed.");
+        var before = State;
+        try
+        {
+            var stacks = Touch(plan.Origin); var gun = stacks.Single(row => row.Id == plan.WeaponId);
+            stacks[stacks.IndexOf(gun)] = gun with { InstanceValues = [plan.BeforeRounds - plan.Rounds, plan.AmmoPid] };
+            Set(plan.Origin, stacks);
+            _expenditures.Add(new(plan.ActionSequence, plan.WeaponId, plan.Origin, plan.AmmoPid, plan.Rounds));
+            ValidateOwnership();
+        }
+        catch { RestoreUnchecked(before); throw; }
+    }
+
+    internal void PublishShot() => Changed?.Invoke();
+
     internal void Equip(string? id, string slot)
     {
         if (player.Moving) throw new InvalidOperationException("Stop walking before changing equipment.");

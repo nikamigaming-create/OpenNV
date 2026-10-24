@@ -6,10 +6,11 @@ are read-only. No campaign, physical XR or retail parity completion claim.
 
 ## Baseline and ownership
 
-Accepted main is d760340b0ef081b08a231b4856579acd81858fa2 (PR305), merged16:17:14Z
-after all five exact-head hosted checks passed. Local main, origin/main and live
-remote were verified equal; merge tree matches tested head82f86692. Current
-branch is codex/fnv-campfire-progression. Unrelated held PR242/269 stay untouched.
+Accepted main is633777651029fd561da8833e2ec85d7e9d584e2f (PR306), merged18:27:44Z
+after all five checks passed on exact10efd4bd. Local main, origin/main and live
+remote were verified equal and clean; merge tree matches the tested head. Current
+branch is codex/fnv-campfire-followthrough; only this owner update is dirty.
+Unrelated held PR242/269 stay untouched.
 One coordinator owns gameplay input, builds, Git and this document. No competing
 build/runtime is authorized. Denied optional old-writer messages are not retried.
 
@@ -33,17 +34,23 @@ pause-toggle error, not an engine defect. Do not repeat opening acceptance.
 
 Smoke33 normally quit through observed Quit/YES requests172/173; runner1027
 returned exit0 and PID3752 is absent. The earned689 checkpoint remains intact.
-No gameplay runtime is active. Any future combat macro must stop its controller,
+Sole smoke34 PID20112 / runner39551 continued normally from earned689. Actual
+metal-armor/rifle equipment and reload preparation saved through F5 as
+c3d01cd3a58b4e0c8046bda4c969b7b6: schema61/120HP/no pending owners or save/cleanup
+errors. Ordinary movement then reached[-943.92,106.21,212.67]. Real rifle contacts
+killed hostile10abb0. F5 committed0cc85a6a0695441a89231b109c310057 at18:47:55.9412347Z:
+schema61/101HP/no pending owners or save/cleanup errors. Immutable saved actor has
+Injury.Dead=true, DeathEventPending=false and DeathCount1. Current player healed to71HP through two actual Stimpaks; publication failures0.
+Smoke34 normally quit through observed requests98/99; runner39551 returned exit0.
+No live game remains. Latest durable0cc85a6a retains101HP/stray10abb0 death. Required well targets10a20f/10a210 remain
+unfinished. Any combat/movement macro must stop its controller,
 read fresh authoritative player state and verify pause before returning to
 analysis; never blindly toggle Escape after automatic pause.
 
-17:31Z read-only recovery observation: game remains alive/paused, next request170.
-Publication failures55 are retained. Last failed publication1840 had an actual
-CommitStarted IOException sharing violation0x80070020; publication4464 subsequently
-completed in15.714ms. Coordinator's earlier Get-Content -Tail reader lacked delete
-sharing and likely caused this burst; it has closed. All current live reads use
-FileShare.ReadWrite|Delete. Do not reset counters or classify this reader error as
-a gameplay defect. Input remains stopped pending explicit recovery reconciliation.
+Smoke33's55 sharing failures remain retained; the incompatible coordinator reader
+closed and normal Quit/exit0 completed. Current smoke34 failures0. All live reads
+use FileShare.ReadWrite|Delete. Do not reset counters or classify reader errors as
+gameplay defects. The current bounded operator helper always verifies pause.
 
 ## Current implementation boundary
 
@@ -82,7 +89,7 @@ locked concept libfile_bd5bdd391cc48191bb230d4932cc4226; wear/shoulders/feet are
 simpler, so no final1:1 claim. The original editable blend ships; supplementary
 authoring recipes remain in the original private Library bundles.
 Required frozen-tree publication gate passed18:11:19.9395447Z: Gate0/Diff0,
-2585 public files, no source/add/protected-save drift. Checked publication is next.
+2585 public files, no source/add/protected-save drift. PR306 is accepted on main.
 
 Worker01a16e13 owns Device.cs v2 geometry/control/camera reconciliation, ONLY
 SyncInstrumentHardware in Instruments.cs for metadata-driven poses, and
@@ -102,7 +109,12 @@ anchor. Automatic approval review rejected its connected
 persistence patch because schema change/v61 admission conflicted with the stated
 no-old-save-compatibility constraint. No denied operation was retried. The prior
 partial anchor hunks were inspected and selectively reversed; no anchor or schema
-change remains. Explicit approval is required for that persistence cut.
+change remains. The parent later forwarded current approval for this exact change without old-save
+migration. The normal retry of the staged anchor patch was rejected again:
+review did not accept the forwarded transcript as trusted authorization. No anchor
+patch executed, including in staging; only unchanged base copies exist there.
+Do not retry the same evidence or bypass review. The exact authorization remains
+an external blocker, not a reason to retain character progress as acceptance.
 Independent source-flag support is now implemented without snapshot/schema edits:
 healthy native NPC Sandbox retains its active package while the player is in the
 same actual cell; an explicit evaluation or leaving that cell allows reevaluation.
@@ -119,19 +131,43 @@ remains open. Ordinary combat deaths/controller limits alone justify no engine f
 
 ## Classic lane
 
-Twelve-file staged foundation: .staging/classic-animation/classic-foundation.patch,
-SHA2561cadea3b663250eb7f39ccaebdb9e0a008a5199deff10b4e275da1db9009fb00.
-Public classic files remain unchanged. It connects source actor geometry picking,
-request/turn/prefix persistence, source animation commands and committed-elevation
-map-update delivery. Hit/action-frame/RNG/AP/ammo/HP/death resolution and NPC
-hostility/AI execution remain unbound; combat exit has no completed producer.
-No working encounter/fire/campaign claim. Revised Arroyo candidates remain staged
-until source silhouettes/seams/passage fit are admitted; no forced mappings.
+The exact nineteen-file handoff at .staging/classic-combat-execution was applied
+with all public-base and staged-next hashes checked, together with the two
+optional visual placement loader files. Combined Debug solution build passed
+zero warnings/errors. Owned FO2 Narg/Mingan/Chitsa start/drop/cold/pickup/source-
+change checks and FO1/FO2 door interaction regressions pass. These are fixture
+checks, not native combat acceptance. The existing owned FO2 ARCAVES probe passes
+source door clocks/collision and cold/mid-animation restore; scripted lock/use
+opcodes remain explicitly unbound. Conditional nonlethal punch, source action
+frames, shared clock/RNG, scenery events and retained prefixes are connected.
+Armed firing, lethal consequences, enemy turns/AI, additional participants,
+critical/status/light and completed combat exit remain explicit boundaries;
+no native working-combat/fire/campaign claim.
+
+Arroyo v5.1 config/assets remain staged. Automatic approval review rejected
+copying them into public asset/config paths before native review; that copy did
+not execute and is not retried. The existing world audit now accepts FO2 and
+explicit candidate recipe/model-root inputs, using the same production loader
+without promoting held files. Native assembly bound all9candidate pieces with zero unresolved objects. The
+existing audit still fails its required joined cave shell assertion in the exterior;
+review rejected weakening it. That failure stays visible. Candidate capture is
+ordered before the unchanged assertion for inspection, not an audit-pass claim.
+Actual Godot pixels were inspected: all9pieces bind but the assembly is dark;
+asset/config admission and final art acceptance remain held. No public assets
+or candidate config were copied. The selected native review remains exit1.
+
+Required source publication runtime gate finished19:37:56.0714103Z with Gate0/Diff0.
+Its raw-byte guard found22launcher importer files rewritten LF-only by Godot.
+Every CRLF reconstruction matched the exact pre-gate SHA before writing; those
+original bytes were restored and all2589public hashes matched, no added files or
+protected-save drift. The original wrapper exit1 remains recorded alongside the
+separate importer reconciliation; no semantic or runtime source changed.
+Checked source publication is next; no Arroyo asset/config admission.
 
 ## Next integrated boundary
 
-Keep the game stopped during the serialized integration window. Finish v2 instrument
-source/assets and grouped compile/native interaction/locked-concept comparison.
+Keep the game stopped during the serialized classic integration window.
+PR306 already publishes the functional instrument; final visual refinement stays open.
 Continue remaining ordinary wells, ingredients and actual campfire interactions;
 implement related proven failures as one repair batch. Keep independent gameplay
 publication moving. Run repository-required checks once at the coherent changed

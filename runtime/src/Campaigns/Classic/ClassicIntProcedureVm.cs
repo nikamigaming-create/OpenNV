@@ -162,8 +162,16 @@ internal sealed record ClassicIntInventoryContract(
     string Identity,
     int CurrencyPid);
 
+// Original neutral requests emitted by source INTs. The native owner validates
+// and commits them with the containing script event, never from presentation.
+internal sealed record ClassicIntAnimationCommand(int Command, int Parameter, int ObjectHandle = 0,
+    bool SuppressedByCombat = false);
+
 internal interface IClassicIntWorldObjectState
 {
+    bool? CombatActive => null;
+    IReadOnlyList<ClassicIntAnimationCommand> AnimationCommands => [];
+
     bool ScriptOverrides { get; }
     IReadOnlyDictionary<int, ClassicIntDoorObjectState> Doors { get; }
     int? LightLevel { get; }
@@ -189,6 +197,9 @@ internal sealed record ClassicIntWorldObjectState(
     int? LightLevel = null) :
     IClassicIntWorldObjectState
 {
+    public bool? CombatActive { get; init; }
+    public IReadOnlyList<ClassicIntAnimationCommand> AnimationCommands { get; init; } = [];
+
     public IReadOnlyDictionary<int, ClassicIntCreatedObject> CreatedObjects
     { get; init; } = new Dictionary<int, ClassicIntCreatedObject>();
 
@@ -266,8 +277,10 @@ internal sealed record ClassicIntWorldObjectState(
         };
         // Keep existing campaign initialization identities byte-compatible
         // when no item-instance owner was bound in that source execution.
-        if (ItemInstances.Count == 0) return baseline;
+        if (ItemInstances.Count == 0 && AnimationCommands.Count == 0 && CombatActive is null) return baseline;
         var expanded = JsonSerializer.SerializeToNode(baseline)!.AsObject();
+        if (CombatActive is not null) expanded.Add("CombatActive", JsonSerializer.SerializeToNode(CombatActive));
+        if (AnimationCommands.Count != 0) expanded.Add("AnimationCommands", JsonSerializer.SerializeToNode(AnimationCommands));
         expanded["Inventory"] = JsonSerializer.SerializeToNode(Inventory);
         expanded.Add("ItemInstances", JsonSerializer.SerializeToNode(ItemInstances.OrderBy(row => row.Key)
             .Select(row => new { Handle = row.Key, Instance = row.Value }).ToArray()));
@@ -301,6 +314,9 @@ internal sealed record ClassicIntWorldObjectState(
                 : null);
         var restored = result with
         {
+            CombatActive = source.TryGetProperty("CombatActive", out var combat) && combat.ValueKind != JsonValueKind.Null ? combat.GetBoolean() : null,
+            AnimationCommands = source.TryGetProperty("AnimationCommands", out var animations)
+                ? animations.Deserialize<ClassicIntAnimationCommand[]>() ?? throw new InvalidOperationException("Missing saved animation commands.") : [],
             ItemInstances = source.TryGetProperty("ItemInstances", out var instances)
                 ? instances.EnumerateArray().ToDictionary(row => row.GetProperty("Handle").GetInt32(),
                     row => row.GetProperty("Instance").Deserialize<ClassicIntItemInstance>() ?? throw new InvalidOperationException("Missing saved item instance."))
@@ -656,6 +672,8 @@ internal static class ClassicIntProcedureVm
         var soundEffects = new List<string>();
         var doors = new Dictionary<int, ClassicIntDoorObjectState>(
             sourceWorldObjects.Doors);
+        var combatActive = sourceWorldObjects.CombatActive;
+        var animationCommands = sourceWorldObjects.AnimationCommands.ToList();
         var scriptOverrides = sourceWorldObjects.ScriptOverrides;
         var lightLevel = sourceWorldObjects.LightLevel;
         var createdObjects = new Dictionary<int, ClassicIntCreatedObject>(
@@ -989,6 +1007,29 @@ internal static class ClassicIntProcedureVm
                         next = DiscardUnobservedResult(next);
                         break;
                     }
+                case 0x8128: // is_in_combat
+                    stack.Add(Bool(RequireCombat()));
+                    break;
+                case 0x810e: // reg_anim_func(command, parameter)
+                    {
+                        var parameter = Pop(stack, program, procedure, offset);
+                        var command = Pop(stack, program, procedure, offset);
+                        var active = RequireCombat();
+                        if (command is not (1 or 2 or 3))
+                            throw Failure(program, procedure, offset, "unsupported-animation-registration-command");
+                        animationCommands.Add(new(command, parameter, SuppressedByCombat: active));
+                        break;
+                    }
+                case 0x8126: // reg_anim_animate_forever(object, animation)
+                    {
+                        var animation = Pop(stack, program, procedure, offset);
+                        var target = Pop(stack, program, procedure, offset);
+                        var active = RequireCombat();
+                        if (!active && (target == 0 || !objects.ContainsKey(target)))
+                            throw Failure(program, procedure, offset, "missing-animation-object");
+                        animationCommands.Add(new(4, animation, target, active));
+                        break;
+                    }
                 case ScriptOverrides:
                     scriptOverrides = true;
                     break;
@@ -1016,6 +1057,9 @@ internal static class ClassicIntProcedureVm
                         messageEffects = used.MessageEffects.ToList();
                         soundEffects = used.SoundEffects.ToList();
                         var changed = used.WorldObjects;
+                        if (changed.CombatActive != combatActive)
+                            throw Failure(program, procedure, offset, "nested-use-changed-combat-context");
+                        animationCommands = changed.AnimationCommands.ToList();
                         doors = new(changed.Doors);
                         lightLevel = changed.LightLevel;
                         createdObjects = new(changed.CreatedObjects);
@@ -1438,6 +1482,8 @@ internal static class ClassicIntProcedureVm
             soundEffects,
             new ClassicIntWorldObjectState(scriptOverrides, doors, lightLevel)
             {
+                CombatActive = combatActive,
+                AnimationCommands = animationCommands.ToArray(),
                 CreatedObjects = createdObjects,
                 Inventory = inventory,
                 ItemInstances = itemInstances,
@@ -1454,6 +1500,8 @@ internal static class ClassicIntProcedureVm
                 DialogueReady = dialogueReady,
             })
         { ExternalVariables = externalVariables, ExternalOwners = externalOwners, ModuleInitializationInstructions = initializerInstructions };
+
+        bool RequireCombat() => combatActive ?? throw Failure(program, procedure, offset, "missing-combat-owner");
 
         void TransferItem(int owner, int item, int quantity, bool single = true)
         {

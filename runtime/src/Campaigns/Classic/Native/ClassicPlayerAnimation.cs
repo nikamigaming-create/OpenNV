@@ -8,16 +8,22 @@ internal sealed class ClassicPlayerAnimation
     private readonly Fallout1NativeFrmFrame[][] _idle, _walk;
     private double _seconds;
     private bool _moving;
+    private readonly Func<string, byte[]> _read;
+    private ClassicActionPose? _action;
+    private Fallout1NativeFrmFrame? _actionFrame;
     internal string IdlePath { get; }
     internal string WalkPath { get; }
+    internal string CurrentPath => _action?.Path ?? (_moving ? WalkPath : IdlePath);
+    internal bool Acting => _action is not null;
     internal int FrameIndex { get; private set; }
     internal int Rotation { get; private set; }
     internal bool Moving => _moving;
-    internal Fallout1NativeFrmFrame Frame => (_moving ? _walk : _idle)[Rotation][FrameIndex];
+    internal Fallout1NativeFrmFrame Frame => _actionFrame ?? (_moving ? _walk : _idle)[Rotation][FrameIndex];
     internal double Phase => (FrameIndex + _seconds * Frame.StoredFps) / Frame.FramesPerDirection;
 
     internal ClassicPlayerAnimation(Func<string, byte[]> read, bool female, string campaign = "fallout-1", ClassicInventory? inventory = null)
     {
+        _read = read;
         var prefix = campaign switch
         {
             "fallout-1" => female ? "hfjmps" : "hmjmps",
@@ -50,6 +56,14 @@ internal sealed class ClassicPlayerAnimation
     internal void Tick(ClassicPlayerSession player, double seconds)
     {
         if (!double.IsFinite(seconds) || seconds < 0) throw new ArgumentOutOfRangeException(nameof(seconds));
+        if (player.Combat.PlayerActionPose is { } action)
+        {
+            _action = action; _moving = false; _seconds = 0;
+            FrameIndex = action.Frame; Rotation = action.Rotation;
+            _actionFrame = Fallout1NativeFrmReader.ReadFrame(_read(action.Path), Rotation, FrameIndex);
+            return;
+        }
+        if (_action is not null) { _action = null; _actionFrame = null; FrameIndex = 0; _seconds = 0; }
         if (_moving != player.Moving) { _moving = player.Moving; FrameIndex = 0; _seconds = 0; }
         Rotation = player.Rotation; _seconds += seconds;
         while (_seconds >= 1.0 / Frame.StoredFps)

@@ -4,11 +4,12 @@ internal sealed record ClassicDoorClockSave(string Map, ClassicIntTimerState Tim
 
 internal sealed partial class ClassicDoorWorld
 {
-    // FO1 executable initialization and ordinary script tick observation. FO2
-    // keeps its timer admission closed until its clock lifecycle is established.
-    private ClassicIntTimerContract? TimerContract => player.Choice.Campaign == "fallout-1" ? new(10) : null;
+    // FO2's qualified native clock starts at 302400 deciseconds. A legacy
+    // session without retained clock authority stays unknown, never zero time.
+    private ClassicIntTimerContract? TimerContract => player.HasCampaignClock ? new(10) : null;
     private ClassicIntTimerState _timers = ClassicIntTimerState.Initial with
-    { CurrentTick = player.Choice.Campaign == "fallout-1" ? 264600 : 0 };
+    { CurrentTick = player.Choice.Campaign == "fallout-1" ? 264600 : player.HasCampaignClock ? 302400 : 0 };
+    internal long? CurrentGameTime => TimerContract is null || _timerFailure is not null ? null : _timers.CurrentTick;
     private double _timerElapsed;
     private string? _timerFailure;
 
@@ -50,7 +51,9 @@ internal sealed partial class ClassicDoorWorld
         _timerElapsed = 0;
         try
         {
-            var through = checked(_timers.CurrentTick + 1);
+            if (player.Choice.Campaign == "fallout-2" && player.Combat.Active is null) return;
+            var through = player.Choice.Campaign == "fallout-2" && player.Combat.Active == true
+                ? _timers.CurrentTick : checked(_timers.CurrentTick + 1);
             var budget = 100000;
             while (_timers.Pending.Count != 0 && _timers.Pending[0].DueTick <= through)
             {
@@ -101,6 +104,7 @@ internal sealed partial class ClassicDoorWorld
             {
                 GlobalVariables = current.State.GlobalVariables,
                 MapVariables = current.State.MapVariables,
+                RandomState = current.State.RandomState,
                 ValueStack = [],
                 LocalVariables = new Dictionary<int, int>()
             };

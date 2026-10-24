@@ -18,6 +18,7 @@ internal sealed partial class ClassicPlayerController : Node3D
     private MeshInstance3D _hover = null!;
     private MeshInstance3D _selection = null!;
     private string _savePath = "";
+    private readonly HashSet<string> _reportedSceneryFailures = new(StringComparer.Ordinal);
     private bool _saveRequested;
     private bool _menuRequested;
     private ClassicWorldPick? _pendingLoot;
@@ -95,7 +96,26 @@ internal sealed partial class ClassicPlayerController : Node3D
             "Combat, quests and Pip-Boy are being restored.";
         world.Caption.Visible = false;
         world.ApplyCampaignInitialization(player);
+        BindScenery(world);
+        player.Combat.BindActionArt(() => _animation.IdlePath, fid => _art.Critter(fid, 0).Path);
+        player.Combat.ActionChanged += CombatActionChanged;
+        ReportSceneryFailures();
         _animation.Tick(player, 0); Publish(); Focus();
+    }
+
+    private void BindScenery(Node node)
+    {
+        if (node is ClassicScenerySprite sprite) sprite.BindOwner(Player.Animations);
+        if (node is ClassicSourceActorSprite actor) actor.BindCombat(Player.Combat);
+        foreach (var child in node.GetChildren()) BindScenery(child);
+    }
+
+    private void CombatActionChanged(string message) => Hud.Message(message);
+
+    private void ReportSceneryFailures()
+    {
+        foreach (var failure in Player.Animations.Failures)
+            if (_reportedSceneryFailures.Add(failure)) _world.ReportPresentationFailure("Source scenery event: " + failure);
     }
 
     private void Focus()
@@ -153,6 +173,7 @@ internal sealed partial class ClassicPlayerController : Node3D
     {
         try
         {
+            Player.Combat.RequireExploration();
             if (host is { } serial) Player.Inventory.CheckAccess(serial);
             if (containerId is not null) Player.Inventory.CheckContainerAccess(containerId);
             var layer = new CanvasLayer { Layer = 8, ProcessMode = ProcessModeEnum.Always }; AddChild(layer);
@@ -167,6 +188,7 @@ internal sealed partial class ClassicPlayerController : Node3D
     {
         try
         {
+            Player.Combat.RequireExploration();
             if (target.Serial is { } door && ClassicDoorWorld.IsDoor(Player.Level.Objects.TopLevelObjects.Single(row => row.Serial == door)))
             {
                 Player.Doors.Use(door);
@@ -212,6 +234,11 @@ internal sealed partial class ClassicPlayerController : Node3D
     {
         if (Player is null) return;
         Player.Doors.Advance(delta);
+        Player.Animations.Advance(delta);
+        Player.Combat.AdvanceAction(delta);
+        ReportSceneryFailures();
+        foreach (var failure in Player.CampaignEvents.Failures)
+            if (_reportedSceneryFailures.Add(failure)) _world.ReportPresentationFailure("Campaign source event: " + failure);
         PublishMessages();
         _animation.Tick(Player, delta); Publish();
     }
@@ -232,16 +259,19 @@ internal sealed partial class ClassicPlayerController : Node3D
         var neighbor = Fo1HexMath.TileInDirection(Player.Tile, Player.Rotation);
         var facing = neighbor < 0 ? Vector3.Forward : Fo1HexMath.Center(neighbor) - start;
         _body?.Publish(_animation.Moving, _animation.Phase, facing);
+        if (_body is not null) _body.Visible = !_animation.Acting;
         if (_sprite is not null)
         {
+            _sprite.Layers = _animation.Acting ? ClassicWorldPreview.ModelLayer | ClassicWorldPreview.SpriteLayer : ClassicWorldPreview.SpriteLayer;
             // Orient source sprites in screen space even when the user orbits
             // the 3D map. Stored source rotation still owns the gameplay path.
             var projected = _world.Camera.UnprojectPosition(_position.Position + facing) - _world.Camera.UnprojectPosition(_position.Position);
             Vector2[] directions = [new(16, -12), new(32, 0), new(16, 12), new(-16, 12), new(-32, 0), new(-16, -12)];
             var rotation = Enumerable.Range(0, 6).MaxBy(index => directions[index].Normalized().Dot(projected.Normalized()));
-            var image = _art.Frame(_animation.Moving ? _animation.WalkPath : _animation.IdlePath, rotation, _animation.FrameIndex);
+            var image = _art.Frame(_animation.CurrentPath, rotation, _animation.FrameIndex);
             _sprite.Texture = image.Texture;
-            _sprite.Offset = new(image.Frame.DirectionX, image.Frame.Height / 2f - image.Frame.DirectionY);
+            _sprite.Offset = new(image.Frame.DirectionX + (_animation.Acting ? image.Frame.FrameX : 0),
+                image.Frame.Height / 2f - image.Frame.DirectionY - (_animation.Acting ? image.Frame.FrameY : 0));
         }
     }
 
@@ -263,6 +293,17 @@ internal sealed partial class ClassicPlayerController : Node3D
         }
         if (input is InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Left } click)
         {
+            if (click.CtrlPressed)
+            {
+                try
+                {
+                    var actor = ClassicWorldPicking.Actor(_world, Player, click.Position);
+                    Hud.Message(actor?.Serial is { } serial ? Player.Combat.RequestPlayerAttack(serial) : "No unobstructed living source actor selected.");
+                }
+                catch (Exception error) when (error is InvalidDataException or InvalidOperationException or NotSupportedException or FileNotFoundException)
+                { Hud.Message(error.Message); }
+                GetViewport().SetInputAsHandled(); return;
+            }
             var tile = PointerTile(click.Position);
             var picked = ClassicWorldPicking.Item(_world, Player, click.Position);
             if (picked is null && !_world.ShowModels)
@@ -288,15 +329,27 @@ internal sealed partial class ClassicPlayerController : Node3D
         if (input is not InputEventKey { Pressed: true, Echo: false } key) return;
         switch (key.PhysicalKeycode)
         {
-            case Key.Space: _pendingLoot = null; Player.Stop(); break;
+            case Key.Space:
+                _pendingLoot = null;
+                if (Player.Combat.Active == true)
+                {
+                    try { Hud.Message(Player.Combat.EndTurn()); }
+                    catch (NotSupportedException error) { Hud.Message(error.Message); }
+                }
+                else Player.Stop();
+                break;
             case Key.F5: Save(); break;
             case Key.Home: Focus(); break;
             case Key.C: Hud.ShowCharacter(); break;
             case Key.I: OpenInventory(); break;
-            case Key.B: Player.Inventory.SwitchHand(); break;
+            case Key.B:
+                try { Player.Combat.RequireExploration(); Player.Inventory.SwitchHand(); }
+                catch (NotSupportedException error) { Hud.Message(error.Message); }
+                break;
             case Key.R:
                 try
                 {
+                    Player.Combat.RequireExploration();
                     var held = Player.Inventory.Held ?? throw new InvalidOperationException("Equip a weapon first.");
                     Hud.Message($"Reloaded {Player.Inventory.Reload(held.Id)} rounds.");
                 }
@@ -310,5 +363,5 @@ internal sealed partial class ClassicPlayerController : Node3D
     }
 
     public override void _ExitTree()
-    { if (Player is not null) { Player.Arrived -= Arrived; Player.Inventory.Changed -= RefreshItems; Player.Inventory.EquipmentChanged -= RefreshEquipment; Player.Doors.FrameChanged -= RefreshDoor; } }
+    { if (Player is not null) { Player.Arrived -= Arrived; Player.Inventory.Changed -= RefreshItems; Player.Inventory.EquipmentChanged -= RefreshEquipment; Player.Doors.FrameChanged -= RefreshDoor; Player.Combat.ActionChanged -= CombatActionChanged; } }
 }

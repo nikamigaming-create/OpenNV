@@ -6,12 +6,16 @@ namespace OpenNV.Runtime.Campaigns.Classic.Native;
 internal sealed record ClassicPlayerSave(string Schema, string Campaign, string ProfileId, string MapPath, string MapSha256,
     int Elevation, ClassicCharacterDraft Choice, int Tile, int Rotation, int HitPoints, long CompletedSteps,
     ClassicItemOrigin[]? Inventory = null, ClassicInventoryState? Items = null, string? InitializationHash = null,
-    ClassicDoorWorldSave? Doors = null);
+    ClassicDoorWorldSave? Doors = null, ClassicObjectAnimationSave? Animations = null,
+    ClassicCombatEncounterSave? Combat = null, ClassicCampaignEventSave? CampaignEvents = null,
+    ClassicRetailRandomLifecycleState? CampaignRandom = null);
 
 /// <summary>The classic player owns movement and persistence; cameras, meshes and HUDs consume it.</summary>
 internal sealed class ClassicPlayerSession
 {
-    internal const string SaveSchema = "opennv-classic-player/v6";
+    internal const string SaveSchema = "opennv-classic-player/v8";
+    private const string AnimationSaveSchema = "opennv-classic-player/v7";
+    private const string ExportSaveSchema = "opennv-classic-player/v6";
     private const string ClockSaveSchema = "opennv-classic-player/v5";
     private const string DoorSaveSchema = "opennv-classic-player/v4";
     private const string InitializationSaveSchema = "opennv-classic-player/v3";
@@ -21,7 +25,7 @@ internal sealed class ClassicPlayerSession
     {
         if (!File.Exists(requested)) return requested;
         using var document = JsonDocument.Parse(File.ReadAllBytes(requested));
-        if (document.RootElement.TryGetProperty("Schema", out var schema) && schema.GetString() is SaveSchema or ClockSaveSchema or DoorSaveSchema or InitializationSaveSchema or ItemsSaveSchema or LegacySaveSchema) return requested;
+        if (document.RootElement.TryGetProperty("Schema", out var schema) && schema.GetString() is SaveSchema or AnimationSaveSchema or ExportSaveSchema or ClockSaveSchema or DoorSaveSchema or InitializationSaveSchema or ItemsSaveSchema or LegacySaveSchema) return requested;
         // The previous runtime's richer save cannot be converted by discarding
         // inventory, combat or scripts. Retain it and use an adjacent new slot.
         return requested + ".native-player.json";
@@ -55,12 +59,46 @@ internal sealed class ClassicPlayerSession
     internal ClassicMapLevel Level => _level;
     internal ClassicInventory Inventory { get; }
     internal ClassicDoorWorld Doors { get; }
+    internal ClassicObjectAnimation Animations { get; }
+    internal ClassicCombatEncounter Combat { get; }
+    internal ClassicCampaignEvents CampaignEvents { get; }
+    internal ClassicRetailRandomContract? RandomContract { get; }
+    internal ClassicCombatContracts? CombatContracts { get; }
+    internal ClassicRetailRandomLifecycleState? CampaignRandom { get; private set; }
+    internal bool HasCampaignClock { get; }
+
+    internal void ValidateRandomCommit(ClassicRetailRandomLifecycleState? next)
+    {
+        if (CampaignRandom is null)
+        {
+            if (next is not null) throw new InvalidDataException("A script cannot manufacture campaign RNG state.");
+            return;
+        }
+        if (RandomContract is null || next is null) throw new InvalidDataException("Campaign RNG owner disappeared.");
+        next.Validate(RandomContract);
+        if (!next.Exact || next.SeedState != CampaignRandom.SeedState || next.Events.Count < CampaignRandom.Events.Count ||
+            !next.Events.Take(CampaignRandom.Events.Count).SequenceEqual(CampaignRandom.Events))
+            throw new InvalidDataException("Campaign RNG transaction does not extend its shared source prefix.");
+    }
+
+    internal void CommitRandom(ClassicRetailRandomLifecycleState? next)
+    {
+        ValidateRandomCommit(next); CampaignRandom = next;
+    }
+    // Explicit supplied context is retained for other owners; native sessions
+    // use their actual encounter lifecycle, including unknown/refused states.
+    internal Func<bool?>? CombatActive { get; }
+
     internal ClassicCampaignInitialization? Initialization { get; private set; }
     internal int ArmorClass => Stats.ArmorClass + (Inventory.Worn?.Definition.Armor?.ArmorClass ?? 0);
 
     internal ClassicPlayerSession(IFalloutClassicOwnedSource source, string mapPath, ClassicCharacterDraft choice,
         int? elevation = null, int? tile = null, int? rotation = null, ClassicDoorWorldSave? savedDoors = null,
-        ClassicCampaignInitialization? initialization = null)
+        ClassicCampaignInitialization? initialization = null, ClassicObjectAnimationSave? savedAnimations = null,
+        Func<bool?>? combatActive = null, ClassicAttackModeCatalog? combatModes = null,
+        bool freshCampaign = false, ClassicCombatEncounterSave? savedCombat = null,
+        ClassicCampaignEventSave? savedCampaignEvents = null, ClassicRetailRandomContract? randomContract = null,
+        ClassicRetailRandomLifecycleState? savedRandom = null, ClassicCombatContracts? combatContracts = null)
     {
         _catalog = source as ClassicMapCatalog ?? new ClassicMapCatalog(source, choice.Campaign);
         _premades = ClassicPremadeReader.Load(_catalog.Campaign, path => _catalog.Read(path, out _));
@@ -70,13 +108,38 @@ internal sealed class ClassicPlayerSession
         Choice = JsonSerializer.Deserialize<ClassicCharacterDraft>(JsonSerializer.Serialize(choice))!;
         Stats = ClassicStartingStats.From(Choice.Character); HitPoints = Stats.HitPoints;
         Initialization = initialization;
+        RandomContract = randomContract;
+        CombatContracts = combatContracts;
+        HasCampaignClock = choice.Campaign == "fallout-1" || freshCampaign || savedDoors?.Clock?.Timers.CurrentTick >= 302400;
+        if (randomContract is not null)
+        {
+            randomContract.Validate();
+            if (randomContract.ExactBuild != "fallout2-retail-1.02" || choice.Campaign != "fallout-2")
+                throw new NotSupportedException("Campaign RNG contract belongs to another source build.");
+            if (freshCampaign) CampaignRandom = initialization?.ScriptState?.RandomState;
+            else if (savedRandom is not null)
+            {
+                savedRandom.Validate(randomContract);
+                // Retail load resets the stream. A prepared action retains its
+                // resolved roll/result; it must never reroll after restoration.
+                CampaignRandom = ClassicRetailRandomLifecycle.ResetForLoad(
+                    ClassicRetailRandomLifecycle.InitializeFromExactBuildClock(randomContract), randomContract);
+            }
+        }
         _level = _catalog.Load(mapPath); MapPath = _level.Path; _mapSha256 = _level.Sha256;
         var map = _level.Map;
         Elevation = elevation ?? map.EnteringElevation; Tile = tile ?? map.EnteringTile; Rotation = rotation ?? map.EnteringRotation;
         _navigation = new(map, _level.Objects, Elevation);
+        Combat = new ClassicCombatEncounter(this, combatModes, freshCampaign, savedCombat, combatContracts);
+        CombatActive = combatActive ?? (() => Combat.Active);
         Inventory = new ClassicInventory(this);
         Doors = new ClassicDoorWorld(this);
         if (savedDoors is null) Doors.Enter(); else Doors.Restore(savedDoors);
+        Animations = new ClassicObjectAnimation(this);
+        if (savedAnimations is null) Animations.Enter(); else Animations.Restore(savedAnimations);
+        CampaignEvents = new ClassicCampaignEvents(this);
+        if (savedCampaignEvents is not null) CampaignEvents.Restore(savedCampaignEvents);
+        Combat.CommittedExit += CampaignEvents.CommittedCombatExit;
         Doors.PassageChanged += RefreshNavigation; RefreshNavigation();
         if (!Walkable.Contains(Tile)) throw new InvalidDataException("Source MAP entry is blocked; map initialization must resolve it before player admission.");
     }
@@ -89,13 +152,13 @@ internal sealed class ClassicPlayerSession
         Changed?.Invoke();
     }
 
-    internal static ClassicPlayerSession Begin(ClassicMapCatalog catalog, ClassicCharacterDraft choice, ClassicRetailRandomContract? initializationContract = null)
+    internal static ClassicPlayerSession Begin(ClassicMapCatalog catalog, ClassicCharacterDraft choice, ClassicRetailRandomContract? initializationContract = null, Func<bool?>? combatActive = null, ClassicAttackModeCatalog? combatModes = null, ClassicCombatContracts? combatContracts = null)
     {
         var initialization = initializationContract is null && catalog.Campaign != "fallout-1"
             ? null : ClassicCampaignInitialization.Execute(catalog, choice, initializationContract);
         var arrival = initialization?.Arrival;
         var player = new ClassicPlayerSession(catalog, catalog.StartingMap, choice, arrival?.Elevation,
-            arrival is null ? null : checked(arrival.TileY * 200 + arrival.TileX), arrival?.Rotation, initialization: initialization);
+            arrival is null ? null : checked(arrival.TileY * 200 + arrival.TileX), arrival?.Rotation, initialization: initialization, combatActive: combatActive, combatModes: combatModes, freshCampaign: true, randomContract: initializationContract, combatContracts: combatContracts);
         if (initialization is not null) player.Inventory.InitializeCreatedItems(initialization.Items);
         return player;
     }
@@ -105,15 +168,19 @@ internal sealed class ClassicPlayerSession
     internal void ChangeLevel(string mapPath, int elevation, int tile, int rotation)
     {
         if (Moving) throw new InvalidOperationException("A map transition must occur at a completed hex.");
+        Combat.RequireExploration();
+        var previousMap = MapPath; var previousElevation = Elevation;
         var next = _catalog.Load(mapPath);
         if (!next.Map.Elevations.ContainsKey(elevation) || rotation is < 0 or >= 6)
             throw new InvalidDataException("Source exit destination elevation or rotation is invalid.");
         var navigation = new ClassicMapNavigation(next.Map, next.Objects, elevation, row => Doors.BlocksAt(next.Path, row));
         if (!navigation.Walkable.Contains(tile)) throw new InvalidDataException("Source exit arrival is blocked; its map initialization is still required.");
+        Animations.Leave(next.Path);
         Doors.Leave(next.Path);
         _level = next; _navigation = navigation; _mapSha256 = next.Sha256;
         MapPath = next.Path; Elevation = elevation; Tile = tile; Rotation = rotation; StepFraction = 0; _redirect = null;
-        Doors.Enter(); RefreshNavigation();
+        Doors.Enter(); Animations.Enter(); RefreshNavigation();
+        CampaignEvents.CommittedElevation(previousMap, previousElevation);
         Status = "Click a floor hex to walk."; Changed?.Invoke(); LevelChanged?.Invoke();
     }
 
@@ -131,6 +198,8 @@ internal sealed class ClassicPlayerSession
 
     internal bool RequestMove(int destination)
     {
+        try { Combat.RequireExploration(); }
+        catch (NotSupportedException error) { Status = error.Message; Changed?.Invoke(); return false; }
         var from = Moving && StepFraction > 0 ? NextTile : Tile;
         if (destination != from && ClassicHexGrid.Path(from, destination, Walkable).Length == 0)
         { Status = "That hex cannot be reached."; Changed?.Invoke(); return false; }
@@ -144,6 +213,13 @@ internal sealed class ClassicPlayerSession
         if (Moving && StepFraction > 0) _redirect = NextTile;
         else { _path.Clear(); _redirect = null; }
         Status = "Stopping at the next hex."; Changed?.Invoke();
+    }
+
+    internal void FaceCombatTarget(int tile)
+    {
+        if (Moving || ClassicHexGrid.Distance(Tile, tile) != 1)
+            throw new InvalidOperationException("Basic punch facing requires an adjacent completed hex.");
+        Rotation = ClassicHexGrid.Rotation(Tile, tile);
     }
 
     private void Plan(int destination)
@@ -182,7 +258,8 @@ internal sealed class ClassicPlayerSession
     {
         if (Moving) throw new InvalidOperationException("Finish the current walk before saving.");
         var save = new ClassicPlayerSave(SaveSchema, Choice.Campaign, Choice.ClassicProfileId, MapPath, _mapSha256,
-            Elevation, Choice, Tile, Rotation, HitPoints, CompletedSteps, Items: Inventory.State, InitializationHash: Initialization?.Identity, Doors: Doors.Save());
+            Elevation, Choice, Tile, Rotation, HitPoints, CompletedSteps, Items: Inventory.State, InitializationHash: Initialization?.Identity, Doors: Doors.Save(), Animations: Animations.Save(),
+            Combat: Combat.Save(), CampaignEvents: CampaignEvents.Save(), CampaignRandom: CampaignRandom);
         var target = Path.GetFullPath(path); Directory.CreateDirectory(Path.GetDirectoryName(target)!);
         if (_sourceRecoveryBackup is { } recovered)
         {
@@ -194,15 +271,15 @@ internal sealed class ClassicPlayerSession
         finally { if (File.Exists(temporary)) File.Delete(temporary); }
     }
 
-    internal static ClassicPlayerSession Restore(IFalloutClassicOwnedSource source, string path, ClassicRetailRandomContract? initializationContract = null)
+    internal static ClassicPlayerSession Restore(IFalloutClassicOwnedSource source, string path, ClassicRetailRandomContract? initializationContract = null, Func<bool?>? combatActive = null, ClassicAttackModeCatalog? combatModes = null, ClassicCombatContracts? combatContracts = null)
     {
         var originalBytes = File.ReadAllBytes(path);
         var save = JsonSerializer.Deserialize<ClassicPlayerSave>(originalBytes) ?? throw new InvalidDataException("Classic player save is empty.");
         var campaign = source is ClassicMapCatalog catalog ? catalog.Campaign : save.Campaign;
-        if (campaign is not ("fallout-1" or "fallout-2") || save.Schema is not (SaveSchema or ClockSaveSchema or DoorSaveSchema or InitializationSaveSchema or ItemsSaveSchema or LegacySaveSchema) || save.Campaign != campaign ||
+        if (campaign is not ("fallout-1" or "fallout-2") || save.Schema is not (SaveSchema or AnimationSaveSchema or ExportSaveSchema or ClockSaveSchema or DoorSaveSchema or InitializationSaveSchema or ItemsSaveSchema or LegacySaveSchema) || save.Campaign != campaign ||
             save.ProfileId != source.ProfileId || save.Choice is null || save.Choice.Campaign != campaign)
             throw new InvalidDataException("This save belongs to another campaign, installation or unsupported save format.");
-        if (save.Schema is SaveSchema or ClockSaveSchema or DoorSaveSchema or InitializationSaveSchema or ItemsSaveSchema && (save.Items is null || save.Inventory is not null))
+        if (save.Schema is SaveSchema or AnimationSaveSchema or ExportSaveSchema or ClockSaveSchema or DoorSaveSchema or InitializationSaveSchema or ItemsSaveSchema && (save.Items is null || save.Inventory is not null))
             throw new InvalidDataException("The current save requires its complete item state.");
         var sourceCatalog = source as ClassicMapCatalog ?? new ClassicMapCatalog(source, campaign);
         var recovered = ClassicNativeSaveRecovery.Rebase(sourceCatalog, save);
@@ -215,11 +292,16 @@ internal sealed class ClassicPlayerSession
             if (save.InitializationHash is not null && save.InitializationHash != initialization.Identity)
                 throw new InvalidDataException("Campaign initialization source or results changed.");
         }
-        var result = new ClassicPlayerSession(sourceCatalog, save.MapPath, save.Choice, save.Elevation, save.Tile, save.Rotation, save.Doors, initialization);
+        if (save.Schema is SaveSchema or AnimationSaveSchema && save.Animations is null) throw new InvalidDataException("The current save requires its scenery animation/event state.");
+        if (save.Schema == SaveSchema && (save.Combat is null || save.CampaignEvents is null))
+            throw new InvalidDataException("The current save requires its combat lifecycle and campaign event prefix.");
+        var result = new ClassicPlayerSession(sourceCatalog, save.MapPath, save.Choice, save.Elevation, save.Tile, save.Rotation,
+            save.Doors, initialization, save.Animations, combatActive, combatModes, savedCombat: save.Combat,
+            savedCampaignEvents: save.CampaignEvents, randomContract: initializationContract, savedRandom: save.CampaignRandom, combatContracts: combatContracts);
         if (sourceChanged) result._sourceRecoveryBackup = originalBytes;
-        if (save.Schema is SaveSchema or ClockSaveSchema or DoorSaveSchema && save.Doors is null) throw new InvalidDataException("The current save requires its complete door state.");
-        if (save.Schema == SaveSchema && save.Doors?.ExternalOwners is null) throw new InvalidDataException("The current save requires exported-variable ownership.");
-        if (save.Schema is SaveSchema or ClockSaveSchema && save.Doors?.Clock is null) throw new InvalidDataException("The current save requires its script clock and pending events.");
+        if (save.Schema is SaveSchema or AnimationSaveSchema or ExportSaveSchema or ClockSaveSchema or DoorSaveSchema && save.Doors is null) throw new InvalidDataException("The current save requires its complete door state.");
+        if (save.Schema is SaveSchema or AnimationSaveSchema or ExportSaveSchema && save.Doors?.ExternalOwners is null) throw new InvalidDataException("The current save requires exported-variable ownership.");
+        if (save.Schema is SaveSchema or AnimationSaveSchema or ExportSaveSchema or ClockSaveSchema && save.Doors?.Clock is null) throw new InvalidDataException("The current save requires its script clock and pending events.");
         if (save.MapSha256 != result._mapSha256 || save.Elevation != result.Elevation || !result.Walkable.Contains(save.Tile) ||
             save.Rotation is < 0 or >= 6 || save.HitPoints is < 0 || save.HitPoints > result.Stats.HitPoints || save.CompletedSteps < 0)
             throw new InvalidDataException("Saved player state no longer matches the owned map or character.");
