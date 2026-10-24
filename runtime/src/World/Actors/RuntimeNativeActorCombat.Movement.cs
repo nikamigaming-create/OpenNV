@@ -93,7 +93,8 @@ internal sealed partial class RuntimeNativeActorCombat
             _turnSpeed = Mathf.DegToRad(FalloutProjectile.Number(turning, 0));
         }
         else _turnSpeed = Mathf.DegToRad(FalloutGameSettingFloats.ReadRetained(_records, "fCharacterDefaultTurningSpeed", nameof(RuntimeNativeActorCombat)));
-        if (_motionScale <= 0 || _turnSpeed <= 0) throw new NotSupportedException("Actor movement/turn speed is not positive.");
+        if (_motionScale <= 0 || _turnSpeed < 0) throw new NotSupportedException("Actor movement/turn speed is not positive.");
+        if (_turnSpeed == 0) throw new FalloutActorZeroTurnException();
         GamebryoReferenceEnableRuntime.SetCollisionFilter(mover, 0, _mask);
         mover.FloorSnapLength = radius;
         mover.FloorMaxAngle = Mathf.DegToRad(_context?.MaximumWalkableSlopeDegrees ?? PlayerConfiguration.DefaultMaximumWalkableSlopeDegrees);

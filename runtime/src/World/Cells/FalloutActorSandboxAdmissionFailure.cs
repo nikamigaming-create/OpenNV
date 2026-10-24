@@ -12,7 +12,7 @@ internal sealed record FalloutActorSandboxAdmissionFailure(FalloutFormKey Packag
     FalloutScheduleTime? ScheduleTime, long QuestRevision, long ActivityRevision,
     FalloutActorActivitySnapshot Activity, long EventRevision, string LastEvent,
     FalloutFormKey LastPackage, string LastPackageSha256, FalloutFaceBlinkSnapshot? Blink = null,
-    FalloutReferencePlacement? SourcePlacement = null)
+    FalloutReferencePlacement? SourcePlacement = null, long? SelectionAttempts = null)
 {
     internal const string AdmissionErrorPrefix = "Sandbox candidate admission requires its activity owner: ";
 
@@ -25,6 +25,7 @@ internal sealed record FalloutActorSandboxAdmissionFailure(FalloutFormKey Packag
             Position.Concat(Basis).Any(value => !float.IsFinite(value)) ||
             !double.IsFinite(PollRemaining) || PollRemaining < 0 || QuestRevision < -1 || QuestRevision == long.MaxValue ||
             ActivityRevision < -1 || ActivityRevision == long.MaxValue || Activity is null || Activity.InCombat ||
+            SelectionAttempts is <= 0 or long.MaxValue ||
             EventRevision <= 0 || EventRevision == long.MaxValue || LastEvent != "POBA" || LastPackage != Package ||
             !string.Equals(LastPackageSha256, PackageSha256, StringComparison.OrdinalIgnoreCase) ||
             ScheduleTime is { } time && (time.Month is < 0 or > 11 || time.Date is < 1 or > 31 ||
@@ -52,7 +53,12 @@ internal sealed record FalloutActorSandboxAdmissionFailure(FalloutFormKey Packag
             !placement.Position.SequenceEqual(authoritative.Position) ||
             !placement.RotationRadians.SequenceEqual(authoritative.RotationRadians)))
             throw new InvalidDataException("Stopped Sandbox relocation differs from authoritative placement.");
-        if (records.GetEffective(actor.Base).Signature != "NPC_" || actor.PackageMotion is not null ||
+        var signature = records.GetEffective(actor.Base).Signature;
+        if (signature == "CREA" && (Blink is not null || SelectionAttempts is null ||
+                AiRandomState != actor.SoundRandom.State || ActivityRevision != Activity.Revision) ||
+            signature == "NPC_" && SelectionAttempts is not null)
+            throw new InvalidDataException("Stopped Sandbox admission has unowned actor-specific state.");
+        if (signature is not ("NPC_" or "CREA") || actor.PackageMotion is not null ||
             actor.PackageAssignment is { } assignment && (assignment.Package != Package || assignment.Done ||
                 !string.Equals(assignment.Sha256, PackageSha256, StringComparison.OrdinalIgnoreCase)) ||
             actor.DeferredPackageContinuation is not null ||

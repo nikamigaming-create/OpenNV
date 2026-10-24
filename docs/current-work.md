@@ -7,34 +7,88 @@ read-only. Recording is off. No campaign, XR or retail parity completion is clai
 
 ## Accepted baseline and ownership
 
-PR300 merged as f7191f3e568d9746bc950b8a1d967f0371f2642a after exact-head independent
-review, the required local gate and all five hosted checks passed. Local main,
-origin/main and the live remote were verified equal and clean; reviewed and merge
-trees match. The completed feature branch was bundled, verified and removed.
-The required gate finished04:49:18 UTC with diff0, all2523 public files unchanged
-and protected saves unchanged. The CompleteQuest frontend repair passed ordinary
-corrected-build gameplay and F5 in immutable241. Main integration is pending.
+PR301 merged as d86f9db548784d6fd0bd9bf97c7c9e31a898202c at07:12:14 UTC.
+Exact-head independent review was clear and all five hosted checks passed. Local
+main, origin/main and live remote main were equal and clean. The completed branch
+was recovered in a verified bundle and its local/remote refs removed. The required
+local gate passed07:01:23 UTC, Gate0/Diff0, with2523 public files and all protected
+saves unchanged. The selected owned-data quest query audit also passed.
 
-Active branch: codex/fnv-tutorial-campfire. The coordinator owns integration,
-scripts/access/crafting, ordinary input, the sole runtime, builds and Git. The
-existing writer is read-only on immutable checkpoint verification with all code
-handoffs integrated. Normal messaging works after the owner supplied explicit
-coordination authorization. No competing worker, worktree, build or source
-investigation is active. Reserve exact files only for a reached gameplay blocker.
+Active branch: codex/fnv-campfire-gathering, from accepted main. One coordinator
+owns integration, ordinary input, runtime, builds and Git. All writer handoffs are
+complete and frozen; Movement.cs was handed back without a writer edit. The
+coordinator owns the integrated ammo, stopped-motion and creature preselection
+continuation batch, including the shared records and publication boundary.
+No competing build or runtime.
 
-Smoke14 normally quit before the corrected build. Scoped formatting, compilation
-and the existing quest-state suite passed, including both CompleteQuest executors.
-Smoke15 loaded earned2c67 through the normal title browser, completed Sunny's
-actual next-lesson choice and saved241. Ordinary gathering travel then saved7e85
-at93HP; no ingredient acquisition or cooking acceptance is claimed. The game
-received normal Quit confirmation and its log ends with source-owner retirement;
-PID226136 is absent. Prior runner handles are unavailable, so its exit code is
-not retained. No game or build is active. The required gate finished07:01:23 UTC with Gate0/
-Diff0, all2523 public files unchanged and all protected saves unchanged. The
-selected owned-data quest query audit also passed. Publish this repair before
-further gameplay. The writer is
-read-only and available for exact-head review.
+Smoke16 normally quit with exit0. Its actual scripted ACTI15d982 harvest committed
+immutable5e54e5f96c04498b82ec8f1415422055 at79HP/map0e1ab0 with no save/cleanup error.
+Independent inspection confirms XanderRoot1, GeckoMeat1 and VCG03stage10 with
+objective10 displayed-incomplete. Broc Flower and cooking remain unaccepted.
 
+The reached ammo repair retains DATA value and nullable unknown weight when
+optional DAT2 is absent. The owned047419 record is AmmoBloatflyDart, DATA13/value1,
+nonplayable, with no DAT2; no absent numeric weight default is qualified. Present
+DAT2 validation stays strict. Scoped formatting and connected inventory probe/
+compile passed after a fixture-only display-name correction. No hardcore weight,
+weapon default, UI, snapshot waiver or actor discard was added.
+
+Sole corrected game: smoke17 PID362612 / runner85142, ordinary Load of earned5e54.
+It restored79HP and XanderRoot1 normally, then reached all four affected creatures.
+The DAT2 refusal is gone and actual POBA was dispatched. Three actors168c25/26/28
+now report non-positive movement/turn speed;168c27 reports unsupported Eat candidate
+admission. These are distinct unimplemented owners, not ammo-save acceptance.
+The writer is tracing the real speed fields without fabricated defaults. The
+creature continuation will retain only the actual stopped preselection failure,
+source lifecycle/pose/RNG/clock and error; it does not implement or skip eating.
+
+Ordinary travel to Broc Flower continues through real collision and streaming,
+with79HP and publication failures0 at the latest sample. The earlier obstruction
+was passed through ordinary movement. Smoke17 subsequently harvested Broc Flower through its actual ACTI script;
+both ingredients and the return-to-Sunny objective were observed live, but not
+saved. It then normally quit with exit0. The grouped native continuation files
+are integrated/frozen and the connected compile/admission probe passed. Sole
+corrected smoke18 PID254088 / runner33223 loaded5e54 normally, then normally quit
+through its observed menu and confirmation (requests115/116). Runner exit0 was
+confirmed before the publication build boundary. Final publication failures were0;
+no duplicate runtime or held input was left behind.
+
+Ordinary F5 committed intermediate8c8de60245f14fd391b50e8b907c2ea4 at08:04:46 UTC,
+79HP/map0e1aa8, retaining XanderRoot1 and GeckoMeat1. This preceded actual native
+binding of all four affected creatures and is not their save acceptance. Later
+all four had selectionAttempts1 and POBA revision1; F5 failed. Detailed state114
+shows168c26/27/28 also have an independent combat zero-turn error in
+AdvanceRadiusWarning, targeting source actor1073e8 rather than the player.
+168c27's Eat admission receipt correctly cannot capture that combat fault.
+No capture predicate was relaxed. The schoolyard obstruction was a real closed
+gate1076bf; ordinary activation opened it and subsequent movement passed it.
+
+The exact next source dependency is TNAM0 turning behavior in the combat owner.
+Stats-tab inheritance and model inheritance are distinct, but both resolve to
+167e37 for these four creatures, so correcting ownership alone cannot resolve
+their zero. A bounded static check verified the existing decoded text SHA256
+ad347436b8d504f811aff739db344dc508bec381bf30fb5cf6865f5faddff526.
+It did not qualify a zero-to-default or instant-turn rule. Installed Capstone5.0.7
+decodes the selected x87 field access, but that access is TNAM serialization,
+not a runtime turn consumer. No behavior was inferred from negative filtered
+searches or other classes' same-offset fields. No installation was needed.
+Actual four-actor save/cold acceptance remains open. A later bounded getter trace
+qualifies exact-zero substitution through the current fCreatureDefaultTurningSpeed
+setting; this is not yet implemented in the frozen publication batch. Downstream
+turn integration and ordinary acceptance remain separate. No default literal is
+authorized by the contract.
+Original and earned saves stay immutable; failed attempts did not replace them.
+
+Publication scope is the independently useful optional-ammo economics and honest
+stopped/preselection continuation owners. Zero-turn locomotion/combat and Eat
+execution remain held, with errors visible and independent capture gates intact.
+The existing container probe now accepts an optional owned-AMMO audit argument
+to join the shared resolver to actual source value and weight-field presence.
+The owned047419 audit passed with value1 and unknown weight. The full required
+publication gate passed08:44:11 UTC, Gate0/Diff0,2524 public files, no source drift,
+added public files or protected-save drift. Runtime/contracts remained frozen
+throughout. The next code owner is the qualified zero-turn getter substitution;
+Eat execution and four-actor save/cold acceptance remain incomplete.
 ## Durable ordinary progress
 
 The genuine fresh character completed Doc stage200 and source rewards; ordinary
@@ -65,7 +119,7 @@ All slots/evidence stay private under local/fnv-wells-fixed/broad-tutorial-batch
 
 ## Next action and operating constraints
 
-Publish the accepted CompleteQuest repair. INFO15d97e formerly stopped before its
+CompleteQuest is accepted on main. INFO15d97e formerly stopped before its
 response because the command had no frontend owner. Both script executors now use
 the existing shared completion owner. The corrected ordinary choice completed
 VCG02, awarded50XP (20 to70, still level1), completed objective60 through source
@@ -74,11 +128,12 @@ VCG02 remained intact. Immutable241 preserves the result with100HP and Sunny ali
 All seven tutorial deaths and the settler's death remain genuine outcomes.
 No reward, StopQuest or blanket objective effect is invented by this command.
 
-Required gate passed; exact-head review, hosted checks and normal merge remain pending.
-After publication, continue ordinary gathering from immutable7e85fb8ff5f347ec9e88269d9a4f887c
-(93HP, combat-adjacent) or241 (100HP before travel). VCG03 objective10 targets actual
-scripted ACTI references15d982 (Xander Root) and15d981 (Broc Flower); neither was
-harvested. Do not replace their script ownership with a generic harvest bypass.
+PR301 publication is complete. Finish the grouped movement/admission continuation
+repair before claiming the later journey can save.
+After the corrected build, use ordinary Load of earned5e54 and continue gathering. VCG03 objective10 targets actual
+scripted ACTI15d982 (Xander Root) and15d981 (Broc Flower). Xander Root is durable;
+Broc Flower is still missing. Do not replace script ownership with a generic
+harvest bypass.
 The earlier other-cell editor-travel warning did not recur in corrected dialogue;
 that general owner and the per-pellet damage question remain parked.
 
@@ -117,3 +172,9 @@ cleanup is claimed. Require a fresh actual refusal before assigning that owner.
   families and assistance, world materials/LOD, complete UI/audio and XR are incomplete.
 - Native rematerialization/full bone-pose fidelity and retail timing remain separate
   from the accepted deferred/pending package persistence boundaries.
+
+Coordination boundary: automatic approval review rejected an optional follow-up to
+the existing writer for lack of direct user authorization in this turn. No retry
+or alternate messaging route is being used. Existing handed-off code is integrated;
+independent gameplay and integration continue. No writer job was requested by that
+rejected message.
