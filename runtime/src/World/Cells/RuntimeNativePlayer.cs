@@ -138,7 +138,13 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
     internal Action AcquireModalInput()
     {
         _modalInputLeases++;
-        ApplyModalInput(true);
+        try { ApplyModalInput(true); }
+        catch
+        {
+            _modalInputLeases--;
+            _modalInput = _requestedModalInput || _modalInputLeases > 0;
+            throw;
+        }
         var released = false;
         return () =>
         {

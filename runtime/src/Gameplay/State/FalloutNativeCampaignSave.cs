@@ -59,7 +59,8 @@ internal sealed record FalloutNativeCampaignState(
     FalloutTransientExplosionsSnapshot? TransientExplosions = null,
     FalloutFastTravelSnapshot? FastTravel = null,
     FalloutReputationsSnapshot? Reputations = null,
-    FalloutPlayerNotesSnapshot? PlayerNotes = null);
+    FalloutPlayerNotesSnapshot? PlayerNotes = null,
+    FalloutPlayerAdvancementSnapshot? PlayerAdvancement = null);
 
 internal sealed record FalloutNativeCampaignRestore(
     FalloutNativeCampaignState State,
@@ -737,6 +738,16 @@ internal static class FalloutNativeCampaignSave
             throw new InvalidDataException("Legacy campaign schema has editor travel progress.");
         FalloutPlayerAbilitySaveAdmission.Require(abilityAuthorityState, originalAbilityAdmission);
         state.Vitals?.Validate();
+        if (state.PlayerAdvancement is { } advancement)
+        {
+            advancement.Source.Validate();
+            if (state.Schema != ExpectedSchema || state.Vitals is not { } progressionVitals ||
+                advancement.Schema != FalloutPlayerAdvancement.SnapshotSchema ||
+                advancement.ObservedLevel != progressionVitals.Level ||
+                advancement.ObservedExperience != progressionVitals.ExperiencePoints ||
+                advancement.OpeningLevel is not null || advancement.Menu is not null || advancement.Error is not null)
+                throw new InvalidDataException("Saved settled player advancement differs from its authoritative vitals.");
+        }
         if (state.PlayerActorValues is { } playerValues)
         {
             FalloutPlayerActorValues.Validate(playerValues);

@@ -17,12 +17,20 @@ public partial class RuntimeCoordinator
     {
         // Capture while transforms, physical bodies and attachment nodes still
         // belong to the scene. ExitTree runs after descendant teardown begins.
+        Exception? failure = null;
+        void Retire(Action retire)
+        {
+            try { retire(); }
+            catch (Exception error) { failure ??= error; }
+        }
         foreach (var combat in SceneGraph.NodeTraversal.SelfAndDescendants<RuntimeNativeActorCombat>(root))
-            combat.RetireSourceBindings();
+            Retire(combat.RetireSourceBindings);
         foreach (var npc in SceneGraph.NodeTraversal.SelfAndDescendants<RuntimeNativeNpc>(root))
-            npc.RetireSourceBindings();
+            Retire(npc.RetireSourceBindings);
         foreach (var creature in SceneGraph.NodeTraversal.SelfAndDescendants<RuntimeNativeCreature>(root))
-            creature.RetireSourceBindings();
+            Retire(creature.RetireSourceBindings);
+        if (failure is not null)
+            throw new InvalidOperationException("Actor retirement could not retain every outgoing continuation.", failure);
     }
 
     internal static void DiscardNativeActor(Node3D actor, Node3D? previousActor)

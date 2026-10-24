@@ -88,6 +88,15 @@ public partial class RuntimeCoordinator
             }
             CommitNativeWorldTransfer(current, active, root, scene, transform);
         }
+        catch (Exception error) when (root is not null && ReferenceEquals(_nativeCurrentCellRoot, root))
+        {
+            // Publication committed. Retiring the outgoing presentation is
+            // irreversible; never free the authoritative incoming root here.
+            _nativeOpeningStageDriver!.RetainDriverFailure(error);
+            foreach (var (body, mode) in arrivalCollision) body.DisableMode = mode;
+            GetTree().Paused = true;
+            throw;
+        }
         catch
         {
             root?.Free();
@@ -134,9 +143,24 @@ public partial class RuntimeCoordinator
             throw;
         }
         root.ProcessMode = ProcessModeEnum.Inherit;
-        RetireNativeActorBindings(current);
-        NativeOwnedAnimationSoundPlayer.UnloadSourceLoops(current);
-        current.ProcessMode = ProcessModeEnum.Disabled;
-        current.QueueFree();
+        Exception? retirementFailure = null;
+        try
+        {
+            // Capture/unbind while the old bodies are still in the tree. Child
+            // exit order cannot provide a live physics continuation during Free.
+            try { current.GetChildren().OfType<RuntimeNativeReferencePresentation>().Single().RetireBindings(); }
+            catch (Exception error) { retirementFailure ??= error; }
+            try { RetireNativeActorBindings(current); }
+            catch (Exception error) { retirementFailure ??= error; }
+            try { NativeOwnedAnimationSoundPlayer.UnloadSourceLoops(current); }
+            catch (Exception error) { retirementFailure ??= error; }
+        }
+        finally
+        {
+            current.ProcessMode = ProcessModeEnum.Disabled;
+            current.QueueFree();
+        }
+        if (retirementFailure is not null)
+            throw new InvalidOperationException("Committed world transfer could not retire its outgoing owners.", retirementFailure);
     }
 }

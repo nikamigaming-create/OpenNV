@@ -138,9 +138,17 @@ internal sealed class FalloutAbilityModifiers(FalloutPluginStack records)
             if (fields[index].Signature != "PRKE") continue;
             var header = fields[index].Data.Span;
             if (header.Length != 3) throw new InvalidDataException("Perk entry header extent is invalid.");
-            if (header[1] != 0) throw new NotSupportedException($"Perk {form} requires acquired rank state.");
             var end = Array.FindIndex(fields, index + 1, field => field.Signature == "PRKF");
-            if (end < 0 || fields[(index + 1)..end].Any(field => field.Signature == "PRKE")) throw new InvalidDataException("Perk entry is unterminated.");
+            if (end < 0 || fields[end].Data.Length != 0 || fields[(index + 1)..end].Any(field => field.Signature == "PRKE")) throw new InvalidDataException("Perk entry is unterminated.");
+            // Actor storage currently admits the first acquired rank only.
+            // Future-rank declarations are not active first-rank effects; keep
+            // their original ordinal for live SetPerkEntryValue addressing.
+            if (header[1] != 0)
+            {
+                ++sourceIndex;
+                index = end;
+                continue;
+            }
             var group = fields[(index + 1)..end];
             var data = group.Single(field => field.Signature == "DATA").Data.Span;
             if (header[0] == 1 && data.Length == 4 && group.Length == 1)

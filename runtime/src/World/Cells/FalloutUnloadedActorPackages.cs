@@ -58,6 +58,7 @@ internal sealed class FalloutUnloadedActorPackages(FalloutPluginStack records, F
         if (state.PendingPackageSelection is { } pending) return pending.Package;
         if (state.PackageBindingFailure is { } stopped) return stopped.Package;
         if (state.SandboxAdmissionFailure is { } sandbox) return sandbox.Package;
+        if (state.SandboxMotionFailure is { } motionFailure) return motionFailure.Package;
         if (state.SelectionFailure is not null) return null;
         var templates = state.Templates ?? world.InitializeActorTemplates(actor, playerLevel(), globals);
         if (!_actors.TryGetValue(actor, out var events))
@@ -111,6 +112,14 @@ internal sealed class FalloutUnloadedActorPackages(FalloutPluginStack records, F
                     throw new InvalidDataException("Retiring Sandbox differs from its stopped lifecycle.");
                 retained.RestoreHistory(events.Revision, events.LastEvent, events.LastPackage);
             }
+            if (world.Get(actor).SandboxMotionFailure is { } motionFailure)
+            {
+                motionFailure.Validate(records, world.Get(actor));
+                if (active.Form != motionFailure.Package || events.Done || events.Revision != motionFailure.EventRevision ||
+                    events.LastEvent != motionFailure.LastEvent || events.LastPackage != motionFailure.LastPackage)
+                    throw new InvalidDataException("Retiring Sandbox motion differs from its stopped lifecycle.");
+                retained.RestoreHistory(events.Revision, events.LastEvent, events.LastPackage);
+            }
         }
         _actors.Add(actor, retained);
         _deferred.Remove(actor);
@@ -121,6 +130,17 @@ internal sealed class FalloutUnloadedActorPackages(FalloutPluginStack records, F
     internal void BindNative(FalloutFormKey actor, FalloutPackageEvents events)
     {
         var state = world.Get(actor);
+        if (state.SandboxMotionFailure is { } motionFailure)
+        {
+            motionFailure.Validate(records, state);
+            if (_actors.TryGetValue(actor, out var prior) && (prior.Error is not null || prior.Done ||
+                prior.Active?.Form != motionFailure.Package || prior.Revision != motionFailure.EventRevision ||
+                prior.LastEvent != motionFailure.LastEvent || prior.LastPackage != motionFailure.LastPackage))
+                throw new InvalidDataException("Unloaded Sandbox motion differs from its stopped lifecycle.");
+            _actors.Remove(actor); _deferred.Remove(actor);
+            motionFailure.RestoreEvents(records, state, events);
+            return;
+        }
         if (state.SandboxAdmissionFailure is { } sandbox)
         {
             sandbox.Validate(records, state);

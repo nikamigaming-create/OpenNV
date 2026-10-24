@@ -29,7 +29,8 @@ internal sealed partial class FalloutReferenceWorld
         var actor = Actor(reference);
         var equipped = EquippedArmor(reference, level, globals);
         var result = _actorDefense.Read(actor.Base, actor.Inventory!.Contents, equipped, actor.Templates);
-        foreach (var effect in PerkModifiers(reference).Where(effect => effect.ActorValue is 12 or 76))
+        // DamageResist is AV18; AV12 is ActionPoints and cannot add armor.
+        foreach (var effect in PerkModifiers(reference).Where(effect => effect.ActorValue is 18 or 76))
         {
             if (effect.Conditions.Count != 0) throw new NotSupportedException("Conditional acquired resistance requires its condition owner.");
             result = effect.ActorValue == 76 ? result with { Threshold = result.Threshold + effect.Amount } : result with { Resistance = result.Resistance + effect.Amount };
@@ -60,7 +61,7 @@ internal sealed class FalloutActorDefenseResolver(FalloutPluginStack records)
                 if (!_defenseAbilities.TryGetConstantModifiers(spell.Value, out var modifiers)) continue;
                 foreach (var effect in modifiers)
                 {
-                    if (effect.ActorValue is not (12 or 76)) continue;
+                    if (effect.ActorValue is not (18 or 76)) continue;
                     if (effect.Conditions.Count != 0) throw new NotSupportedException("Conditional actor resistance requires its condition owner.");
                     if (effect.ActorValue == 76) threshold += effect.Amount; else resistance += effect.Amount;
                 }
@@ -90,7 +91,7 @@ internal sealed class FalloutActorDefenseResolver(FalloutPluginStack records)
                     if (!_defenseAbilities.TryGetConstantModifiers(form.Value, out var armorModifiers)) continue;
                     foreach (var effect in armorModifiers)
                     {
-                        if (effect.ActorValue is not (12 or 76)) continue;
+                        if (effect.ActorValue is not (18 or 76)) continue;
                         if (effect.Conditions.Count != 0) throw new NotSupportedException("Conditional armor resistance requires its condition owner.");
                         if (effect.ActorValue == 76) threshold += effect.Amount; else resistance += effect.Amount;
                     }

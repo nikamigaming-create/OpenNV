@@ -10,7 +10,11 @@ internal sealed partial class FalloutReferenceInstance
 
     internal void UnbindObjectPhysicsCapture(Func<IReadOnlyList<FalloutObjectPhysicsSnapshot>> capture)
     {
-        if (CaptureObjectPhysics == capture) ObjectPhysics = capture();
-        if (!_physicsCaptures.Remove(capture)) throw new InvalidOperationException("Object physics capture was not bound.");
+        if (!_physicsCaptures.Contains(capture)) throw new InvalidOperationException("Object physics capture was not bound.");
+        try
+        {
+            if (CaptureObjectPhysics == capture) ObjectPhysics = capture();
+        }
+        finally { _physicsCaptures.Remove(capture); }
     }
 }

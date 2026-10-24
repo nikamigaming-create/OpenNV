@@ -155,6 +155,7 @@ internal sealed partial class RuntimeNativeCreature : CharacterBody3D
         try
         {
             AdvanceConversationFacing((float)delta);
+            if (AdvanceScriptIdle(delta)) return;
             if (AdvanceEventIdle(delta)) return;
             if (Combat?.PackageOwnsPose == true) return;
             var from = _clock.ElapsedSeconds;
@@ -163,7 +164,7 @@ internal sealed partial class RuntimeNativeCreature : CharacterBody3D
             foreach (var key in _textKeys.Crossed(from, _clock.ElapsedSeconds, include))
             {
                 _animation.ApplySourceTime(key.SourceSeconds);
-                var disposition = _sounds.Dispatch(key);
+                var disposition = IsCreatureAuxiliarySound(key.Text) ? DispatchCreatureTextKey(key.Text) : _sounds.Dispatch(key);
                 if (disposition.Contains("unbound", StringComparison.Ordinal)) _unbound.Add("source-event:" + key.Text);
                 _lastEvent = new { ordinal = ++_eventCount, key, disposition };
                 RuntimeNifControllerPlayer.TextKeyObserver?.Invoke(new

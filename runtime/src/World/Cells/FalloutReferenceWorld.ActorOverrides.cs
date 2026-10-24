@@ -116,6 +116,24 @@ internal sealed partial class FalloutReferenceWorld
         return result.Where(item => item.Value > 0).Select(item => item.Key).ToArray();
     }
 
+    // Current actor storage admits only the first acquired rank. Allocation
+    // queries this same owner instead of keeping a second perk list in the UI.
+    internal int AcquiredPerkRank(FalloutFormKey reference, FalloutFormKey perk) =>
+        AcquiredPerks(reference).Contains(perk) ? 1 : 0;
+
+    internal void AcquireFirstPerkRank(FalloutFormKey reference, FalloutFormKey perk, int rank, Action requireEffects)
+    {
+        ArgumentNullException.ThrowIfNull(requireEffects);
+        if (rank != 1 || AcquiredPerkRank(reference, perk) != 0)
+            throw new NotSupportedException("Perk acquisition requires an unowned first rank.");
+        // Validate every effect before publishing the acquisition. Quest-stage
+        // effects and higher ranks retain their explicit unsupported boundary.
+        var effects = _perkAbilities.Perk(perk);
+        foreach (var spell in effects.Spells) _ = _perkAbilities.ConstantModifiers(spell);
+        requireEffects();
+        ChangePerk(reference, perk, true);
+    }
+
     internal IEnumerable<FalloutPerkEntry> PerkEntries(FalloutFormKey reference) =>
         AcquiredPerks(reference).SelectMany(perk => _perkAbilities.Perk(perk).Entries);
 

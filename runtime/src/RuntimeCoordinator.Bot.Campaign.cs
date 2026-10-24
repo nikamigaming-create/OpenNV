@@ -18,7 +18,7 @@ public partial class RuntimeCoordinator
         {
             var start = controls.SingleOrDefault(control => control.Name == (entry == "new" ? "sNew" : "sContinue"));
             if (start is not null) choices.Add(new(start.Name, start.Path, start.Text, "startup", "opening-menu"));
-            return new(null, (long)Engine.GetFramesDrawn(), scene, 0, _nativeLoadingLayer is not null ||
+            return new(null, (long)Engine.GetProcessFrames(), scene, 0, _nativeLoadingLayer is not null ||
                 _loadingScreen is not null, GetTree().Paused, false, false, false, [], choices);
         }
         foreach (var control in controls)
@@ -74,7 +74,9 @@ public partial class RuntimeCoordinator
                             {
                                 _campaignPortals ??= new(records);
                                 var route = _campaignPortals.Find(current.FormKey, placement.Cell,
-                                    reference => world.CanActivate(reference));
+                                    reference => world.CanActivate(reference) &&
+                                        (world.Lock(reference) is not { } gate ||
+                                            gate.Key is { } key && _nativeInventory.Item(key) is not null));
                                 if (route.Count == 0) throw new InvalidDataException("Cross-cell campaign goal has no source portal action.");
                                 action = route[0]; mode = "interact";
                             }
@@ -101,7 +103,7 @@ public partial class RuntimeCoordinator
         }
         var save = _nativeManualSaves.Receipt is { } receipt
             ? new BotCampaignSave(receipt.Generation, receipt.Disposition, receipt.CommittedSlot?.Id, receipt.Error) : null;
-        return new(binding, (long)Engine.GetFramesDrawn(), scene, driver?.Quests.ProgressRevision ?? 0,
+        return new(binding, (long)Engine.GetProcessFrames(), scene, driver?.Quests.ProgressRevision ?? 0,
             loading, GetTree().Paused, player.ModalInput, defeated, !loading && !player.ModalInput &&
             !GetTree().Paused && NativeActiveMenus()?.Any() != true, goals, choices, save, error,
             _campaignPortals is not null, _campaignPortals?.Issues.Select(issue => issue.Error).ToArray());

@@ -13,6 +13,7 @@ internal sealed partial class RuntimeNativeCreature
     private RuntimeLiveContentSource _content = null!;
     private RuntimeNativeNifAnimation? _eventIdleAnimation;
     private FalloutIdleAnimationPlayback? _eventIdleClock;
+    private readonly Dictionary<string, FalloutFormKey?> _certainEnumSounds = new(StringComparer.OrdinalIgnoreCase);
     private bool PackageEndIdlePending => _aiState?.PackageIdle?.Kind == "POEA" && _eventIdleClock?.Complete == false;
 
     private void DispatchPackageEvent(FalloutScriptPackage package, string kind)
@@ -94,6 +95,7 @@ internal sealed partial class RuntimeNativeCreature
     private void BindEventIdle(FalloutPackageEventIdle saved, RuntimeNativeNifAnimation animation, FalloutIdleAnimationPlayback clock)
     {
         saved.Validate();
+        if (ScriptIdleActive) throw new NotSupportedException("Creature package event idle cannot compose an active script idle.");
         animation.ApplySourceTime(clock.SourceSeconds);
         _eventIdleAnimation = animation; _eventIdleClock = clock; _aiState!.PackageIdle = saved;
     }
@@ -103,21 +105,7 @@ internal sealed partial class RuntimeNativeCreature
         if (_eventIdleAnimation is not { } animation || _eventIdleClock is not { } clock || _aiState!.PackageIdle is not { } saved) return false;
         try
         {
-            clock.Advance(delta, interval =>
-            {
-                animation.ApplySourceTime(interval.To);
-                foreach (var key in animation.TextKeys.Where(key => key.Time <= interval.To &&
-                    (key.Time > interval.From || interval.IncludeFrom && key.Time == interval.From)))
-                    foreach (var value in key.Value.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries).Select(value => value.Trim()))
-                    {
-                        var structural = value.Equals("start", StringComparison.OrdinalIgnoreCase) || value.Equals("end", StringComparison.OrdinalIgnoreCase) ||
-                            value.Equals("StartLoop", StringComparison.OrdinalIgnoreCase) || value.Equals("EndLoop", StringComparison.OrdinalIgnoreCase);
-                        var disposition = structural ? "source-phase-owner" : _sounds.Dispatch(value);
-                        if (disposition.Contains("unbound", StringComparison.Ordinal))
-                            throw new NotSupportedException($"Creature event idle key {value} is unbound.");
-                        _lastEvent = new { ordinal = ++_eventCount, idle = saved.Idle.ToString(), key.Time, key = value, disposition };
-                    }
-            });
+            clock.Advance(delta, interval => DispatchIdleInterval(animation, interval, saved.Idle));
         }
         catch (Exception error) when (error is InvalidDataException or NotSupportedException or InvalidOperationException)
         {
@@ -133,6 +121,46 @@ internal sealed partial class RuntimeNativeCreature
             GD.Print($"OPENNV_CREATURE_PACKAGE_IDLE_END reference={Appearance.Reference} idle={saved.Idle} sourceSeconds={clock.SourceSeconds:R}");
         }
         return true;
+    }
+
+    private void DispatchIdleInterval(RuntimeNativeNifAnimation animation, FalloutIdleAnimationInterval interval, FalloutFormKey idle)
+    {
+        animation.ApplySourceTime(interval.To);
+        foreach (var key in animation.TextKeys.Where(key => key.Time <= interval.To &&
+            (key.Time > interval.From || interval.IncludeFrom && key.Time == interval.From)))
+            foreach (var value in key.Value.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries).Select(value => value.Trim()))
+            {
+                var structural = value.Equals("start", StringComparison.OrdinalIgnoreCase) || value.Equals("end", StringComparison.OrdinalIgnoreCase) ||
+                    value.Equals("StartLoop", StringComparison.OrdinalIgnoreCase) || value.Equals("EndLoop", StringComparison.OrdinalIgnoreCase);
+                var disposition = structural ? "source-phase-owner" : DispatchCreatureTextKey(value);
+                if (disposition.Contains("unbound", StringComparison.Ordinal))
+                    throw new NotSupportedException($"Creature event idle key {value} is unbound.");
+                _lastEvent = new { ordinal = ++_eventCount, idle = idle.ToString(), key.Time, key = value, disposition };
+            }
+    }
+
+    private static bool IsCreatureAuxiliarySound(string value) =>
+        value.StartsWith("Enum:", StringComparison.OrdinalIgnoreCase) &&
+        (value[5..].Trim().Equals("Auxiliary1", StringComparison.OrdinalIgnoreCase) ||
+         value[5..].Trim().Equals("Auxiliary2", StringComparison.OrdinalIgnoreCase) ||
+         value[5..].Trim().Equals("Auxiliary3", StringComparison.OrdinalIgnoreCase));
+
+    private string DispatchCreatureTextKey(string value)
+    {
+        if (!IsCreatureAuxiliarySound(value)) return _sounds.Dispatch(value);
+        var name = value[5..].Trim();
+        if (!_certainEnumSounds.TryGetValue(name, out var sound))
+        {
+            var records = _aiRecords ?? throw new NotSupportedException("Creature enum sound has no source record owner.");
+            sound = FalloutCreatureAnimationSounds.RequiredCertainSound(records, Appearance.Creature, name);
+            if (sound is { } selected) _sounds.PrepareSound(selected);
+            _certainEnumSounds.Add(name, sound);
+        }
+        // A single 100% declaration needs no chance decision. Playback and
+        // variant selection use the retained audio owner; native endpoint gate
+        // RNG consumption is not yet qualified and is visible as divergence.
+        _unbound.Add("creature-enum-native-endpoint-gate-rng-unqualified");
+        return sound is { } form ? _sounds.DispatchSound(form) : "source-declared-null-creature-sound";
     }
 
     private static string Hash(ReadOnlySpan<byte> bytes) => Convert.ToHexString(SHA256.HashData(bytes));

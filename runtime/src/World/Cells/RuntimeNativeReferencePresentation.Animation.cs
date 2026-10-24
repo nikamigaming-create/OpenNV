@@ -59,11 +59,23 @@ internal partial class RuntimeNativeReferencePresentation
         if (_animationCaptures.Remove(key, out var capture)) instance.UnbindObjectAnimationCapture(capture);
     }
 
-    public override void _ExitTree()
+    internal void RetireBindings()
     {
-        foreach (var key in _physicsBindings.Keys.ToArray()) UnbindObjectPhysics(key);
-        foreach (var key in _objectControllers.Keys.ToArray()) UnbindObjectAnimation(key);
+        Exception? failure = null;
+        foreach (var key in _physicsBindings.Keys.ToArray())
+            try { UnbindObjectPhysics(key); }
+            catch (Exception error) { failure ??= error; }
+        foreach (var key in _objectControllers.Keys.ToArray())
+            try { UnbindObjectAnimation(key); }
+            catch (Exception error) { failure ??= error; }
+        if (failure is not null)
+        {
+            Error ??= failure.Message;
+            throw new InvalidOperationException("Reference presentation retirement could not retain its continuation.", failure);
+        }
     }
+
+    public override void _ExitTree() => RetireBindings();
 
     private RuntimeNifControllerPlayer[] ObjectControllers(FalloutFormKey key)
     {

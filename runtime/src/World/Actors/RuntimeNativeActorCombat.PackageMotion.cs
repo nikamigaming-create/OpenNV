@@ -192,26 +192,6 @@ internal sealed partial class RuntimeNativeActorCombat
         StopPackageMotion();
         if (OwnsPose || !PackageMovementReady) return;
         PrepareMovement();
-        if (_packageIdle is null)
-        {
-            var directory = _skeletonPath[.._skeletonPath.LastIndexOf('/')];
-            _packageIdle = new(SelectPath(directory, "mtidle", "locomotion/mtidle"), _content, _skeleton, null, true);
-            var gender = _actor is RuntimeNativeNpc npc && npc.Appearance.Female ? "female" : "male";
-            _packageWalk = new(SelectPath(directory, "mtforward", $"locomotion/{gender}/mtforward", "locomotion/mtforward"), _content, _skeleton, null, true);
-            _packageRun = new(SelectPath(directory, "mtfastforward", $"locomotion/{gender}/mtfastforward", "locomotion/mtfastforward", "mtforward", $"locomotion/{gender}/mtforward", "locomotion/mtforward"),
-                _content, _skeleton, null, true);
-            _packageSounds = new(_records, _content, _actor, _skeleton.UnitsToMetres, _state.SoundRandom);
-            _actor.AddChild(_packageSounds);
-        }
-        if (sneaking && _packageSneakIdle is null)
-        {
-            var directory = _skeletonPath[.._skeletonPath.LastIndexOf('/')];
-            var idle = new NativeActorCombatAnimation(SelectPath(directory, "sneakmtidle"), _content, _skeleton, null, true);
-            var walk = new NativeActorCombatAnimation(SelectPath(directory, "sneakmtforward"), _content, _skeleton, null, true);
-            var run = new NativeActorCombatAnimation(SelectPath(directory, "sneakmtfastforward"), _content, _skeleton, null, true);
-            _packageSneakIdle = idle; _packageSneakWalk = walk; _packageSneakRun = run;
-        }
-        PreparePackageWeapon(package, weaponDrawn, sneaking);
         if (!_packageHashes.TryGetValue(package.FormKey, out var hash))
             _packageHashes.Add(package.FormKey, hash = Convert.ToHexString(SHA256.HashData(package.ReadData())));
         var offset = target - _actor.GlobalPosition;
@@ -219,10 +199,18 @@ internal sealed partial class RuntimeNativeActorCombat
         var movementRequested = moving;
         var destination = moving ? PursuitTarget(target, delta, distance) : null;
         moving &= destination.HasValue;
+        // A pending route or observed arrival needs only an idle. Missing
+        // locomotion must not prevent that real observation, nor leave an
+        // idle cached as a false indication that every movement clip loaded.
+        var clip = SelectPackageMotionClip(moving, running, sneaking);
+        if (_packageSounds is null)
+        {
+            var sounds = new NativeOwnedAnimationSoundPlayer(_records, _content, _actor, _skeleton.UnitsToMetres, _state.SoundRandom);
+            _actor.AddChild(sounds);
+            _packageSounds = sounds;
+        }
+        PreparePackageWeapon(package, weaponDrawn, sneaking);
         PackageMoving = moving;
-        var clip = sneaking
-            ? moving ? running ? _packageSneakRun! : _packageSneakWalk! : _packageSneakIdle!
-            : moving ? running ? _packageRun! : _packageWalk! : _packageIdle;
         var retained = _state.PackageMotion;
         var same = retained?.Package == package.FormKey && retained.Animation.Equals(clip.Path, StringComparison.OrdinalIgnoreCase);
         if (same && (!retained!.PackageSha256.Equals(hash, StringComparison.OrdinalIgnoreCase) ||
@@ -256,5 +244,23 @@ internal sealed partial class RuntimeNativeActorCombat
         _packageDestination = target;
         _packageDestinationActive = movementRequested;
         PackageOwnsPose = true;
+    }
+
+    private NativeActorCombatAnimation SelectPackageMotionClip(bool moving, bool running, bool sneaking)
+    {
+        var directory = _skeletonPath[.._skeletonPath.LastIndexOf('/')];
+        if (sneaking)
+        {
+            if (!moving) return _packageSneakIdle ??= Load("sneakmtidle");
+            if (running) return _packageSneakRun ??= Load("sneakmtfastforward");
+            return _packageSneakWalk ??= Load("sneakmtforward");
+        }
+        if (!moving) return _packageIdle ??= Load("mtidle", "locomotion/mtidle");
+        var gender = _actor is RuntimeNativeNpc npc && npc.Appearance.Female ? "female" : "male";
+        if (running) return _packageRun ??= Load("mtfastforward", $"locomotion/{gender}/mtfastforward", "locomotion/mtfastforward");
+        return _packageWalk ??= Load("mtforward", $"locomotion/{gender}/mtforward", "locomotion/mtforward");
+
+        NativeActorCombatAnimation Load(params string[] groups) =>
+            new(SelectPath(directory, groups), _content, _skeleton, null, true);
     }
 }

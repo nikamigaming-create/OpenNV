@@ -47,8 +47,7 @@ internal partial class RuntimeNativeReferencePresentation
 
     private void UnbindObjectPhysics(FalloutFormKey key)
     {
-        if (!_physicsBindings.TryGetValue(key, out var binding)) return;
+        if (!_physicsBindings.Remove(key, out var binding)) return;
         if (binding.Active) binding.Instance.UnbindObjectPhysicsCapture(binding.Capture);
-        _physicsBindings.Remove(key);
     }
 }

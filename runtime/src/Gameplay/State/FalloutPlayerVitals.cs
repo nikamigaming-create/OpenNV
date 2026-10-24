@@ -9,6 +9,11 @@ internal sealed class FalloutPlayerVitals
     private readonly double _healthEndurance, _healthLevel, _apBase, _apAgility, _xpBase, _xpBump;
     private readonly int _initialLevel;
     private readonly FalloutPlayerActorValues? _actorValues;
+    private readonly FalloutPluginStack _records;
+    private FalloutNativeSpecialState? _lastSpecial;
+    private Action? _requestAdvancement;
+    private bool _advancing;
+    internal event Action<int, int>? LevelChanged;
     private GameplayVitals _state = null!;
     internal GameplayVitals State
     {
@@ -32,8 +37,50 @@ internal sealed class FalloutPlayerVitals
     internal void Publish(GameplayVitals state) { state.Validate(); _state = state; }
     internal void RequireLevelUpOwner()
     {
-        if (State.ExperiencePoints >= State.NextLevelExperiencePoints)
-            throw new NotSupportedException("Earned player XP requires the source level-cap, skill/perk allocation and LevelUpMenu owners.");
+        var current = State;
+        if (current.ExperiencePoints < ExperienceThreshold(checked(current.Level + 1))) return;
+        var cap = unchecked((int)FalloutGameSettingIntegers.Read(_records, "iMaxCharacterLevel"));
+        if (cap is < 1 or > ushort.MaxValue) throw new InvalidDataException("Player level cap exceeds source storage.");
+        if (current.Level >= cap) return;
+        (_requestAdvancement ?? throw new NotSupportedException(
+            "Earned player XP requires the bound skill/perk allocation and LevelUpMenu owners."))();
+    }
+
+    internal void BindLevelUpOwner(Action requestAdvancement)
+    {
+        ArgumentNullException.ThrowIfNull(requestAdvancement);
+        if (_requestAdvancement is not null) throw new InvalidOperationException("Player advancement is already bound.");
+        _requestAdvancement = requestAdvancement;
+    }
+
+    // The caller owns the qualified level-induced healing/AP effects. Source
+    // maximums are derived here; no default heal or discarded earned XP is used.
+    internal void AdvanceLevel(int level,
+        Func<GameplayVitals, GameplayVitals, GameplayVitals> applyLevelEffects)
+    {
+        ArgumentNullException.ThrowIfNull(applyLevelEffects);
+        if (_advancing) throw new InvalidOperationException("Player level advancement is already publishing.");
+        var before = State;
+        var cap = unchecked((int)FalloutGameSettingIntegers.Read(_records, "iMaxCharacterLevel"));
+        if (cap is < 1 or > ushort.MaxValue || level != checked(before.Level + 1) || level > cap ||
+            before.ExperiencePoints < ExperienceThreshold(level))
+            throw new InvalidOperationException("Player level advancement has no earned single-level transition.");
+        var derived = _actorValues is { } values ? GameplayVitals.Derive(_baseHealth, level,
+            values.ReadPermanent(7), values.ReadBoundedCurrent(10), _healthEndurance, _healthLevel,
+            _apBase, _apAgility, before.ExperiencePoints, _xpBase, _xpBump) :
+            Derive(_lastSpecial ?? throw new InvalidOperationException("Player SPECIAL is absent."), level, before.ExperiencePoints);
+        _advancing = true;
+        try
+        {
+            var changed = applyLevelEffects(before, derived);
+            if (changed.Level != level || changed.ExperiencePoints != before.ExperiencePoints ||
+                changed.NextLevelExperiencePoints != ExperienceThreshold(checked(level + 1)) ||
+                changed.MaximumHitPoints != derived.MaximumHitPoints || changed.MaximumActionPoints != derived.MaximumActionPoints)
+                throw new InvalidDataException("Player level effects changed source maximums, level or earned XP.");
+            Publish(changed);
+            LevelChanged?.Invoke(before.Level, level);
+        }
+        finally { _advancing = false; }
     }
 
     internal int ExperienceThreshold(int level)
@@ -48,12 +95,14 @@ internal sealed class FalloutPlayerVitals
     internal FalloutPlayerVitals(FalloutPluginStack records, FalloutFormKey player, FalloutNativeSpecialState special,
         GameplayVitals? restore = null) : this(records, player)
     {
+        _lastSpecial = special;
         _state = restore ?? Derive(special, _initialLevel, 0);
         _state.Validate();
     }
 
     private FalloutPlayerVitals(FalloutPluginStack records, FalloutFormKey player)
     {
+        _records = records;
         var fields = FalloutActorTemplateOwner.Resolve(records, records.GetEffective(player), 2).ReadSubrecords().ToArray();
         var data = fields.Single(field => field.Signature == "DATA").Data;
         var actor = fields.Single(field => field.Signature == "ACBS").Data;
@@ -95,6 +144,7 @@ internal sealed class FalloutPlayerVitals
     internal void SetSpecial(FalloutNativeSpecialState special)
     {
         if (_actorValues is not null) throw new InvalidOperationException("Player vitals are bound to the shared actor value owner.");
+        _lastSpecial = special;
         var derived = Derive(special, State.Level, State.ExperiencePoints);
         SetDerived(derived);
     }
@@ -102,16 +152,6 @@ internal sealed class FalloutPlayerVitals
     private void SetDerived(GameplayVitals derived)
     {
         if (_state.MaximumHitPoints == derived.MaximumHitPoints && _state.MaximumActionPoints == derived.MaximumActionPoints) return;
-        var hitPoints = Math.Clamp(derived.MaximumHitPoints - (_state.MaximumHitPoints - _state.ExactHitPoints), 0, derived.MaximumHitPoints);
-        var displayed = checked((int)MathF.Ceiling(hitPoints));
-        var state = derived with
-        {
-            HitPoints = displayed,
-            HitPointFraction = displayed - hitPoints,
-            LimbDamage = _state.LimbDamage is null ? null : new Dictionary<byte, float>(_state.LimbDamage),
-            RadiationRads = _state.RadiationRads,
-            ActionPoints = Math.Clamp(derived.MaximumActionPoints - (_state.MaximumActionPoints - _state.ActionPoints), 0, derived.MaximumActionPoints),
-        };
-        state.Validate(); _state = state;
+        _state = _state.WithDerivedMaximums(derived);
     }
 }

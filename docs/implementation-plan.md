@@ -28,7 +28,9 @@ The accepted lockpick runtime connects keyless DOOR/CONT activation to manual
 mouse/rebound-control input and Force outcomes for its admitted unowned,
 unscripted, known-history plain-pin scope. Shared unlock, XP and resident
 activation are owned; ordinary campaign and owned-model presentation acceptance
-remain open. TERM hacking stays unbound. Complete the unsupported ownership,
+remain open. Locked TERM activation now connects owned puzzle generation,
+interactive selection, source lockout/perk admission, XP/statistic outcomes and
+delayed contents; ordinary campaign acceptance remains open. Complete the unsupported ownership,
 script, threshold-cache, variant/history and XR lanes from source evidence;
 never unlock on a skill threshold alone or bypass required quest effects.
 
