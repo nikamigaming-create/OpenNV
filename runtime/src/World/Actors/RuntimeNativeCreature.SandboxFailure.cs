@@ -110,6 +110,8 @@ internal sealed partial class RuntimeNativeCreature
 
     public override void _Ready()
     {
+        // Admission publication belongs to the constructing caller after
+        // AddChild; lifecycle callback exceptions cannot commit its authority.
         PublishSandboxMotionPose();
         PublishScriptIdlePose();
     }

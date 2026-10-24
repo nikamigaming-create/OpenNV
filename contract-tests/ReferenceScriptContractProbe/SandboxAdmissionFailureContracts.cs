@@ -18,10 +18,15 @@ internal static class SandboxAdmissionFailureContracts
             var data = new byte[12]; data[4] = 12;
             var location = new byte[12]; location[0] = 3;
             var reference = Record("ACHR", 0x900, Field("NAME", BitConverter.GetBytes(0x10u)), Field("DATA", new byte[24]));
-            var group = new byte[24 + reference.Length]; Encoding.ASCII.GetBytes("GRUP").CopyTo(group, 0);
+            var creatureReference = Record("ACRE", 0x902, Field("NAME", BitConverter.GetBytes(0x11u)), Field("DATA", new byte[24]));
+            var turningReference = Record("ACRE", 0x903, Field("NAME", BitConverter.GetBytes(0x12u)), Field("DATA", new byte[24]));
+            var creatureStats = new byte[24]; BinaryPrimitives.WriteUInt16LittleEndian(creatureStats.AsSpan(14), 100);
+            var group = new byte[24 + reference.Length + creatureReference.Length + turningReference.Length]; Encoding.ASCII.GetBytes("GRUP").CopyTo(group, 0);
             BinaryPrimitives.WriteUInt32LittleEndian(group.AsSpan(4), (uint)group.Length);
             BinaryPrimitives.WriteUInt32LittleEndian(group.AsSpan(8), 0x800);
             BinaryPrimitives.WriteUInt32LittleEndian(group.AsSpan(12), 6); reference.CopyTo(group, 24);
+            creatureReference.CopyTo(group, 24 + reference.Length);
+            turningReference.CopyTo(group, 24 + reference.Length + creatureReference.Length);
             byte[] Package(uint id, bool idle) => Record("PACK", id,
                 Field("EDID", Encoding.ASCII.GetBytes("Sandbox\0")), Field("PKDT", data), Field("PLDT", location),
                 Field("IDLC", [idle ? (byte)1 : (byte)0]), Field("IDLA", idle ? BitConverter.GetBytes(0x30u) : []),
@@ -29,6 +34,8 @@ internal static class SandboxAdmissionFailureContracts
             File.WriteAllBytes(path, Join(Record("TES4", 0, Field("HEDR", new byte[12])),
                 Record("NPC_", 0x10, Field("ACBS", new byte[24]), Field("PKID", BitConverter.GetBytes(0x20u)),
                     Field("PKID", BitConverter.GetBytes(0x21u))), Package(0x20, false), Package(0x21, true),
+                Record("CREA", 0x11, Field("ACBS", creatureStats), Field("TNAM", BitConverter.GetBytes(0f)), Field("PKID", BitConverter.GetBytes(0x20u))),
+                Record("CREA", 0x12, Field("ACBS", creatureStats), Field("TNAM", BitConverter.GetBytes(180f)), Field("PKID", BitConverter.GetBytes(0x20u))),
                 Record("CELL", 0x800, Field("DATA", [1, 0])), group,
                 Record("CELL", 0x801, Field("DATA", [1, 0])), NavigationFloor(0x802, 0x801)));
             using var records = FalloutPluginStack.Load(directory, ["Admission.esm"]);
@@ -79,6 +86,74 @@ internal static class SandboxAdmissionFailureContracts
                 new(false, true, false, false, false, false, 2), live.Revision, live.LastEvent!,
                 live.LastPackage!.Value, Hash(0x20));
             saved.Validate(records, actor);
+            var creature = new FalloutReferenceInstance(records.GetEffective(Key(0x902)), null);
+            creature.Animation.Restore(new("meshes/fixture/idle.kf", new('a', 64), 12.5, false));
+            var creatureEffects = 0;
+            var creatureLive = new FalloutPackageEvents((_, kind) => { if (kind == "POBA") creatureEffects++; });
+            creatureLive.Change(FalloutScriptPackage.Read(records.GetEffective(Key(0x20))));
+            var creatureSaved = saved with
+            {
+                Error = FalloutActorSandboxAdmissionFailure.AdmissionErrorPrefix + "Eat reference=Admission.esm:000901 base=Admission.esm:000030 inventory=False",
+                AiRandomState = creature.SoundRandom.State,
+                SelectionAttempts = 1,
+                ActivityRevision = saved.Activity.Revision,
+                EventRevision = creatureLive.Revision,
+                LastEvent = creatureLive.LastEvent!,
+                LastPackage = creatureLive.LastPackage!.Value,
+            };
+            creatureSaved.Validate(records, creature);
+            Reject(() => (creatureSaved with { SelectionAttempts = null }).Validate(records, creature));
+            Reject(() => (creatureSaved with { AiRandomState = creatureSaved.AiRandomState + 1 }).Validate(records, creature));
+            creature.SandboxAdmissionFailure = creatureSaved;
+            creature.ProcedureCaptureBlocker = FalloutSandboxPackage.CaptureBlockerPrefix + creatureSaved.Error;
+            var creatureSnapshot = creature.Capture();
+            FalloutReferenceSnapshot.Validate([creatureSnapshot]);
+            var creatureCold = JsonSerializer.Deserialize<FalloutActorSandboxAdmissionFailure>(JsonSerializer.Serialize(creatureSaved))!;
+            var creatureEvents = new FalloutPackageEvents((_, kind) => { if (kind == "POBA") creatureEffects++; });
+            creatureCold.RestoreEvents(records, creature, creatureEvents);
+            Require(creatureEffects == 1 && creatureEvents.Revision == creatureLive.Revision &&
+                creatureEvents.LastEvent == "POBA" && creature.PackageMotion is null &&
+                creature.Animation.ElapsedSeconds == 12.5 && creatureCold.AiRandomState == creatureSaved.AiRandomState,
+                "Creature admission restoration replayed Start or fabricated an activity, motion or base clock.");
+            var motionActor = new FalloutReferenceInstance(records.GetEffective(Key(0x902)), null);
+            motionActor.Animation.Restore(creature.Animation.Capture()!);
+            var motionEffects = 0;
+            var motionLive = new FalloutPackageEvents((_, kind) => { if (kind == "POBA") motionEffects++; });
+            motionLive.Change(FalloutScriptPackage.Read(records.GetEffective(Key(0x20))));
+            var acceptedActivity = new FalloutSandboxActivityProgress(FalloutSandboxActivity.Wander, 9, 1,
+                new FalloutSandboxPreferences().Capture());
+            var acceptedWander = new FalloutWanderProgress(Key(0x800), new('a', 64), [5, 6, 7], false);
+            var motionFailure = new FalloutActorSandboxMotionFailure(motionActor.Reference, motionActor.Base, Hash(0x11),
+                Key(0x11), Hash(0x11), Key(0x20), Hash(0x20), FalloutActorZeroTurnException.SourceError,
+                new(acceptedActivity, acceptedWander, true, true, 1, 2, 2),
+                [3, 4, 5], [1, 0, 0, 0, 1, 0, 0, 0, 1], [0, 0, 0],
+                new("meshes/fixture/skeleton.nif", new('a', 64), []), motionActor.Animation.Capture()!, null,
+                motionActor.SoundRandom.State, saved.Activity, .25, saved.ScheduleTime, 4, 1,
+                motionLive.Revision, motionLive.LastEvent!, motionLive.LastPackage!.Value);
+            motionFailure.Validate(records, motionActor);
+            var motionCold = JsonSerializer.Deserialize<FalloutActorSandboxMotionFailure>(JsonSerializer.Serialize(motionFailure))!;
+            var motionEvents = new FalloutPackageEvents((_, kind) => { if (kind == "POBA") motionEffects++; });
+            motionCold.RestoreEvents(records, motionActor, motionEvents);
+            Require(motionEffects == 1 && motionEvents.Revision == motionLive.Revision && motionActor.PackageMotion is null &&
+                JsonSerializer.Serialize(motionCold.Prefix) == JsonSerializer.Serialize(motionFailure.Prefix) &&
+                motionActor.Animation.ElapsedSeconds == 12.5,
+                "Stopped zero-turn restoration replayed selection, Start, motion or the base clock.");
+            Reject(() => (motionFailure with { Prefix = motionFailure.Prefix with { RandomAfterFailure = 3 } }).Validate());
+            var turningActor = new FalloutReferenceInstance(records.GetEffective(Key(0x903)), null);
+            turningActor.Animation.Restore(motionActor.Animation.Capture()!);
+            var wrongTurn = motionFailure with
+            {
+                Reference = turningActor.Reference,
+                Base = turningActor.Base,
+                BaseSha256 = Hash(0x12),
+                ModelOwner = Key(0x12),
+                ModelOwnerSha256 = Hash(0x12),
+                SoundRandomState = turningActor.SoundRandom.State,
+            };
+            var refusedTurnEvents = new FalloutPackageEvents((_, _) => motionEffects++);
+            Reject(() => wrongTurn.RestoreEvents(records, turningActor, refusedTurnEvents));
+            Require(refusedTurnEvents.Revision == 0 && motionEffects == 1,
+                "A nonzero source turn rate admitted a zero-turn receipt or dispatched its lifecycle.");
             var cold = JsonSerializer.Deserialize<FalloutActorSandboxAdmissionFailure>(JsonSerializer.Serialize(saved))!;
             var restored = new FalloutPackageEvents(Dispatch);
             cold.RestoreEvents(records, actor, restored);

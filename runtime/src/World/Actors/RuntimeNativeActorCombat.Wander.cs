@@ -58,7 +58,7 @@ internal sealed partial class RuntimeNativeActorCombat
         if (progress is null) throw new InvalidOperationException("Sandbox has no accepted wander request.");
         var randomBeforeMotion = _state.SoundRandom.State;
         try { progress = AdvancePackageWander(package, progress, source.Running, source.WeaponDrawn, delta); }
-        catch (FileNotFoundException error) when (FalloutSandboxMotionException.IsMissingMovement(error.Message) &&
+        catch (Exception error) when (FalloutSandboxMotionException.CanRetain(error) &&
             randomBeforeMotion == _state.SoundRandom.State)
         {
             // Preserve the accepted request and consumed selection prefix. A

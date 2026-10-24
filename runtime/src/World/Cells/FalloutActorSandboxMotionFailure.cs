@@ -25,12 +25,21 @@ internal sealed record FalloutSandboxMotionPrefix(FalloutSandboxActivityProgress
     };
 }
 
+internal sealed class FalloutActorZeroTurnException() : NotSupportedException(SourceError)
+{
+    internal const string SourceError = "Creature zero turn speed has no native turn owner.";
+}
+
 internal sealed class FalloutSandboxMotionException(FalloutFormKey package,
-    FalloutSandboxMotionPrefix prefix, FileNotFoundException cause) :
+    FalloutSandboxMotionPrefix prefix, Exception cause) :
     NotSupportedException(cause.Message, cause)
 {
     internal FalloutFormKey Package { get; } = package;
     internal FalloutSandboxMotionPrefix Prefix { get; } = prefix.Copy();
+    internal static bool CanRetain(Exception error) => error is FalloutActorZeroTurnException ||
+        error is FileNotFoundException && IsMissingMovement(error.Message);
+    internal static bool IsRetainedFailure(string message) => IsMissingMovement(message) ||
+        message == FalloutActorZeroTurnException.SourceError;
     internal static bool IsMissingMovement(string message)
     {
         const string prefix = "Source actor group is absent: ";
@@ -58,7 +67,7 @@ internal sealed record FalloutActorSandboxMotionFailure(FalloutFormKey Reference
             !FalloutActorFurnitureContinuation.ValidHash(BaseSha256) ||
             !FalloutActorFurnitureContinuation.ValidHash(ModelOwnerSha256) ||
             !FalloutActorFurnitureContinuation.ValidHash(PackageSha256) ||
-            string.IsNullOrWhiteSpace(Error) || !FalloutSandboxMotionException.IsMissingMovement(Error) ||
+            string.IsNullOrWhiteSpace(Error) || !FalloutSandboxMotionException.IsRetainedFailure(Error) ||
             Prefix is null || Pose is null || Animation is null || Activity is null || Activity.InCombat ||
             Position is not { Length: 3 } || Basis is not { Length: 9 } || Velocity is not { Length: 3 } ||
             Position.Concat(Basis).Concat(Velocity).Any(value => !float.IsFinite(value)) ||
@@ -111,6 +120,17 @@ internal sealed record FalloutActorSandboxMotionFailure(FalloutFormKey Reference
         _ = FalloutSandboxPackage.Read(package);
         var model = FalloutActorTemplateOwner.Resolve(records, records.GetEffective(Base), 64, actor.Templates);
         if (model.FormKey != ModelOwner) throw new InvalidDataException("Stopped Sandbox model owner changed.");
+        if (Error == FalloutActorZeroTurnException.SourceError)
+        {
+            var turn = model.ReadSubrecords().Where(field => field.Signature == "TNAM").ToArray();
+            var stats = FalloutActorTemplateOwner.Resolve(records, records.GetEffective(Base), 2, actor.Templates);
+            var speed = stats.ReadSubrecords().Where(field => field.Signature == "ACBS").ToArray();
+            if (turn.Length != 1 || turn[0].Data.Length != 4 ||
+                BinaryPrimitives.ReadSingleLittleEndian(turn[0].Data.Span) != 0 ||
+                speed.Length != 1 || speed[0].Data.Length != 24 ||
+                BinaryPrimitives.ReadUInt16LittleEndian(speed[0].Data.Span[14..]) == 0)
+                throw new InvalidDataException("Stopped Sandbox zero-turn failure differs from its source movement fields.");
+        }
         var owner = FalloutActorTemplateOwner.Resolve(records, records.GetEffective(Base), 32, actor.Templates);
         if (!owner.ReadSubrecords().Any(field => field.Signature == "PKID" && field.Data.Length == 4 &&
             owner.Plugin.AdjustFormId(BinaryPrimitives.ReadUInt32LittleEndian(field.Data.Span)) == Package))

@@ -80,6 +80,7 @@ internal sealed partial class RuntimeNativeCreature : CharacterBody3D
         var actor = new RuntimeNativeCreature { Name = $"Reference_{reference.FormKey}", Appearance = appearance, _clock = state.Animation, _content = content };
         try
         {
+            actor.PrepareSandboxAdmissionSource(state);
             actor.SetMeta("opennv_reference_form_key", reference.FormKey.ToString());
             actor.SetMeta("opennv_creature_form_key", reference.Base.ToString());
             actor.SetMeta("opennv_source_form", appearance.ModelOwner.ToString());

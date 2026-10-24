@@ -11,6 +11,8 @@ public partial class RuntimeCoordinator
         if (!root.IsInsideTree()) throw new InvalidDataException("Native actor publication has no live tree owner.");
         foreach (var npc in SceneGraph.NodeTraversal.SelfAndDescendants<RuntimeNativeNpc>(root))
             npc.RequireSourcePublication();
+        foreach (var creature in SceneGraph.NodeTraversal.SelfAndDescendants<RuntimeNativeCreature>(root))
+            creature.RequireSourcePublication();
     }
 
     internal static void RetireNativeActorBindings(Node root)

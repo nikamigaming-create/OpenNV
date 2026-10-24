@@ -87,7 +87,12 @@ internal sealed partial class RuntimeNativeCreature
         _aiState.QuerySitting = _sittingQuery = () => _aiState.FurnitureContinuation is null ? 0 :
             throw new NotSupportedException("Creature furniture continuation has no physical sitting owner.");
         _packageEvents = new(DispatchPackageEvent);
-        if (_aiState.SandboxMotionFailure is { } stoppedSandbox)
+        if (_aiState.SandboxAdmissionFailure is { } stoppedAdmission)
+        {
+            world.UnloadedPackages?.BindNative(Appearance.Reference!.Value, _packageEvents);
+            RestoreSandboxAdmissionFailure(stoppedAdmission);
+        }
+        else if (_aiState.SandboxMotionFailure is { } stoppedSandbox)
         {
             world.UnloadedPackages?.BindNative(Appearance.Reference!.Value, _packageEvents);
             RestoreSandboxMotionFailure(stoppedSandbox);
@@ -102,6 +107,8 @@ internal sealed partial class RuntimeNativeCreature
         RestoreScriptIdle();
         BindScriptIdleCapture();
         BindSandboxMotionFailureCapture();
+        BindSandboxAdmissionCapture();
+        _sandboxAdmissionConfigurationComplete = true;
     }
 
     internal void EvaluatePackages(bool reset)
@@ -109,6 +116,7 @@ internal sealed partial class RuntimeNativeCreature
         if (_aiRecords is null) throw new NotSupportedException("Creature has no package owner.");
         if (_aiState?.ScriptError is { } error) throw new NotSupportedException(error);
         if (SandboxMotionError is { } stopped) throw new NotSupportedException(stopped);
+        if (SandboxAdmissionError is { } admission) throw new NotSupportedException(admission);
         _aiError = null;
         // Script evaluation may precede native enable/materialization in the
         // same source event. Evaluate on the next resident physics step.
@@ -122,16 +130,24 @@ internal sealed partial class RuntimeNativeCreature
     {
         if (_sourceBindingsRetired) return;
         Exception? retirementFailure = null;
-        try { RetireScriptIdleCapture(); }
-        catch (Exception error) { retirementFailure = error; }
-        try { RetireSandboxMotionFailureCapture(); }
-        catch (Exception error) { retirementFailure ??= error; }
+        var detachedAdmission = HasDetachedSandboxAdmission;
+        if (detachedAdmission) ReleaseDetachedSandboxAdmissionBindings();
+        else
+        {
+            try { RetireScriptIdleCapture(); }
+            catch (Exception error) { retirementFailure = error; }
+            try { RetireSandboxMotionFailureCapture(); }
+            catch (Exception error) { retirementFailure ??= error; }
+            try { RetireSandboxAdmissionCapture(); }
+            catch (Exception error) { retirementFailure ??= error; }
+        }
         _sourceBindingsRetired = true;
         if (_aiState is { } state && ReferenceEquals(state.QueryCurrentPackage, _currentPackageQuery))
         {
             try
             {
-                if (_packageEvents is not null) _aiWorld?.UnloadedPackages?.Retain(Appearance.Reference!.Value, _packageEvents);
+                if (!detachedAdmission && _packageEvents is not null)
+                    _aiWorld?.UnloadedPackages?.Retain(Appearance.Reference!.Value, _packageEvents);
             }
             catch (Exception error) { retirementFailure ??= error; }
             finally
@@ -152,6 +168,7 @@ internal sealed partial class RuntimeNativeCreature
         state.QueryCurrentPackage ??= _currentPackageQuery;
         state.QuerySitting ??= _sittingQuery;
         state.CapturePackageAssignment ??= _packageAssignmentCapture;
+        RebindSandboxAdmissionCapture();
         Combat?.RestoreSourceBindings();
     }
 
@@ -352,6 +369,7 @@ internal sealed partial class RuntimeNativeCreature
         _waitingForTarget = null;
         if (ScriptIdleActive) return;
         if (SandboxMotionError is not null) return;
+        if (SandboxAdmissionError is not null || HasDetachedSandboxAdmission) return;
         if (_aiRecords is null || Combat is null || Combat.OwnsPose ||
             !Combat.PackageMovementReady || _conversationTarget is not null) return;
         if (_aiState?.ScriptError is { } scriptError) { _aiError = scriptError; return; }
@@ -437,6 +455,9 @@ internal sealed partial class RuntimeNativeCreature
             if (!selecting && _sandboxPackage is not null && error is FalloutSandboxMotionException stopped &&
                 stopped.Package == _aiPackage?.FormKey)
                 _sandboxMotionException = stopped;
+            if (!selecting && _sandboxPackage is not null && error is FalloutSandboxAdmissionException admission &&
+                admission.Package == _aiPackage?.FormKey && _sandboxWander is null && _aiState!.PackageMotion is null)
+                _sandboxAdmissionFailure = admission;
             if (!selecting) _failedPackage = _aiPackage?.FormKey;
             if (changed) GD.PushError($"OPENNV_CREATURE_AI_DIVERGENCE reference={Appearance.Reference}: {_aiError}");
         }

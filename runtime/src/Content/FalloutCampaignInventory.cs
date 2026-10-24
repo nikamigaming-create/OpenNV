@@ -285,10 +285,14 @@ internal static class FalloutCampaignInventoryResolver
         {
             var ammoData = RequiredSingle(record, subrecords, "DATA", 13).Span;
             var ammoValue = BinaryPrimitives.ReadInt32LittleEndian(ammoData[8..]);
+            if (ammoValue < 0) throw Error(record, "DATA contains invalid ammunition value");
+            // DAT2 is optional. Without its weight field, retain unknown
+            // economics rather than inventing a numeric ammunition default.
+            if (!subrecords.Any(field => field.Signature == "DAT2")) return (ammoValue, null);
             var extra = RequiredSingle(record, subrecords, "DAT2").Span;
             if (extra.Length is not (12 or 20)) throw Error(record, "DAT2 has an unsupported ammunition extent");
             var ammoWeight = BinaryPrimitives.ReadSingleLittleEndian(extra[8..]);
-            if (ammoValue < 0 || !float.IsFinite(ammoWeight) || ammoWeight < 0)
+            if (!float.IsFinite(ammoWeight) || ammoWeight < 0)
                 throw Error(record, "DATA/DAT2 contains invalid ammunition economics");
             return (ammoValue, ammoWeight);
         }
