@@ -26,6 +26,7 @@ internal static class UnloadedActorPackageContracts
             deferredActor.PackageAssignment is { Done: false } && deferredActor.Animation is null && world.PendingProcedureCaptureCount == 0,
             "Deferred source Start lost its owned boundary or invented native progress.");
         CheckDeferredCold(records, quests, actor, deferred);
+        CheckRetainedNative(records, actor);
         quests.EnterStage(Key(0x871), 1);
         Check(world.CurrentPackage(actor) == Key(0x8f6), "Unloaded package query retained stale quest eligibility.");
         var secondReceipt = world.PackageEvents.SnapshotPending(actor);
@@ -135,6 +136,86 @@ internal static class UnloadedActorPackageContracts
         Check(priorNative.Get(actor).DeferredPackageContinuation is null && priorNative.PendingProcedureCaptureCount == 1,
             "Prior native state was replaced with a deferred-initialization receipt.");
         Reject(() => priorNative.Capture());
+    }
+
+    private static void CheckRetainedNative(FalloutPluginStack records, FalloutFormKey actor)
+    {
+        FalloutFormKey Key(uint id) => new("Actors.esm", id);
+        using var world = new FalloutReferenceWorld(records);
+        var quests = new FalloutQuestState(records);
+        var packages = new FalloutUnloadedActorPackages(records, world, quests, null, null,
+            (program, _) => program.RequireEmptyScript(), () => 1);
+        world.UnloadedPackages = packages;
+        var native = new FalloutPackageEvents((_, _) => { });
+        native.Change(FalloutScriptPackage.Read(records.GetEffective(Key(0x8f5))));
+        var state = world.Get(actor);
+        var previous = FalloutActorPackageAssignment.Capture(records, native)!;
+        state.PackageAssignment = previous;
+        state.Animation.Change("meshes/fixture/idle.kf", new('a', 64));
+        state.PackageMotion = new(previous.Package, previous.Sha256, "meshes/fixture/walk.kf", new('b', 64),
+            12.5, false, [1, 2, 3], [0, 0, 0, 1]);
+        var pose = JsonSerializer.Serialize(state.PackageMotion);
+        var clock = JsonSerializer.Serialize(state.Animation.Capture());
+        _ = world.InitializeActorTemplates(actor, 1, null);
+        var random = state.SoundRandom.State;
+        packages.Retain(actor, native);
+        Check(world.CurrentPackage(actor) == previous.Package && state.DeferredPackageContinuation is null,
+            "Unchanged unloaded native assignment invented a transition.");
+        quests.EnterStage(Key(0x871), 1);
+        Check(world.CurrentPackage(actor) == Key(0x8f6), "Prior native motion suppressed new source eligibility.");
+        var boundary = state.DeferredPackageContinuation ?? throw new InvalidDataException("Retired native body lost deferred ownership.");
+        Check(boundary is { Revision: 3 } && boundary.RetainedAssignment == previous &&
+            boundary.Assignment.Package == Key(0x8f6) && world.PendingProcedureCaptureCount == 0,
+            "Changed unloaded assignment lost its actual native predecessor or lifecycle.");
+        Check(JsonSerializer.Serialize(state.PackageMotion) == pose &&
+            JsonSerializer.Serialize(state.Animation.Capture()) == clock && state.SoundRandom.State == random,
+            "Unloaded selection advanced or replaced the physical predecessor.");
+        world.PackageEvents.Consume(world.PackageEvents.SnapshotPending(actor));
+        var saved = JsonSerializer.Deserialize<FalloutReferenceSnapshot[]>(JsonSerializer.Serialize(world.Capture()))!;
+        using var cold = new FalloutReferenceWorld(records);
+        cold.Restore(saved);
+        cold.UnloadedPackages = new(records, cold, quests, null, null,
+            (_, _) => throw new InvalidDataException("Cold retained selection replayed source effects."), () => 1);
+        Check(cold.CurrentPackage(actor) == Key(0x8f6) && cold.PendingPackageEventCount == 0 &&
+            JsonSerializer.Serialize(cold.Get(actor).PackageMotion) == pose &&
+            cold.Get(actor).DeferredPackageContinuation == boundary,
+            "Cold unloaded selection changed the retained physical phase or consumed history.");
+        cold.LoadCell(FalloutCellSceneReader.Read(records, Key(0x880)));
+        var incoming = new FalloutPackageEvents((_, _) => throw new InvalidDataException("Native retained handoff replayed source effects."));
+        cold.UnloadedPackages.BindNative(actor, incoming);
+        incoming.Change(FalloutScriptPackage.Read(records.GetEffective(Key(0x8f6))));
+        Check(incoming.Revision == 3 && incoming.LastEvent == "POBA" &&
+            cold.Get(actor).DeferredPackageContinuation == boundary && cold.PendingProcedureCaptureCount == 1,
+            "Native binding consumed the physical handoff before an actual incoming observation.");
+        Reject(() => cold.Capture());
+        foreach (var (invalid, invalidMotion) in new[]
+        {
+            (boundary with { RetainedAssignment = previous with { Sha256 = new('0', 64) } },
+                state.PackageMotion! with { PackageSha256 = new('0', 64) }),
+            (boundary with { RetainedAssignment = boundary.Assignment }, state.PackageMotion!)
+        })
+        {
+            using var rejected = new FalloutReferenceWorld(records);
+            Reject(() => rejected.Restore(saved.Select(value => value.Reference == actor ? value with
+            { DeferredPackageContinuation = invalid, PackageMotion = invalidMotion } : value).ToArray()));
+            Check(rejected.InstanceCount == 0, "Invalid predecessor partially restored a reference world.");
+        }
+        using var repeated = new FalloutReferenceWorld(records);
+        repeated.Restore(saved.Select(value => value.Reference == actor ? value with
+        {
+            PackageAssignment = previous,
+            DeferredPackageContinuation = new(actor, previous, 5, previous)
+        } : value).ToArray());
+        repeated.UnloadedPackages = new(records, repeated, new(records), null, null,
+            (_, _) => throw new InvalidDataException("Same-ID native handoff replayed source effects."), () => 1);
+        repeated.LoadCell(FalloutCellSceneReader.Read(records, Key(0x880)));
+        var sameId = new FalloutPackageEvents((_, _) => throw new InvalidDataException("Same-ID lifecycle replayed source effects."));
+        repeated.UnloadedPackages.BindNative(actor, sameId);
+        sameId.Change(FalloutScriptPackage.Read(records.GetEffective(previous.Package)));
+        Check(sameId.Revision == 5 && repeated.Get(actor).DeferredPackageContinuation?.RetainedAssignment == previous &&
+            repeated.Get(actor).PackageMotion?.Seconds == 12.5 && repeated.PendingProcedureCaptureCount == 1,
+            "A-to-B-to-A handoff resumed its old physical clock or collapsed the new lifecycle.");
+        Console.WriteLine("OPENNV_UNLOADED_RETAINED_NATIVE_PASS unchangedPose=true unchangedClock=true noRandomDraw=true cold=true noEventReplay=true nativePublicationRequired=true sourceDriftRefused=true fixture=no-native-body");
     }
 
     internal static byte[] StageCondition(uint quest)

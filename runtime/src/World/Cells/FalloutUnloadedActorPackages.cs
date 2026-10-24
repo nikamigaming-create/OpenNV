@@ -80,6 +80,10 @@ internal sealed class FalloutUnloadedActorPackages(FalloutPluginStack records, F
             var selected = FalloutAiPackages.Select(records, state.Base, condition => Evaluate(actor, condition),
                 templates, clock, evaluateRunOn: true,
                 eligible: package => world.PackageEligible(actor, package, clock, events.Active?.Form, events.Done));
+            var predecessor = state.DeferredPackageContinuation?.RetainedAssignment ??
+                (state.PackageMotion is { } previousMotion && state.PackageAssignment is { } previousAssignment &&
+                    previousMotion.Package == previousAssignment.Package ? previousAssignment : null);
+            var revision = events.Revision;
             try { events.Change(selected is null ? null : FalloutScriptPackage.Read(selected)); }
             catch
             {
@@ -87,8 +91,10 @@ internal sealed class FalloutUnloadedActorPackages(FalloutPluginStack records, F
                 state.ProcedureCaptureBlocker = ContinuationBlocker;
                 throw;
             }
-            Remember(actor, events);
-            if (events.Active is { } active && state.PackageMotion?.Package != active.Form && state.FurnitureContinuation?.Assignment.Package != active.Form && state.DialogueContinuation?.Assignment.Package != active.Form)
+            if (events.Revision != revision) _deferred.Add(actor);
+            Remember(actor, events, predecessor);
+            if (events.Active is { } active && state.PackageMotion?.Package != active.Form && state.FurnitureContinuation?.Assignment.Package != active.Form && state.DialogueContinuation?.Assignment.Package != active.Form ||
+                _deferred.Contains(actor) && state.PackageMotion is not null)
                 state.ProcedureCaptureBlocker = ContinuationBlocker;
             else if (state.ProcedureCaptureBlocker == ContinuationBlocker) state.ProcedureCaptureBlocker = null;
             return events.Active?.Form;
@@ -110,7 +116,6 @@ internal sealed class FalloutUnloadedActorPackages(FalloutPluginStack records, F
                 if (active.Form != sandbox.Package || events.Done || events.Revision != sandbox.EventRevision ||
                     events.LastEvent != sandbox.LastEvent || events.LastPackage != sandbox.LastPackage)
                     throw new InvalidDataException("Retiring Sandbox differs from its stopped lifecycle.");
-                retained.RestoreHistory(events.Revision, events.LastEvent, events.LastPackage);
             }
             if (world.Get(actor).SandboxMotionFailure is { } motionFailure)
             {
@@ -118,13 +123,32 @@ internal sealed class FalloutUnloadedActorPackages(FalloutPluginStack records, F
                 if (active.Form != motionFailure.Package || events.Done || events.Revision != motionFailure.EventRevision ||
                     events.LastEvent != motionFailure.LastEvent || events.LastPackage != motionFailure.LastPackage)
                     throw new InvalidDataException("Retiring Sandbox motion differs from its stopped lifecycle.");
-                retained.RestoreHistory(events.Revision, events.LastEvent, events.LastPackage);
             }
         }
+        if (events.Error is null) retained.RestoreHistory(events.Revision, events.LastEvent, events.LastPackage);
+        var state = world.Get(actor);
+        var deferred = state.DeferredPackageContinuation;
+        if (deferred is not null && (retained.Active?.Form != deferred.Assignment.Package ||
+            retained.Done || retained.Error is not null || retained.Revision != deferred.Revision ||
+            retained.LastEvent != "POBA" || retained.LastPackage != deferred.Assignment.Package))
+        {
+            state.DeferredPackageContinuation = null;
+            state.ProcedureCaptureBlocker = ContinuationBlocker;
+            throw new NotSupportedException("Native retirement differs from its deferred package boundary.");
+        }
         _actors.Add(actor, retained);
-        _deferred.Remove(actor);
-        world.Get(actor).DeferredPackageContinuation = null;
-        Remember(actor, retained);
+        if (deferred is not null)
+        {
+            // Retirement precedes callback removal. Keep the actual boundary;
+            // its unloaded admission becomes true only after native unbinding.
+            _deferred.Add(actor);
+            state.PackageAssignment = FalloutActorPackageAssignment.Capture(records, retained);
+        }
+        else
+        {
+            _deferred.Remove(actor);
+            Remember(actor, retained);
+        }
     }
 
     internal void BindNative(FalloutFormKey actor, FalloutPackageEvents events)
@@ -158,9 +182,13 @@ internal sealed class FalloutUnloadedActorPackages(FalloutPluginStack records, F
             _actors.Remove(actor); _deferred.Remove(actor);
             return;
         }
+        if (_deferred.Contains(actor) && state.ProcedureCaptureBlocker == ContinuationBlocker)
+            throw new NotSupportedException("Unloaded package transition has no retained native continuation.");
         FalloutScriptPackage? active;
         bool done;
-        if (_actors.Remove(actor, out var previous))
+        if (events.Active is not null || events.Revision != 0 || events.LastEvent is not null || events.LastPackage is not null || events.Error is not null)
+            throw new InvalidOperationException("Native binding requires a fresh package lifecycle.");
+        if (_actors.TryGetValue(actor, out var previous))
         {
             if (previous.Error is { } failure) throw new NotSupportedException(failure);
             active = previous.Active; done = previous.Done;
@@ -174,6 +202,12 @@ internal sealed class FalloutUnloadedActorPackages(FalloutPluginStack records, F
         // procedure owner. A newly selected assignment has no motion yet.
         if (active is not null && state.PackageMotion?.Package != active.Form && state.FurnitureContinuation?.Assignment.Package != active.Form && state.DialogueContinuation?.Assignment.Package != active.Form)
             events.Restore(active, done);
+        // These native continuations restore their own complete lifecycle.
+        // Ordinary movement has no second history owner.
+        if (previous is not null && state.FurnitureContinuation is null && state.DialogueContinuation is null &&
+            state.PackageBindingFailure is null && state.SelectionFailure is null && state.PendingPackageSelection is null)
+            events.RestoreHistory(previous.Revision, previous.LastEvent, previous.LastPackage);
+        _actors.Remove(actor);
         _deferred.Remove(actor);
         if (state.ProcedureCaptureBlocker == ContinuationBlocker) state.ProcedureCaptureBlocker = null;
     }
@@ -207,12 +241,12 @@ internal sealed class FalloutUnloadedActorPackages(FalloutPluginStack records, F
         };
     }
 
-    private void Remember(FalloutFormKey actor, FalloutPackageEvents events)
+    private void Remember(FalloutFormKey actor, FalloutPackageEvents events, FalloutActorPackageAssignment? predecessor = null)
     {
         var state = world.Get(actor);
         state.PackageAssignment = FalloutActorPackageAssignment.Capture(records, events);
         state.DeferredPackageContinuation = _deferred.Contains(actor)
-            ? FalloutActorDeferredPackageContinuation.Capture(records, state, events) : null;
+            ? FalloutActorDeferredPackageContinuation.Capture(records, state, events, predecessor) : null;
     }
 
     private void Dispatch(FalloutFormKey actor, FalloutScriptPackage package, string kind)

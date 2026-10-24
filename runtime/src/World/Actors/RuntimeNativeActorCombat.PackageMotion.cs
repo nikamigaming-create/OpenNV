@@ -150,6 +150,17 @@ internal sealed partial class RuntimeNativeActorCombat
             return;
         }
         if (_state.PackageMotion is not { } motion) return;
+        if (_state.DeferredPackageContinuation?.RetainedAssignment is not null)
+        {
+            // Unloaded source selection can supersede a previously observed
+            // native procedure. Restore that body's last pose, never its old
+            // route or clock, while the incoming procedure is still pending.
+            motion.Validate();
+            _actor.GlobalTransform = new(new Basis(new Quaternion(motion.Rotation[0], motion.Rotation[1],
+                motion.Rotation[2], motion.Rotation[3])).Scaled(_actor.Scale),
+                new(motion.Position[0], motion.Position[1], motion.Position[2]));
+            return;
+        }
         if (_state.PackageAssignment is { } assignment && assignment.Package != motion.Package)
         {
             GD.Print($"OPENNV_NATIVE_PACKAGE_MOTION_STALE reference={_state.Reference} saved={motion.Package} current={assignment.Package} restored=false");
@@ -189,6 +200,35 @@ internal sealed partial class RuntimeNativeActorCombat
     internal void AdvancePackageMotion(FalloutPluginRecord package, Vector3 target, float distance,
         bool running, double delta, bool weaponDrawn = false, bool requireArrivalHeight = false, bool sneaking = false)
     {
+        var deferred = _state.DeferredPackageContinuation?.RetainedAssignment is not null
+            ? _state.DeferredPackageContinuation : null;
+        try
+        {
+            AdvancePackageMotionCore(package, target, distance, running, delta, weaponDrawn, requireArrivalHeight, sneaking, deferred);
+        }
+        catch (Exception error) when (deferred is not null)
+        {
+            // A failed incoming publication may already have moved the body or
+            // consumed text-key effects. It cannot become an unchanged unloaded
+            // prefix again after retirement.
+            _state.ScriptError ??= $"Native package handoff failed: {error.Message}";
+            _state.DeferredPackageContinuation = null;
+            _state.ProcedureCaptureBlocker = FalloutUnloadedActorPackages.ContinuationBlocker;
+            throw;
+        }
+    }
+
+    private void AdvancePackageMotionCore(FalloutPluginRecord package, Vector3 target, float distance,
+        bool running, double delta, bool weaponDrawn, bool requireArrivalHeight, bool sneaking,
+        FalloutActorDeferredPackageContinuation? deferred)
+    {
+        if (deferred is not null)
+        {
+            var incoming = _state.CapturePackageAssignment?.Invoke();
+            if (incoming is null || incoming.Done || incoming.Package != package.FormKey ||
+                !incoming.Sha256.Equals(Convert.ToHexString(SHA256.HashData(package.ReadData())), StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("Deferred native motion has no matching active source assignment.");
+        }
         StopPackageMotion();
         if (OwnsPose || !PackageMovementReady) return;
         PrepareMovement();
@@ -211,7 +251,7 @@ internal sealed partial class RuntimeNativeActorCombat
         }
         PreparePackageWeapon(package, weaponDrawn, sneaking);
         PackageMoving = moving;
-        var retained = _state.PackageMotion;
+        var retained = deferred is null ? _state.PackageMotion : null;
         var same = retained?.Package == package.FormKey && retained.Animation.Equals(clip.Path, StringComparison.OrdinalIgnoreCase);
         if (same && (!retained!.PackageSha256.Equals(hash, StringComparison.OrdinalIgnoreCase) ||
             !retained.AnimationSha256.Equals(clip.Hash, StringComparison.OrdinalIgnoreCase)))
@@ -241,6 +281,12 @@ internal sealed partial class RuntimeNativeActorCombat
             retained?.Package == package.FormKey ? retained.Guard : null,
             Wander: retained?.Package == package.FormKey ? retained.Wander : null,
             Sandbox: retained?.Package == package.FormKey ? retained.Sandbox : null);
+        if (deferred is not null)
+        {
+            _state.DeferredPackageContinuation = null;
+            if (_state.ProcedureCaptureBlocker == FalloutUnloadedActorPackages.ContinuationBlocker)
+                _state.ProcedureCaptureBlocker = null;
+        }
         _packageDestination = target;
         _packageDestinationActive = movementRequested;
         PackageOwnsPose = true;

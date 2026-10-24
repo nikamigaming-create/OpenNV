@@ -232,15 +232,19 @@ internal sealed partial class RuntimeNativeCreature
         var previousFailure = _failedPackage;
         _failedPackage = null;
         var retained = !_initialPackageSelected ? _aiState!.PackageMotion : null;
-        var restoreTravel = retained?.Travel is not null;
-        var restoreGuard = retained?.Guard is not null;
-        var restoreSandbox = (retained?.Wander is not null || retained?.Sandbox is not null) &&
-            _aiState!.PackageAssignment?.Package == retained!.Package;
-        var restoreAccompany = retained?.AccompanyPortal is not null;
+        var assignedMotion = retained is not null && _aiState!.PackageAssignment?.Package == retained.Package &&
+            _aiState.DeferredPackageContinuation?.RetainedAssignment is null;
+        var restoreTravel = assignedMotion && retained!.Travel is not null;
+        var restoreGuard = assignedMotion && retained!.Guard is not null;
+        var restoreSandbox = assignedMotion && (retained!.Wander is not null || retained.Sandbox is not null);
+        var restoreAccompany = assignedMotion && retained!.AccompanyPortal is not null;
         // A retired package may retain its last physical pose. That motion is
         // not an active assignment and must not restart its procedure on load.
-        var restorePatrol = retained?.Patrol is not null && _aiState!.PackageAssignment?.Package == retained.Package;
-        var selected = restoreTravel || restoreGuard || restoreAccompany || restorePatrol || restoreSandbox ? _aiRecords!.GetEffective(retained!.Package) :
+        var restorePatrol = assignedMotion && retained!.Patrol is not null;
+        var deferred = !_initialPackageSelected && _aiState!.DeferredPackageContinuation?.RetainedAssignment is not null
+            ? _aiState.DeferredPackageContinuation : null;
+        var selected = deferred is not null ? _aiRecords!.GetEffective(deferred.Assignment.Package) :
+            restoreTravel || restoreGuard || restoreAccompany || restorePatrol || restoreSandbox ? _aiRecords!.GetEffective(retained!.Package) :
             FalloutAiPackages.Select(_aiRecords!, Appearance.Creature, PackageCondition, _aiState!.Templates, _aiClock,
                 evaluateRunOn: true,
                 eligible: package => _aiWorld!.PackageEligible(Appearance.Reference!.Value, package, _aiClock,
@@ -286,7 +290,7 @@ internal sealed partial class RuntimeNativeCreature
             }
             else throw new NotSupportedException($"Creature package {source.Form} procedure {source.Procedure} is unbound.");
         }
-        var restoredDialogue = !_initialPackageSelected && dialogue?.Type == 1 && _aiState!.PackageMotion is { DialogueCompleted: true } motion && motion.Package == source!.Form;
+        var restoredDialogue = assignedMotion && dialogue?.Type == 1 && retained is { DialogueCompleted: true } motion && motion.Package == source!.Form;
         if (travel is not null) BeginTravel(selected!, restoreTravel);
         else { _travelPackage = null; _travelProgress = null; _travelDestination = null; }
         if (guard is not null)
@@ -305,7 +309,7 @@ internal sealed partial class RuntimeNativeCreature
         if (patrol is not null) BeginPatrol(patrol, restorePatrol);
         else { _patrol = null; _patrolProgress = null; _patrolDestination = null; }
         _initialPackageSelected = true;
-        var restoreFollow = follow is not null && retained?.Package == source!.Form &&
+        var restoreFollow = assignedMotion && follow is not null && retained!.Package == source!.Form &&
             _aiState!.PackageAssignment is { } followAssignment && followAssignment.Package == source.Form;
         if (restoreTravel || restoreGuard || restoreAccompany || restoreFollow || restorePatrol || restoreSandbox || restoredDialogue)
             _packageEvents!.Restore(source!, restoreFollow ? _aiState!.PackageAssignment!.Done :
@@ -319,8 +323,10 @@ internal sealed partial class RuntimeNativeCreature
             _aiState!.ProcedureCaptureBlocker = dialogue is not null && !restoredDialogue ? DialogueCaptureBlocker : null;
         if (sandbox is not null && !restoreSandbox)
             _aiState!.ProcedureCaptureBlocker = FalloutSandboxPackage.CaptureBlockerPrefix + "awaiting first native movement observation.";
-        if (!restoredDialogue && _aiState!.PackageMotion is { DialogueCompleted: true } previousMotion)
+        if (deferred is null && !restoredDialogue && _aiState!.PackageMotion is { DialogueCompleted: true } previousMotion)
             _aiState.PackageMotion = previousMotion with { DialogueCompleted = false };
+        if (deferred is not null && _aiState!.ProcedureCaptureBlocker is null)
+            _aiState.ProcedureCaptureBlocker = FalloutUnloadedActorPackages.ContinuationBlocker;
         if (restoreTravel) _evaluateRequested = true;
         _failedPackage = null;
         GD.Print($"OPENNV_CREATURE_PACKAGE reference={Appearance.Reference} package={source?.Form} procedure={source?.Procedure}");

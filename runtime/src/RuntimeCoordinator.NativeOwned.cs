@@ -57,14 +57,20 @@ public partial class RuntimeCoordinator
     {
         static float[] Vector(Vector3 value) => [value.X, value.Y, value.Z];
         static object? MovieField(Node movie, string key) => movie.HasMeta(key) ? movie.GetMeta(key).Obj : null;
-        var camera = GetViewport().GetCamera3D();
+        // The observer can outlive this coordinator's scene-tree binding.
+        // No gameplay snapshot exists until its real tree and viewport do.
+        if (!IsInsideTree()) return null!;
+        var tree = GetTree();
+        var viewport = GetViewport();
+        if (tree is null || viewport is null) return null!;
+        var camera = viewport.GetCamera3D();
         var cellChildren = _nativeCurrentCellRoot?.GetChildren();
         using var cellChildrenOwner = cellChildren is null ? null : (Godot.Collections.Array)cellChildren;
         var cellNodes = cellChildren?.ToArray() ?? [];
         var pendingCorpseCaptures = detailed ? _nativeReferences?.PendingCorpseEquipmentCaptureCount : null;
         return new
         {
-            paused = GetTree().Paused,
+            paused = tree.Paused,
             imageSpaceClock = _nativeImageSpaceClock?.State,
             botPlanning = NativeBotPlanningState,
             manualSave = new { receipt = _nativeManualSaves.Receipt, history = detailed ? _nativeManualSaves.History : null },

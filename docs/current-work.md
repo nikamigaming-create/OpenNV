@@ -1,142 +1,84 @@
 # Current work
 
-Updated 2026-10-24. Priority: one playable flat New Vegas milestone, from fresh
-New Game through Doc Mitchell, Sunny/tutorial/campfire, admitted access interactions
-and save/resume. Follow docs/implementation-plan.md. Original owned files and saves
-remain read-only. Recording is off. No campaign, XR or retail parity completion is
-claimed.
+Updated 2026-10-24. One active milestone: fresh flat New Vegas New Game through
+Doc Mitchell, Sunny's shooting/tutorial/campfire, admitted access interactions and
+save/resume. Follow docs/implementation-plan.md. Original owned files and immutable
+save slots remain read-only. Recording is off. No campaign, XR or retail parity
+completion is claimed.
 
-## Accepted main and active batch
+## Accepted baseline and ownership
 
-Main/origin-main is 8643852ea03de5814ea66f33a3742b4d58b270e1 (PR297), accepted after
-independent exact-head review, the local required gate and five hosted checks.
-The merged batch connects the advancement and continuation owners listed below.
-Locked terminal activation
-connects the owned dictionary, interactive hacking transaction, shared RNG, XP,
-Computers Hacked/CHAL and delayed terminal contents. Cancel and UI retirement release
-input without teardown saves. Unsupported ownership/history/presentation remain
-explicit. The completed branch has a verified recovery bundle and was cleaned.
+Main/origin-main and the live remote main were verified clean at
+c10798bcc8884c201f7b066bd0adfee5a211573f (PR298). Its exact head had independent
+source review, the required local runtime gate and all five hosted checks passing.
+The completed feature branch was recovered in a verified private bundle and removed.
 
-Active branch: codex/fnv-creature-idle-transitions. This is a broad gameplay batch, not
-a separate publication for each small command. Implement connected owners, freeze,
-run an integrated smoke, collect failures, fix blocking failures together and
-iterate. Run the required gate before checked publication; synchronize clean main
-and recover/clean the completed branch afterward.
+Active branch: codex/fnv-tutorial-progression, based on that accepted main.
+The coordinator owns integration, source/script/access repairs, ordinary input,
+builds, the sole runtime session and Git. The existing writer is read-only with
+all production handoffs integrated; no source investigation or competing job is
+active. Work in coherent gameplay batches, then one integrated smoke and grouped
+blocking fixes. Do not launch unchanged acceptance loops or unrelated API work.
 
-Connected code includes:
+The accepted implementation connects admitted lockpicking/hacking, shared skill
+pools, XP-driven advancement/allocation and guarded perk effects. Source creature
+script idles now use retained current-pose entry transitions, group-aware text-key
+classification and single-candidate auxiliary sounds with shared process RNG.
+Source Disable retires the active phase before processing is disabled. Unknown
+behavior and independent capture faults still refuse visibly.
 
-- Hacking Science entry30 adjustment evaluated once before generation RNG, with
-  ordinary Science admission kept separate from generation adjustment.
-- XP-driven advancement, deferred level-up UI, allocation through existing skill
-  pools, source perk declarations and guarded first-rank acquisition. Unsupported
-  effects remain visible and refuse before rank publication. The authenticated
-  integer-INT budget and entry10 adjustment are bound; fractional permanent INT
-  remains refused. Current-level readers use authoritative vitals.
-- Level changes reuse derived maxima while preserving HP/AP deficits, fractional
-  HP, limbs and radiation. Complete retail healing timing is not established.
-- Crafting/barter/level-up modal leases retire on close, removal and failure.
-- Presentation bindings retire while outgoing nodes are live. Post-commit
-  retirement failures preserve the incoming world, retain the driver fault and
-  refuse saving instead of rolling back onto partially retired owners.
-- Campaign-controller routing composes source-world exterior travel with directed
-  XTEL doors and read-only effective lock/key admission. It neither teleports nor
-  proves physical traversal. The WRLD signature regression is corrected for the
-  grouped build.
-- Combat defense now distinguishes DamageResist18 from ActionPoints12 in acquired
-  abilities, inherent actor spells and equipped armor effects. Threshold76 and
-  existing condition/pool admission remain unchanged. The grouped Debug build
-  includes this correction. Ordinary combat effects are not yet exercised.
+## Current ordinary gameplay
 
-## Integrated smoke and current blocker
+The genuine fresh character completed Doc stage200 and source-authored rewards.
+Ordinary input traversed the real saloon front door, accepted Sunny's training
+topic and saved Back in the Saddle stage10. A fresh process loaded that immutable
+save through the normal browser, exited the saloon through its authored door and
+followed Sunny outside. Her automatic source response reached stage20 and granted
+the rifle and ammunition. F5 committed slot9c985c2884564f50b79c7f71be2990fe;
+normal R then loaded five rounds with 25 in reserve.
 
-Fresh normal input completed chargen with Guns/Lockpick/Science tags, Doc stage200
-and authored rewards. Ordinary exterior/interior movement, Sunny's offered tutorial
-dialogue and her source package exit have run. The disposed outgoing physics callback
-is repaired; captures retire while bodies are live and post-commit faults retain
-the incoming authoritative world. This is not complete tutorial acceptance.
+The shooting replay hit three authored bottles, completed the objective and
+accepted the next lesson. The reached stage25 save failure was a real unloaded
+assignment/native-motion mismatch on Cheyenne10588e. The current branch retains
+that pending boundary with its actual previous physical owner and consumed event
+history. Native rebinding does not resume superseded routes/clocks/subphases,
+even after A-to-B-to-A selection; actual incoming motion consumes the marker.
+A failed incoming publication retains a fault and cannot regain unloaded admission.
 
-Genuine F5 slot4a223dfa46174df48ab14db617539cf6 retains two stopped raven motion
-receipts. Normal menu load and F5 slot daebbfaf6425420e966d4b90269eb1bf preserved
-their selected activity/wander/RNG prefix and POBA revision while idle clocks
-advanced. Separate-process Continue restores that save; a separate-process
-no-replay/resave comparison is not complete. These receipts preserve unsupported
-walking; they do not implement raven locomotion. Original saves are unchanged.
+The grouped runtime build passed with zero warnings/errors, and focused contracts
+passed for retained state, cold history, source drift and native-publication
+admission. Smoke11 then normally loaded genuine stage20, repeated the bottle lesson,
+reached stage25 and committed F5 slot591fe79d266246f0b85f497df14a2944 at03:06:15 UTC
+with no save/cleanup error and zero pending procedure captures. Its Cheyenne receipt
+contains Assignment152afa, prior17267e and actual event revision2. Comparison with
+the original stage20 slot found every other actor field unchanged, including
+motion, base animation, placement and RNG. This is pending native initialization,
+not simulated offscreen arrival or completed companion travel. Full bone-pose,
+animation and retail parity are unclaimed; cold native rematerialization remains open.
 
-The reached blocker is the authored creature fly-away IDLE. Creature PlayIdle
-starts through its source owner. The single-candidate auxiliary sound reader and
-per-event shared process RNG gate are implemented and handed back. Declared-null
-candidates consume no draw; nonnull candidates consume one even at 0%/100%.
-The coordinator added source-name/group marker classification for the reached
-SpecialIdle Attach disposition. The connected branch compiles with zero warnings
-and errors. Focused contracts pass for the retained origin, held source cursor,
-cold restoration, group marker classification and shared sound gate.
+Three later live-summary publication deadline overruns were recorded. Their writes
+eventually completed and fresh snapshots recovered; counters/error diagnostics were
+not reset. Gameplay input stopped, with explicit recovery restricted to normal Quit.
+Smoke11 exited normally with exit0. The separate observed unbound-viewport snapshot
+exception now has a minimal tree/viewport availability guard returning unavailable
+state, without fabricated camera/paused values or broad catches. That guard does
+not change publication timing or erase the I/O diagnostics.
 
-The remaining finite transition caller qualification is complete. IDLE execution
-slot and source animation group are independent: the reached DATA low-six-bit
-slot is 7, while SpecialIdle's default slot is 0. An empty/inactive selected slot
-uses a snapshot of current target-local transforms, fades that snapshot against
-the incoming start pose, and holds incoming source phase at zero until the blend
-finishes. An active outgoing slot uses the distinct ordinary easing path.
-Sequence weight and entry ease are separate factors; source events must follow
-actual clip phase. The direct-activation duration threshold is approximately
-0.01 seconds, not zero. The selected snapshot transition has no synchronization
-pointer and does not require synchronized marker phase mapping. Pending instant,
-menu/application overrides, other controller types and unqualified priority
-composition remain explicit admission boundaries. The private caller contract
-and hashed ranges are retained with the other creature-idle evidence.
-
-Both normal entrance approaches reached the same clip. Smoke07 stopped before
-repeating the transition and exited normally; no route bypass is accepted.
-The connection is restored and the preserved edits were reconciled. The coordinator
-owns all handed-back code and build/runtime/Git work; the writer is read-only.
-The integrated smoke08 process376776 reached the saloon through the ordinary
-front door (10636f to interior106185). F5 committed genuine slot
-7899b990a17d4fbea50dcd82b4384de6 at 01:47:24 UTC without save or cleanup error.
-Sunny's survival-training response advanced Back in the Saddle to stage10 and
-her source package exited through the real door. F5 committed slot
-d8e5b2afcd764081ab32c39ec988f1a6 at 01:52:30 UTC without errors.
-Smoke08 then exited through normal Quit/Yes with exit0. Recording remains off.
-
-The reached fly-away ran both actual Auxiliary3 outcomes: roll0 selected the
-20-percent sound, and roll40 missed it. Both actors then reached authored Disable.
-An exterior F5 exposed two pending capture owners because disabling processing
-prevented their next idle-cancellation tick. The enable lifecycle hook now cancels
-source-disabled idle owners before presentation processing is disabled, retaining
-faults and guaranteeing collision/visibility retirement. The corrected Debug build
-passed with zero warnings/errors (27.79 seconds).
-
-Smoke09 loaded the immutable pre-fly-away daebbfaf6425420e966d4b90269eb1bf slot
-through normal Load. A short ordinary approach triggered actor14c44a's source
-script. The new hook cancelled its idle at sourceSeconds4.338921 while the exterior
-0daebb remained resident. Pending procedure captures were zero, and ordinary F5
-committed slot19eb067689b440379f254d8e4840a4ed at 01:59:14 UTC with no save or
-cleanup error, before any door transition. Smoke09 exited normally with exit0.
-This verifies the reached resident Disable/save path; it does not add raven
-walking or qualify all animation transitions. The broader batch passed the required full runtime gate and git diff --check on
-2026-10-24 after this replay. Checked PR publication is next. All writer code is
-handed back and read-only.
-The later Sunny stage10 save d8e5b2afcd764081ab32c39ec988f1a6 is preserved for
-tutorial continuation after publication; the earlier input slot is unchanged.
-The snapshot transition retains its first-update origin and source cursor, and
-explicitly refuses the still-unqualified clip-end/return handoff. The authored
-script's independent timer drives Disable/Delete before that clip end; this real
-cancellation path is the current ordinary gameplay target, not an end bypass.
-
-The latest grouped Debug build passes with zero warnings/errors and includes the
-reached GetDestroyed query in both frontends using the existing destroyed flag.
-All writer production code is handed off. Smoke07 exited
-through normal Quit/Yes with exit0 and unchanged input save
-B0FDA62E180D6092BA6B70DDD6842801684EEE9D2A9C3070E28BC083CBAE8857.
-Local code checkpoint8ea6601b contains the broad batch. Publication repairs fix
-formatting, avoid requiring advancement settings below the earned XP threshold,
-and preserve portal failure causes while allowing admitted alternative routes.
-Both reached contract probes pass, followed by the full required runtime gate
-with OPENNV_CSHARP_GODOT_GATE_PASS. PR297 is merged; local main and origin/main
-were verified equal and clean, with the completed branch recovered and removed.
-This is implementation acceptance, not a finished tutorial. Sunny shooting,
-campfire, XP-driven allocation and access results remain pending. Private current
-run evidence is under local/fnv-wells-fixed/broad-tutorial-batch-20261023/.
-
+No game/build is active. This seven-file bug batch passed the full required runtime
+gate and git diff --check after the ordinary replay; checked publication is next. The existing writer is read-only. After publication,
+continue normally from the genuine stage25 slot toward Sunny's wells/combat/campfire,
+then actual XP-driven allocation and admitted access. No campfire, earned level-up
+or access result is inferred from bottle completion. Private run evidence stays
+under local/fnv-wells-fixed/broad-tutorial-batch-20261023/.
+The accepted resident-disable regression used a separate process and normal Load
+of pre-fly-away slotdaebbfaf6425420e966d4b90269eb1bf. Actual source Disable retired
+actor14c44a's idle at sourceSeconds4.338921 while exterior0daebb remained resident;
+pending procedure captures were zero and F5 committed slot19eb067689b440379f254d8e4840a4ed
+before any door transition. Separate-process resave of that resulting slot remains
+unexercised. Stopped missing-walk receipts preserve faults/choices/events; they do
+not implement raven walking. Full clip-end return, active outgoing/direct/sync/
+override transitions, non-transform or mixed-priority controllers and inherited or
+multiple sound candidates remain refused by this selected owner.
 ## Preserved holds and known limits
 
 - The original tutorial slot 4dc878ab017f4e75a41f80d213387284 is unchanged at
