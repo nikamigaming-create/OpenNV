@@ -142,7 +142,13 @@ internal sealed partial class ClassicWorldBrowser : Node
     private void Enter(ClassicPlayerSession player)
     {
         if (PlayerController is not null) throw new InvalidOperationException("A classic player is already active.");
-        Select(player.MapPath, player.Elevation);
+        // The source preview already owns this exact static world in the
+        // common Begin path. Building a duplicate before retiring it doubles
+        // donor mesh/uniform allocations and needlessly discards the view.
+        if (_world is null || _selectedMap != player.MapPath ||
+            _world.GetMeta("source_elevation").AsInt32() != player.Elevation ||
+            _world.SourceSha256 != player.Level.Sha256)
+            Select(player.MapPath, player.Elevation);
         if (_selectedMap != player.MapPath || _world!.GetMeta("source_elevation").AsInt32() != player.Elevation)
             throw new InvalidOperationException("Player map or elevation could not be presented.");
         var controller = new ClassicPlayerController(); _world!.AddChild(controller);

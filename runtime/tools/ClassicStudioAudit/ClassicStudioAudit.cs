@@ -1,6 +1,8 @@
 using System.Text.Json;
 using Godot;
 using OpenNV.Runtime.Campaigns.Classic.Native;
+using OpenNV.Runtime.Campaigns.Classic;
+using OpenNV.Runtime.Campaigns.Fallout1;
 using OpenNV.Runtime.Campaigns.Fallout1.Native;
 using OpenNV.Runtime.Campaigns.Fallout2.CharacterStart;
 using OpenNV.Runtime.Campaigns.NewVegas.Opening;
@@ -18,7 +20,8 @@ public sealed partial class ClassicStudioAudit : Node
         try
         {
             var args = OS.GetCmdlineUserArgs();
-            if (args.Length != 4) throw new ArgumentException("Provide classic install, New Vegas Data, campaign and private output directory.");
+            if (args.Length is not (4 or 5) || args.Length == 5 && args[4] != "--walk")
+                throw new ArgumentException("Provide classic install, New Vegas Data, campaign, private output directory and optional --walk.");
             var campaign = args[2]; var save = Path.Combine(temporary, "campaign.json");
             if (campaign == "fallout-1")
             {
@@ -53,6 +56,58 @@ public sealed partial class ClassicStudioAudit : Node
                     GetViewport().PushInput(new InputEventKey { Keycode = key, PhysicalKeycode = key, Pressed = pressed }, true);
             }
             await Settle();
+            if (args.Length == 5)
+            {
+                var choose = FindChild("ClassicCharacterSelection", true, false) as Button
+                    ?? throw new InvalidOperationException("Source character selection is absent.");
+                Click(choose); await Settle();
+                var selection = FindChild("SaveCharacterChoice", true, false) as Button
+                    ?? throw new InvalidOperationException("Source premade acceptance is absent.");
+                Click(selection); await Settle();
+                var begin = FindChild("ClassicEnterWorld", true, false) as Button
+                    ?? throw new InvalidOperationException("Native campaign entry is absent.");
+                if (begin.Disabled) throw new InvalidOperationException("Source character was not accepted.");
+                var preview = FindChildren("*", "", true, false).OfType<ClassicWorldPreview>().Single();
+                Click(begin); await Settle();
+                var controller = FindChildren("*", "", true, false).OfType<ClassicPlayerController>().Single();
+                var player = controller.Player;
+                var world = controller.GetParent<ClassicWorldPreview>();
+                if (preview.SourceSha256 == player.Level.Sha256 &&
+                    preview.GetMeta("source_elevation").AsInt32() == player.Elevation && !ReferenceEquals(preview, world))
+                    throw new InvalidOperationException("Begin duplicated its matching source preview world.");
+                var origin = player.Tile;
+                var blocked = world.Navigation.Blocked.Order().ToArray();
+                var candidates = ClassicHexGrid.Neighbors(origin).Where(player.Walkable.Contains)
+                    .Select(tile => new { Tile = tile, Point = world.Camera.UnprojectPosition(Fo1HexMath.Center(tile)) })
+                    .Where(row => GetViewport().GetVisibleRect().Grow(-16).HasPoint(row.Point) &&
+                        row.Point.Y < GetViewport().GetVisibleRect().Size.Y - controller.Hud.Size.Y * controller.Hud.Scale.Y &&
+                        ClassicWorldPicking.Item(world, player, row.Point) is null).ToArray();
+                if (candidates.Length == 0) throw new InvalidOperationException("No visible unobstructed adjacent source floor for ordinary pointer movement.");
+                var destination = candidates[0];
+                GetViewport().PushInput(new InputEventMouseMotion { Position = destination.Point, GlobalPosition = destination.Point }, true);
+                foreach (var pressed in new[] { true, false })
+                    GetViewport().PushInput(new InputEventMouseButton
+                    {
+                        Position = destination.Point,
+                        GlobalPosition = destination.Point,
+                        ButtonIndex = MouseButton.Left,
+                        Pressed = pressed
+                    }, true);
+                var until = Time.GetTicksMsec() + 8000;
+                while (player.Tile != destination.Tile || player.Moving)
+                {
+                    if (Time.GetTicksMsec() >= until) throw new InvalidOperationException("Ordinary floor click did not complete its source hex movement: " + player.Status);
+                    await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+                }
+                if (!blocked.SequenceEqual(world.Navigation.Blocked.Order()) || player.CompletedSteps == 0)
+                    throw new InvalidOperationException("Movement changed the source blocking field or skipped the native step owner.");
+                await Settle(); Directory.CreateDirectory(args[3]);
+                using (var image = GetViewport().GetTexture().GetImage())
+                    if (image.SavePng(Path.Combine(args[3], campaign + "-walk.png")) != Error.Ok)
+                        throw new IOException("Native walk image could not be saved.");
+                GD.Print($"OPENNV_CLASSIC_NATIVE_WALK_PASS campaign={campaign} sourceStart=true sourcePremade=true pointer=true from={origin} to={player.Tile} steps={player.CompletedSteps} blocking=unchanged presentationFailures={world.Unresolved.Count} campaignComplete=false");
+                GetTree().Quit(); return;
+            }
             var open = FindChild("ClassicCharacterStudio", true, false) as Button ?? throw new InvalidOperationException("World appearance button is missing.");
             Click(open); await Settle();
             var entry = GetTree().Root.FindChild("NativeRaceSexEntry", true, false) as RuntimeNativeRaceSexEntry

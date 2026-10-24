@@ -22,6 +22,7 @@ internal sealed class ClassicAuthoredScenery : IDisposable
     private readonly ClassicAuthoredMaterials _materials;
     private readonly string _modelRoot;
     private readonly Dictionary<string, (Node3D Root, Aabb Bounds)> _models = [];
+    private readonly Dictionary<ulong, ShaderMaterial> _linearVertexMaterials = [];
 
     internal ClassicAuthoredScenery(ClassicAuthoredSceneryRecipe? recipe = null,
         string modelRoot = "res://assets/classic")
@@ -66,7 +67,10 @@ internal sealed class ClassicAuthoredScenery : IDisposable
             var error = document.AppendFromBuffer(bytes, resourcePath.GetBaseDir(), state);
             if (error != Error.Ok) throw new InvalidDataException($"Classic authored mesh could not load: {binding.Model} ({error}).");
             var model = document.GenerateScene(state) as Node3D ?? throw new InvalidDataException("Classic authored mesh has no scene.");
-            try { prototype = (model, ClassicSceneryPlacement.Bounds(model)); }
+            try
+            {
+                prototype = (model, ClassicSceneryPlacement.Bounds(model));
+            }
             catch { model.Free(); throw; }
             _models.Add(binding.Model, prototype);
         }
@@ -104,6 +108,7 @@ internal sealed class ClassicAuthoredScenery : IDisposable
             }
             if (binding.UseSourcePalette)
                 _materials.Apply(instance, orientation * assembly.Transform, binding, sourceTexture, frame, pixelsPerMeter);
+            else if (binding.OwnedSurface is null) BindLinearVertexMaterials(instance);
             if (binding.OwnedSurface is not null)
             {
                 var material = binding.OwnedSurface switch
@@ -123,6 +128,37 @@ internal sealed class ClassicAuthoredScenery : IDisposable
             return result;
         }
         catch { result.Free(); throw; }
+    }
+
+    private void BindLinearVertexMaterials(Node3D root)
+    {
+        Shader? shader = null;
+        foreach (var mesh in root.FindChildren("*", "MeshInstance3D", true, false).OfType<MeshInstance3D>())
+            for (var surface = 0; surface < mesh.Mesh.GetSurfaceCount(); surface++)
+            {
+                // Textured, transparent and additional material features retain
+                // their existing importer owner. This adapter only binds the
+                // plain opaque double-sided vertex-painted glTF contract.
+                if (mesh.GetActiveMaterial(surface) is not StandardMaterial3D source ||
+                    !source.VertexColorUseAsAlbedo || source.VertexColorIsSrgb || source.AlbedoColor != Colors.White ||
+                    source.AlbedoTexture is not null || source.NormalEnabled || source.EmissionEnabled ||
+                    source.MetallicTexture is not null || source.RoughnessTexture is not null ||
+                    Enum.GetValues<BaseMaterial3D.Feature>().Any(feature => feature != BaseMaterial3D.Feature.Max && source.GetFeature(feature)) ||
+                    source.Transparency != BaseMaterial3D.TransparencyEnum.Disabled ||
+                    source.ShadingMode != BaseMaterial3D.ShadingModeEnum.PerPixel ||
+                    source.CullMode != BaseMaterial3D.CullModeEnum.Disabled) continue;
+                if (!_linearVertexMaterials.TryGetValue(source.GetInstanceId(), out var material))
+                {
+                    shader ??= GD.Load<Shader>("res://assets/classic/materials/linear-vertex-color.gdshader")
+                        ?? throw new InvalidDataException("Linear vertex-color presentation shader is absent.");
+                    material = new ShaderMaterial { Shader = shader, ResourceName = source.ResourceName + " / linear vertex color" };
+                    material.SetShaderParameter("surface_roughness", source.Roughness);
+                    material.SetShaderParameter("surface_metallic", source.Metallic);
+                    material.SetShaderParameter("surface_specular", source.MetallicSpecular);
+                    _linearVertexMaterials.Add(source.GetInstanceId(), material);
+                }
+                mesh.SetSurfaceOverrideMaterial(surface, material);
+            }
     }
 
     private static void QualifyVisualPlacement(ClassicAuthoredSceneryBinding binding, ClassicAuthoredVisualPlacement visual,
@@ -153,6 +189,7 @@ internal sealed class ClassicAuthoredScenery : IDisposable
     public void Dispose()
     {
         foreach (var model in _models.Values) model.Root.Free();
+        _linearVertexMaterials.Clear();
         _models.Clear(); _materials.Clear();
     }
 }
