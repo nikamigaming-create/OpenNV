@@ -158,30 +158,35 @@ internal sealed partial class RuntimeNativeCreature : CharacterBody3D
             if (AdvanceScriptIdle(delta)) return;
             if (AdvanceEventIdle(delta)) return;
             if (Combat?.PackageOwnsPose == true) return;
-            var from = _clock.ElapsedSeconds;
-            var include = _clock.StartPending;
-            _clock.Advance(delta);
-            foreach (var key in _textKeys.Crossed(from, _clock.ElapsedSeconds, include))
-            {
-                _animation.ApplySourceTime(key.SourceSeconds);
-                var disposition = IsCreatureAuxiliarySound(key.Text) ? DispatchCreatureTextKey(key.Text) : _sounds.Dispatch(key);
-                if (disposition.Contains("unbound", StringComparison.Ordinal)) _unbound.Add("source-event:" + key.Text);
-                _lastEvent = new { ordinal = ++_eventCount, key, disposition };
-                RuntimeNifControllerPlayer.TextKeyObserver?.Invoke(new
-                {
-                    owner = Appearance.Reference?.ToString(),
-                    controller = "creature-source-KF",
-                    observation = _lastEvent
-                });
-            }
-            Skeleton.ResetMorphPublication();
-            _animation.ApplySourceTime(SourceSeconds);
+            AdvanceBaseSource(delta);
         }
         catch (Exception error) when (error is InvalidDataException or NotSupportedException or ArgumentException)
         {
             Error = error.Message;
             GD.PushError($"OPENNV_NATIVE_CREATURE_ANIMATION_DIVERGENCE reference={Appearance.Reference}: {error.Message}");
         }
+    }
+
+    private void AdvanceBaseSource(double delta)
+    {
+        var from = _clock.ElapsedSeconds;
+        var include = _clock.StartPending;
+        _clock.Advance(delta);
+        foreach (var key in _textKeys.Crossed(from, _clock.ElapsedSeconds, include))
+        {
+            _animation.ApplySourceTime(key.SourceSeconds);
+            var disposition = IsCreatureAuxiliarySound(key.Text) ? DispatchCreatureTextKey(key.Text) : _sounds.Dispatch(key);
+            if (disposition.Contains("unbound", StringComparison.Ordinal)) _unbound.Add("source-event:" + key.Text);
+            _lastEvent = new { ordinal = ++_eventCount, key, disposition };
+            RuntimeNifControllerPlayer.TextKeyObserver?.Invoke(new
+            {
+                owner = Appearance.Reference?.ToString(),
+                controller = "creature-source-KF",
+                observation = _lastEvent
+            });
+        }
+        Skeleton.ResetMorphPublication();
+        _animation.ApplySourceTime(SourceSeconds);
     }
 
     private float ResolveTime(double elapsed)

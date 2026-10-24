@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using System.Runtime.CompilerServices;
 using Godot;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Formats.Gamebryo;
@@ -13,7 +14,8 @@ internal sealed partial class RuntimeNativeCreature
     private RuntimeLiveContentSource _content = null!;
     private RuntimeNativeNifAnimation? _eventIdleAnimation;
     private FalloutIdleAnimationPlayback? _eventIdleClock;
-    private readonly Dictionary<string, FalloutFormKey?> _certainEnumSounds = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConditionalWeakTable<RuntimeNativeNifAnimation, FalloutIdleGroupTextKeys> _idleGroupKeys = new();
+    private readonly Dictionary<string, FalloutCreatureAnimationSounds.Declaration> _creatureEnumSounds = new(StringComparer.OrdinalIgnoreCase);
     private bool PackageEndIdlePending => _aiState?.PackageIdle?.Kind == "POEA" && _eventIdleClock?.Complete == false;
 
     private void DispatchPackageEvent(FalloutScriptPackage package, string kind)
@@ -73,6 +75,7 @@ internal sealed partial class RuntimeNativeCreature
         if (animation.UnboundChannels.Count != 0)
             throw new NotSupportedException("Creature event idle has unbound source channels: " +
                 string.Join("; ", animation.UnboundChannels.Select(channel => channel.Source.NodeName + "/" + channel.Reason)));
+        _ = GroupKeys(animation);
         return (animation, Hash(bytes));
     }
 
@@ -125,19 +128,36 @@ internal sealed partial class RuntimeNativeCreature
 
     private void DispatchIdleInterval(RuntimeNativeNifAnimation animation, FalloutIdleAnimationInterval interval, FalloutFormKey idle)
     {
+        if (ReferenceEquals(animation, _scriptIdleAnimation) && animation.TextKeys.Any(key => key.Time <= interval.To &&
+            (key.Time > interval.From || interval.IncludeFrom && key.Time == interval.From) &&
+            key.Value.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries).Any(value => value.Trim().Equals("end", StringComparison.OrdinalIgnoreCase))))
+            throw new NotSupportedException("Creature script idle end requires its source completion/return owner.");
         animation.ApplySourceTime(interval.To);
-        foreach (var key in animation.TextKeys.Where(key => key.Time <= interval.To &&
-            (key.Time > interval.From || interval.IncludeFrom && key.Time == interval.From)))
-            foreach (var value in key.Value.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries).Select(value => value.Trim()))
+        var declarations = GroupKeys(animation);
+        for (var ordinal = 0; ordinal < animation.TextKeys.Count; ++ordinal)
+        {
+            var key = animation.TextKeys[ordinal];
+            if (key.Time > interval.To || !(key.Time > interval.From || interval.IncludeFrom && key.Time == interval.From)) continue;
+            var values = key.Value.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
+            for (var segment = 0; segment < values.Length; ++segment)
             {
+                var value = values[segment].Trim();
                 var structural = value.Equals("start", StringComparison.OrdinalIgnoreCase) || value.Equals("end", StringComparison.OrdinalIgnoreCase) ||
                     value.Equals("StartLoop", StringComparison.OrdinalIgnoreCase) || value.Equals("EndLoop", StringComparison.OrdinalIgnoreCase);
-                var disposition = structural ? "source-phase-owner" : DispatchCreatureTextKey(value);
+                var kind = declarations.Kind(ordinal, segment);
+                var disposition = kind == FalloutIdleGroupKeyKind.NonmatchingGroupMarker
+                    ? "source-nonmatching-group-marker" : kind == FalloutIdleGroupKeyKind.TransitionMetadata &&
+                        ReferenceEquals(animation, _scriptIdleAnimation) && _scriptIdleTransition is not null
+                        ? "source-transition-metadata" : structural ? "source-phase-owner" : DispatchCreatureTextKey(value);
                 if (disposition.Contains("unbound", StringComparison.Ordinal))
                     throw new NotSupportedException($"Creature event idle key {value} is unbound.");
                 _lastEvent = new { ordinal = ++_eventCount, idle = idle.ToString(), key.Time, key = value, disposition };
             }
+        }
     }
+
+    private FalloutIdleGroupTextKeys GroupKeys(RuntimeNativeNifAnimation animation) =>
+        _idleGroupKeys.GetValue(animation, static source => FalloutIdleGroupTextKeys.Read(source.Sequence.Name, source.TextKeys));
 
     private static bool IsCreatureAuxiliarySound(string value) =>
         value.StartsWith("Enum:", StringComparison.OrdinalIgnoreCase) &&
@@ -149,18 +169,22 @@ internal sealed partial class RuntimeNativeCreature
     {
         if (!IsCreatureAuxiliarySound(value)) return _sounds.Dispatch(value);
         var name = value[5..].Trim();
-        if (!_certainEnumSounds.TryGetValue(name, out var sound))
+        if (!_creatureEnumSounds.TryGetValue(name, out var declaration))
         {
             var records = _aiRecords ?? throw new NotSupportedException("Creature enum sound has no source record owner.");
-            sound = FalloutCreatureAnimationSounds.RequiredCertainSound(records, Appearance.Creature, name);
-            if (sound is { } selected) _sounds.PrepareSound(selected);
-            _certainEnumSounds.Add(name, sound);
+            declaration = FalloutCreatureAnimationSounds.ReadSingleSound(records, Appearance.Creature, name);
+            _creatureEnumSounds.Add(name, declaration);
         }
-        // A single 100% declaration needs no chance decision. Playback and
-        // variant selection use the retained audio owner; native endpoint gate
-        // RNG consumption is not yet qualified and is visible as divergence.
-        _unbound.Add("creature-enum-native-endpoint-gate-rng-unqualified");
-        return sound is { } form ? _sounds.DispatchSound(form) : "source-declared-null-creature-sound";
+        // Cache declarations only. Each nonnull event makes its own decision
+        // in the shared process stream, before media or variant selection.
+        var selected = declaration.Select(FalloutSharedUnsignedRandom.Process.NextBounded);
+        if (selected.Kind == FalloutCreatureAnimationSounds.SelectionKind.DeclaredNull)
+            return "source-declared-null-creature-sound";
+        if (selected.Kind == FalloutCreatureAnimationSounds.SelectionKind.ChanceMiss)
+            return $"source-creature-sound-chance-miss roll={selected.Roll} chance={declaration.Chance}";
+        var form = selected.Sound ?? throw new InvalidDataException("Selected creature sound lost its source identity.");
+        _sounds.PrepareSound(form);
+        return _sounds.DispatchSound(form) + $";creatureChance={declaration.Chance};roll={selected.Roll}";
     }
 
     private static string Hash(ReadOnlySpan<byte> bytes) => Convert.ToHexString(SHA256.HashData(bytes));

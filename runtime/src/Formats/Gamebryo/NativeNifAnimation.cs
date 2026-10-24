@@ -111,6 +111,37 @@ internal sealed class RuntimeNativeNifAnimation
     internal IReadOnlyList<FalloutNifControllerLink> AbsentSourceTargets => _absentTargets;
     internal int TransformChannelCount => _transforms.Count;
 
+    internal void RequireSnapshotTransitionOver(RuntimeNativeNifAnimation background)
+    {
+        if (_skeleton != background._skeleton || background._unbound.Count != 0 || _unbound.Count != 0 || _otherChannels.Count != 0 ||
+            _transforms.Count == 0 || Sequence.Weight != 1)
+            throw new NotSupportedException("Snapshot transition requires complete transform-only source bindings on one skeleton.");
+        foreach (var (bone, priority, _) in _transforms)
+            if (background._transforms.Any(value => value.Bone == bone && value.Priority >= priority))
+                throw new NotSupportedException("Snapshot transition requires incoming transform priority above the background slot.");
+    }
+
+    // Snapshot and incoming links share the incoming source priorities. No
+    // arbitrary mixed-priority easing is inferred by this finite owner.
+    internal void ApplySnapshotTransition(float sourceTime, IReadOnlyList<FalloutNifAnimationSample> snapshot,
+        float snapshotWeight, float incomingWeight)
+    {
+        if (_unbound.Count != 0 || _otherChannels.Count != 0 || snapshot.Count != _skeleton.Node.GetBoneCount() ||
+            !float.IsFinite(snapshotWeight) || !float.IsFinite(incomingWeight) || snapshotWeight < 0 || incomingWeight < 0 ||
+            snapshotWeight + incomingWeight <= 0 || !float.IsFinite(sourceTime) || sourceTime < Sequence.StartTime || sourceTime > Sequence.StopTime)
+            throw new InvalidDataException("Snapshot transition has invalid weights, phase or source bindings.");
+        var blend = _skeleton.AnimationBlend;
+        blend.Clear();
+        foreach (var (bone, priority, sampler) in _transforms)
+        {
+            ref var current = ref blend.Bones[bone];
+            current.Active = true; current.Priority = priority;
+            if (snapshotWeight > 0) current.Add(snapshot[bone], snapshotWeight);
+            if (incomingWeight > 0) current.Add(sampler.Sample(sourceTime), Sequence.Weight * incomingWeight);
+        }
+        blend.Publish(_skeleton);
+    }
+
     // The same whole-bone priority selection used by ApplyLayers determines
     // which components have a current source owner. Missing components retain
     // their previously published pose and need an independent continuation.

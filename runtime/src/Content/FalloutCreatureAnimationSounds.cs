@@ -2,12 +2,32 @@ using System.Buffers.Binary;
 
 namespace OpenNV.Runtime.Content;
 
-// A functional certain/silent-event lane, not the native chance/selection RNG policy.
-// Neither this reader nor the caller invents a creature chance draw. Audio
-// resource/variant selection and playback remain with the real sound owner.
+// Local single-candidate declarations and their process-owned percentage gate.
+// Audio resource/variant selection and playback remain with the sound owner.
 internal static class FalloutCreatureAnimationSounds
 {
-    internal static FalloutFormKey? RequiredCertainSound(FalloutPluginStack records,
+    internal enum SelectionKind { DeclaredNull, ChanceMiss, Selected }
+
+    internal readonly record struct Selection(SelectionKind Kind, FalloutFormKey? Sound, uint? Roll);
+
+    internal sealed record Declaration(FalloutFormKey Creature, uint Type, FalloutFormKey? Sound, byte Chance)
+    {
+        internal Selection Select(Func<uint, uint> sharedNextBounded)
+        {
+            if (Creature.ObjectId == 0 || Type is not (12 or 13 or 14) || Chance > 100 ||
+                Sound is { ObjectId: 0 })
+                throw new InvalidDataException("Creature sound selection has an invalid source declaration.");
+            // The source tests the candidate pointer before touching shared RNG.
+            if (Sound is null) return new(SelectionKind.DeclaredNull, null, null);
+            ArgumentNullException.ThrowIfNull(sharedNextBounded);
+            // Even a 0% or 100% nonnull candidate consumes this one draw.
+            var roll = sharedNextBounded(100);
+            if (roll >= 100) throw new InvalidDataException("Creature sound gate returned an out-of-domain roll.");
+            return roll < Chance ? new(SelectionKind.Selected, Sound, roll) : new(SelectionKind.ChanceMiss, null, roll);
+        }
+    }
+
+    internal static Declaration ReadSingleSound(FalloutPluginStack records,
         FalloutFormKey creature, string enumName)
     {
         ArgumentNullException.ThrowIfNull(records);
@@ -19,7 +39,7 @@ internal static class FalloutCreatureAnimationSounds
             "AUXILIARY1" => 12u,
             "AUXILIARY2" => 13u,
             "AUXILIARY3" => 14u,
-            _ => throw new NotSupportedException($"Creature animation enum {enumName} has no certain-event sound owner.")
+            _ => throw new NotSupportedException($"Creature animation enum {enumName} has no single-candidate sound owner.")
         };
         var record = records.GetEffective(creature);
         if (record.Signature != "CREA" || (record.Flags & FalloutPluginRecord.DeletedFlag) != 0)
@@ -57,15 +77,10 @@ internal static class FalloutCreatureAnimationSounds
         var chance = chances[0].Field.Data.Span[0];
         if (chance > 100) throw new InvalidDataException($"CREA {creature} sound type {type} chance exceeds 100%.");
         var sound = record.Plugin.AdjustOptionalFormId(BinaryPrimitives.ReadUInt32LittleEndian(sounds[0].Field.Data.Span));
-        // A single source-null candidate is silent for every valid outcome.
-        // This does not establish whether the native gate consumes RNG.
-        if (sound is null) return null;
-        if (chance != 100)
-            throw new NotSupportedException($"CREA {creature} sound type {type} is not a certain (100%) event; chance policy is unqualified.");
-        if (!records.TryGetEffective(sound.Value, out var source) || source.Signature != "SOUN" ||
-            (source.Flags & FalloutPluginRecord.DeletedFlag) != 0)
+        if (sound is { } form && (!records.TryGetEffective(form, out var source) || source.Signature != "SOUN" ||
+            (source.Flags & FalloutPluginRecord.DeletedFlag) != 0))
             throw new InvalidDataException($"CREA {creature} sound type {type} does not bind a live winning SOUN {sound}.");
-        return sound.Value;
+        return new(creature, type, sound, chance);
 
         void RequireLocal(string signature)
         {
