@@ -42,8 +42,8 @@ Connected code includes:
   grouped build.
 - Combat defense now distinguishes DamageResist18 from ActionPoints12 in acquired
   abilities, inherent actor spells and equipped armor effects. Threshold76 and
-  existing condition/pool admission remain unchanged. This correction awaits the
-  grouped build. Ordinary combat effects are not yet exercised in this batch.
+  existing condition/pool admission remain unchanged. The grouped Debug build
+  includes this correction. Ordinary combat effects are not yet exercised.
 
 ## Integrated smoke and current blocker
 
@@ -70,17 +70,26 @@ Both normal entrance approaches reached the same clip. The alternate back-door
 approach was stopped before repeating a doomed transition. No teleport, actor
 change, branch bypass or front-entrance repair is claimed. The lookup budget was
 a workflow stop-loss, not a permission denial. With the shared dependency now
-proven, the existing writer has one bounded authenticated static pass on the
-specific Attach/Blend and single-candidate chance owner. No live retail launch,
-new worker or unchanged gameplay replay is running.
+proven, the existing writer completed the initial bounded static pass: Blend is
+load-time sequence metadata, not a timestamped gameplay callback, but its runtime
+consumer required a second bounded pass. That pass is now complete: the finite
+transition duration and linear ease-weight kernel are qualified, but synchronized
+phase mapping, caller overrides, Attach classification and chance selection remain
+open. No complete transition API or gameplay replay is cleared. The writer is
+stopped with all findings handed off; no live retail launch, new worker or unchanged
+gameplay replay is running.
 
 The latest grouped Debug build passes with zero warnings/errors and includes the
 reached GetDestroyed query in both frontends using the existing destroyed flag.
 All writer production code is handed off; no build/game is active. Smoke07 exited
 through normal Quit/Yes with exit0 and unchanged input save
 B0FDA62E180D6092BA6B70DDD6842801684EEE9D2A9C3070E28BC083CBAE8857.
-The coordinator is making a local recoverable code checkpoint. The broad batch
-is unpublished and has not run its final required gate. Sunny shooting,
+Local code checkpoint8ea6601b contains the broad batch. Publication repairs fix
+formatting, avoid requiring advancement settings below the earned XP threshold,
+and preserve portal failure causes while allowing admitted alternative routes.
+Both reached contract probes pass, followed by the full required runtime gate
+with OPENNV_CSHARP_GODOT_GATE_PASS. The feature checkpoint is being published;
+it is not accepted main or a finished tutorial. Sunny shooting,
 campfire, XP-driven allocation and access results remain pending. Private current
 run evidence is under local/fnv-wells-fixed/broad-tutorial-batch-20261023/.
 

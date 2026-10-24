@@ -38,9 +38,10 @@ internal sealed class FalloutPlayerVitals
     internal void RequireLevelUpOwner()
     {
         var current = State;
+        if (current.ExperiencePoints < ExperienceThreshold(checked(current.Level + 1))) return;
         var cap = unchecked((int)FalloutGameSettingIntegers.Read(_records, "iMaxCharacterLevel"));
         if (cap is < 1 or > ushort.MaxValue) throw new InvalidDataException("Player level cap exceeds source storage.");
-        if (current.Level >= cap || current.ExperiencePoints < ExperienceThreshold(checked(current.Level + 1))) return;
+        if (current.Level >= cap) return;
         (_requestAdvancement ?? throw new NotSupportedException(
             "Earned player XP requires the bound skill/perk allocation and LevelUpMenu owners."))();
     }

@@ -155,11 +155,15 @@ internal sealed record FalloutActorSandboxMotionFailure(FalloutFormKey Reference
 
     internal FalloutActorSandboxMotionFailure Copy() => this with
     {
-        Prefix = Prefix.Copy(), Position = (float[])Position.Clone(), Basis = (float[])Basis.Clone(),
-        Velocity = (float[])Velocity.Clone(), Pose = Pose.Copy(),
+        Prefix = Prefix.Copy(),
+        Position = (float[])Position.Clone(),
+        Basis = (float[])Basis.Clone(),
+        Velocity = (float[])Velocity.Clone(),
+        Pose = Pose.Copy(),
         PriorMotion = PriorMotion is not { } motion ? null : motion with
         {
-            Position = (float[])motion.Position.Clone(), Rotation = (float[])motion.Rotation.Clone(),
+            Position = (float[])motion.Position.Clone(),
+            Rotation = (float[])motion.Rotation.Clone(),
             Wander = motion.Wander is not { } wander ? null : wander with { Destination = (float[])wander.Destination.Clone() },
             Sandbox = motion.Sandbox is not { } sandbox ? null : sandbox with { Preferences = (byte[])sandbox.Preferences.Clone() }
         }

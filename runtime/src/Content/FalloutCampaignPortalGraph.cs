@@ -198,6 +198,7 @@ internal sealed class FalloutCampaignPortalGraph
         var pending = new Queue<Region>();
         var blocked = new List<string>();
         var reachedFailures = new List<Failure>();
+        Exception? eligibilityFailure = null;
         pending.Enqueue(fromRegion);
         while (pending.TryDequeue(out var cell))
         {
@@ -232,12 +233,19 @@ internal sealed class FalloutCampaignPortalGraph
                 pending.Enqueue(destinationCell);
             }
         }
-        throw new NotSupportedException(
+        var detail =
             $"No usable directed source XTEL route from {Context(from)} to {Context(target)}; " +
             $"explored CELLs=[{string.Join(", ", visited)}]; rejected doors=[{string.Join("; ", blocked)}]. " +
             $"Retained source graph Issues={Issues.Count}; reached excluded source edges=[" +
             string.Join("; ", reachedFailures.Select(failure => failure.Issue.Error)) + "]. " +
-            "Exterior itinerary intent does not prove physical traversal. No reverse link, lock bypass or state change is inferred.");
+            "Exterior itinerary intent does not prove physical traversal. No reverse link, lock bypass or state change is inferred.";
+        if (reachedFailures.FirstOrDefault() is { } sourceFailure)
+        {
+            if (sourceFailure.Cause is NotSupportedException)
+                throw new NotSupportedException(detail, sourceFailure.Cause);
+            throw new InvalidDataException(detail, sourceFailure.Cause);
+        }
+        throw new NotSupportedException(detail, eligibilityFailure);
 
         bool Admitted(Door door, Link link)
         {
@@ -247,6 +255,7 @@ internal sealed class FalloutCampaignPortalGraph
             }
             catch (Exception error) when (error is InvalidDataException or NotSupportedException or KeyNotFoundException)
             {
+                eligibilityFailure ??= error;
                 blocked.Add($"Source XTEL eligibility is unavailable for {Context(door.Source)} on " +
                     $"{link.Source.Source.FormKey} -> {link.Destination.Source.FormKey}: {error.Message}");
                 return false;

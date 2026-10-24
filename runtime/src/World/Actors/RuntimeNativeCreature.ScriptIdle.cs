@@ -66,8 +66,11 @@ internal sealed partial class RuntimeNativeCreature
         if (!CanCaptureScriptIdle()) throw new NotSupportedException("Creature script idle retains an independent continuation owner.");
         if (!ScriptIdleActive) return null;
         var saved = _aiState!.CreatureScriptIdle ?? throw new InvalidDataException("Creature script idle lost its source receipt.");
-        var result = saved with { Animation = saved.Animation with
-        { Clock = _scriptIdleClock!.Capture(), ResidualPose = CaptureScriptIdlePose() } };
+        var result = saved with
+        {
+            Animation = saved.Animation with
+            { Clock = _scriptIdleClock!.Capture(), ResidualPose = CaptureScriptIdlePose() }
+        };
         result.Validate(_aiRecords!);
         return result.Copy();
     }

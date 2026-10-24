@@ -222,7 +222,8 @@ internal static partial class CampaignGoalContracts
             Reference(0x211, 0x100, extra: Field("XTEL", Teleport(0x220, 1))))))], records =>
         {
             var graph = new FalloutCampaignPortalGraph(records);
-            Expect<NotSupportedException>(() => graph.Find(Key(0x300), Key(0x301), _ => true));
+            RequireRoute(graph.Find(Key(0x300), Key(0x301), _ => true), 0x210);
+            Require(graph.Issues.Count == 1, "An admitted alternative erased the excluded source edge diagnostic.");
         });
     }
 
