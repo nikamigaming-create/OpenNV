@@ -24,6 +24,10 @@ internal static partial class QuestStateQueryContracts
             foreach (var shared in new[] { false, true })
             {
                 ShortCircuit(shared);
+                foreach (var running in new[] { false, true }) CompleteQuest(shared, running);
+                foreach (var target in new[] { "BadGlobal", "MissingQuest", "", "TargetQuest TargetQuest" })
+                    CompleteQuestRefusal(target, shared);
+                CompleteQuestRefusal("TargetQuest", shared, bindTarget: false);
                 foreach (var query in new[] { "GetQuestRunning", "GetQuestCompleted" })
                 {
                     foreach (var target in new[] { "BadGlobal", "MissingQuest" }) Refusal(query, target, shared);
@@ -112,6 +116,50 @@ internal static partial class QuestStateQueryContracts
         cold.Tick(); cold.Expect(query == "GetQuestCompleted" ? 1 : 0, 6);
         Require(JsonSerializer.Serialize(cold.Quests.Capture().Single(value => value.Quest == cold.Target)) == targetBefore,
             "Read-only quest queries changed the target quest.");
+    }
+
+    private static void CompleteQuest(bool shared, bool running)
+    {
+        using var fixture = new Fixture("if 0\nCompleteQuest MissingQuest\nCompleteQuest BadGlobal\nendif\n" +
+            "set prefix to prefix + 1\nCompleteQuest TargetQuest\nCompleteQuest TargetQuest\n" +
+            "set result to GetQuestCompleted TargetQuest\nset suffix to suffix + 1", shared);
+        fixture.Quests.SetRunning(fixture.Target, running);
+        if (running) fixture.Quests.ForceActive(fixture.Target);
+        fixture.Quests.EnterStage(fixture.Target, 42);
+        fixture.Quests.ApplyObjective(fixture.Target, 10, display: true, value: true);
+        fixture.Quests.ApplyObjective(fixture.Target, 0, display: false, value: true);
+        var before = fixture.Quests.Capture().Single(value => value.Quest == fixture.Target);
+        var expected = JsonSerializer.Serialize(before with { Completed = true });
+        var progress = fixture.Quests.ProgressRevision;
+        fixture.Tick(); fixture.Expect(1, 1);
+        Require(JsonSerializer.Serialize(fixture.Quests.Capture().Single(value => value.Quest == fixture.Target)) == expected &&
+            fixture.Quests.ProgressRevision == progress + 1,
+            "CompleteQuest changed independent state or repeated its completion transition.");
+        fixture.Tick(); fixture.Expect(1, 2);
+        Require(JsonSerializer.Serialize(fixture.Quests.Capture().Single(value => value.Quest == fixture.Target)) == expected &&
+            fixture.Quests.ProgressRevision == progress + 1,
+            "Repeated CompleteQuest changed the target or completion revision.");
+        using var cold = new Fixture(fixture.Body, shared, initialize: false);
+        cold.Quests.Restore(RoundTrip(fixture.Quests.Capture().ToArray()));
+        cold.Scripts.Restore(RoundTrip(fixture.Scripts.Capture()));
+        cold.Tick(); cold.Expect(1, 3);
+        Require(JsonSerializer.Serialize(cold.Quests.Capture().Single(value => value.Quest == cold.Target)) == expected,
+            "Cold CompleteQuest changed retained stage, objectives, running or active state.");
+    }
+
+    private static void CompleteQuestRefusal(string target, bool shared, bool bindTarget = true)
+    {
+        using var fixture = new Fixture($"set prefix to prefix + 1\nCompleteQuest {target}\nset suffix to 99", shared,
+            bindTarget: bindTarget);
+        var before = JsonSerializer.Serialize(fixture.Quests.Capture().Single(value => value.Quest == fixture.Target));
+        fixture.Tick();
+        Require(fixture.Error is not null && fixture.Value(1) == 1 && fixture.Value(3) == 0 &&
+            JsonSerializer.Serialize(fixture.Quests.Capture().Single(value => value.Quest == fixture.Target)) == before,
+            "Invalid CompleteQuest mutated its target, ran its suffix or discarded its prefix.");
+        var error = fixture.Error;
+        fixture.Tick();
+        Require(fixture.Error == error && fixture.Value(1) == 1 && fixture.Value(3) == 0,
+            "A refused CompleteQuest replayed its consumed prefix.");
     }
 
     private static void ShortCircuit(bool shared)

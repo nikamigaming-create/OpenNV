@@ -1282,6 +1282,9 @@ internal sealed partial class FalloutQuestScripts
                 case "startquest" or "stopquest" when arguments.Count == 1:
                     _quests.SetRunning(Quest(arguments[0]).FormKey, command.Equals("startquest", StringComparison.OrdinalIgnoreCase));
                     break;
+                case "completequest" when arguments.Count == 1:
+                    _quests.Complete(Quest(arguments[0]).FormKey);
+                    break;
                 case "completeallobjectives" when arguments.Count == 1:
                     _quests.CompleteAllObjectives(Quest(arguments[0]).FormKey);
                     break;

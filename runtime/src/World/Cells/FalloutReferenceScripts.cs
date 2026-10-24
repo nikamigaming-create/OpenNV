@@ -1151,6 +1151,9 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                 case "startquest" or "stopquest" when parts.Length == 1 && arguments.Count == 1:
                     quests.SetRunning(Quest(arguments[0]), operation == "startquest");
                     break;
+                case "completequest" when parts.Length == 1 && arguments.Count == 1:
+                    quests.Complete(Quest(arguments[0]));
+                    break;
                 case "forceactivequest" when parts.Length == 1 && arguments.Count == 1:
                     quests.ForceActive(Quest(arguments[0]));
                     break;
