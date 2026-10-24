@@ -82,7 +82,9 @@ internal sealed partial class RuntimeNativeActorCombat
     {
         foreach (var group in groups)
         {
-            var paths = _content.ActorAnimations.Variants(directory, group);
+            var paths = _actor is RuntimeNativeCreature creature
+                ? _content.ActorAnimations.Variants(directory, group, creature.Appearance.AnimationFiles)
+                : _content.ActorAnimations.Variants(directory, group);
             if (paths.Count != 0) return paths;
         }
         throw new FileNotFoundException("Source actor attack group is absent: " + string.Join(',', groups));

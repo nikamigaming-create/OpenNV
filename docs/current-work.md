@@ -1,180 +1,180 @@
 # Current work
 
-Updated 2026-10-24. One active milestone: fresh flat New Vegas New Game through
-Doc Mitchell, Sunny's tutorial/wells/campfire, admitted access and save/resume.
-Follow docs/implementation-plan.md. Owned inputs and immutable saves remain
-read-only. Recording is off. No campaign, XR or retail parity completion is claimed.
+Updated 2026-10-24. One active milestone: fresh flat New Vegas through Doc Mitchell,
+Sunny's tutorial/wells, ingredients and campfire cooking, admitted access and
+save/resume. Follow docs/implementation-plan.md. Recording is off. Owned inputs
+and immutable saves are read-only. No campaign, XR or retail parity completion.
 
-## Accepted baseline and ownership
+## Baseline and ownership
 
-PR301 merged as d86f9db548784d6fd0bd9bf97c7c9e31a898202c at07:12:14 UTC.
-Exact-head independent review was clear and all five hosted checks passed. Local
-main, origin/main and live remote main were equal and clean. The completed branch
-was recovered in a verified bundle and its local/remote refs removed. The required
-local gate passed07:01:23 UTC, Gate0/Diff0, with2523 public files and all protected
-saves unchanged. The selected owned-data quest query audit also passed.
+PR302 merged as74c717287f60ba26e6297326c2e23e935448da6f at08:50:54 UTC. Local main,
+origin/main and live remote main were verified equal and clean. Its full local gate
+passed08:44:11 UTC, Gate0/Diff0,2524 public files, no source/added-file/protected-save
+drift. The selected owned ammo audit passed (source value1, unknown weight).
+All five exact-head hosted checks are now successful; runtime completed08:57 UTC.
+GitHub had immediately merged the requested auto-merge while runtime was still
+running. This timing mistake is not a replacement for checking all five results;
+future publication must verify success before requesting merge. Independent
+exact-remote-patch review was clear. The completed branch was preserved in a
+verified recovery bundle and its exact merged local/remote refs removed.
 
-Active branch: codex/fnv-campfire-gathering, from accepted main. One coordinator
-owns integration, ordinary input, runtime, builds and Git. All writer handoffs are
-complete and frozen; Movement.cs was handed back without a writer edit. The
-coordinator owns the integrated ammo, stopped-motion and creature preselection
-continuation batch, including the shared records and publication boundary.
-No competing build or runtime.
+Active branch: codex/fnv-creature-turning, from synchronized main. One coordinator
+owns source integration, ordinary input, runtime, builds and Git. Writer production
+handoffs are complete/frozen; no writer input/build/Git job is active. Smoke18
+normally quit through observed requests115/116, runner exit0. Sole corrected
+smoke19 PID97568 / runner83303 used ordinary title Load/Slot/LoadSelected requests
+1-3 for immutable8c8de602, then normally quit through requests11/12, runner exit0.
+Corrected smoke20 PID166732 / runner26274 loaded the same immutable slot
+through ordinary title controls and normally quit through requests75/76, exit0.
+No runtime is active in this lane. After a genuine gecko defeat, ordinary Load
+restored the earned checkpoint in the same process. Source Stimpak use, shotgun
+equipment/reload and F5 produced preparation slot eb57653da03748e4b4f325ceef5d3e14
+at09:43:06 UTC with100HP. Ordinary aim/fire then killed16aefe (20 to-17 health),
+consuming one loaded shell. Ordinary movement passed a bounded planner failure
+without changing collision; source ACTI activation then acquired Broc Flower and
+completed the ingredient objective. Both ingredients and Meat1 were read back.
+The subsequent F5 failed, so the kill/flower pickup remain unsaved and are not
+claimed as durable progress. Publication failures stayed0. No state injection,
+recording or build occurred while live.
+The denied optional writer follow-up remains unexecuted and is not being retried.
 
-Smoke16 normally quit with exit0. Its actual scripted ACTI15d982 harvest committed
-immutable5e54e5f96c04498b82ec8f1415422055 at79HP/map0e1ab0 with no save/cleanup error.
-Independent inspection confirms XanderRoot1, GeckoMeat1 and VCG03stage10 with
-objective10 displayed-incomplete. Broc Flower and cooking remain unaccepted.
+## Current implementation and exact blocker
 
-The reached ammo repair retains DATA value and nullable unknown weight when
-optional DAT2 is absent. The owned047419 record is AmmoBloatflyDart, DATA13/value1,
-nonplayable, with no DAT2; no absent numeric weight default is qualified. Present
-DAT2 validation stays strict. Scoped formatting and connected inventory probe/
-compile passed after a fixture-only display-name correction. No hardcore weight,
-weapon default, UI, snapshot waiver or actor discard was added.
+Main now accepts absent optional AMMO DAT2 as unknown weight while preserving
+required DATA value. Present DAT2 remains strict; hardcore weight admission and
+weapon behavior were not waived. Actual047419 AmmoBloatflyDart has DATA13/value1
+and no DAT2. The source-compatible repair allowed all four reached creatures to
+initialize inventory and publish genuine POBA once.
 
-Sole corrected game: smoke17 PID362612 / runner85142, ordinary Load of earned5e54.
-It restored79HP and XanderRoot1 normally, then reached all four affected creatures.
-The DAT2 refusal is gone and actual POBA was dispatched. Three actors168c25/26/28
-now report non-positive movement/turn speed;168c27 reports unsupported Eat candidate
-admission. These are distinct unimplemented owners, not ammo-save acceptance.
-The writer is tracing the real speed fields without fabricated defaults. The
-creature continuation will retain only the actual stopped preselection failure,
-source lifecycle/pose/RNG/clock and error; it does not implement or skip eating.
+Main also retains qualified creature preselection Sandbox admission failures and
+stopped motion prefixes, with source hashes, consumed event history, selection
+attempts, pose, clocks and RNG. Detached construction stages authority until real
+publication. Independent combat/script/audio/pose failures still refuse capture.
+This does not implement Eat or creature locomotion merely by persisting a fault.
 
-Ordinary travel to Broc Flower continues through real collision and streaming,
-with79HP and publication failures0 at the latest sample. The earlier obstruction
-was passed through ordinary movement. Smoke17 subsequently harvested Broc Flower through its actual ACTI script;
-both ingredients and the return-to-Sunny objective were observed live, but not
-saved. It then normally quit with exit0. The grouped native continuation files
-are integrated/frozen and the connected compile/admission probe passed. Sole
-corrected smoke18 PID254088 / runner33223 loaded5e54 normally, then normally quit
-through its observed menu and confirmation (requests115/116). Runner exit0 was
-confirmed before the publication build boundary. Final publication failures were0;
-no duplicate runtime or held input was left behind.
+Actual smoke18 state114 showed selectionAttempts1/POBArev1 on all four168c25-28.
+168c26/27/28 additionally failed the real aggro-warning turn owner against source
+actor1073e8, not the player.168c27's separate Eat candidate failure therefore could
+not be saved through the Sandbox owner. Later F5 failed; no admission was relaxed.
+The schoolyard obstruction was a real closed gate1076bf: ordinary activation
+opened it and subsequent movement passed it. No collision repair was needed.
 
-Ordinary F5 committed intermediate8c8de60245f14fd391b50e8b907c2ea4 at08:04:46 UTC,
-79HP/map0e1aa8, retaining XanderRoot1 and GeckoMeat1. This preceded actual native
-binding of all four affected creatures and is not their save acceptance. Later
-all four had selectionAttempts1 and POBA revision1; F5 failed. Detailed state114
-shows168c26/27/28 also have an independent combat zero-turn error in
-AdvanceRadiusWarning, targeting source actor1073e8 rather than the player.
-168c27's Eat admission receipt correctly cannot capture that combat fault.
-No capture predicate was relaxed. The schoolyard obstruction was a real closed
-gate1076bf; ordinary activation opened it and subsequent movement passed it.
+The new batch implements the qualified creature turning getter: finite authored
+TNAM belongs to Stats inheritance; exact zero (including signed zero) selects the
+current fCreatureDefaultTurningSpeed setting. No numeric fallback is hardcoded.
+The existing owned-default owner resolves the setting from winning GMST or owned
+executable defaults. Turn integration refreshes the fallback at actual turns
+rather than freezing its value during envelope setup. Negative/nonfinite values
+remain refused. Existing historical fault receipts are not silently cleared.
 
-The exact next source dependency is TNAM0 turning behavior in the combat owner.
-Stats-tab inheritance and model inheritance are distinct, but both resolve to
-167e37 for these four creatures, so correcting ownership alone cannot resolve
-their zero. A bounded static check verified the existing decoded text SHA256
-ad347436b8d504f811aff739db344dc508bec381bf30fb5cf6865f5faddff526.
-It did not qualify a zero-to-default or instant-turn rule. Installed Capstone5.0.7
-decodes the selected x87 field access, but that access is TNAM serialization,
-not a runtime turn consumer. No behavior was inferred from negative filtered
-searches or other classes' same-offset fields. No installation was needed.
-Actual four-actor save/cold acceptance remains open. A later bounded getter trace
-qualifies exact-zero substitution through the current fCreatureDefaultTurningSpeed
-setting; this is not yet implemented in the frozen publication batch. Downstream
-turn integration and ordinary acceptance remain separate. No default literal is
-authorized by the contract.
-Original and earned saves stay immutable; failed attempts did not replace them.
+Connected compile, synthetic movement and owned creature getter checks passed.
+Actual smoke19 bound all four creatures, advanced warning timing to19.844 seconds
+without a zero-turn refusal, and produced source package motion on168c25. The next
+grouped blocker is ordinary weapon default255 on168c26/27/28; F5 correctly failed.
+Eat remains an independent visible failure on168c27. No save gate was weakened.
 
-Publication scope is the independently useful optional-ammo economics and honest
-stopped/preselection continuation owners. Zero-turn locomotion/combat and Eat
-execution remain held, with errors visible and independent capture gates intact.
-The existing container probe now accepts an optional owned-AMMO audit argument
-to join the shared resolver to actual source value and weight-field presence.
-The owned047419 audit passed with value1 and unknown weight. The full required
-publication gate passed08:44:11 UTC, Gate0/Diff0,2524 public files, no source drift,
-added public files or protected-save drift. Runtime/contracts remained frozen
-throughout. The next code owner is the qualified zero-turn getter substitution;
-Eat execution and four-actor save/cold acceptance remain incomplete.
+The grouped correction now maps the qualified ordinary pistol default to AttackRight
+and binds model-owner KFFZ attack overrides. Bare assigned names use SpecialAnims;
+explicit source paths remain explicit. Matching overrides take precedence, unrelated
+declarations allow ordinary lookup, and malformed/missing matching overrides refuse.
+Base attack variants remain separate from up/down. Cache identity includes the
+actual declaration set so shared skeleton directories cannot merge actor choices.
+Native attack variants retain their existing RNG/event/cold owner; Hit is already
+the ranged discharge event and was not aliased or replayed. General thrown/mine,
+special-action and other unqualified default groups remain refused.
+
+Scope is the turn helper, shared movement/attack binding, creature appearance and
+animation resource/weapon declarations plus their existing probes. No separate
+proof project. Grouped compile and selected owned binding passed, as did existing
+animation/source contracts including unrelated-override fallback, malformed-match
+refusal and cache isolation. Actual smoke20 state5 bound all four to source base,
+_2/_3 attack paths with combat errors null. Attack attempts advanced, but all shots
+were held by the existing friendly-spread guard at54.5478 median degrees
+(unbounded-spread). No projectile emission/damage or firing parity is claimed.
+The same F5 still refused:168c27 has both the Eat failure and active combat.
+The source spread calculation/guard is the next actual shared firing dependency;
+do not clamp accuracy, skip friend checks or capture combat as Sandbox.
+The actual launch-radius/Euler sampler is qualified independently of the old
+empirical median conversion. NPC aim-chase is separate retained angular state;
+its source constructor starts at zero, which is not proof of a permanent zero
+or permission to reset old/cold state. Its producer/retained integration remains
+the next firing owner. Player aim/camera wobble and exact random rounding remain
+separate unqualified boundaries.
+
+Smoke20 state70 also reached QJMelissaRef0e5e51/PACK0e6343's editor dialogue wait.
+The source persistent parent CELL0846ea and merged exterior scene share world
+0da726; strict cell identity rejected their common coordinate space and blocked
+F5 independently. The grouped correction now uses the existing TravelRegion
+owner for dialogue wait/trigger/player-cell admission and editor travel. Exterior
+cells share only their actual world; interiors remain separate. Native floor,
+capsule movement and arrival predicates remain authoritative. Different-region
+portal routes are still refused. Connected build passed with0 warnings/errors,
+travel contracts passed and the selected owned Melissa coordinate audit passed;
+the initial sandbox formatter could not open its build-host pipe, while the
+approved host formatter/build/checks completed successfully. This new native
+correction has not been replayed and does not remove168c27's
+independent blocker. No broad replay is being launched expecting F5 to pass.
+The broad checkpoint still needs durable Broc/campfire acceptance.
+
+This independent turning/attack-binding/coordinate-admission batch passed the
+full required runtime gate at10:53:33 UTC: Gate0/Diff0,2525 public files and no
+source/added-file/protected-save drift. Independent runtime source review is clear.
+Publication is proceeding; no main acceptance is claimed yet. The
+next firing work must retain actual process aim-chase state and use the qualified
+launch extent/sampler without resetting historical actors, changing friend
+admission or inventing player wobble. Original saves remain unchanged.
+Collect related blockers and fix together. Keep Eat unsupported unless its real
+actor inventory/effect/animation/persistence owners exist. General KFFZ locomotion
+override support, full turn integration/retail timing, four-actor save/cold and
+campfire acceptance remain open.
+
 ## Durable ordinary progress
 
-The genuine fresh character completed Doc stage200 and source rewards; ordinary
-saloon entry/dialogue/exit; Sunny's rifle handoff, R reload and three-bottle lesson;
-first-well instruction, both first-well kills, Gecko Meat looting and stage50.
-The v60 pending Sandbox-start owner passed actual stage35 F5, ordinary Load/resave
-and separate-process stage50 Continue/F5 without invented movement or Start replay.
-Timed base/head/blink state advanced normally; independent RNG comparisons match
-actual blink draws. The typed owner is not general locomotion or parity acceptance.
+The genuine fresh character completed Doc stage200/rewards, saloon entry/dialogue,
+Sunny's rifle/reload/bottle lesson, all seven tutorial gecko kills and resolved
+death dispatch, and Gecko Meat looting. Sunny survived with actual retained limb
+damage; settler10b3de died to10a212. Do not fabricate rescue or survival.
 
-A real east-side detour passed rock107105 through ordinary collision. Source
-next-well dialogue and Sunny's completed10a215 travel were saved in immutable
-c6275ac9f7b34200bf3a889e30859397. Normal death recovery preserved that progress.
-Actual Stimpak use, equipment changes, uninterrupted shotgun reload, capsule-aware
-approach and source rifle combat then killed the next-well geckos10a20f/10a210
-and the additional attacking10abb0. No collision, health or quest-state override.
+CompleteQuest is accepted on main through ordinary Sunny choice INFO15d97e:
+VCG02 completed while stage50/running/active were preserved, source50XP advanced
+20 to70 (still level1), objective60 completed and VCG03 started atstage10.
+Immutable24108482708c43d98fdda49be9606f51 preserves this ordinary transition.
 
-Pre-repair recovery source: immutable2c67ff9cb2cd42c3be5f1c9e12042fd9,
-F5 request339, written06:11:05 UTC, v60,100HP, map0e19cd, no save/cleanup error.
-Independent inspection confirms all seven tutorial geckos dead with their death
-events resolved. Sunny104e85 is alive with actual retained limb damage; settler
-10b3de is dead, killed by10a212. No rescue/survival rewrite is claimed. Gecko Meat1
-remains. VCG02 is stage50/running/incomplete; objective50 is complete and60 is
-displayed/incomplete. Earlier5c3f26720c104d269c2ac4cd0f4e64fe preserves the second-well
-kills,348ef0f9f89942c985a4755468d071e8 the first new kill; originalc627,
-423466f4d00441e0951f12743cdfe690 and7d35ed58767d4530ba75f36712395ed3 remain immutable.
-All slots/evidence stay private under local/fnv-wells-fixed/broad-tutorial-batch-20261023/.
+Immutable5e54e5f96c04498b82ec8f1415422055 preserves actual scripted ACTI15d982
+Xander Root acquisition,79HP, GeckoMeat1 and VCG03stage10/objective10 incomplete.
+Durable intermediate8c8de60245f14fd391b50e8b907c2ea4 was ordinary F5 at
+08:04:46 UTC, v60/map0e1aa8/79HP, XanderRoot1+Meat1, no Broc. It preceded native
+binding of the four affected creatures and is not their save acceptance.
+Newest preparation slot eb57653da03748e4b4f325ceef5d3e14 retains ordinary Stimpak
+use/equipment/reload at100HP, shotgun loaded2/reserve35. It is also an intermediate
+checkpoint, not four-actor capture or Broc/campfire acceptance.
+Smoke17 actually harvested Broc through ACTI15d981 and showed both ingredients
+and the return objective, but a later save refused; that unsaved result was lost
+through normal Quit. Gather Broc again through ordinary source activation.
 
-## Next action and operating constraints
+Earlier typed pending-start and deferred-package boundaries passed genuine F5,
+Load/resave and separate-process Continue/F5. Consumed POBA/assignment and actual
+RNG/clock prefixes were preserved; timed blink draws explain observed progression.
+These are bounded persistence capabilities, not general actor or campaign parity.
 
-CompleteQuest is accepted on main. INFO15d97e formerly stopped before its
-response because the command had no frontend owner. Both script executors now use
-the existing shared completion owner. The corrected ordinary choice completed
-VCG02, awarded50XP (20 to70, still level1), completed objective60 through source
-results and started VCG03 atstage10/objective10. Stage50/running/active state of
-VCG02 remained intact. Immutable241 preserves the result with100HP and Sunny alive.
-All seven tutorial deaths and the settler's death remain genuine outcomes.
-No reward, StopQuest or blanket objective effect is invented by this command.
+## Operating constraints and preserved holds
 
-PR301 publication is complete. Finish the grouped movement/admission continuation
-repair before claiming the later journey can save.
-After the corrected build, use ordinary Load of earned5e54 and continue gathering. VCG03 objective10 targets actual
-scripted ACTI15d982 (Xander Root) and15d981 (Broc Flower). Xander Root is durable;
-Broc Flower is still missing. Do not replace script ownership with a generic
-harvest bypass.
-The earlier other-cell editor-travel warning did not recur in corrected dialogue;
-that general owner and the per-pellet damage question remain parked.
-
-Smoke15 publication3343 completed with no writer error but exceeded its deadline
-(commit602.550ms). Later publications recovered; the exact failure was explicitly
-acknowledged for that process only. Counters/deadlines were not reset or raised.
-A new session must use the default zero-loss guard, not inherit that acknowledgement.
-
-Use supported20-1000ms input leases. A delivered receipt is not a gameplay result.
-Wait for observed paused=false and modalInput=false before firing/reload input;
-wait for a fresh active/terminal controller state rather than an old stopped
-summary. The current modal handler cancels active weapon actions, so allow a reload
-to publish loaded rounds before opening the Pip-Boy. Transient shared-file reads
-may be retried against the same observation; publication counters/deadlines and
-input guards must remain intact. A new/unrecovered publication loss stops dependent
-input until reconciled. No counter or deadline has been manually reset or raised.
-
-Source rocks stopped direct movement and blocked shots; alternate movement and
-actual hit receipts resolved those attempts. Player/Sunny deaths were real failed
-outcomes, not silently repaired. Use normal save recovery, healing and tactics.
-PR300's corpse diagnostics retain unchanged capture predicates; no semantic effect
-cleanup is claimed. Require a fresh actual refusal before assigning that owner.
-
-## Preserved holds
-
-- Original tutorial slot4dc878ab017f4e75a41f80d213387284 remains unchanged at
-  7B366B739C51102CCF62AD2C8CEE25D878EE8FAC7032A2C00B56AE36C9655F14.
-  Its prior receipts do not establish a new kill or tutorial completion. No identical
-  retired retail combat retry or third blind retail launch; first-party smoke is separate.
-- Unique PR242/PR269 work is preserved. Website copy remains outside this batch and
-  unapplied. No competing native jobs or workers.
-- Physical NOTE ownership/Karma and reversible relationship effects, static ACTI
-  defaults, notification/witness/crime effects and Generator MenuMode ordering stay
-  at their recorded gaps; errors are not cleared or replayed.
-- Actor maximum-health destruction/traps, full Sandbox activity, remaining combat
-  families and assistance, world materials/LOD, complete UI/audio and XR are incomplete.
-- Native rematerialization/full bone-pose fidelity and retail timing remain separate
-  from the accepted deferred/pending package persistence boundaries.
-
-Coordination boundary: automatic approval review rejected an optional follow-up to
-the existing writer for lack of direct user authorization in this turn. No retry
-or alternate messaging route is being used. Existing handed-off code is integrated;
-independent gameplay and integration continue. No writer job was requested by that
-rejected message.
+- Preserve the original slot4dc878ab017f4e75a41f80d213387284 at SHA256
+  7B366B739C51102CCF62AD2C8CEE25D878EE8FAC7032A2C00B56AE36C9655F14 and every
+  earned immutable slot. Evidence remains private under local/fnv-wells-fixed/.
+- One local runtime/build/input owner. No build while gameplay is live; use normal
+  Quit and reconcile runner exit. New runs retain the default zero-publication-loss
+  guard; no counter/deadline reset or inherited recovery acknowledgement.
+- Supported input leases are20-1000ms. Delivered receipts are not gameplay results.
+  Observe paused=false/modalInput=false before actions. Preserve reload completion
+  before opening menus. Real collision and player deaths require ordinary recovery.
+- Publication requires the full repository gate, selected owned-data audit,
+  diff check, checked PR, exact-head hosted success, then normal non-force merge
+  and clean main/origin/live verification. Keep private source evidence and saves out.
+- No unchanged refused route retries, named-location exceptions, actor discard,
+  fabricated motion, quest progress or survival. No new workers or retail dumps.
+- Source Eat, other Sandbox activities, full combat/animation/material/UI/audio,
+  physical XR and retail parity remain incomplete. Historical faults remain visible.
+- Physical NOTE/Karma/relationships, static ACTI defaults, remaining witness/crime
+  effects, actor-max-health traps and Generator ordering stay at recorded gaps.
+  Website copy remains outside this gameplay batch. Preserve PR242/269 recovery.

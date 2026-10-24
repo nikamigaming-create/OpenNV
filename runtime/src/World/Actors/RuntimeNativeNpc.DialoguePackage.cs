@@ -70,8 +70,8 @@ internal partial class RuntimeNativeNpc
         if (_packageIdleSource!.LocationType != 3) return GlobalPosition;
         var world = _aiWorld ?? throw new NotSupportedException("Dialogue editor wait has no reference placement owner.");
         var placement = world.EditorPlacement(Appearance.Reference!.Value);
-        if (placement.Cell != _aiCell!.Cell.FormKey)
-            throw new NotSupportedException("Dialogue editor wait requires its other-cell route owner.");
+        if (!world.SameTravelRegion(placement.Cell, _aiCell!.Cell.FormKey))
+            throw new NotSupportedException("Dialogue editor wait requires its other-region route owner.");
         return GetParent<Node3D>().ToGlobal(new Vector3(placement.Position[0], placement.Position[2],
             -placement.Position[1]) * Skeleton.UnitsToMetres);
     }
@@ -112,7 +112,8 @@ internal partial class RuntimeNativeNpc
         }
         if (_dialogueNativeMovement && (Combat is null || Combat.OwnsPose || !Combat.PackageMovementReady || _conversationTarget is not null)) return;
         var playerTarget = _aiStack!.RuntimeFormId(dialogue.Target) == 0x14;
-        if (playerTarget && Combat?.PackagePlayerCell is { } playerCell && playerCell != _aiCell!.Cell.FormKey) return;
+        if (playerTarget && Combat?.PackagePlayerCell is { } playerCell &&
+            !_aiWorld!.SameTravelRegion(playerCell, _aiCell!.Cell.FormKey)) return;
         if (!playerTarget && _aiWorld?.IsEnabled(dialogue.Target) == false) return;
         var targetNode = ResolveDialogueTarget is { } resolve ? resolve(dialogue.Target) : playerTarget ?
             Combat?.PackagePlayer ?? GetTree().Root.FindChildren("*", "", true, false).OfType<RuntimeNativePlayer>()
@@ -185,7 +186,7 @@ internal partial class RuntimeNativeNpc
         if (trigger.Type == 2) return target.DistanceTo(_dialogueWaitPosition) <= trigger.Radius * Skeleton.UnitsToMetres;
         var world = _aiWorld ?? throw new NotSupportedException("Dialogue trigger has no shared placement owner.");
         var placement = trigger.Type == 3 ? world.EditorPlacement(Appearance.Reference!.Value) : world.Placement(trigger.Reference!.Value);
-        if (placement.Cell != _aiCell!.Cell.FormKey) return false;
+        if (!world.SameTravelRegion(placement.Cell, _aiCell!.Cell.FormKey)) return false;
         var point = GetParent<Node3D>().ToGlobal(new Vector3(placement.Position[0], placement.Position[2], -placement.Position[1]) * Skeleton.UnitsToMetres);
         return target.DistanceTo(point) <= trigger.Radius * Skeleton.UnitsToMetres;
     }

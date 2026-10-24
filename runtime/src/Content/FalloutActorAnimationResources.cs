@@ -12,6 +12,7 @@ internal sealed class FalloutActorAnimationResources
     private readonly Dictionary<string, string[]> _directories = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, string?> _resolved = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, IReadOnlyList<string>> _variants = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, IReadOnlyList<string>> _declaredVariants = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, IReadOnlyList<string>> _exportedGroups = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, string> _selectedGroups = new(StringComparer.OrdinalIgnoreCase);
 
@@ -52,6 +53,37 @@ internal sealed class FalloutActorAnimationResources
 
     internal string? SelectedGroup(string path) => _selectedGroups.GetValueOrDefault(Canonical(path));
 
+    internal IReadOnlyList<string> Variants(string directory, string group, IReadOnlyList<string> declarations)
+    {
+        var assigned = DeclaredVariants(declarations, group);
+        return assigned.Count > 0 ? assigned : Variants(directory, group);
+    }
+
+    // CREA KFFZ supplies explicit owned paths, including SpecialAnims. It does
+    // not authorize scanning arbitrary nested folders or mixing directional
+    // groups into the requested base action's variants.
+    internal IReadOnlyList<string> DeclaredVariants(IReadOnlyList<string> declarations, string group)
+    {
+        if (string.IsNullOrWhiteSpace(group) || group.IndexOfAny(['/', '\\', '\0']) >= 0)
+            throw new InvalidDataException("Declared animation action group is invalid.");
+        var paths = declarations.Select(Canonical).Distinct(StringComparer.OrdinalIgnoreCase)
+            .Order(StringComparer.OrdinalIgnoreCase).ToArray();
+        var key = group + '\0' + string.Join('\0', paths);
+        if (_declaredVariants.TryGetValue(key, out var resolved)) return resolved;
+        var candidates = paths.Where(path =>
+        {
+            if (!path.EndsWith(".kf", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException("Declared actor animation is not KF.");
+            var stem = path[(path.LastIndexOf('/') + 1)..^3];
+            return stem.Equals(group, StringComparison.OrdinalIgnoreCase) ||
+                stem.StartsWith(group + "_", StringComparison.OrdinalIgnoreCase);
+        }).ToArray();
+        foreach (var path in candidates)
+            if (!_exists(path)) throw new FileNotFoundException($"Declared source animation is missing: {path}", path);
+        BindGroups(candidates, group, "KFFZ:" + group);
+        return _declaredVariants[key] = Array.AsReadOnly(candidates);
+    }
+
     private IReadOnlyList<string> Candidates(string requested, bool includeExact)
     {
         var split = requested.LastIndexOf('/');
@@ -66,10 +98,16 @@ internal sealed class FalloutActorAnimationResources
         if (includeExact && _exists(requested) && !candidates.Contains(requested, StringComparer.OrdinalIgnoreCase))
             candidates.Add(requested);
         candidates.Sort(StringComparer.OrdinalIgnoreCase);
+        BindGroups(candidates, stem, requested);
+        return Array.AsReadOnly(candidates.ToArray());
+    }
+
+    private void BindGroups(IReadOnlyList<string> candidates, string stem, string requested)
+    {
         var selectedGroups = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var path in candidates)
         {
-            var variant = path[(split + 1)..^3];
+            var variant = path[(path.LastIndexOf('/') + 1)..^3];
             if (!_exportedGroups.TryGetValue(path, out var names))
                 _exportedGroups.Add(path, names = _groups(path).ToArray());
             var compatible = names.Where(name =>
@@ -92,7 +130,6 @@ internal sealed class FalloutActorAnimationResources
             if (_selectedGroups.TryGetValue(path, out var prior) && !prior.Equals(group, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidDataException($"Source animation {path} resolves to incompatible exported groups.");
         foreach (var (path, group) in selectedGroups) _selectedGroups[path] = group;
-        return Array.AsReadOnly(candidates.ToArray());
     }
 
     internal string Require(string directory, string group) => Find(directory, group) ??
