@@ -302,6 +302,7 @@ internal partial class RuntimeNativeNpc
         var retainedFurniture = false;
         try
         {
+            if (HasDetachedPendingSandboxStart) return;
             if (_sandboxAdmissionStaging is { } staging)
             {
                 if (!staging.Retire(RetainLiveSources)) ReleaseDetachedSandboxAdmission();
@@ -318,6 +319,7 @@ internal partial class RuntimeNativeNpc
         {
             RetainHeadTracking();
             RetainPendingSelection();
+            RetainPendingSandboxStart();
             RetainBindingFailure();
             RetainSandboxAdmissionFailure();
             RetainSelectionFailure();

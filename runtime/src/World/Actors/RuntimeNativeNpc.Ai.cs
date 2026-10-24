@@ -212,7 +212,7 @@ internal partial class RuntimeNativeNpc
             if (_aiReferenceState.SandboxAdmissionFailure is not null)
                 _sandboxAdmissionStaging = new(_aiReferenceState);
             world.BindActorAlert(Appearance.Reference!.Value, Activity);
-            _baseClock = _sandboxAdmissionStaging?.Clock ?? _aiReferenceState.Animation;
+            _baseClock = PreparePendingSandboxStartClock() ?? _sandboxAdmissionStaging?.Clock ?? _aiReferenceState.Animation;
             _aiReferenceState.QueryCurrentPackage = _currentPackageQuery = () => CurrentPackage;
             _aiReferenceState.QuerySitting = _sittingQuery = () => SittingState;
         }
@@ -222,6 +222,8 @@ internal partial class RuntimeNativeNpc
             unloaded.BindNative(Appearance.Reference!.Value, _packageEvents);
         else if (_aiReferenceState?.DeferredPackageContinuation is { } deferred)
             deferred.BindNative(stack, _aiReferenceState, _packageEvents);
+        else if (_aiReferenceState?.PendingSandboxStart is { } pendingStart)
+            pendingStart.RestoreEvents(stack, _aiReferenceState, _packageEvents);
         else if (_aiReferenceState?.SandboxAdmissionFailure is null &&
             _aiReferenceState?.PackageAssignment is { } retained && _aiReferenceState.PackageMotion?.Package != retained.Package)
             retained.Bind(stack, _packageEvents);
@@ -232,6 +234,7 @@ internal partial class RuntimeNativeNpc
         BindSandboxAdmissionCapture();
         BindSelectionFailureCapture();
         BindPendingSelectionCapture();
+        BindPendingSandboxStartCapture();
         BindFurnitureCapture();
         BindDialogueCapture();
         var bindingFailure = _aiReferenceState?.PackageBindingFailure;
@@ -243,6 +246,11 @@ internal partial class RuntimeNativeNpc
         {
             PlayLocomotion(false);
             RestoreSandboxAdmissionFailure(sandboxAdmission);
+        }
+        else if (_aiReferenceState?.PendingSandboxStart is { } pendingSandbox)
+        {
+            PlayLocomotion(false);
+            RestorePendingSandboxStart(pendingSandbox);
         }
         else if (_aiReferenceState?.PendingPackageSelection is { } pendingSelection)
         {
@@ -427,6 +435,7 @@ internal partial class RuntimeNativeNpc
                 }
                 CancelIdle();
                 _packageEvents!.Change(null);
+                ClearPendingSandboxStart(clearBlocker: true);
                 _aiPackage = null;
                 _packageIdleSource = null;
                 _packageIdles = null;

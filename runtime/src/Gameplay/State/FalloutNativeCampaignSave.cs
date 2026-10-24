@@ -69,7 +69,8 @@ internal sealed record FalloutNativeCampaignRestore(
 
 internal static class FalloutNativeCampaignSave
 {
-    internal const string ExpectedSchema = "opennv-native-fnv-campaign-save/v59";
+    internal const string ExpectedSchema = "opennv-native-fnv-campaign-save/v60";
+    internal const string BeforePendingSandboxStartSchema = "opennv-native-fnv-campaign-save/v59";
     internal const string BeforePlayerNotesSchema = "opennv-native-fnv-campaign-save/v58";
     internal const string BeforeReputationSchema = "opennv-native-fnv-campaign-save/v57";
     internal const string BeforeTerminalHackStateSchema = "opennv-native-fnv-campaign-save/v56";
@@ -537,6 +538,9 @@ internal static class FalloutNativeCampaignSave
 
     internal static FalloutNativeCampaignState AdmitPreviousOwnerSchema(FalloutNativeCampaignState state)
     {
+        if (state.Schema != ExpectedSchema && state.References?.Any(reference => reference.PendingSandboxStart is not null) == true)
+            throw new InvalidDataException("Earlier campaign schemas cannot own a pending native Sandbox start.");
+        if (state.Schema == BeforePendingSandboxStartSchema) state = state with { Schema = ExpectedSchema };
         ValidatePlayerNotesSchema(state);
         if (state.Schema == BeforePlayerNotesSchema) state = state with { Schema = ExpectedSchema };
         ValidateReputationSchema(state);

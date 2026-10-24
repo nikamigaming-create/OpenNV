@@ -76,7 +76,8 @@ internal sealed partial class RuntimeNativeActorCombat
         if (Error is not null || _engagementError is not null || _assistanceError is not null)
             throw new NotSupportedException("Corpse equipment retains an unowned combat failure.");
         if (_enemyMuzzle?.CaptureReady == false || _enemyShotEffects?.CaptureReady == false)
-            throw new NotSupportedException("Corpse equipment has a pending source attack effect, projectile, decal or effect fault.");
+            throw new NotSupportedException("Corpse equipment has a pending source attack effect, projectile, decal or effect fault: " +
+                $"muzzle=[{_enemyMuzzle?.CaptureBlocker ?? "ready"}]; shotEffects=[{_enemyShotEffects?.CaptureBlocker ?? "ready"}].");
         if (_corpseVisualBoundary is { } boundary) throw new NotSupportedException(boundary);
         if (_enemyObject is null && _packageWeapon is null && _enemyWeaponHandling is null && _deathRouteRetirement is null)
         {

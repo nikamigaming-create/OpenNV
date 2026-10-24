@@ -5,6 +5,7 @@ internal partial class RuntimeNativeNpc
     private void ReleaseSourceBindings()
     {
         if (_aiReferenceState is not { } state) return;
+        ReleasePendingSandboxStartBindings();
         if (ReferenceEquals(state.QueryCurrentPackage, _currentPackageQuery)) state.QueryCurrentPackage = null;
         if (ReferenceEquals(state.QuerySitting, _sittingQuery)) state.QuerySitting = null;
         if (ReferenceEquals(state.CapturePackageAssignment, _packageAssignmentCapture)) state.CapturePackageAssignment = null;
@@ -37,6 +38,7 @@ internal partial class RuntimeNativeNpc
         state.QueryCurrentPackage ??= _currentPackageQuery;
         state.QuerySitting ??= _sittingQuery;
         state.CapturePackageAssignment ??= _packageAssignmentCapture;
+        RebindPendingSandboxStartBindings();
         state.CanCapturePendingPackageSelection ??= _pendingSelectionReady;
         state.CapturePendingPackageSelection ??= _pendingSelectionCapture;
         state.CanCapturePackageBindingFailure ??= _bindingFailureReady;

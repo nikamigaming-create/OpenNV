@@ -7,6 +7,15 @@ internal sealed partial class RuntimeNativeActorCombat
 {
     private bool RestoreStoppedAiPose()
     {
+        if (_state.PendingSandboxStart is { } pendingStart)
+        {
+            pendingStart.Validate();
+            var pose = pendingStart.Pose;
+            _actor.Transform = new(new Basis(new Vector3(pose[0], pose[1], pose[2]),
+                new Vector3(pose[3], pose[4], pose[5]), new Vector3(pose[6], pose[7], pose[8])),
+                new(pose[9], pose[10], pose[11]));
+            return true;
+        }
         if (_state.PackageBindingFailure is { } binding)
         {
             binding.Validate();

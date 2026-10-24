@@ -42,7 +42,8 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
     FalloutActorSandboxAdmissionFailure? SandboxAdmissionFailure = null,
     FalloutTerminalHackState? TerminalHackState = null, bool? ObjectHealthPresent = null,
     FalloutActorSandboxMotionFailure? SandboxMotionFailure = null,
-    FalloutActorStoppedIdleAnimation? CreatureScriptIdle = null)
+    FalloutActorStoppedIdleAnimation? CreatureScriptIdle = null,
+    FalloutActorPendingSandboxStart? PendingSandboxStart = null)
 {
     internal static void Validate(IReadOnlyList<FalloutReferenceSnapshot> snapshots)
     {
@@ -102,6 +103,7 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
                 throw new InvalidDataException("Saved attack randomness differs between reference and active engagement.");
             snapshot.PackageMotion?.Validate();
             snapshot.PackageAssignment?.Validate();
+            snapshot.PendingSandboxStart?.ValidateShape(snapshot);
             snapshot.DeferredPackageContinuation?.ValidateShape(snapshot);
             snapshot.PackageBindingFailure?.Validate();
             snapshot.SandboxAdmissionFailure?.Validate();
@@ -262,6 +264,11 @@ internal sealed partial class FalloutReferenceInstance
     internal FalloutActorPackageBindingFailure? PackageBindingFailure { get; set; }
     internal FalloutActorSandboxAdmissionFailure? SandboxAdmissionFailure { get; set; }
     internal FalloutActorSandboxMotionFailure? SandboxMotionFailure { get; set; }
+    internal FalloutActorPendingSandboxStart? PendingSandboxStart { get; set; }
+    internal Func<bool>? CanCapturePendingSandboxStart { get; set; }
+    internal Func<FalloutActorPendingSandboxStart>? CapturePendingSandboxStart { get; set; }
+    internal bool PendingSandboxStartCaptureReady => CanCapturePendingSandboxStart?.Invoke() ??
+        PendingSandboxStart is not null && ProcedureCaptureBlocker == FalloutActorPendingSandboxStart.CaptureBlocker;
     internal FalloutActorStoppedIdleAnimation? CreatureScriptIdle { get; set; }
     internal Func<bool>? CanCaptureCreatureScriptIdle { get; set; }
     internal Func<FalloutActorStoppedIdleAnimation?>? CaptureCreatureScriptIdle { get; set; }
@@ -451,7 +458,7 @@ internal sealed partial class FalloutReferenceInstance
             throw new NotSupportedException($"Reference {Reference} cannot save its active creature script idle.");
         var failureReady = bindingOverride is not null || PackageBindingFailureCaptureReady;
         var selectionReady = selectionOverride is not null || SelectionFailureCaptureReady;
-        if (ProcedureCaptureBlocker is { } blocker && !failureReady && !FurnitureCaptureReady && !selectionReady && !DialogueCaptureReady && !PendingPackageSelectionCaptureReady && !SandboxAdmissionFailureCaptureReady && !SandboxMotionFailureCaptureReady &&
+        if (ProcedureCaptureBlocker is { } blocker && !failureReady && !FurnitureCaptureReady && !selectionReady && !DialogueCaptureReady && !PendingPackageSelectionCaptureReady && !SandboxAdmissionFailureCaptureReady && !SandboxMotionFailureCaptureReady && !PendingSandboxStartCaptureReady &&
             DeferredPackageContinuation?.CanCapture(this) != true)
             throw new NotSupportedException($"Reference {Reference} cannot save: {blocker}");
         var bindingFailure = bindingOverride?.Copy() ?? (failureReady ? CapturePackageBindingFailure is { } captureFailure
@@ -486,7 +493,9 @@ internal sealed partial class FalloutReferenceInstance
             SandboxMotionFailure: SandboxMotionFailureCaptureReady ? CaptureSandboxMotionFailure is { } captureSandboxMotion
                 ? captureSandboxMotion() : SandboxMotionFailure?.Copy() : null,
             CreatureScriptIdle: CreatureScriptIdle is not null && CaptureCreatureScriptIdle is { } captureScriptIdle
-                ? captureScriptIdle()?.Copy() : CreatureScriptIdle?.Copy());
+                ? captureScriptIdle()?.Copy() : CreatureScriptIdle?.Copy(),
+            PendingSandboxStart: PendingSandboxStartCaptureReady ? CapturePendingSandboxStart is { } captureSandboxStart
+                ? captureSandboxStart() : PendingSandboxStart?.Copy() : null);
     }
 }
 
@@ -658,7 +667,7 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
 
     private bool PendingProcedureCapture(FalloutReferenceInstance instance) =>
         !instance.CreatureScriptIdleCaptureReady || instance.ProcedureCaptureBlocker is not null && !instance.PackageBindingFailureCaptureReady && !instance.FurnitureCaptureReady &&
-        !instance.SelectionFailureCaptureReady && !instance.DialogueCaptureReady && !instance.PendingPackageSelectionCaptureReady && !instance.SandboxAdmissionFailureCaptureReady && !instance.SandboxMotionFailureCaptureReady &&
+        !instance.SelectionFailureCaptureReady && !instance.DialogueCaptureReady && !instance.PendingPackageSelectionCaptureReady && !instance.SandboxAdmissionFailureCaptureReady && !instance.SandboxMotionFailureCaptureReady && !instance.PendingSandboxStartCaptureReady &&
         (IsResident(instance.Reference) || instance.DeferredPackageContinuation?.CanCapture(instance) != true);
     internal int PendingProcedureCaptureCount => _instances.Values.Count(PendingProcedureCapture);
     internal int StoppedPackageBindingCount => _instances.Values.Count(instance => instance.PackageBindingFailureCaptureReady);
@@ -969,6 +978,13 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
         // placements must be restored before validating their Travel anchors.
         foreach (var snapshot in snapshots)
         {
+            if (snapshot.PendingSandboxStart is { } pendingStart)
+            {
+                var actor = validated.Get(snapshot.Reference);
+                pendingStart.Validate(records, actor);
+                actor.PendingSandboxStart = pendingStart.Copy();
+                actor.ProcedureCaptureBlocker = FalloutActorPendingSandboxStart.CaptureBlocker;
+            }
             if (snapshot.SandboxMotionFailure is { } motionFailure)
             {
                 var actor = validated.Get(snapshot.Reference);
