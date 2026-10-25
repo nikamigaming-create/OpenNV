@@ -79,7 +79,7 @@ internal sealed partial class FalloutReferenceWorld
     internal FalloutReferencePlacement SpawnPlacement(FalloutFormKey reference,
         FalloutReferencePlacement player, float unitsToMetres) => SpatialPlacement(reference, player, unitsToMetres, requireFacing: true);
 
-    private FalloutReferencePlacement SpatialPlacement(FalloutFormKey reference,
+    internal FalloutReferencePlacement SpatialPlacement(FalloutFormKey reference,
         FalloutReferencePlacement? player, float unitsToMetres, bool requireFacing = false)
     {
         if (!float.IsFinite(unitsToMetres) || unitsToMetres <= 0)

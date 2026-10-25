@@ -49,6 +49,7 @@ internal sealed partial class RuntimeNativeActorCombat
     private object EngagementObservation => new
     {
         state = _state.Engagement,
+        ingestibles = _state.Ingestibles,
         threat = _threat,
         relation = _relation,
         attacks = _attacks,

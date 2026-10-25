@@ -459,6 +459,16 @@ if (args is ["--default-activation-contracts"])
     DefaultActivationContracts.Run();
     return;
 }
+if (args is ["--ingestible-contracts"])
+{
+    IngestibleContracts.Run();
+    return;
+}
+if (args is ["--audit-ingestibles", var ingestibleRoot])
+{
+    OwnedIngestibleProbe.Run(ingestibleRoot);
+    return;
+}
 if (args is ["--script-save-contracts"])
 {
     ScriptManualSaveContracts.Run();

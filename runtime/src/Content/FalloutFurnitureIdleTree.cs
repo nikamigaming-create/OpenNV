@@ -35,17 +35,25 @@ internal sealed class FalloutFurnitureIdleTree
     }
 
     internal FalloutPluginRecord Select(Func<FalloutCondition, float> evaluate)
+        => SelectRoots(branch => branch.Conditions.Any(condition => condition.Function is 159 or 49), evaluate, "Furniture");
+
+    internal FalloutPluginRecord SelectProcedure(int procedure, Func<FalloutCondition, float> evaluate) =>
+        SelectRoots(branch => branch.Conditions.Where(condition => condition.Function == 143)
+            .Any(condition => FalloutCondition.AllPass([condition], _ => procedure)), evaluate, "Actor procedure " + procedure);
+
+    private FalloutPluginRecord SelectRoots(Func<FalloutIdleBranch, bool> requested,
+        Func<FalloutCondition, float> evaluate, string owner)
     {
         // The furniture procedure requests the source branch whose predicates
         // inspect sitting/sleeping state. No EDID, actor or animation filename
         // selects a pose. Other AI procedures retain their own selection owner.
         var roots = _branches.Where(branch => branch.Parent is null &&
             !branch.Model.EndsWith(".kf", StringComparison.OrdinalIgnoreCase) &&
-            branch.Conditions.Any(condition => condition.Function is 159 or 49) &&
+            requested(branch) &&
             FalloutCondition.AllPass(branch.Conditions, evaluate)).ToArray();
-        if (roots.Length != 1) throw new NotSupportedException($"Furniture procedure has {roots.Length} eligible source roots: {string.Join(',', roots.Select(value => value.Record.FormKey))}.");
+        if (roots.Length != 1) throw new NotSupportedException($"{owner} has {roots.Length} eligible source roots: {string.Join(',', roots.Select(value => value.Record.FormKey))}.");
         return Visit(roots[0], new HashSet<FalloutFormKey>()) ??
-            throw new NotSupportedException("Furniture procedure has no eligible source KF leaf.");
+            throw new NotSupportedException($"{owner} has no eligible source KF leaf.");
 
         FalloutPluginRecord? Visit(FalloutIdleBranch branch, HashSet<FalloutFormKey> ancestors)
         {

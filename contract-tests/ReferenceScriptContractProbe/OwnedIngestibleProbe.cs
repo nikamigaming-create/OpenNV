@@ -50,6 +50,29 @@ internal static class OwnedIngestibleProbe
                 restoredVitals.State.ExactHitPoints != vitals.State.ExactHitPoints || owner.Capture().Effects.Count != 0)
                 throw new InvalidDataException("Owned Stimpak timing or cold healing total diverged.");
         }
+        var cactus = FalloutDialogueTopic.Find(records, "ALCH", "NVFreshBarrelCactusFruit").FormKey;
+        var foodInventory = new FalloutPlayerInventory(); foodInventory.Add(records, cactus, 1, 1, true);
+        var foodPools = new FalloutPlayerActorValues(records); foodPools.BindConstantModifiers((_, _) => []);
+        var foodVitals = new FalloutPlayerVitals(records, player, new(5, 5, 5, 5, 5, 5, 5));
+        foodVitals.Damage(50);
+        var foodHealth = foodVitals.State.ExactHitPoints;
+        var endurance = foodPools.ReadCurrent(7);
+        var food = new FalloutPlayerIngestibles(records, foodInventory, foodVitals, body,
+            _ => 50, _ => false, () => false, foodPools);
+        food.Prepare(cactus).Commit();
+        if (foodInventory.Item(cactus) is { Count: > 0 } || foodPools.ReadCurrent(7) != endurance - 1)
+            throw new InvalidDataException("Owned cactus lost its consumption or temporary Endurance penalty.");
+        food.Advance(5);
+        var restoreHealth = FalloutIngestible.Read(records, cactus).Effects.Single(effect => effect.ActorValue == 16);
+        var expectedFood = restoreHealth.Magnitude * restoreHealth.EffectiveDuration *
+            (FalloutGameSettingFloats.Read(records, "fMagicSurvivalSkillBase") +
+                FalloutGameSettingFloats.Read(records, "fMagicSurvivalSkillMult") * .5f);
+        if (MathF.Abs(foodVitals.State.ExactHitPoints - foodHealth - expectedFood) > .001f || foodPools.ReadCurrent(7) != endurance - 1)
+            throw new InvalidDataException("Owned food timed healing or independent modifier lifetime diverged.");
+        food.Advance(115);
+        if (foodPools.ReadCurrent(7) != endurance || food.Capture().Effects.Count != 0)
+            throw new InvalidDataException("Owned cactus modifier did not expire once at its source duration.");
+        Console.WriteLine("OPENNV_OWNED_FOOD_EFFECT_PASS cactus=true survivalScale=true timedHealth=true temporaryEndurance=true hardcoreConditions=false nativeEat=unverified");
         var label = FalloutGameSettingStrings.Read(records, "sInventoryUse");
         if (string.IsNullOrWhiteSpace(label)) throw new InvalidDataException("Owned Aid action label is absent.");
         Console.WriteLine("OPENNV_OWNED_INGESTIBLE_PASS stimpak=true normalInstant=true hardcoreTimed=true medicine=true consumeSound=true coldRemainder=true nativeUse=separate");

@@ -189,6 +189,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         _imageSpaceState = imageSpaceState;
         _quests = quests;
         _scripts = scripts;
+        _scripts.References!.BindHardcore(() => _scripts.Session.Hardcore);
         BindSourceManualSaves();
         _scripts.References!.BindActorAlert(_pluginStack.RuntimeFormKey(0x14), _player.Activity);
         _player.Activity.Restore(_player.Activity.Capture() with { Sneaking = restore?.State.PlayerSneaking ?? false });
@@ -254,7 +255,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
                 (before, derived) => before.WithDerivedMaximums(derived), restore?.State.PlayerAdvancement);
         _ingestibles = new(pluginStack, inventory, _vitals,
             FalloutBodyPartData.Read(pluginStack.GetEffective(pluginStack.RuntimeFormKey(0x1d))),
-            _playerSkills.Value, _playerSkills.HasPerk, () => _scripts.Session.Hardcore);
+            _playerSkills.Value, _playerSkills.HasPerk, () => _scripts.Session.Hardcore, _playerActorValues);
         if (restore?.State.Ingestibles is { } ingestibles) _ingestibles.Restore(ingestibles);
         _player.ConfigureExplosionExposure(() => _activeCell, amount =>
         {
@@ -315,6 +316,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
             if (BlockingExecutionError is not null) return;
             RefreshRadioStations();
             _ingestibles.Advance(delta);
+            _scripts.References?.AdvanceActorIngestibles(delta);
             _stageResults?.Continue();
             AdvancePlayerAdvancement();
             if (_saveRequested && Vitals.HitPoints > 0 && SaveContinuationBlocker is null && SourceAnimationSoundSaveBlocker is null &&

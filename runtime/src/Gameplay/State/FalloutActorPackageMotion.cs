@@ -9,7 +9,7 @@ internal sealed record FalloutActorPackageMotion(FalloutFormKey Package, string 
     float[] Position, float[] Rotation, FalloutPatrolProgress? Patrol = null, FalloutEscortProgress? Escort = null,
     FalloutEditorTravelProgress? EditorTravel = null, bool DialogueCompleted = false, FalloutTravelProgress? Travel = null,
     FalloutTravelProgress? Guard = null, FalloutAccompanyPortalArrival? AccompanyPortal = null,
-    FalloutWanderProgress? Wander = null, FalloutSandboxActivityProgress? Sandbox = null)
+    FalloutWanderProgress? Wander = null, FalloutSandboxActivityProgress? Sandbox = null, FalloutActorEatProgress? Eat = null)
 {
     internal void Validate()
     {
@@ -21,7 +21,10 @@ internal sealed record FalloutActorPackageMotion(FalloutFormKey Package, string 
         AccompanyPortal?.Validate();
         Wander?.Validate();
         Sandbox?.Validate();
-        if (Sandbox is not null && (Sandbox.Activity is not (FalloutSandboxActivity.Wander or FalloutSandboxActivity.Dialogue) ||
+        Eat?.Validate();
+        if (Eat is not null && (Sandbox?.Activity != FalloutSandboxActivity.Eat || Wander is not null || Sandbox.Target != Eat.WorldReference))
+            throw new InvalidDataException("Eat continuation conflicts with its selected Sandbox activity.");
+        if (Sandbox is not null && (Sandbox.Activity is not (FalloutSandboxActivity.Wander or FalloutSandboxActivity.Dialogue or FalloutSandboxActivity.Eat) ||
             Wander is not null && Sandbox.Activity != FalloutSandboxActivity.Wander ||
             new object?[] { Patrol, Escort, EditorTravel, Travel, Guard, AccompanyPortal }.Any(value => value is not null) || DialogueCompleted))
             throw new InvalidDataException("Saved Sandbox activity conflicts with its procedure continuation.");

@@ -1,151 +1,83 @@
 # Current work
 
-Updated 2026-10-24. Deliver playable source-driven games in broad code batches.
-New Vegas remains incomplete through later wells, ingredients/campfire and onward
-to Primm/ED-E. Character checkpoint preservation and old-save migration are not
-acceptance requirements before 1.0. Fresh starts are acceptable. No files are
-permanently deleted. Recording is off; owned retail inputs remain read-only.
+Updated 2026-10-25. Immediate priority is fully playable flat Fallout: New Vegas,
+then Fallout 3. Classic Fallout 1/2 reconstruction, Arroyo presentation and launcher
+polish are parked by owner direction. Preserve their work; do not delete it or
+continue classic-only implementation/captures. Character checkpoint preservation
+and old-save migration are not acceptance goals before1.0. Recording is off.
 
-## Baseline and ownership
+## Baseline and sole ownership
 
-Accepted main is69cff8626c0c72458dd697300d74fce99e70e583 (PR308), merged20:51:04Z
-after all five exact785a591d checks passed. Local main, origin/main and live remote
-were verified equal and clean; tested/merge trees bothf3a0313f2b5f8db4dc30396888acab25aae9d403.
-Current branch is codex/classic-combat-followthrough. One coordinator owns all source,
-input, builds, Git and this file. No gameplay, build or writer job remains active.
-Unrelated held PR242/269 are untouched.
+Accepted main is39d95f457b0b2294fe43270abea8e9f33607da5e (PR309). All five hosted
+checks succeeded on exact ed201772ce49cdea51322fa3c7778dbd83a1f343 before normal
+merge. Local main, origin/main and live remote were verified equal and clean.
+The required local gate ended OPENNV_CSHARP_GODOT_GATE_PASS at
+2026-10-24T22:33:51.4342609Z, Gate0/Diff0.
 
-The existing writer handoff failed before delivery: durable host has an invalid
-AbsolutePathBuf workspace path; its listed local attachment returns no rollout.
-No worker/session was recreated and no source reservation was delivered. All
-current files are coordinator-owned.
+Active branch: codex/fnv-gameplay-followthrough, based on origin/main. One
+coordinator owns source integration, Git, builds and ordinary game input. No
+runtime/build/writer job remains active. No new workers or competing runtime.
+Unrelated held PR242/269 remain untouched.
 
-## Delivered broad batch: classic scene usability
+## Active New Vegas outcome
 
-Nine original source-bound Arroyo models and editable sources are integrated from
-the verified v5.1 handoff. No retail assets or derivatives were copied. Exact
-FRM/MAP identity, source placement, blocking, scripts and gameplay authority stay
-with the owned installation. Separate LODs are not runtime-selected. Relief and
-full scene likeness remain simplified; this is not 1:1 or campaign acceptance.
+Complete ordinary later-well, ingredient and campfire play, then the next campaign
+loop toward Primm/ED-E. Implement connected missing gameplay owners in a broad
+batch before one integrated smoke; collect failures and fix them together. Do not
+repeat accepted opening content solely for evidence, preserve a particular test
+character, treat normal deaths/navigation limits as engine defects, or fabricate
+quest/world state. Independently ready gameplay should not wait on exact visual
+parity or unrelated unsupported behavior.
 
-The dark presentation was a linear vertex-color/render-input mismatch. A PBR
-adapter handles plain opaque double-sided vertex-painted glTF surfaces, preserving
-roughness/metallic/specular and shadows. Source-palette materials keep their own
-owner; caches reuse immutable adapters. The original mesh/colors are unchanged.
-The color-only environment explicitly disables sky contribution. Review framing
-uses the existing actual frustum fit.
+The integrated smoke36 normally quit through requests20/21, runner exit0.
+It loaded ordinary Continue, exercised one normal death recovery, opened Pip-Boy
+and consumed one Stimpak (9 to8) without an action error. Native player movement
+reached Sunny and opened her source dialogue. Publication failures stayed0.
+No campfire completion or native actor Eat consumption is claimed. The run is
+closed; no runtime remains.
 
-The shell audit now uses decoded visible source walls. ARTEMPLE's45wall records
-are transparent1x1block.frm navigation markers, not a missing visible cave shell.
-Visible walls still require the existing shell and manifold checks. Native staged
-review binds all9models with zero unresolved source objects; actual pixels were
-inspected and the masonry is readable. No source placement/collision was changed.
+Current uncommitted batch implements actor-owned ingestible transactions, timed
+health and reversible SPECIAL effects, source-stat reads, script EquipItem aid
+consumption, and selected Sandbox Eat approach/pose/one-use continuation. It does
+not change the parked Sandbox location anchor. Debug runtime/probe build passed
+with zero warnings/errors. Focused existing ingestible contracts pass actor/player
+inventory isolation, contention for one world item, timed effects, modifier expiry
+and cold remainder. Existing owned-data audit passes actual cactus food health /
+Endurance effects and Stimpak behavior. Formatter completed successfully. Required publication gate completed
+2026-10-25T00:02:04.7537659Z: Gate0/Diff0 and final
+OPENNV_CSHARP_GODOT_GATE_PASS. The earlier LF-format failure was corrected before
+this passing run; no runtime behavior was waived.
 
-The ordinary product entry exposed duplicate donor-world allocations: Begin
-rebuilt its matching preview before retiring it and exhausted shader instance
-storage. Begin now reuses a world only for an exact MAP hash/path/elevation match;
-different inputs retain rebuild behavior. No renderer limit was increased.
+The integrated smoke completed the input/item regression scope above. Actor Eat
+and campfire acceptance remain open. Actual Gecko Meat use refused effect020516
+(DamageRadiationLevel) before consuming the item or adding effects. This needs its
+radiation effect/presentation owner; do not remove the refusal or invent a value. Remaining supported-scope boundaries
+are visible: creature noncombat skill scaling, missing source eating IDLE/ANIO,
+multiple carried food kinds, scripted/conditional-owned food, world stacks, lethal
+item effects and unimplemented Hardcore needs are refused rather than guessed.
+The reached prior Eat source was CREA168c27 / world1210c9 / ALCH0ec01d; that old
+observation is not a fresh reproduction. Recipe/ingredient interactions retain
+the existing source script and inventory owners.
 
-Combined native pass uses the real source picker, Narg, Begin and ordinary mouse
-floor input. It starts at source tile17488 and completes tile17487 through the
-normal movement owner, blocking unchanged, presentationFailures0 and renderer
-errors0. The earlier erroring exit0 run remains distinct from this clean result.
-The required publication gate passed20:37:05.0651114Z: Gate0/Diff0/Public2630,
-Drift[], Added[], ProtectedSaveDrift[]. PR308 is merged; the next broad owner is
-classic encounter execution: enemy turns and lethal consequences.
+## Parked persistence operation
 
-## Active broad batch — not yet published
+Owner approved the specific Sandbox current-location anchor/save-format change
+without migration. Approval review nevertheless rejected that operation; it did
+not execute. Do not repeat approval wording, retry it or route around the denial.
+No anchor/schema workaround is selected. Continue independent gameplay code.
 
-Required publication gate completed 2026-10-24T22:33:51.4342609Z with Gate0/Diff0;
-the log ends OPENNV_CSHARP_GODOT_GATE_PASS. The selected owned-data combat
-transaction and the bounded native runs below are separate evidence. Publication
-is pending checked remote acceptance; no complete native encounter is claimed.
+## Preserved classic checkpoint
 
-Coordinator-owned code now connects adjacent unarmed enemy turns, source action
-frames, shared RNG/AP, HP/death poses, deferred encounter XP and exit, generic
-actor script startup/events/timers and retained event boundaries. A typed reader
-corrects the eleven MAP critter words: AP is word3 and results word4, rather than
-mistaking AP for injury flags. The owned synthetic transaction passes one enemy
-response, lethal outcome and XP25/exit; this is explicitly not ordinary campaign
-acceptance. The connected Debug build passes with zero warnings/errors.
+PR309 contains the accepted renderer/material, source critter/event and conditional
+combat foundation. It does not claim ordinary complete combat or campaign parity.
+Further work is preserved locally on codex/classic-actor-locomotion at59aecc9d,
+unpublished WIP: actor walk state/FRM clock/routes/live hex bindings and fixed-view
+diagnostics. Debug build passed0warnings/errors. Its one native encounter reached
+actor animation registration refusal before a walk/attack commit (HP44/actions0/
+deaths0/XP0). No runtime remains. Do not resume that lane until reprioritized.
 
-The combined native pass now reaches ARCAVES and source target1442 through the
-actual exit, movement and geometry Ctrl-click. Its timed source script stops
-attack admission before any roll/action/HP/XP commit. The reached critter-state
-query80fb and directional-tile query80d5 are now connected. The actual next
-consumer is actor movement: timed script requests1443->tile25505 at speed0.
-That request remains refused until its source movement clock/path owner exists.
-Actual scorpion MAP AP6 with PRO maximum5 disproved the previous read restriction;
-the authored prefix is preserved and an actual turn still uses its turn owner.
-The HUD UTF-8 error is corrected. GPU instance exhaustion is repaired for the
-reached scenes. Godot retains renderer-side entries even after null parameter
-assignments; fixed source-paint and classic environment inputs now belong to
-shared materials from construction, with no instance-parameter clearing calls.
-Live material identities/controller targets stay intact. Static clones copy
-known static nodes rather than serializing stale shader dictionaries. No renderer
-limit, engine dependency or source gameplay rule changed.
-FO1 ordinary entry/movement now exits0 with GodotErrors0/GpuErrors0 (23 separate
-presentation/script divergences remain). FO2 ordinary entry, movement and actual
-ARCAVES transition report GodotErrors0/GpuErrors0, then the intentional encounter
-boundary exits2 on the unimplemented move above. No completed native encounter
-is claimed. No game remains active. Publication checks are the current job.
-Additional actor acquisition/perception, destination
-map-header entry/light, critical/status, armed combat and full enemy movement
-remain explicit dependencies. No further unchanged gameplay run is selected.
-
-Entrance diagnosis now confirms the apparent plain slab was the BACK of the
-gateway. Default camera yaw0 replacesPi and exposes the existing face, medallion
-and decorated lintel from the positive-Z source approach. No mesh/anchor changed;
-key light returns to its original direction and shadow range follows camera
-distance. Native front image exists in Library; no baked lighting was added.
-The scene remains visually unaccepted: architecture-painted flat floors, edge
-gaps, disconnected-looking structures and repetitive cliffs need coherent shared
-3D geometry over the original hex simulation. Do not fill or infer terrain heights
-from pixels. Sampled black-region ground positions have real nonblank floor IDs;
-the exact black-rendering layer is not yet established as a physical hole.
-The exact private piece-specific handoff is under ignored staging, with unchanged
-MAP placements. Private diagnosis, normalized map/camera/ground data and native
-front image are delivered separately; no retail pixels are repository inputs.
-All72FO1/155FO2 catalog MAP headers/elevation arrays decode, zero exceptions.
-Detailed object/navigation data covers V13ENT/ARTEMPLE only. Native entry/movement
-runs in both games; FO1 still reports23 presentation divergences. The latest runs
-have zero renderer errors, while full visual/scene acceptance remains open.
-No all-map claim or within-map elevation-transition coverage is asserted.
-
-Requested existing launcher/Arroyo stills were inspected and delivered privately.
-Exact identities and provenance stay outside the product repository. Originals
-are retained; no retail pixels were added to the public source or assets.
-
-## Remaining behavior
-
-PR307 connects conditional nonlethal basic punch, source action frames, shared
-clock/RNG and scenery/campaign event prefixes. Native combat execution remains
-unverified. The new enemy/lethal subset above remains under integration. Armed
-attacks, acquisition/AI movement, critical/status/light and full corpse behavior
-remain unsupported. Do not invent them or skip enemies to reach a successful end state.
-
-Next gameplay batch: consume actual actor move requests through source FRM clocks,
-paths, live hex occupancy and source query bindings; connect per-map header entry,
-first-run and source light context. Do not teleport, invent effects or clear failed
-actor events to make the encounter pass. The cloud art lane owns coherent original
-ground/approach/temple geometry against the normalized handoff, without changing
-hex blocking or source exits. Its pending models are outside this frozen batch.
-
-The launcher is functional as a hardware-first instrument. Its final1:1 surface
-refinement remains open and is not part of this batch. No cosmetic polishing lane.
-
-NV smoke35 normally quit through observed requests27/28; runner79569 returned
-exit0. Ordinary shotgun fire killed10a20f/10a210. Later wells/campfire and death-event
-completion are not inferred. Bot policy/normal combat deaths are not engine defects.
-No further character save preservation work is selected.
-
-## Parked operation
-
-Nick explicitly approved the Sandbox current-location anchor/save-format change
-without migration. Approval review nevertheless rejected the staged anchor patch
-because it did not accept forwarded approval as trusted authorization. That patch
-did not execute. Parent history exposed no approval turns. The owner then directed
-this operation to be parked: do not ask for repeated wording, retry it or route
-around review. No anchor/schema change or migration exists in the public tree.
-Actor Eat still needs its real actor inventory/effect/procedure owners; player
-consumption or suppression of the candidate refusal is not an implementation.
+Six native camera views confirmed an architectural temple image flattened onto
+ground beneath the real facade; that ground decomposition and black-edge layer
+remain unresolved. Requested views are in Library; private diagnosis
+libfile_e6539de821e4819186baf8e5ee1cc713 is version3. Original captures and ignored
+staging are retained. No further classic art review or capture is active.

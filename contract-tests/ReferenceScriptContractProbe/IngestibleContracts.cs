@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Gameplay.State;
+using OpenNV.Runtime.World.Cells;
 
 internal static class IngestibleContracts
 {
@@ -15,16 +16,24 @@ internal static class IngestibleContracts
         {
             var actor = new byte[24]; actor[8] = 1;
             var bytes = Join(Record("TES4", 0, Field("HEDR", new byte[12])),
-                Record("NPC_", 7, Field("ACBS", actor), Field("DATA", [100, 0, 0, 0, 5, 5, 5, 5, 5, 5, 5])),
+                Record("NPC_", 7, Field("ACBS", actor), Field("DATA", [100, 0, 0, 0, 5, 5, 5, 5, 5, 5, 5]),
+                    Field("NAM4", new byte[4]), Field("DNAM", Enumerable.Repeat((byte)50, 28).ToArray())),
                 Item(1, Effect(10, 20, 0)), Item(2, Effect(11, 4, 6, true)),
                 Item(3, Effect(10, 20, 0), Effect(12, 1, 0)),
                 Item(4, Effect(13, 20, 99)), Item(5, Effect(14, 50, 0)),
-                Modifier(10, 34, 0x70), Modifier(11, 0, 0x70), Modifier(12, 1, 0x70), Modifier(13, 0, 0xf0), Modifier(14, 0, 0x70, 54),
+                Food(6, Effect(11, 4, 5), Effect(15, 1, 8, actorValue: 7)),
+                Modifier(15, 0, 0x76, 7), Modifier(10, 34, 0x70), Modifier(11, 0, 0x70), Modifier(12, 1, 0x70), Modifier(13, 0, 0xf0), Modifier(14, 0, 0x70, 54),
                 Setting(100, "fMagicMedicineSkillBase", 1), Setting(101, "fMagicMedicineSkillMult", 2),
+                Setting(110, "fMagicSurvivalSkillBase", 1), Setting(111, "fMagicSurvivalSkillMult", 2),
+                Setting(112, "fAVDNPCHealthEnduranceOffset", 0), Setting(113, "fAVDNPCHealthEnduranceMult", 0),
+                Setting(114, "fAVDNPCHealthLevelMult", 0),
                 Setting(102, "fAVDHealthEnduranceMult", 20), Setting(103, "fAVDHealthLevelMult", 5),
                 Setting(104, "fAVDActionPointsBase", 65), Setting(105, "fAVDActionPointsMult", 3),
                 Record("GMST", 106, Field("EDID", Text("iXPBase")), Field("DATA", BitConverter.GetBytes(200))),
-                Record("GMST", 107, Field("EDID", Text("iXPBumpBase")), Field("DATA", BitConverter.GetBytes(150))));
+                Record("GMST", 107, Field("EDID", Text("iXPBumpBase")), Field("DATA", BitConverter.GetBytes(150))),
+                Record("BPTD", 0x1d, Field("BPNN", Text("Root")), Field("BPND", new byte[84])), Record("CELL", 0x80, Field("DATA", [1])),
+                ReferenceGroup(Record("ACHR", 0x91, Field("NAME", BitConverter.GetBytes(7u)), Field("DATA", new byte[24])),
+                    Record("REFR", 0x92, Field("NAME", BitConverter.GetBytes(6u)), Field("DATA", new byte[24]))));
             File.WriteAllBytes(path, bytes);
             using var records = FalloutPluginStack.Load(directory, ["Test.esm"]);
             FalloutFormKey Key(uint id) => new("Test.esm", id);
@@ -77,6 +86,72 @@ internal static class IngestibleContracts
             Reject(() => dead.Prepare(Key(1)));
             Check(deadVitals.State.HitPoints == 0 && inventory.Item(Key(1))!.Count == retainedCount,
                 "Dead Aid use consumed an item or silently revived the player.");
+            // Food modifies the consuming actor's own values once, while its
+            // health component integrates only the remaining source duration.
+            inventory.Add(records, Key(6), 2, 1, true);
+            var pools = new FalloutPlayerActorValues(records);
+            pools.BindConstantModifiers((_, _) => []);
+            var foodVitals = Vitals(initial);
+            var foodOwner = new FalloutPlayerIngestibles(records, inventory, foodVitals, parts,
+                _ => 50, _ => false, () => false, pools);
+            foodOwner.Prepare(Key(6)).Commit();
+            Check(pools.ReadCurrent(7) == 4 && foodVitals.State.ExactHitPoints == 100,
+                "Food modifier was integrated as a rate or health applied before its duration.");
+            foodOwner.Advance(3);
+            Check(pools.ReadCurrent(7) == 4 && foodVitals.State.ExactHitPoints == 124,
+                "Timed food reapplied its temporary modifier.");
+            var foodColdPools = new FalloutPlayerActorValues(records, pools.Capture());
+            foodColdPools.BindConstantModifiers((_, _) => []);
+            var foodColdVitals = Vitals(foodVitals.State);
+            var foodCold = new FalloutPlayerIngestibles(records, inventory, foodColdVitals, parts,
+                _ => 50, _ => false, () => false, foodColdPools);
+            foodCold.Restore(foodOwner.Capture());
+            foodOwner.Advance(100); foodCold.Advance(100);
+            Check(pools.ReadCurrent(7) == 5 && foodColdPools.ReadCurrent(7) == 5 &&
+                foodVitals.State.ExactHitPoints == 140 && foodColdVitals.State.ExactHitPoints == 140,
+                "Cold food expiry duplicated healing or failed to remove its retained modifier.");
+
+            var failModifier = true;
+            void RefuseModifier() { if (failModifier) { failModifier = false; throw new InvalidOperationException("native publication refused"); } }
+            pools.Changed += RefuseModifier;
+            var rollbackCount = inventory.Item(Key(6))!.Count;
+            Reject(() => foodOwner.Prepare(Key(6)).Commit());
+            pools.Changed -= RefuseModifier;
+            Check(pools.ReadCurrent(7) == 5 && inventory.Item(Key(6))!.Count == rollbackCount &&
+                foodOwner.Capture().Effects.Count == 0 && foodVitals.State.ExactHitPoints == 140,
+                "Failed native modifier publication partially consumed or retained effects.");
+
+            var world = new FalloutReferenceWorld(records);
+            var consumer = world.Get(Key(0x91));
+            _ = world.Health(consumer.Reference);
+            consumer.ActorValues["health"] = consumer.ActorValues["health"] with { Damage = -60 };
+            var actorInventory = world.Inventory(consumer.Reference, 1, null).Contents;
+            actorInventory.Add(records, Key(6), 2, 1, true);
+            var playerCount = inventory.Item(Key(6))!.Count;
+            var actorUse = world.PrepareActorIngestible(consumer.Reference, Key(6), 1, null, false);
+            actorUse.Commit(); Reject(() => actorUse.Commit());
+            Check(actorInventory.Item(Key(6))!.Count == 1 && inventory.Item(Key(6))!.Count == playerCount &&
+                world.ActorValue(consumer.Reference, "endurance") == 4,
+                "Actor food consumed player inventory, consumed twice, or lost its modifier.");
+            world.AdvanceActorIngestibles(3);
+            var actorSaved = world.Capture();
+            var coldWorld = new FalloutReferenceWorld(records); coldWorld.Restore(actorSaved);
+            world.AdvanceActorIngestibles(100); coldWorld.AdvanceActorIngestibles(100);
+            Check(world.Health(consumer.Reference).Current == 80 && coldWorld.Health(consumer.Reference).Current == 80 &&
+                world.ActorValue(consumer.Reference, "endurance") == 5 &&
+                coldWorld.ActorValue(consumer.Reference, "endurance") == 5,
+                "Actor cold continuation lost duration, health, or temporary modifier ownership.");
+            consumer.PrepareNativeInventoryRemoval = (_, _) => new(() => throw new InvalidOperationException("native inventory refused"), () => { });
+            Reject(() => world.PrepareActorIngestible(consumer.Reference, Key(6), 1, null, false).Commit());
+            consumer.PrepareNativeInventoryRemoval = null;
+            Check(actorInventory.Item(Key(6))!.Count == 1 && world.ActorValue(consumer.Reference, "endurance") == 5 &&
+                consumer.Ingestibles!.Effects.Count == 0, "Actor native publication failure partially consumed food or effects.");
+            var first = world.PrepareActorIngestible(consumer.Reference, Key(6), 1, null, false, Key(0x92));
+            var second = world.PrepareActorIngestible(consumer.Reference, Key(6), 1, null, false, Key(0x92));
+            first.Commit(); Reject(() => second.Commit());
+            Check(world.Get(Key(0x92)).Taken && actorInventory.Item(Key(6))!.Count == 1,
+                "World food was consumed twice or removed unrelated carried food.");
+            Console.WriteLine("OPENNV_ACTOR_INGESTIBLE_CONTRACT_PASS ownInventory=true worldContention=true reversible=true cold=true");
             Console.WriteLine("OPENNV_INGESTIBLE_CONTRACT_PASS sourceMagnitude=true limbs=true atomic=true staleInput=true duration=true finalRemainder=true noDuration=true cold=true driftRejected=true");
         }
         finally { File.Delete(path); Directory.Delete(directory); }
@@ -87,14 +162,25 @@ internal static class IngestibleContracts
         var header = new byte[20]; header[0] = 20; header[4] = 5;
         return Record("ALCH", id, Field("EDID", Text("Aid" + id)), Field("DATA", BitConverter.GetBytes(1f)), Field("ENIT", header), Join(effects));
     }
+    private static byte[] Food(uint id, params byte[][] effects)
+    {
+        var header = new byte[20]; header[4] = 3;
+        return Record("ALCH", id, Field("EDID", Text("Food" + id)), Field("DATA", BitConverter.GetBytes(1f)), Field("ENIT", header), Join(effects));
+    }
+    private static byte[] ReferenceGroup(params byte[][] references)
+    {
+        var data = Join(references); var bytes = new byte[24 + data.Length];
+        Encoding.ASCII.GetBytes("GRUP").CopyTo(bytes, 0); UInt(bytes, 4, (uint)bytes.Length);
+        UInt(bytes, 8, 0x80); UInt(bytes, 12, 6); data.CopyTo(bytes, 24); return bytes;
+    }
     private static byte[] Modifier(uint id, uint archetype, uint flags, uint actorValue = 16)
     {
         var data = new byte[72]; UInt(data, 0, flags); UInt(data, 64, archetype); UInt(data, 68, actorValue);
         return Record("MGEF", id, Field("DATA", data));
     }
-    private static byte[] Effect(uint id, uint magnitude, uint duration, bool hardcore = false)
+    private static byte[] Effect(uint id, uint magnitude, uint duration, bool hardcore = false, uint actorValue = 16)
     {
-        var data = new byte[20]; UInt(data, 0, magnitude); UInt(data, 8, duration); UInt(data, 16, 16);
+        var data = new byte[20]; UInt(data, 0, magnitude); UInt(data, 8, duration); UInt(data, 16, actorValue);
         var condition = new byte[28]; BitConverter.GetBytes(1f).CopyTo(condition, 4);
         BinaryPrimitives.WriteUInt16LittleEndian(condition.AsSpan(8), 586);
         return Join(Field("EFID", BitConverter.GetBytes(id)), Field("EFIT", data), hardcore ? Field("CTDA", condition) : []);

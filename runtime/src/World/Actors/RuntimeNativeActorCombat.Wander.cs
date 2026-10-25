@@ -25,8 +25,15 @@ internal sealed partial class RuntimeNativeActorCombat
         {
             activity = SelectSandboxActivity(source, activity, hour, delta, context);
             progress = null;
+            if (_state.PackageMotion is { } previousMotion && previousMotion.Package == package.FormKey &&
+                _state.DeferredPackageContinuation?.RetainedAssignment is null)
+                _state.PackageMotion = previousMotion with { Eat = null };
         }
         if (activity is null) throw new InvalidOperationException("Sandbox has no selected activity.");
+        if (activity.Activity == FalloutSandboxActivity.Eat)
+        {
+            AdvanceSandboxEat(package, source, activity, delta, context); return null;
+        }
         if (activity.Activity == FalloutSandboxActivity.Dialogue)
         {
             // A refused opening retains this selection. A successful attempt
@@ -81,6 +88,11 @@ internal sealed partial class RuntimeNativeActorCombat
         foreach (var candidate in candidates)
         {
             if (candidate.Activity == FalloutSandboxActivity.Wander) { admitted.Add(candidate); continue; }
+            if (candidate.Activity == FalloutSandboxActivity.Eat)
+            {
+                if (candidate.Reference is { } food && !_world.ActorMayEatWorldFood(_state.Reference, food)) continue;
+                admitted.Add(candidate); continue;
+            }
             if (candidate.Activity != FalloutSandboxActivity.Dialogue)
                 throw new FalloutSandboxAdmissionException(source.Form,
                     $"{FalloutActorSandboxAdmissionFailure.AdmissionErrorPrefix}{candidate.Activity} " +

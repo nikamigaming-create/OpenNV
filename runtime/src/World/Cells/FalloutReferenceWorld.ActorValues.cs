@@ -20,7 +20,28 @@ internal sealed partial class FalloutReferenceWorld
         if (name.Equals("aggression", StringComparison.OrdinalIgnoreCase)) return actor.ActorValues.GetValueOrDefault("aggression",
             new(FalloutActorThreat.Read(records, actor.Base, actor.Templates).Aggression)).Current;
         if (LimbActorValue(name) is { } limb) return BodyParts(reference).LimbCondition(limb, Health(reference).Base, actor.Injury?.LimbDamage);
-        return actor.ActorValues.GetValueOrDefault(FalloutActorValue.UserSlot(name), new(0)).Current;
+        var slot = FalloutActorValue.SourceSlot(name);
+        return actor.ActorValues.GetValueOrDefault(slot, new(SourceActorValue(actor, slot))).Current;
+    }
+
+    private float SourceActorValue(FalloutReferenceInstance actor, string slot)
+    {
+        var index = FalloutActorValue.SourceIndex(slot);
+        if (index < 0) return 0; // Declared user slots have zero initial pools.
+        var source = FalloutActorTemplateOwner.Resolve(records, records.GetEffective(actor.Base), 2, actor.Templates);
+        var data = source.ReadSubrecords().Single(field => field.Signature == "DATA").Data.Span;
+        if (source.Signature == "NPC_")
+        {
+            if (data.Length != 11) throw new InvalidDataException("NPC actor-value DATA extent is invalid.");
+            if (index is >= 5 and <= 11) return data[index - 1];
+            var skills = source.ReadSubrecords().Single(field => field.Signature == "DNAM").Data.Span;
+            if (skills.Length != 28) throw new InvalidDataException("NPC actor-value skill extent is invalid.");
+            return skills[index - 32];
+        }
+        if (source.Signature != "CREA" || data.Length != 17) throw new InvalidDataException("Creature actor-value DATA extent is invalid.");
+        if (index is >= 5 and <= 11) return data[index + 5];
+        if (index is 33 or 34 or 35 or 38 or 41 or 45) return data[1];
+        throw new NotSupportedException($"Creature {slot} requires its source skill owner.");
     }
 
     private static int? LimbActorValue(string name) => name.ToLowerInvariant() switch
@@ -76,7 +97,7 @@ internal sealed partial class FalloutReferenceWorld
     internal void ChangeActorValue(FalloutFormKey reference, string name, string operation, float value)
     {
         var instance = Actor(reference);
-        var slot = name.Equals("aggression", StringComparison.OrdinalIgnoreCase) ? "aggression" : FalloutActorValue.UserSlot(name);
+        var slot = name.Equals("aggression", StringComparison.OrdinalIgnoreCase) ? "aggression" : FalloutActorValue.SourceSlot(name);
         var previous = instance.ActorValues.GetValueOrDefault(slot, new(ActorValue(reference, slot)));
         var changed = operation switch
         {

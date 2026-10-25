@@ -18,5 +18,15 @@ internal partial class RuntimeNativeOpeningStageDriver
                 RuntimeNativeNpc actor => actor.Activity.WeaponDrawn,
                 RuntimeNativeCreature creature => creature.Activity.WeaponDrawn,
                 _ => throw new NotSupportedException($"Weapon draw query for {reference} has no active actor owner."),
+            }, consumeIngestible: (reference, item) =>
+            {
+                if (reference == _pluginStack.RuntimeFormKey(0x14)) { UseAid(item); return; }
+                var combat = ReferencePresentation().Nodes.GetValueOrDefault(reference) switch
+                {
+                    RuntimeNativeNpc actor => actor.Combat,
+                    RuntimeNativeCreature creature => creature.Combat,
+                    _ => null,
+                };
+                (combat ?? throw new NotSupportedException("Actor ingestion has no resident gameplay owner.")).UseIngestible(item);
             });
 }

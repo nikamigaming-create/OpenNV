@@ -44,7 +44,7 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
     FalloutActorSandboxMotionFailure? SandboxMotionFailure = null,
     FalloutActorStoppedIdleAnimation? CreatureScriptIdle = null,
     FalloutActorPendingSandboxStart? PendingSandboxStart = null,
-    FalloutActorProjectileLaunch? ProjectileLaunch = null)
+    FalloutActorProjectileLaunch? ProjectileLaunch = null, FalloutActorIngestiblesSnapshot? Ingestibles = null)
 {
     internal static void Validate(IReadOnlyList<FalloutReferenceSnapshot> snapshots)
     {
@@ -63,11 +63,12 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
                     !ValidKey(snapshot.Script.Value) || snapshot.ScriptSha256 is not { Length: 64 } || !snapshot.ScriptSha256.All(Uri.IsHexDigit)))
                 throw new InvalidDataException("Saved reference state is invalid or duplicated.");
             foreach (var (name, value) in snapshot.ActorValues ?? new Dictionary<string, FalloutActorValue>())
-                if ((name is not ("health" or "aggression") && FalloutActorValue.UserSlot(name) != name) || value is null || !value.IsFinite)
+                if ((name is not ("health" or "aggression") && FalloutActorValue.SourceSlot(name) != name) || value is null || !value.IsFinite)
                     throw new InvalidDataException("Saved actor value is invalid.");
             if (snapshot.ConversationSuppressionSeconds is { } suppression && !float.IsFinite(suppression))
                 throw new InvalidDataException("Saved conversation suppression is not finite.");
             snapshot.ConversationHistory?.Validate();
+            if (snapshot.Ingestibles is { } ingestibles) FalloutActorIngestiblesSnapshot.Validate(ingestibles);
             if (snapshot.Animation is { } animation) FalloutActorAnimationState.Validate(animation);
             snapshot.GrabEvents?.Validate(snapshot.Reference);
             if (snapshot.ObjectPhysics is { } physics) FalloutObjectPhysicsSnapshot.ValidateSet(physics);
@@ -261,6 +262,7 @@ internal sealed partial class FalloutReferenceInstance
     internal bool? BroadcastState { get; set; }
     internal FalloutFormKey? TalkingActivatorActor { get; set; }
     internal FalloutActorPackageMotion? PackageMotion { get; set; }
+    internal FalloutActorIngestiblesSnapshot? Ingestibles { get; set; }
     internal FalloutActorPackageAssignment? PackageAssignment { get; set; }
     internal FalloutActorDeferredPackageContinuation? DeferredPackageContinuation { get; set; }
     internal Func<FalloutActorPackageAssignment?>? CapturePackageAssignment { get; set; }
@@ -499,7 +501,7 @@ internal sealed partial class FalloutReferenceInstance
                 ? captureScriptIdle()?.Copy() : CreatureScriptIdle?.Copy(),
             PendingSandboxStart: PendingSandboxStartCaptureReady ? CapturePendingSandboxStart is { } captureSandboxStart
                 ? captureSandboxStart() : PendingSandboxStart?.Copy() : null,
-            ProjectileLaunch: ProjectileLaunch);
+            ProjectileLaunch: ProjectileLaunch, Ingestibles: Ingestibles?.Copy());
     }
 }
 
@@ -935,6 +937,11 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
             }
             if (snapshot.Injury is { } injury) validated.RestoreInjury(instance, injury);
             else if (instance.ActorValues.ContainsKey("health")) throw new InvalidDataException("Saved health has no actor injury state.");
+            if (snapshot.Ingestibles is { } ingestibles)
+            {
+                validated.ValidateActorIngestibles(instance.Reference, ingestibles);
+                instance.Ingestibles = ingestibles.Copy();
+            }
             instance.DeathCount = snapshot.DeathCount ?? (snapshot.Injury?.DeathInventoryGranted == true ? 1 : 0);
             if (snapshot.Injury?.DeathInventoryGranted == true && instance.DeathCount < 1)
                 throw new InvalidDataException("Saved killed actor has no consumed death history.");
@@ -1053,7 +1060,8 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
                 accompanyPortal.Validate(records, validated, snapshot.Reference, records.GetEffective(snapshot.PackageMotion.Package));
             if (snapshot.PackageMotion?.Wander is { } wander)
                 validated.ValidatePackageWander(snapshot.Reference, wander);
-            if (snapshot.PackageMotion?.Sandbox?.Target is { } conversationTarget &&
+            if (snapshot.PackageMotion?.Eat is { } meal) validated.ValidateEatProgress(snapshot.Reference, meal);
+            if (snapshot.PackageMotion?.Sandbox is { Activity: FalloutSandboxActivity.Dialogue, Target: { } conversationTarget } &&
                 records.GetEffective(conversationTarget).Signature is not ("ACHR" or "ACRE"))
                 throw new InvalidDataException("Saved Sandbox conversation target is not an actor reference.");
         }
