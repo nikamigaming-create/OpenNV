@@ -363,6 +363,8 @@ internal sealed partial class RuntimeNativeCreature
         GD.Print($"OPENNV_CREATURE_PACKAGE reference={Appearance.Reference} package={source?.Form} procedure={source?.Procedure}");
     }
 
+    internal Func<FalloutFormKey, Node3D?>? ResolvePackageTarget { get; set; }
+
     private Node3D? TargetNode(FalloutFormKey target)
     {
         if (target == _aiRecords!.RuntimeFormKey(0x14))
@@ -370,7 +372,8 @@ internal sealed partial class RuntimeNativeCreature
         if (_aiRecords.GetEffective(target).Signature is not ("ACHR" or "ACRE"))
             throw new NotSupportedException($"Package target {target} has no actor target owner.");
         if (!_aiWorld!.IsEnabled(target)) return null;
-        var node = GetParent().GetChildren().OfType<Node3D>().SingleOrDefault(node =>
+        if (ResolvePackageTarget is { } resolve) return resolve(target);
+        var node = GetParent()?.GetChildren().OfType<Node3D>().SingleOrDefault(node =>
             node is RuntimeNativeCreature creature && creature.Appearance.Reference == target ||
             node is RuntimeNativeNpc npc && npc.Appearance.Reference == target);
         return node;

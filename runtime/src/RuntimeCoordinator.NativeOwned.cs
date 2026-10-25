@@ -1062,6 +1062,7 @@ public partial class RuntimeCoordinator
                     _configuration.Player.CollisionLayer, _configuration.Player.CollisionMask | _configuration.Player.CollisionLayer, NativeCombatContext, newLaunchProcess);
                 actor.ConfigureAi(_nativePluginStack!, _nativeQuestState!, _nativeReferences, _nativeGameTime, _nativeGlobals,
                     NativeActorItemCount);
+                actor.ResolvePackageTarget = target => _nativeReferencePresentation?.Nodes.GetValueOrDefault(target);
                 actor.ExecutePackageEvent = (program, caller) => (_nativeOpeningStageDriver ??
                     throw new InvalidOperationException("Creature package results have no gameplay owner."))
                     .ExecutePackageEvent(program, caller);

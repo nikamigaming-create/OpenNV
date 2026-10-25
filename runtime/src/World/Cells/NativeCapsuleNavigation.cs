@@ -110,9 +110,9 @@ internal static partial class NativeCapsuleNavigation
         catch (InvalidOperationException coarse) when (refinedSpacing < coarseSpacing)
         {
             // A lattice can miss a supported passage narrower than its node
-            // spacing. One finer search keeps the same body, sweep/floor rules,
-            // residency predicate and node bound. It cannot create clearance.
-            try { return (Find(body, start, target, stepHeight, refinedSpacing, resident, maximumNodes, targetRadius, probe, corridor, arrival), refinedSpacing, coarse.Message); }
+            // spacing. One finer search keeps the same body, sweep/floor rules
+            // and residency predicate, scaling the node bound to match the finer lattice.
+            try { return (Find(body, start, target, stepHeight, refinedSpacing, resident, Math.Max(maximumNodes * 2, 2400), targetRadius, probe, corridor, arrival), refinedSpacing, coarse.Message); }
             catch (InvalidOperationException refined)
             {
                 throw new InvalidOperationException($"Coarse capsule query: {coarse.Message} Refined capsule query: {refined.Message}", refined);

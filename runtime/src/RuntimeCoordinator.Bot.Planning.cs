@@ -129,7 +129,7 @@ public partial class RuntimeCoordinator
             {
                 current.CoarseError = error.Message; current.Spacing = current.RefinedSpacing;
                 current.Search = NativeCapsuleNavigation.Search(player, Native(start), current.LocalTarget,
-                    _configuration.Player.StepHeightMeters, current.Spacing, NativeCollisionResident, probe: current.Probe,
+                    _configuration.Player.StepHeightMeters, current.Spacing, NativeCollisionResident, maximumNodes: 3600, probe: current.Probe,
                     targetRadius: current.ArrivalRadius, corridor: current.Intent!.Corridor, arrival: current.Arrival).GetEnumerator();
                 return null;
             }
