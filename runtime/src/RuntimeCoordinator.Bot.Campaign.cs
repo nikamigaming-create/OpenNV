@@ -1,6 +1,7 @@
 using Godot;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Gameplay.Bots;
+using OpenNV.Runtime.Gameplay.State;
 
 namespace OpenNV.Runtime;
 
@@ -22,7 +23,7 @@ public partial class RuntimeCoordinator
                 _loadingScreen is not null, GetTree().Paused, false, false, false, [], choices);
         }
         foreach (var control in controls)
-            if (control.Kind is "dialogue" or "terminal" or "terminal-back" or "message")
+            if (control.Kind is "dialogue" or "terminal" or "terminal-back" or "message" or "chargen" or "special")
                 choices.Add(new(control.Identity ?? throw new InvalidDataException("Source choice has no identity."),
                     control.Path, control.Text, control.Kind,
                     control.Menu ?? throw new InvalidDataException("Source choice has no owning menu."),
@@ -103,9 +104,17 @@ public partial class RuntimeCoordinator
         }
         var save = _nativeManualSaves.Receipt is { } receipt
             ? new BotCampaignSave(receipt.Generation, receipt.Disposition, receipt.CommittedSlot?.Id, receipt.Error) : null;
+        var canSave = !loading && !player.ModalInput && !GetTree().Paused &&
+            NativeActiveMenus()?.Any() != true &&
+            NativeSourceManualSaveBlocker() is null &&
+            !_nativeManualSaves.Pending &&
+            _nativeManualSavePreparation is null &&
+            (_nativeQuestScripts is null || _nativeQuestScripts.Scripts.Sounds.ActiveVoices == 0) &&
+            driver is not null && !driver.SpeechActive &&
+            driver.ObserveManualSaveAdmission().Kind != RuntimeManualSaveAdmissionKind.Refused;
         return new(binding, (long)Engine.GetProcessFrames(), scene, driver?.Quests.ProgressRevision ?? 0,
-            loading, GetTree().Paused, player.ModalInput, defeated, !loading && !player.ModalInput &&
-            !GetTree().Paused && NativeActiveMenus()?.Any() != true, goals, choices, save, error,
-            _campaignPortals is not null, _campaignPortals?.Issues.Select(issue => issue.Error).ToArray());
+            loading, GetTree().Paused, player.ModalInput, defeated, canSave, goals, choices, save, error,
+            _campaignPortals is not null, _campaignPortals?.Issues.Select(issue => issue.Error).ToArray(),
+            driver?.SpeechActive == true);
     }
 }

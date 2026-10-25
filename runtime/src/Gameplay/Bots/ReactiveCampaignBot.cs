@@ -14,7 +14,8 @@ internal sealed record BotCampaignObservation(BotSkillBinding? Binding, long Sam
     long Progress, bool Loading, bool Paused, bool ModalInput, bool Defeated, bool CanSave,
     IReadOnlyList<BotCampaignGoal> Goals, IReadOnlyList<BotCampaignChoice> Choices,
     BotCampaignSave? Save = null, string? Error = null,
-    bool PortalGraphInspected = false, IReadOnlyList<string>? SourceIssues = null);
+    bool PortalGraphInspected = false, IReadOnlyList<string>? SourceIssues = null,
+    bool SpeechActive = false);
 
 internal sealed record BotCampaignSkill(bool Active, string Phase, string? Error, string? FailureKind);
 internal enum BotCampaignCommandKind { None, Reference, Choice, Save, Pause }
@@ -140,6 +141,7 @@ internal sealed class ReactiveCampaignBot
         { Phase = "executing-skill"; return new(BotCampaignCommandKind.None); }
         if (observation.Paused && observation.Choices.Count == 0 && !observation.ModalInput)
         { Phase = "paused"; return new(BotCampaignCommandKind.None); }
+        if (observation.SpeechActive) _idle = 0;
         _idle += seconds;
         if (_idle > ProgressLimitSeconds)
             return Fail("bot-policy", "No observed quest/objective, menu or scene progress within the campaign bound.");

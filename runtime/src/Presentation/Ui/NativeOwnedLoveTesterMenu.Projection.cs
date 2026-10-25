@@ -24,6 +24,12 @@ internal sealed partial class NativeOwnedLoveTesterMenu
 
     public override void _ExitTree()
     {
+        foreach (var target in _choiceTargets)
+        {
+            RemoveChild(target);
+            target.QueueFree();
+        }
+        _choiceTargets.Clear();
         _targetProjection?.Dispose(); _targetProjection = null;
     }
 }

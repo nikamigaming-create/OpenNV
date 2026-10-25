@@ -56,6 +56,7 @@ internal sealed partial class RuntimeLiveHarness : Node
         if (!float.IsFinite(sensitivity) || sensitivity <= 0) throw new ArgumentException("Invalid mouse sensitivity.");
         _botSensitivity = sensitivity; _botForward = forward; _botActivate = activate;
         _pumpBotInput = pumpInput;
+        ReactiveReferenceBot.Log = GD.Print;
         _bot = new(identity =>
         {
             var observation = observe(identity);

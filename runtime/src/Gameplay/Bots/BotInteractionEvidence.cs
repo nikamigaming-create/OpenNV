@@ -30,7 +30,8 @@ internal sealed record BotInteractionSnapshot(string TargetState, string? Target
     string? RequestedOutcome = null, long RequestOrdinal = 0,
     BotInteractionOutcomeKind TargetOutcomeKind = BotInteractionOutcomeKind.Other,
     BotInteractionOutcomeKind RequestedOutcomeKind = BotInteractionOutcomeKind.Other,
-    bool RequestedOutcomePending = false, long TargetOutcomeOrdinal = 0);
+    bool RequestedOutcomePending = false, long TargetOutcomeOrdinal = 0,
+    long ProgressRevision = 0);
 
 internal enum BotInteractionOutcomeKind { Other, Portal, Furniture }
 
@@ -90,7 +91,7 @@ internal sealed class BotInteractionEvidence
         {
             BlockBefore = null,
             Result = pending.Result || after.TargetState != before.TargetState || newOutcome ||
-                after.Menus.Except(before.Menus).Any(),
+                after.Menus.Except(before.Menus).Any() || after.ProgressRevision != before.ProgressRevision,
             DeferredOutcome = newRequest ? after.RequestedOutcome : pending.DeferredOutcome,
             DeferredOutcomeKind = newRequest ? after.RequestedOutcomeKind : pending.DeferredOutcomeKind,
             DeferredRequestOrdinal = newRequest ? after.RequestOrdinal : pending.DeferredRequestOrdinal,

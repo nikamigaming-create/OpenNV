@@ -41,6 +41,19 @@ internal static class ReferenceBotContracts
         bot.Tick(.016f);
         if (Phase(bot) != "interaction-observed") throw new Exception("Real interaction response was ignored.");
 
+        observation = observation with { Paused = false, Position = new(1, 0, 5), Camera = new(1, 1, 5), AimedReference = "machine", SpeechActive = true, InteractionState = "idle" };
+        bot.Start("machine", "interact", 1.5f);
+        bot.Tick(.016f);
+        if (activations != 1 || Phase(bot) != "waiting-for-speech")
+            throw new Exception("Bot activated reference while speech was active.");
+        observation = observation with { SpeechActive = false };
+        bot.Tick(.016f);
+        if (activations != 2 || Phase(bot) != "awaiting-interaction")
+            throw new Exception("Bot did not activate reference once speech completed.");
+        observation = observation with { InteractionState = "vigor-tester-opened" };
+        bot.Tick(.016f);
+        if (Phase(bot) != "interaction-observed") throw new Exception("Vigor tester response was ignored.");
+
         observation = observation with { Paused = false, Position = Vector3.Zero, Camera = Vector3.UnitY, Target = new(0, 0, 6), Aim = new(0, 1, 6) };
         bot.Start("actor", "approach", 1);
         var obstructionReleases = 0;

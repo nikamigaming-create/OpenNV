@@ -7,7 +7,7 @@ internal sealed record BotObservation(string Scene, Vector3 Position, Vector3 Ca
     bool LookingEnabled, bool Resident, string? Blocker, string InteractionState, bool TravelReady = false,
     BotDoorObservation? Door = null, long ProgressRevision = 0, string ActiveMenus = "", int ControlMask = 0,
     bool ModalInput = false, bool Loading = false, string? ExecutionFault = null, bool Defeated = false,
-    BotCombatObservation? Combat = null, bool InteractionPending = false);
+    BotCombatObservation? Combat = null, bool InteractionPending = false, bool SpeechActive = false);
 
 internal sealed record BotDoorObservation(bool Open, bool Moving, bool Pending, string? Error = null);
 
@@ -25,6 +25,7 @@ internal sealed record BotNavigationProjection(Vector3 Requested, Vector3 Select
 // Navigation and scene queries stay with the engine; steering is reusable C#.
 internal sealed partial class ReactiveReferenceBot
 {
+    internal static Action<string>? Log { get; set; }
     internal const float ControlWaitLimitSeconds = 30;
     private readonly Func<string, BotObservation> _observe;
     private readonly Func<Vector3, Vector3, float, BotNavigationRoute> _route;
@@ -36,7 +37,21 @@ internal sealed partial class ReactiveReferenceBot
     private BotNavigationRoute? _navigation;
     private BotObservation? _observation;
     private string? _reference, _goalReference, _scene, _interactionBefore;
-    private string _mode = "interact", _phase = "idle";
+    private long _progressRevisionBefore;
+    private string _mode = "interact";
+    private string _phaseField = "idle";
+    private string _phase
+    {
+        get => _phaseField;
+        set
+        {
+            if (_phaseField != value)
+            {
+                _phaseField = value;
+                Log?.Invoke($"OPENNV_REFERENCE_BOT phase={_phaseField} ref={_reference} mode={_mode}");
+            }
+        }
+    }
     private string? _error;
     private Vector3 _plannedTarget;
     private Vector3 _segmentStart;
@@ -145,7 +160,7 @@ internal sealed partial class ReactiveReferenceBot
         _replans = _obstructionReplans = _endpointReplans = _movingTargetReplans = 0; _error = null;
         _navigation = null; _observation = null; _projectionRadius = 2; _progressWaypoint = -1;
         _motionPosition = null; _motionlessSeconds = 0;
-        _controlWaitSeconds = 0; _controlWaitReason = null; _progress = null;
+        _controlWaitSeconds = 0; _controlWaitReason = null; _progress = null; _progressRevisionBefore = 0;
     }
 
     internal void Stop(bool pauseAfter = false)
@@ -183,10 +198,10 @@ internal sealed partial class ReactiveReferenceBot
             _observation = state;
             var progress = new GameplayProgress(state.Scene, state.ProgressRevision, state.ActiveMenus, state.ControlMask,
                 state.MovementEnabled, state.LookingEnabled, state.ModalInput);
-            if (_progress != progress) { _progress = progress; _controlWaitSeconds = 0; }
+            if (_progress != progress || state.SpeechActive) { _progress = progress; _controlWaitSeconds = 0; }
             // A real interaction may open a paused menu. Observe its outcome
             // before suspending clocks, without treating a delivery as success.
-            if (_phase == "awaiting-interaction" && state.InteractionState != _interactionBefore)
+            if (_phase == "awaiting-interaction" && (state.InteractionState != _interactionBefore || state.ProgressRevision != _progressRevisionBefore))
             { Complete("interaction-observed"); return; }
             if (state.Paused || state.Loading)
             {
@@ -220,12 +235,14 @@ internal sealed partial class ReactiveReferenceBot
             if (_phase == "awaiting-interaction")
             {
                 _input(default, false);
-                if (state.InteractionState != _interactionBefore) { Complete("interaction-observed"); return; }
+                Log?.Invoke($"OPENNV_DEBUG_AWAITING ref={_reference} waiting={_waiting:F2} statePR={state.ProgressRevision} beforePR={_progressRevisionBefore} stateIS={state.InteractionState} beforeIS={_interactionBefore} speechActive={state.SpeechActive} pending={state.InteractionPending}");
+                if (state.InteractionState != _interactionBefore || state.ProgressRevision != _progressRevisionBefore)
+                { Complete("interaction-observed"); return; }
                 // The exact activation-owned furniture reservation can still
                 // be approaching its source entry marker. Keep the global goal
                 // clock running, but do not time out this living owner as a
                 // no-op. Losing the reservation starts a fresh response bound.
-                if (state.InteractionPending) { _waiting = 0; return; }
+                if (state.InteractionPending || state.SpeechActive) { _waiting = 0; return; }
                 _waiting += seconds;
                 if (_waiting > 3) throw new InvalidOperationException("Activation had no observed gameplay response.");
                 return;
@@ -266,8 +283,17 @@ internal sealed partial class ReactiveReferenceBot
             // reference origin or its projected standoff lies farther away.
             if (_mode == "interact" && state.AimedReference == _reference)
             {
+                if (state.SpeechActive)
+                {
+                    CancelRoute();
+                    _input(default, false); _steering.Reset();
+                    _phase = "waiting-for-speech";
+                    return;
+                }
                 CancelRoute();
-                _interactionBefore = state.InteractionState; _phase = _routeDoor is null ? "awaiting-interaction" : "awaiting-route-door";
+                _interactionBefore = state.InteractionState;
+                _progressRevisionBefore = state.ProgressRevision;
+                _phase = _routeDoor is null ? "awaiting-interaction" : "awaiting-route-door";
                 _waiting = 0; _input(default, true);
                 return;
             }
@@ -358,7 +384,7 @@ internal sealed partial class ReactiveReferenceBot
             }
             else if (_mode == "interact")
             {
-                _endpointAiming += seconds;
+                if (!state.SpeechActive) _endpointAiming += seconds;
                 if (_endpointAiming > 3)
                 {
                     // Standoff is an initial aiming position, not proof that

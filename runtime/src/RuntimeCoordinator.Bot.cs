@@ -79,7 +79,8 @@ public partial class RuntimeCoordinator
             requested == "furniture" ? BotInteractionOutcomeKind.Furniture :
                 requested?.StartsWith("portal:", StringComparison.Ordinal) == true ? BotInteractionOutcomeKind.Portal : BotInteractionOutcomeKind.Other,
             requested == "furniture" && furniture!.Pending, outcome == "furniture" ? furniture!.Ordinal :
-                settledPortal && outcome == "portal:" + portal!.Destination ? portal.Ordinal : 0);
+                settledPortal && outcome == "portal:" + portal!.Destination ? portal.Ordinal : 0,
+            ProgressRevision: _nativeQuestState?.ProgressRevision ?? 0);
     }
 
     internal static BotInteractionSourceState NativeBotSourceState(FalloutReferenceInstance state) =>
@@ -229,7 +230,7 @@ public partial class RuntimeCoordinator
             player.GetMeta("opennv_source_looking_enabled", false).AsBool(), resident && player.CollisionResident,
             player.BlockingShape, interaction.Revision.ToString(CultureInfo.InvariantCulture), travelReady, door,
             _nativeQuestState?.ProgressRevision ?? 0, menus, controlMask, player.ModalInput, loading, Combat: combatObservation,
-            InteractionPending: interaction.PendingFurniture);
+            InteractionPending: interaction.PendingFurniture, SpeechActive: _nativeOpeningStageDriver?.SpeechActive == true);
     }
 
     private static System.Numerics.Vector3 Vector3ToNumeric(Vector3 value) => new(value.X, value.Y, value.Z);
