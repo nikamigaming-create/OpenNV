@@ -108,6 +108,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
     }
     internal object? SpeechState => _speech?.State;
     internal FalloutSpeechSubtitle? Subtitle => _speech?.Subtitle;
+    internal bool SpeechActive => _speech?.Active == true;
     internal Action<FalloutSpeechSubtitle>? PrepareSubtitle { get; set; }
     internal Action<FalloutSpeechCompletionReceipt>? SayToCompleted { get; set; }
     internal object? PlayerPackageState => _playerPackage?.State;

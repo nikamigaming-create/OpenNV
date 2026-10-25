@@ -10,6 +10,7 @@ internal sealed partial class FalloutReferenceWorld
 
     private FalloutReferencePlacement ProjectMovedActor(FalloutReferenceInstance instance, FalloutReferencePlacement placement)
     {
+        if (!IsEnabled(instance.Reference)) return placement;
         var source = records.GetEffective(instance.Base);
         if (source.Signature is not ("NPC_" or "CREA")) return placement;
         if (source.Signature == "CREA")

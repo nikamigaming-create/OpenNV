@@ -33,6 +33,7 @@ internal sealed class FalloutScriptSounds(FalloutPluginStack records, FalloutScr
     internal string? LastDisposition { get; private set; }
     internal string? LastError { get; private set; }
     internal int ActiveVoices => _voices.Count;
+    internal bool HasActiveLoops => _voices.Values.Any(voice => voice.Request.Source.IsLooping);
     internal bool IsBound => _binding is not null;
     internal bool IsActive(long id) => _voices.ContainsKey(id);
     internal static bool SystemFlag(double value) => double.IsFinite(value) && value == Math.Truncate(value) &&
@@ -151,7 +152,8 @@ internal sealed class FalloutScriptSounds(FalloutPluginStack records, FalloutScr
             voice.Phase = "playing"; LastDisposition = "source-sound-playing";
             voice.Registration = records.SoundVoices.Register(voice.Request.Source.FormKey, voice.Request.Reference,
                 voice.Request.Reference is null ? "PlaySound" : "PlaySound3D",
-                () => _voices.ContainsKey(voice.Request.Id), () => StopVoice(voice));
+                () => _voices.ContainsKey(voice.Request.Id), () => StopVoice(voice),
+                checkpointReady: !voice.Request.Source.IsLooping ? () => true : null);
             voice.Playback.Start();
         }
         else if (audible == (voice.Phase == "paused-menu"))

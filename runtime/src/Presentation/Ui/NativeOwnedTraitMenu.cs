@@ -178,12 +178,33 @@ internal sealed partial class NativeOwnedTraitMenu : Control
         {
             var rect = new Rect2(_tiles.Position(row.Tile), new(_tiles.Number(row.Tile, "width"), _tiles.Number(row.Tile, "height"))).Intersection(bounds);
             row.Button.Visible = rect.HasArea(); row.Button.Position = rect.Position; row.Button.Size = rect.Size;
+            if (_selection.Remaining > 0 && !_selection.Selected.Contains(row.Choice.Trait))
+            {
+                row.Button.SetMeta("opennv_source_choice_kind", "chargen");
+                row.Button.SetMeta("opennv_source_choice_id", row.Choice.Trait.RuntimeFormId.ToString());
+                row.Button.SetMeta("opennv_source_choice_menu", "TraitMenu");
+                row.Button.SetMeta("opennv_source_choice_goodbye", false);
+            }
+            else
+            {
+                row.Button.RemoveMeta("opennv_source_choice_kind");
+                row.Button.RemoveMeta("opennv_source_choice_id");
+                row.Button.RemoveMeta("opennv_source_choice_menu");
+                row.Button.RemoveMeta("opennv_source_choice_goodbye");
+            }
         }
         if (_focused is not null) Focus(_focused);
         foreach (var (tile, button, _) in _actions)
         {
             button.Text = _tiles.String(tile); button.Position = _tiles.Position(tile);
             button.Size = new(_tiles.Number(tile, "width"), _tiles.Number(tile, "height"));
+            if ((string?)tile.Attribute("name") is "LUM_ContinueButton" or "TM_DoneButton")
+            {
+                button.SetMeta("opennv_source_choice_kind", "chargen");
+                button.SetMeta("opennv_source_choice_id", "done");
+                button.SetMeta("opennv_source_choice_menu", "TraitMenu");
+                button.SetMeta("opennv_source_choice_goodbye", true);
+            }
         }
         foreach (var (tile, button, bar) in _scrollTargets)
         {

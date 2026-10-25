@@ -183,6 +183,28 @@ internal sealed partial class NativeOwnedTagSkillMenu : Control
             button.Text = _tiles.String(tile); button.Position = _tiles.Position(tile);
             button.Size = new(_tiles.Number(tile, "width"), _tiles.Number(tile, "height"));
             button.Disabled = (string?)tile.Attribute("name") == "CGM_DoneButton" && !_selection.Complete;
+            if ((string?)tile.Attribute("name") == "CGM_DoneButton")
+            {
+                button.SetMeta("opennv_source_choice_kind", "chargen");
+                button.SetMeta("opennv_source_choice_id", "done");
+                button.SetMeta("opennv_source_choice_menu", $"CharGenMenu:{_selection.Remaining}");
+                button.SetMeta("opennv_source_choice_goodbye", true);
+            }
+        }
+        foreach (var row in _rows)
+        {
+            var isTagged = _selection.Selected.Contains(row.Choice.Skill);
+            if (!isTagged && _selection.Remaining > 0)
+            {
+                row.Button.SetMeta("opennv_source_choice_kind", "chargen");
+                row.Button.SetMeta("opennv_source_choice_id", row.Choice.Skill.EditorId);
+                row.Button.SetMeta("opennv_source_choice_menu", $"CharGenMenu:{_selection.Remaining}");
+                row.Button.SetMeta("opennv_source_choice_goodbye", false);
+            }
+            else
+            {
+                row.Button.RemoveMeta("opennv_source_choice_kind");
+            }
         }
         foreach (var (tile, button) in _scrollTargets)
         {

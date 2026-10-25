@@ -56,6 +56,7 @@ internal sealed partial class RuntimeLiveHarness : Node
         if (!float.IsFinite(sensitivity) || sensitivity <= 0) throw new ArgumentException("Invalid mouse sensitivity.");
         _botSensitivity = sensitivity; _botForward = forward; _botActivate = activate;
         _pumpBotInput = pumpInput;
+        ReactiveReferenceBot.Log = GD.Print;
         _bot = new(identity =>
         {
             var observation = observe(identity);
@@ -123,9 +124,12 @@ internal sealed partial class RuntimeLiveHarness : Node
             _liveFrames = new LiveHarnessFrameBuffer(channel + ".opennv", true);
         ProcessMode = ProcessModeEnum.Always;
         ProcessPriority = int.MinValue;
+        ProcessPhysicsPriority = int.MinValue;
         RenderingServer.FramePostDraw += AfterDraw;
         RenderingServer.FramePreDraw += BeforeDraw;
     }
+
+    public override void _PhysicsProcess(double delta) => _bot?.AdvanceCombatPhysics((float)delta);
 
     public override void _Process(double delta)
     {
@@ -234,6 +238,9 @@ internal sealed partial class RuntimeLiveHarness : Node
             case "bot":
                 if (_bot is null) throw new NotSupportedException("Bot observation/input adapter is unavailable.");
                 var mode = command.GetProperty("mode").GetString()!;
+                float? minimumCombatHitPoints = command.TryGetProperty("minimumCombatHitPoints", out var combatHealth) ? combatHealth.GetSingle() : null;
+                float? maximumCombatSimulationSeconds = command.TryGetProperty("maximumCombatSimulationSeconds", out var combatTime) ? combatTime.GetSingle() : null;
+                ReactiveReferenceBot.ValidateCombatLimits(mode, minimumCombatHitPoints, maximumCombatSimulationSeconds);
                 if (mode != "observe") _campaignBot.Stop();
                 var pauseAfter = !command.TryGetProperty("pauseAfter", out var pause) || pause.GetBoolean();
                 if (mode == "observe") { _bot.ObserveCombat(); PublishState(); }
@@ -243,7 +250,8 @@ internal sealed partial class RuntimeLiveHarness : Node
                     EnsureBotSkillLibrary();
                     _bot.Start(command.TryGetProperty("reference", out var botReference) ? botReference.GetString() : null, mode,
                         command.TryGetProperty("distance", out var distance) ? distance.GetSingle() : 1.5f,
-                        !command.TryGetProperty("combatTakeover", out var takeover) || takeover.GetBoolean(), pauseAfter);
+                        !command.TryGetProperty("combatTakeover", out var takeover) || takeover.GetBoolean(), pauseAfter,
+                        minimumCombatHitPoints, maximumCombatSimulationSeconds);
                 }
                 break;
             case "key":

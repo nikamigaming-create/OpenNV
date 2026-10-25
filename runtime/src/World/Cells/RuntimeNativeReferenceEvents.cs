@@ -361,87 +361,100 @@ internal partial class RuntimeNativeReferenceEvents : Node
         QueueActivationRelays((float)delta);
         foreach (var binding in _bindings.Values)
         {
-            var grabBatch = binding.Instance.GrabEvents is { HasPending: true } grabEvents ? grabEvents : null;
-            var hasGrabEvents = grabBatch is not null;
-            var packageBatch = binding.Signature is "NPC_" or "CREA" &&
-                binding.Node is not RuntimeNativeNpc { PackageEventError: not null } &&
-                _world.PackageEvents.HasPending(binding.Reference.FormKey)
-                ? _world.PackageEvents.SnapshotPending(binding.Reference.FormKey) : null;
-            var hasPackageEvents = packageBatch?.Count > 0;
-            var hitBatch = _world.HitEvents.HasPending(binding.Reference.FormKey)
-                ? _world.HitEvents.SnapshotPending(binding.Reference.FormKey) : null;
-            var hasHitEvents = hitBatch?.Count > 0;
-            var needsAbilities = binding.Signature is "NPC_" or "CREA" && binding.Node is not null &&
-                !_abilityActors.Contains(binding.Reference.FormKey);
-            if (!needsAbilities && !hasPackageEvents && !hasHitEvents && !hasGrabEvents && binding.Instance.Script is null && binding.PendingActivation is null && binding.Trigger is null) continue;
-            if (!IsProcessing() || tree.Paused) break; // An effect can unload this cell or open a modal menu.
-            if (needsAbilities && _world.IsEnabled(binding.Reference.FormKey) &&
-                _abilityActors.Add(binding.Reference.FormKey)) StartAbilityScripts(binding);
-            if (!hasPackageEvents && !hasHitEvents && !hasGrabEvents && binding.Instance.Script is null && binding.PendingActivation is null && binding.Trigger is null) continue;
-            var enabled = _world.IsEnabled(binding.Reference.FormKey);
-            binding.ActorScriptStarted |= enabled;
-            if (binding.Signature is "NPC_" or "CREA" && !binding.ActorScriptStarted) continue;
-            if (binding.Trigger is { } volume && volume.Visible != enabled) GamebryoReferenceEnableRuntime.Apply(volume, enabled);
-            if (!hasPackageEvents && !hasHitEvents && !hasGrabEvents && binding.Instance.Script is null && binding.PendingActivation is null) continue;
-            // Keep admitting real contact transitions after a script fault. The
-            // C# owner decides whether a fresh event can retry its source block;
-            // suppressing contact sampling here permanently poisoned saved triggers.
-            var events = new List<FalloutReferenceScriptEvent>();
-            var playerInput = false;
-            var relay = binding.PendingRelay;
-            var npcPortalActor = binding.Reference.Teleport is not null && binding.PendingActivation is { } portalActor &&
-                portalActor != _records.RuntimeFormKey(0x14) && _bindings.GetValueOrDefault(portalActor)?.Node is INativeActorPortal portalNpc
-                ? portalNpc : null;
-            if (binding.PendingActivation is { } actor)
-            {
-                events.Add(new("OnActivate", actor));
-                binding.PendingActivation = null;
-                binding.PendingRelay = null;
-                playerInput = binding.PendingPlayerInput;
-                binding.PendingPlayerInput = false;
-            }
-            if (!binding.Loaded && enabled && (binding.Node is not null || binding.Trigger is not null)) { events.Add(new("OnLoad")); binding.Loaded = true; }
-            if (binding.Instance.Injury is { DeathEventPending: true } injury &&
-                _world.AdvanceDeathEvent(binding.Reference.FormKey, delta,
-                    FalloutGameSettingFloats.Read(_records, "fDyingTimer"),
-                    _host.IsTalking?.Invoke(binding.Reference.FormKey) == true))
-                events.Add(new("OnDeath", injury.Killer));
-            if (enabled && binding.Trigger is { } trigger)
-            {
-                var bodies = trigger.GetOverlappingBodies();
-                var areas = trigger.GetOverlappingAreas();
-                using var bodiesOwner = (Godot.Collections.Array)bodies;
-                using var areasOwner = (Godot.Collections.Array)areas;
-                var contacts = bodies.Cast<Node>().Concat(areas).Select(Contact).Where(key => key is not null)
-                    .Select(key => key!.Value).Distinct().ToArray();
-                events.AddRange(binding.Contacts.Advance(contacts));
-            }
-            if (hasPackageEvents) events.AddRange(packageBatch!.Events);
-            if (hasHitEvents) events.AddRange(hitBatch!.Events);
-            if (grabBatch?.Grab > 0) events.Add(new("OnGrab", _records.RuntimeFormKey(0x14)));
-            if (grabBatch?.Release > 0) events.Add(new("OnRelease", _records.RuntimeFormKey(0x14)));
-            events.Add(new("GameMode"));
-            IReadOnlyList<FalloutReferenceScriptEventResult> results;
-            if (relay is not null) _dispatchingActivationRelays.Add(binding.Reference.FormKey);
-            try
-            {
-                results = _scripts.DispatchFrame(binding.Reference.FormKey, events, delta,
-                    playerInput ? () => ObservePlayerActivationBegin?.Invoke(binding.Reference.FormKey) : null,
-                    playerInput ? () => ObservePlayerActivationEnd?.Invoke(binding.Reference.FormKey, true) : null);
-            }
-            finally { if (relay is not null) _dispatchingActivationRelays.Remove(binding.Reference.FormKey); }
-            if (relay is not null) _world.ConsumeActivationRelay(relay);
-            if (playerInput) ObservePlayerActivationFinished?.Invoke(binding.Reference.FormKey,
-                results.Single(result => result.Event.Equals("OnActivate", StringComparison.OrdinalIgnoreCase)).Error is null);
-            npcPortalActor?.FinishPortalAttempt(binding.Reference.FormKey,
-                results.Single(result => result.Event.Equals("OnActivate", StringComparison.OrdinalIgnoreCase)).Error);
-            // Source faults retain their executed prefix on the actual instance.
-            // Consume this admission once while preserving marks produced by it.
-            if (hasPackageEvents) _world.PackageEvents.Consume(packageBatch!);
-            if (hasHitEvents) _world.HitEvents.Consume(hitBatch!);
-            if (grabBatch is not null) _world.ConsumeGrabEvents(binding.Reference.FormKey, grabBatch);
-            Report(binding, results);
+            if (binding.Trigger is null) continue;
+            if (!IsProcessing() || tree.Paused) return;
+            ProcessBinding(binding, tree, delta);
         }
+        foreach (var binding in _bindings.Values)
+        {
+            if (binding.Trigger is not null) continue;
+            if (!IsProcessing() || tree.Paused) return;
+            ProcessBinding(binding, tree, delta);
+        }
+    }
+
+    private void ProcessBinding(Binding binding, SceneTree tree, double delta)
+    {
+        var grabBatch = binding.Instance.GrabEvents is { HasPending: true } grabEvents ? grabEvents : null;
+        var hasGrabEvents = grabBatch is not null;
+        var packageBatch = binding.Signature is "NPC_" or "CREA" &&
+            binding.Node is not RuntimeNativeNpc { PackageEventError: not null } &&
+            _world.PackageEvents.HasPending(binding.Reference.FormKey)
+            ? _world.PackageEvents.SnapshotPending(binding.Reference.FormKey) : null;
+        var hasPackageEvents = packageBatch?.Count > 0;
+        var hitBatch = _world.HitEvents.HasPending(binding.Reference.FormKey)
+            ? _world.HitEvents.SnapshotPending(binding.Reference.FormKey) : null;
+        var hasHitEvents = hitBatch?.Count > 0;
+        var needsAbilities = binding.Signature is "NPC_" or "CREA" && binding.Node is not null &&
+            !_abilityActors.Contains(binding.Reference.FormKey);
+        if (!needsAbilities && !hasPackageEvents && !hasHitEvents && !hasGrabEvents && binding.Instance.Script is null && binding.PendingActivation is null && binding.Trigger is null) return;
+        if (!IsProcessing() || tree.Paused) return; // An effect can unload this cell or open a modal menu.
+        if (needsAbilities && _world.IsEnabled(binding.Reference.FormKey) &&
+            _abilityActors.Add(binding.Reference.FormKey)) StartAbilityScripts(binding);
+        if (!hasPackageEvents && !hasHitEvents && !hasGrabEvents && binding.Instance.Script is null && binding.PendingActivation is null && binding.Trigger is null) return;
+        var enabled = _world.IsEnabled(binding.Reference.FormKey);
+        binding.ActorScriptStarted |= enabled;
+        if (binding.Signature is "NPC_" or "CREA" && !binding.ActorScriptStarted) return;
+        if (binding.Trigger is { } volume && volume.Visible != enabled) GamebryoReferenceEnableRuntime.Apply(volume, enabled);
+        if (!hasPackageEvents && !hasHitEvents && !hasGrabEvents && binding.Instance.Script is null && binding.PendingActivation is null) return;
+        // Keep admitting real contact transitions after a script fault. The
+        // C# owner decides whether a fresh event can retry its source block;
+        // suppressing contact sampling here permanently poisoned saved triggers.
+        var events = new List<FalloutReferenceScriptEvent>();
+        var playerInput = false;
+        var relay = binding.PendingRelay;
+        var npcPortalActor = binding.Reference.Teleport is not null && binding.PendingActivation is { } portalActor &&
+            portalActor != _records.RuntimeFormKey(0x14) && _bindings.GetValueOrDefault(portalActor)?.Node is INativeActorPortal portalNpc
+            ? portalNpc : null;
+        if (binding.PendingActivation is { } actor)
+        {
+            events.Add(new("OnActivate", actor));
+            binding.PendingActivation = null;
+            binding.PendingRelay = null;
+            playerInput = binding.PendingPlayerInput;
+            binding.PendingPlayerInput = false;
+        }
+        if (!binding.Loaded && enabled && (binding.Node is not null || binding.Trigger is not null)) { events.Add(new("OnLoad")); binding.Loaded = true; }
+        if (binding.Instance.Injury is { DeathEventPending: true } injury &&
+            _world.AdvanceDeathEvent(binding.Reference.FormKey, delta,
+                FalloutGameSettingFloats.Read(_records, "fDyingTimer"),
+                _host.IsTalking?.Invoke(binding.Reference.FormKey) == true))
+            events.Add(new("OnDeath", injury.Killer));
+        if (enabled && binding.Trigger is { } trigger)
+        {
+            var bodies = trigger.GetOverlappingBodies();
+            var areas = trigger.GetOverlappingAreas();
+            using var bodiesOwner = (Godot.Collections.Array)bodies;
+            using var areasOwner = (Godot.Collections.Array)areas;
+            var contacts = bodies.Cast<Node>().Concat(areas).Select(Contact).Where(key => key is not null)
+                .Select(key => key!.Value).Distinct().ToArray();
+            events.AddRange(binding.Contacts.Advance(contacts));
+        }
+        if (hasPackageEvents) events.AddRange(packageBatch!.Events);
+        if (hasHitEvents) events.AddRange(hitBatch!.Events);
+        if (grabBatch?.Grab > 0) events.Add(new("OnGrab", _records.RuntimeFormKey(0x14)));
+        if (grabBatch?.Release > 0) events.Add(new("OnRelease", _records.RuntimeFormKey(0x14)));
+        events.Add(new("GameMode"));
+        IReadOnlyList<FalloutReferenceScriptEventResult> results;
+        if (relay is not null) _dispatchingActivationRelays.Add(binding.Reference.FormKey);
+        try
+        {
+            results = _scripts.DispatchFrame(binding.Reference.FormKey, events, delta,
+                playerInput ? () => ObservePlayerActivationBegin?.Invoke(binding.Reference.FormKey) : null,
+                playerInput ? () => ObservePlayerActivationEnd?.Invoke(binding.Reference.FormKey, true) : null);
+        }
+        finally { if (relay is not null) _dispatchingActivationRelays.Remove(binding.Reference.FormKey); }
+        if (relay is not null) _world.ConsumeActivationRelay(relay);
+        if (playerInput) ObservePlayerActivationFinished?.Invoke(binding.Reference.FormKey,
+            results.Single(result => result.Event.Equals("OnActivate", StringComparison.OrdinalIgnoreCase)).Error is null);
+        npcPortalActor?.FinishPortalAttempt(binding.Reference.FormKey,
+            results.Single(result => result.Event.Equals("OnActivate", StringComparison.OrdinalIgnoreCase)).Error);
+        // Source faults retain their executed prefix on the actual instance.
+        // Consume this admission once while preserving marks produced by it.
+        if (hasPackageEvents) _world.PackageEvents.Consume(packageBatch!);
+        if (hasHitEvents) _world.HitEvents.Consume(hitBatch!);
+        if (grabBatch is not null) _world.ConsumeGrabEvents(binding.Reference.FormKey, grabBatch);
+        Report(binding, results);
     }
 
     private void Report(Binding binding, IReadOnlyList<FalloutReferenceScriptEventResult> results)

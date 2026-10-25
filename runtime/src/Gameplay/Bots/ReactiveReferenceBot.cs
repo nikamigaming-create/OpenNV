@@ -7,7 +7,8 @@ internal sealed record BotObservation(string Scene, Vector3 Position, Vector3 Ca
     bool LookingEnabled, bool Resident, string? Blocker, string InteractionState, bool TravelReady = false,
     BotDoorObservation? Door = null, long ProgressRevision = 0, string ActiveMenus = "", int ControlMask = 0,
     bool ModalInput = false, bool Loading = false, string? ExecutionFault = null, bool Defeated = false,
-    BotCombatObservation? Combat = null, bool InteractionPending = false);
+    BotCombatObservation? Combat = null, bool InteractionPending = false, bool SpeechActive = false,
+    bool FurnitureActive = false, int FurniturePhase = 0);
 
 internal sealed record BotDoorObservation(bool Open, bool Moving, bool Pending, string? Error = null);
 
@@ -25,6 +26,7 @@ internal sealed record BotNavigationProjection(Vector3 Requested, Vector3 Select
 // Navigation and scene queries stay with the engine; steering is reusable C#.
 internal sealed partial class ReactiveReferenceBot
 {
+    internal static Action<string>? Log { get; set; }
     internal const float ControlWaitLimitSeconds = 30;
     private readonly Func<string, BotObservation> _observe;
     private readonly Func<Vector3, Vector3, float, BotNavigationRoute> _route;
@@ -36,7 +38,21 @@ internal sealed partial class ReactiveReferenceBot
     private BotNavigationRoute? _navigation;
     private BotObservation? _observation;
     private string? _reference, _goalReference, _scene, _interactionBefore;
-    private string _mode = "interact", _phase = "idle";
+    private long _progressRevisionBefore;
+    private string _mode = "interact";
+    private string _phaseField = "idle";
+    private string _phase
+    {
+        get => _phaseField;
+        set
+        {
+            if (_phaseField != value)
+            {
+                _phaseField = value;
+                Log?.Invoke($"OPENNV_REFERENCE_BOT phase={_phaseField} ref={_reference} mode={_mode}");
+            }
+        }
+    }
     private string? _error;
     private Vector3 _plannedTarget;
     private Vector3 _segmentStart;
@@ -116,6 +132,11 @@ internal sealed partial class ReactiveReferenceBot
         failureKind = _failureKind,
         combatTakeover = _combatTakeover,
         pauseAfter = _pauseAfter,
+        minimumCombatHitPoints = _minimumCombatHitPoints,
+        maximumCombatSimulationSeconds = _maximumCombatSimulationSeconds,
+        combatSimulationSeconds = _combatSimulationSeconds,
+        combatPhysicsSample = _combatPhysicsSample,
+        combatPolicyStop = _combatPolicyStop,
         combat = _combat?.State,
         combatObservation = _combatObservation?.State,
         skills = _combatSkills.State,
@@ -131,8 +152,10 @@ internal sealed partial class ReactiveReferenceBot
         _combatSkills = skills ?? new(); _persistSkills = persistSkills;
     }
 
-    internal void Start(string? reference, string mode, float distance, bool combatTakeover = true, bool pauseAfter = true)
+    internal void Start(string? reference, string mode, float distance, bool combatTakeover = true, bool pauseAfter = true,
+        float? minimumCombatHitPoints = null, float? maximumCombatSimulationSeconds = null)
     {
+        ValidateCombatLimits(mode, minimumCombatHitPoints, maximumCombatSimulationSeconds);
         if ((mode != "combat" && string.IsNullOrWhiteSpace(reference)) || mode is not ("interact" or "approach" or "follow" or "travel" or "combat") ||
             !float.IsFinite(distance) || distance is < .5f or > 5)
             throw new ArgumentException("Bot goal requires interact/approach/follow/travel with a source reference, or combat with an optional source threat; distance is 0.5-5 metres.");
@@ -141,11 +164,14 @@ internal sealed partial class ReactiveReferenceBot
         _distance = _approachDistance = distance; _phase = "observing";
         _combat = null; _combatFeedbackPublished = false; _combatCount = 0; _phaseBeforeCombat = null;
         _combatTakeover = combatTakeover; _pauseAfter = pauseAfter; _combatObservation = null; _failureKind = null;
+        _minimumCombatHitPoints = minimumCombatHitPoints; _maximumCombatSimulationSeconds = maximumCombatSimulationSeconds;
+        _combatSimulationSeconds = 0; _combatPolicySample = _combatPhysicsSample = -1; _combatPolicyStop = null;
+        _combatSessionBinding = null; _combatSessionScene = null; _terminalInputReleased = false;
         _elapsed = _stalled = _waiting = _endpointAiming = 0;
         _replans = _obstructionReplans = _endpointReplans = _movingTargetReplans = 0; _error = null;
         _navigation = null; _observation = null; _projectionRadius = 2; _progressWaypoint = -1;
         _motionPosition = null; _motionlessSeconds = 0;
-        _controlWaitSeconds = 0; _controlWaitReason = null; _progress = null;
+        _controlWaitSeconds = 0; _controlWaitReason = null; _progress = null; _progressRevisionBefore = 0;
     }
 
     internal void Stop(bool pauseAfter = false)
@@ -183,10 +209,10 @@ internal sealed partial class ReactiveReferenceBot
             _observation = state;
             var progress = new GameplayProgress(state.Scene, state.ProgressRevision, state.ActiveMenus, state.ControlMask,
                 state.MovementEnabled, state.LookingEnabled, state.ModalInput);
-            if (_progress != progress) { _progress = progress; _controlWaitSeconds = 0; }
+            if (_progress != progress || state.SpeechActive) { _progress = progress; _controlWaitSeconds = 0; }
             // A real interaction may open a paused menu. Observe its outcome
             // before suspending clocks, without treating a delivery as success.
-            if (_phase == "awaiting-interaction" && state.InteractionState != _interactionBefore)
+            if (_phase == "awaiting-interaction" && (state.InteractionState != _interactionBefore || state.ProgressRevision != _progressRevisionBefore))
             { Complete("interaction-observed"); return; }
             if (state.Paused || state.Loading)
             {
@@ -220,23 +246,47 @@ internal sealed partial class ReactiveReferenceBot
             if (_phase == "awaiting-interaction")
             {
                 _input(default, false);
-                if (state.InteractionState != _interactionBefore) { Complete("interaction-observed"); return; }
+                Log?.Invoke($"OPENNV_DEBUG_AWAITING ref={_reference} waiting={_waiting:F2} statePR={state.ProgressRevision} beforePR={_progressRevisionBefore} stateIS={state.InteractionState} beforeIS={_interactionBefore} speechActive={state.SpeechActive} pending={state.InteractionPending}");
+                if (state.InteractionState != _interactionBefore || state.ProgressRevision != _progressRevisionBefore)
+                { Complete("interaction-observed"); return; }
                 // The exact activation-owned furniture reservation can still
                 // be approaching its source entry marker. Keep the global goal
                 // clock running, but do not time out this living owner as a
                 // no-op. Losing the reservation starts a fresh response bound.
-                if (state.InteractionPending) { _waiting = 0; return; }
+                if (state.InteractionPending || state.SpeechActive) { _waiting = 0; return; }
                 _waiting += seconds;
                 if (_waiting > 3) throw new InvalidOperationException("Activation had no observed gameplay response.");
                 return;
+            }
+            if (state.FurnitureActive && _phase != "awaiting-interaction")
+            {
+                if (state.FurniturePhase == 3 && _phase != "exiting-furniture")
+                {
+                    CancelRoute(); _path = null; _steering.Reset();
+                    _input(default, true);
+                    _phase = "exiting-furniture";
+                    _waiting = 0;
+                    return;
+                }
+                _input(default, false);
+                if (state.SpeechActive) _waiting = 0;
+                else _waiting += seconds;
+                if (_waiting > 5) throw new InvalidOperationException("Player furniture exit did not finish within 5 seconds.");
+                return;
+            }
+            if (_phase == "exiting-furniture")
+            {
+                _phase = "observing";
+                _waiting = 0;
             }
             if (state.ModalInput || !state.MovementEnabled || !state.LookingEnabled ||
                 !(state.Resident || _mode == "travel" && state.TravelReady))
             {
                 CancelRoute(); _path = null;
-                _input(default, false); _steering.Reset(); _phase = "waiting-for-player-control";
+                _input(default, false); _steering.Reset();
                 _controlWaitReason = state.ModalInput ? "modal input is held" : !state.MovementEnabled ? "source movement is disabled" :
                     !state.LookingEnabled ? "source looking is disabled" : "the source target or collision is not resident";
+                _phase = "waiting-for-player-control";
                 _controlWaitSeconds += seconds;
                 if (_controlWaitSeconds > ControlWaitLimitSeconds)
                     throw new InvalidOperationException($"No quest, objective, menu, scene or control progress for {ControlWaitLimitSeconds} seconds while {_controlWaitReason}.");
@@ -266,8 +316,17 @@ internal sealed partial class ReactiveReferenceBot
             // reference origin or its projected standoff lies farther away.
             if (_mode == "interact" && state.AimedReference == _reference)
             {
+                if (state.SpeechActive)
+                {
+                    CancelRoute();
+                    _input(default, false); _steering.Reset();
+                    _phase = "waiting-for-speech";
+                    return;
+                }
                 CancelRoute();
-                _interactionBefore = state.InteractionState; _phase = _routeDoor is null ? "awaiting-interaction" : "awaiting-route-door";
+                _interactionBefore = state.InteractionState;
+                _progressRevisionBefore = state.ProgressRevision;
+                _phase = _routeDoor is null ? "awaiting-interaction" : "awaiting-route-door";
                 _waiting = 0; _input(default, true);
                 return;
             }
@@ -358,7 +417,7 @@ internal sealed partial class ReactiveReferenceBot
             }
             else if (_mode == "interact")
             {
-                _endpointAiming += seconds;
+                if (!state.SpeechActive) _endpointAiming += seconds;
                 if (_endpointAiming > 3)
                 {
                     // Standoff is an initial aiming position, not proof that
@@ -412,20 +471,20 @@ internal sealed partial class ReactiveReferenceBot
     {
         _error = error; _failureKind = kind;
         _combat?.Abort(kind, error);
+        _reference = null; _path = null; _steering.Reset(); _phase = "blocked";
+        try { ReleaseTerminalInput(_pauseAfter && (_combat is not null || _mode == "combat")); }
+        catch (Exception release) when (release is IOException or InvalidOperationException or NotSupportedException or System.Text.Json.JsonException)
+        { _error += "; input release failed (device lease expires): " + release.Message; }
         try { PublishCombatFeedback(); }
         catch (Exception persistence) when (persistence is IOException or UnauthorizedAccessException or InvalidOperationException or InvalidDataException or System.Text.Json.JsonException)
         { _error += "; skill evidence persistence failed: " + persistence.Message; }
         try { CancelRoute(); }
         catch (Exception cancellation) when (cancellation is IOException or InvalidOperationException or NotSupportedException or ArgumentException)
         { _error += "; route cancellation failed: " + cancellation.Message; }
-        _reference = null; _path = null; _steering.Reset(); _phase = "blocked";
-        try { ReleaseBotControls(_pauseAfter && (_combat is not null || _mode == "combat")); }
-        catch (Exception release) when (release is IOException or InvalidOperationException or NotSupportedException or System.Text.Json.JsonException)
-        { _error += "; input release failed (device lease expires): " + release.Message; }
     }
 
     private void CancelRoute() { _request = null; _cancelRoute?.Invoke(); }
-    private void Complete(string phase) { CancelRoute(); ReleaseBotControls(_pauseAfter); _reference = null; _path = null; _steering.Reset(); _phase = phase; }
+    private void Complete(string phase) { CancelRoute(); ReleaseTerminalInput(_pauseAfter); _reference = null; _path = null; _steering.Reset(); _phase = phase; }
     private void Replan(string phase)
     { CancelRoute(); _path = null; _input(default, false); _steering.Reset(); _stalled = _endpointAiming = 0; _phase = phase; }
     private void ReplanEndpoint(bool closer)

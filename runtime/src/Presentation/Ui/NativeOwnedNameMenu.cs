@@ -67,6 +67,10 @@ internal partial class NativeOwnedNameMenu : Control
         AddChild(_entry);
         _button = new NativeBitmapMenuButton(_font.Font, _font.Atlas, _color)
         { Name = "textedit_button_ok", Text = FalloutMenuXml.String(_accept.Element("string")!, records), Baseline = _font.Font.TileBaseline };
+        _button.SetMeta("opennv_source_choice_kind", "chargen");
+        _button.SetMeta("opennv_source_choice_id", "ok");
+        _button.SetMeta("opennv_source_choice_menu", "TextEditMenu");
+        _button.SetMeta("opennv_source_choice_goodbye", true);
         void Submit()
         {
             var value = _entry.Text.Trim();

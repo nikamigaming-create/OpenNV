@@ -41,6 +41,19 @@ internal static class ReferenceBotContracts
         bot.Tick(.016f);
         if (Phase(bot) != "interaction-observed") throw new Exception("Real interaction response was ignored.");
 
+        observation = observation with { Paused = false, Position = new(1, 0, 5), Camera = new(1, 1, 5), AimedReference = "machine", SpeechActive = true, InteractionState = "idle" };
+        bot.Start("machine", "interact", 1.5f);
+        bot.Tick(.016f);
+        if (activations != 1 || Phase(bot) != "waiting-for-speech")
+            throw new Exception("Bot activated reference while speech was active.");
+        observation = observation with { SpeechActive = false };
+        bot.Tick(.016f);
+        if (activations != 2 || Phase(bot) != "awaiting-interaction")
+            throw new Exception("Bot did not activate reference once speech completed.");
+        observation = observation with { InteractionState = "vigor-tester-opened" };
+        bot.Tick(.016f);
+        if (Phase(bot) != "interaction-observed") throw new Exception("Vigor tester response was ignored.");
+
         observation = observation with { Paused = false, Position = Vector3.Zero, Camera = Vector3.UnitY, Target = new(0, 0, 6), Aim = new(0, 1, 6) };
         bot.Start("actor", "approach", 1);
         var obstructionReleases = 0;
@@ -167,7 +180,31 @@ internal static class ReferenceBotContracts
         failedCancellation.Tick(.016f);
         if (Phase(failedCancellation) != "blocked" || input.Forward || !Error(failedCancellation).Contains("route owner retired", StringComparison.Ordinal))
             throw new Exception("Failed route cancellation prevented known-fault input release.");
+        CheckFurnitureExit();
         Console.WriteLine("Reference bot: semantic control progress, camera/audio loop rejection, pause/loading suspension, modal lock and immediate fault release PASS.");
+    }
+
+    private static void CheckFurnitureExit()
+    {
+        var observation = new BotObservation("cell", Vector3.Zero, Vector3.UnitY, Vector3.UnitZ,
+            new(0, 0, 6), new(0, 1, 6), null, false, false, true, true, null, "idle",
+            FurnitureActive: true, FurniturePhase: 3);
+        SteeringIntent input = default;
+        var activates = 0;
+        var bot = new ReactiveReferenceBot(_ => observation, (_, end, _) => new([end], end, end, true),
+            (intent, activate) => { input = intent; if (activate) activates++; });
+        bot.Start("target", "travel", 2);
+        bot.Tick(.016f);
+        if (activates != 1 || Phase(bot) != "exiting-furniture")
+            throw new Exception("Occupied furniture did not pulse activate to request exit.");
+        observation = observation with { FurniturePhase = 4 };
+        bot.Tick(.016f);
+        if (activates != 1 || Phase(bot) != "exiting-furniture")
+            throw new Exception("Exiting furniture pulsed duplicate activate during exit animation.");
+        observation = observation with { FurnitureActive = false, FurniturePhase = 0, MovementEnabled = true };
+        bot.Tick(.016f);
+        if (Phase(bot) == "exiting-furniture" || !input.Forward)
+            throw new Exception("Completed furniture exit did not resume ordinary navigation.");
     }
 
     private static JsonDocument State(ReactiveReferenceBot bot) => JsonDocument.Parse(JsonSerializer.Serialize(bot.State));

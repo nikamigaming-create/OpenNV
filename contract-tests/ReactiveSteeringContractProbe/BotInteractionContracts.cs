@@ -50,6 +50,11 @@ internal static partial class BotInteractionContracts
         evidence.Begin("item", closed); evidence.End("item", closed with { TargetState = "taken" }, true);
         evidence.Finish("item", true);
         Require(evidence.Observe("item", closed) == 1, "An actual target mutation was ignored.");
+        evidence.Begin("activator-progress", closed with { ProgressRevision = 1 });
+        evidence.End("activator-progress", closed with { ProgressRevision = 3 }, true);
+        evidence.Finish("activator-progress", true);
+        Require(evidence.Observe("activator-progress", closed with { ProgressRevision = 3 }) == 1,
+            "An activation producing direct quest progress was ignored.");
         evidence.Begin("interleaved", closed); evidence.End("interleaved", closed, true);
         var unrelatedMenu = closed with { Menus = [1060] };
         evidence.Begin("interleaved", unrelatedMenu); evidence.End("interleaved", unrelatedMenu, true);

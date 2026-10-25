@@ -176,6 +176,7 @@ internal sealed partial class NativeOwnedLoveTesterMenu : Control
                 if (mesh.GetActiveMaterial(surface) is ShaderMaterial material && material.ResourceName == NativeNifLightingMaterial.ResourceIdentity)
                     NativeNifPointLighting.Bind(material, [light], 1, storeEncoded: true);
         SetMeta("opennv_love_tester_projection", new Vector2(horizontal, horizontal * Size.Y / Size.X));
+        SynchronizeChoiceTargets();
     }
 
     public override void _Process(double delta)
@@ -275,6 +276,47 @@ internal sealed partial class NativeOwnedLoveTesterMenu : Control
         SetMeta("opennv_love_tester_page", _page); SetMeta("opennv_love_tester_selected_attribute", current);
         SetMeta("opennv_love_tester_remaining", remaining); SetMeta("opennv_love_tester_special", _state.Values.ToArray());
         SetMeta("opennv_love_tester_turning", _turning);
+        SynchronizeChoiceTargets();
+    }
+
+    private readonly List<NativeOwnedTileTarget> _choiceTargets = [];
+
+    private void SynchronizeChoiceTargets()
+    {
+        foreach (var target in _choiceTargets)
+        {
+            RemoveChild(target);
+            target.QueueFree();
+        }
+        _choiceTargets.Clear();
+        if (_accepted || _turning || !IsInsideTree() || Size.X <= 0 || Size.Y <= 0) return;
+        var remaining = _contract.RequiredTotal - _state.Values.Sum();
+        foreach (var target in Targets)
+        {
+            if (!target.InFront || target.Bounds.Size.X <= 0 || target.Bounds.Size.Y <= 0) continue;
+            var isForward = (remaining > 0 && target.Geometry == "P1_Increase_Btn:0") ||
+                            (remaining == 0 && target.Geometry == "P1_RT_Btn:0");
+            var button = new NativeOwnedTileTarget
+            {
+                Name = target.Geometry.Replace(':', '_'),
+                Text = target.Geometry,
+                Position = target.Bounds.Position,
+                Size = target.Bounds.Size,
+                FocusMode = FocusModeEnum.None,
+            };
+            if (isForward)
+            {
+                var isDone = remaining == 0 && _page == ReviewPage && target.Geometry == "P1_RT_Btn:0";
+                button.SetMeta("opennv_source_choice_kind", "chargen");
+                button.SetMeta("opennv_source_choice_id", isDone ? "done" : remaining > 0 ? "increase" : "next");
+                button.SetMeta("opennv_source_choice_menu", $"LoveTesterMenu:{_page}:{remaining}");
+                button.SetMeta("opennv_source_choice_goodbye", isDone);
+            }
+            if (_actions.TryGetValue(target.Geometry, out var action))
+                button.Pressed += action;
+            _choiceTargets.Add(button);
+            AddChild(button);
+        }
     }
 
     private void Number(string geometry, int value) => Texture(geometry, "textures/terminals/BBNumber" + value.ToString(CultureInfo.InvariantCulture) + ".dds");

@@ -64,12 +64,20 @@ internal sealed partial class RuntimeNativeManualSavePreparation : Node
                 SourceOrder = new(_sourceRequests, _requests.Receipt!, Engine.GetProcessFrames());
                 _requests.ObserveOrderedSourceSave(SourceOrder.Receipt);
             }
+            var initialAdmission = _admission();
+            if (initialAdmission.Kind == RuntimeManualSaveAdmissionKind.Refused)
+            {
+                _requests.Fail(initialAdmission.Blocker ?? "Manual save admission was refused.");
+                _publish(_requests.Receipt!);
+                Finish();
+                return;
+            }
             _audio = _sounds.PrepareFiniteSaveDrain();
             _tree.Paused = true;
             _sourcePause = new(_sourceProducers);
             _releaseInput = _player.AcquirePausedSaveInput();
             Input.MouseMode = Input.MouseModeEnum.Visible;
-            _requests.Prepare(Engine.GetProcessFrames(), Time.GetTicksMsec(), _admission(), _audio.Voices, _maximumWaitMilliseconds);
+            _requests.Prepare(Engine.GetProcessFrames(), Time.GetTicksMsec(), initialAdmission, _audio.Voices, _maximumWaitMilliseconds);
             _audio.Activate();
             _publish(_requests.Receipt!);
         }

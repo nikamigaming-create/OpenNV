@@ -85,6 +85,7 @@ internal static class OwnedOpeningProgramProbe
                     scripts.ShowMessage(effect.Target!.Value, FalloutScriptLocals.AttachedScript(records, owner)?.FormKey,
                         owner.Signature == "QUST" ? null : owner.FormKey); break;
                 case FalloutReferenceEffectKind.AutoDisplayObjectives: scripts.Session.AutoDisplayObjectives = effect.Enable; break;
+                case FalloutReferenceEffectKind.PlayerScale: scripts.Session.SetPlayerScale(effect.Scale); break;
                 default: throw new NotSupportedException($"Opening fixture effect {effect.Kind} is unbound.");
             }
         }
@@ -138,7 +139,8 @@ internal static class OwnedOpeningProgramProbe
             }
         }
         executor = new(records, world, quests, new((_, _) => false, Apply, scripts.MessageResults.Take,
-            ActorValue: (_, _) => 5, Globals: globals, Command: Native));
+            ActorValue: (_, _) => 5, Globals: globals, Command: Native,
+            Inventory: new FalloutInventoryCommands(records, world, inventory, () => 1)));
         stages = new(records, quests, executor.StageSteps, Evaluate, () => !moviePending);
         questHost = new((quest, stage) => () => stages.Enter(quest, stage), _ => 5, executor.ExecuteProgram);
         scripts.Host = questHost;

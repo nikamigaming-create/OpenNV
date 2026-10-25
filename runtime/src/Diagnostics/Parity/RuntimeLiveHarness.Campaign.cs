@@ -72,7 +72,7 @@ internal sealed partial class RuntimeLiveHarness
             var skill = _bot?.CampaignSkill ?? throw new NotSupportedException("Campaign skill owner retired.");
             var command = _campaignBot.Tick(observation, skill, elapsed);
             if (command.Kind == BotCampaignCommandKind.Reference)
-                _bot!.Start(command.Reference, command.Mode!, 1.5f, combatTakeover: true, pauseAfter: false);
+                _bot!.Start(command.Reference, command.Mode!, command.Distance, combatTakeover: true, pauseAfter: false);
             else if (command.Kind == BotCampaignCommandKind.Choice)
                 DeliverObservedButton(command.Path!);
             else if (command.Kind == BotCampaignCommandKind.Save)

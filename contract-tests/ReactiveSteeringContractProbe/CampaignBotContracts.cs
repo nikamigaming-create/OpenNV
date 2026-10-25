@@ -67,6 +67,13 @@ internal static class CampaignBotContracts
                 new("active", "active-quest", 2, "active", "active", "interact", 1000)]
         };
         Require(bot.Tick(higher, Idle, .2f).Reference == "active", "Source active-quest priority was ignored.");
+        var travelOnly = State(6, 3) with
+        {
+            Goals = [new("side-travel", "side-quest", 1, "marker", "marker", "travel", 10)]
+        };
+        var travelCommand = bot.Tick(travelOnly, Idle, .2f);
+        Require(travelCommand.Kind == BotCampaignCommandKind.Reference && travelCommand.Mode == "travel" && travelCommand.Distance == .5f,
+            "Campaign travel goal did not request close destination standoff.");
     }
 
     private static void SourceMenus()
@@ -94,20 +101,23 @@ internal static class CampaignBotContracts
     {
         var bot = new ReactiveCampaignBot(); bot.Start();
         bot.Tick(State(), Idle, .2f);
-        var progressed = State(2, 2) with { CanSave = true, Goals = [] };
+        var blockedProgress = State(2, 2) with { CanSave = false, Goals = [] };
+        Require(bot.Tick(blockedProgress, Idle, .2f).Kind == BotCampaignCommandKind.None,
+            "Observed quest progress requested a save while saving was blocked.");
+        var progressed = blockedProgress with { Sample = 3, CanSave = true };
         Require(bot.Tick(progressed, Idle, .2f).Kind == BotCampaignCommandKind.Save,
             "Observed quest progress did not request an ordinary complete save.");
-        Require(bot.Tick(progressed with { Sample = 3 }, Idle, .2f).Kind == BotCampaignCommandKind.None,
+        Require(bot.Tick(progressed with { Sample = 4 }, Idle, .2f).Kind == BotCampaignCommandKind.None,
             "A save input without a new receipt was acknowledged or repeated.");
-        var pending = progressed with { Sample = 4, Save = new(1, "pending", null, null) };
+        var pending = progressed with { Sample = 5, Save = new(1, "pending", null, null) };
         Require(bot.Tick(pending, Idle, .2f).Kind == BotCampaignCommandKind.None &&
             bot.Phase == "awaiting-complete-checkpoint", "Finite-source save waiting was replaced with a partial checkpoint.");
-        var completed = pending with { Sample = 5, Save = new(1, "completed", "complete-slot", null) };
+        var completed = pending with { Sample = 6, Save = new(1, "completed", "complete-slot", null) };
         Require(bot.Tick(completed, Idle, .2f).Kind == BotCampaignCommandKind.None &&
             bot.Phase == "awaiting-source-objective", "Actual matching complete writer receipt was not retained.");
-        var another = State(6, 3) with { CanSave = true, Save = completed.Save, Goals = [] };
+        var another = State(7, 3) with { CanSave = true, Save = completed.Save, Goals = [] };
         Require(bot.Tick(another, Idle, .2f).Kind == BotCampaignCommandKind.Save, "New semantic progress did not request a separate checkpoint.");
-        var failed = another with { Sample = 7, Save = new(2, "failed", null, "unowned actor pose") };
+        var failed = another with { Sample = 8, Save = new(2, "failed", null, "unowned actor pose") };
         Require(bot.Tick(failed, Idle, .2f).Kind == BotCampaignCommandKind.Pause && !bot.Active &&
             bot.Error!.Contains("unowned actor pose", StringComparison.Ordinal),
             "A complete-save refusal became success or lost its exact engine owner.");
@@ -204,6 +214,11 @@ internal static class CampaignBotContracts
             waiting.Tick(State(index) with { Goals = [] }, Idle, 1);
         Require(!waiting.Active && waiting.Phase == "blocked" && waiting.Error!.Contains("progress", StringComparison.Ordinal),
             "No source objective became game completion or an unbounded polling loop.");
+        var speaking = new ReactiveCampaignBot(); speaking.Start();
+        for (var index = 1; index <= 100; index++)
+            speaking.Tick(State(index) with { Goals = [], SpeechActive = true }, Idle, 1);
+        Require(speaking.Active && speaking.Phase == "awaiting-source-objective",
+            "Active dialogue speech was treated as an unprogressed stall.");
         var stale = new ReactiveCampaignBot(); stale.Start(); stale.Tick(State(), Idle, .2f);
         stale.Tick(State(), Idle, 3);
         Require(!stale.Active && stale.FailureKind == "observation-loss", "Stale game state advanced a campaign.");

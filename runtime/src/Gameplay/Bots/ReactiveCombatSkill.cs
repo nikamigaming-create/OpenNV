@@ -82,6 +82,38 @@ internal sealed class ReactiveCombatSkill
         Active = true;
     }
 
+    // Shared, nonmutating admission for both skill execution and optional limits.
+    // A safety policy cannot replace an existing target, weapon or firing refusal.
+    internal bool CanApplyLimit(BotCombatObservation state, bool newlyAccountedPhysics) =>
+        state.Sample >= _lastSample && (newlyAccountedPhysics || state.Sample > _lastSample) &&
+        SourceOwnerFailure(state, out _, out _) is null;
+
+    internal bool SourceOwnersValid(BotCombatObservation state) => SourceOwnerFailure(state, out _, out _) is null;
+
+    private (string Kind, string Error)? SourceOwnerFailure(BotCombatObservation state,
+        out BotCombatTarget target, out BotCombatWeapon weapon)
+    {
+        target = null!; weapon = null!;
+        var matches = state.Targets.Where(target => target.Reference == _reference).ToArray();
+        if (matches.Length != 1 || !matches[0].Resident || !matches[0].Enabled)
+            return ("observation-loss", "Combat target lost its unique resident source owner.");
+        target = matches[0];
+        if (target.Error is { } targetError) return ("engine-owner", targetError);
+        if (target.Health is not { } health || !float.IsFinite(health) || !target.Dead && health < 0)
+            return ("engine-owner", "Target health is not authoritative.");
+        weapon = state.Weapon!;
+        if (weapon is null || weapon.Error is not null)
+            return ("engine-owner", weapon?.Error ?? "No equipped source weapon owner is available.");
+        if (!weapon.Supported)
+            return ("skill-limit", weapon.Limit ?? "This skill requires a magazine-fed single instant-ray weapon.");
+        if (weapon.Reference != _weapon || weapon.Ammunition != _ammunition || weapon.Projectile != _projectile)
+            return ("observation-loss", "Equipped weapon/ammunition/projectile changed during combat.");
+        if (weapon.Loaded < 0 || weapon.Reserve < 0)
+            return ("observation-loss", "Ammunition observation is invalid.");
+        if (state.Firing.Error is { } firingError) return ("engine-owner", firingError);
+        return null;
+    }
+
     internal BotSkillStep Tick(BotCombatObservation state, float seconds)
     {
         if (!Active) return new(default, true);
@@ -116,24 +148,10 @@ internal sealed class ReactiveCombatSkill
                 return new(default);
             }
             _lastSample = state.Sample; _stale = 0;
-            var matches = state.Targets.Where(target => target.Reference == _reference).ToArray();
-            if (matches.Length != 1 || !matches[0].Resident || !matches[0].Enabled)
-                return Refuse("observation-loss", "Combat target lost its unique resident source owner.");
-            var target = matches[0];
-            _sourceFault = target.SourceFault ?? _sourceFault;
-            if (target.Error is { } targetError) return Refuse("engine-owner", targetError);
-            if (target.Health is not { } health || !float.IsFinite(health) || !target.Dead && health < 0)
-                return Refuse("engine-owner", "Target health is not authoritative.");
-            var weapon = state.Weapon;
-            if (weapon is null || weapon.Error is not null)
-                return Refuse("engine-owner", weapon?.Error ?? "No equipped source weapon owner is available.");
-            if (!weapon.Supported)
-                return Refuse("skill-limit", weapon.Limit ?? "This skill requires a magazine-fed single instant-ray weapon.");
-            if (weapon.Reference != _weapon || weapon.Ammunition != _ammunition || weapon.Projectile != _projectile)
-                return Refuse("observation-loss", "Equipped weapon/ammunition/projectile changed during combat.");
-            if (weapon.Loaded < 0 || weapon.Reserve < 0)
-                return Refuse("observation-loss", "Ammunition observation is invalid.");
-            if (state.Firing.Error is { } firingError) return Refuse("engine-owner", firingError);
+            var ownerFailure = SourceOwnerFailure(state, out var target, out var weapon);
+            _sourceFault = target?.SourceFault ?? _sourceFault;
+            if (ownerFailure is { } failure) return Refuse(failure.Kind, failure.Error);
+            var health = target!.Health!.Value;
             if (_phase == "awaiting-shot") return ObserveShot(state, target, weapon, seconds);
             if (target.Dead || health == 0)
                 return Refuse("receipt-refusal", "Target death has no new attributable player shot/contact/death receipt.");

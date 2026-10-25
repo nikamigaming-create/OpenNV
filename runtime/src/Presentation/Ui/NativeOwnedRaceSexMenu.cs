@@ -70,6 +70,14 @@ internal sealed partial class NativeOwnedRaceSexMenu : Control
         _tiles.Bind(_back, "visible", page == 0 ? 0 : 1);
         _tiles.Bind(_next, "visible", page < 4 ? 1 : 0);
         _tiles.Text[_next] = FalloutGameSettingStrings.Read(_records, last ? "sDone" : "sNext").ToUpperInvariant();
+        var nextTarget = _targets.SingleOrDefault(t => t.Tile == _next);
+        if (nextTarget is not null)
+        {
+            nextTarget.Button.SetMeta("opennv_source_choice_kind", "chargen");
+            nextTarget.Button.SetMeta("opennv_source_choice_id", last ? "done" : $"next_{page}");
+            nextTarget.Button.SetMeta("opennv_source_choice_menu", $"RaceSexMenu:{page}");
+            nextTarget.Button.SetMeta("opennv_source_choice_goodbye", last);
+        }
         var header = Row(page < 4 ? $"{page + 1}. {title}" : title, page, _template);
         _tiles.Bind(header, "_is_header", 1); _tiles.Bind(header, "target", 0);
         foreach (var choice in choices)
