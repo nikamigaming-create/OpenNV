@@ -245,6 +245,8 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         _playerActorValues.BindConstantModifiers(_playerSkills.Modifiers);
         _playerAbilities.Synchronize();
         _vitals = FalloutPlayerVitals.FromActorValues(pluginStack, _playerActorValues, restore?.State.Vitals);
+        _playerSkills.HealthPercentage = () => _vitals.State.MaximumHitPoints <= 0 ? 1f :
+            Math.Clamp((float)(_vitals.State.ExactHitPoints / _vitals.State.MaximumHitPoints), 0f, 1f);
         _experience = new(pluginStack, _vitals, () => _playerSkills.PerkEntries);
         _experience.BindPerkConditions(PlayerExperienceCondition);
         if (!FalloutNativeTagSkillResolver.UsesFallout3Skills(pluginStack))

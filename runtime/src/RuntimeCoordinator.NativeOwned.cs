@@ -1237,9 +1237,10 @@ public partial class RuntimeCoordinator
             if (grid is not null) grid = grid with { Scene = targetScene };
             sky.EnterCell(targetScene.Cell, _nativeGlobals, entry.Position);
             SetLoadingStatus("Loading the world");
+            RetireNativeGridPreparation();
+            await previousPresentation.PrepareActorAudioTransferAsync([scripts]);
             current.ProcessMode = ProcessModeEnum.Disabled;
             scripts.ProcessMode = ProcessModeEnum.Disabled;
-            RetireNativeGridPreparation();
             previousPresentation.RetireOverlappingActors(targetScene.References, out retiredActors);
             targetRoot = await BuildNativeCellRootResponsive(targetScene, null, sourceSide: false);
             targetRoot.ProcessMode = ProcessModeEnum.Disabled;

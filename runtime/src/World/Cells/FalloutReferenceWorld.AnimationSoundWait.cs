@@ -5,6 +5,9 @@ namespace OpenNV.Runtime.World.Cells;
 
 internal sealed partial class FalloutReferenceWorld
 {
+    internal FalloutFiniteSoundSaveDrain PrepareSourceAudioTransfer(IReadOnlySet<FalloutFormKey> references) =>
+        records.SoundVoices.PrepareFiniteSourceDrain(references);
+
     // Every unsettled ledger blocks a complete save. Only exact retained
     // finite native voices may wait for Finished; an absent or looping owner
     // remains a visible continuation refusal without stopping later gameplay.

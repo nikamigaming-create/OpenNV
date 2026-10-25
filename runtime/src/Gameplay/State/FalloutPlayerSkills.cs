@@ -30,6 +30,7 @@ internal sealed partial class FalloutPlayerSkills
     private long _weightQuestObjectRevision = -1;
     private bool _weightHardcore;
     private float _carriedWeight;
+    internal Func<float>? HealthPercentage { get; set; }
     private static readonly (int Value, string Name, string Setting, int Attribute)[] Skills =
     [
         (32, "Barter", "Barter", 8), (34, "EnergyWeapons", "EnergyWeapons", 6), (35, "Explosives", "Explosives", 6),
@@ -161,6 +162,7 @@ internal sealed partial class FalloutPlayerSkills
             74 => (_globals ?? throw new InvalidOperationException("Ability has no global state owner.")).Get(condition.FormArgument1),
             14 => FalloutPlayerActorValues.HasPool(checked((int)condition.Argument1)) && _actorValues is not null
                 ? _actorValues.ReadCurrent(checked((int)condition.Argument1)) : Value(checked((int)condition.Argument1)),
+            431 => HealthPercentage?.Invoke() ?? 1.0f,
             _ => throw new NotSupportedException($"Ability condition {condition.Owner.FormKey}/{condition.Function} is unbound.")
         };
     private float Setting(string name) => FalloutGameSettingFloats.Read(_records, name);

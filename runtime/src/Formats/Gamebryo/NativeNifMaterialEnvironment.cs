@@ -10,7 +10,7 @@ internal static class NativeNifMaterialEnvironment
         instance uniform vec3 source_fog_color : instance_index(1);
         instance uniform vec3 source_fog_range : instance_index(2);
         instance uniform float source_fog_game_units_per_meter : instance_index(3);
-        instance uniform bool source_exterior_environment : instance_index(7) = false;
+        instance uniform bool source_exterior_environment : instance_index(7) = true;
         global uniform vec3 opennv_exterior_ambient;
         global uniform vec3 opennv_exterior_fog_color;
         global uniform vec4 opennv_exterior_fog_range;
@@ -44,7 +44,8 @@ internal static class NativeNifMaterialEnvironment
     internal static void BindExterior(GeometryInstance3D mesh)
     {
         var (lit, effect) = Roles(mesh);
-        if (lit || effect) mesh.SetInstanceShaderParameter(ExteriorParameter, true);
+        if ((lit || effect) && mesh.GetInstanceShaderParameter(ExteriorParameter).VariantType != Variant.Type.Nil)
+            mesh.SetInstanceShaderParameter(ExteriorParameter, true);
     }
 
     internal static void PublishExterior(Vector3 ambient, Vector3 fog, Vector3 range, float unitsToMeters)
@@ -69,5 +70,5 @@ internal static class NativeNifMaterialEnvironment
         return (lit, effect);
     }
 
-    private static Vector3 Rgb(byte[] value) => new(value[0] / 255f, value[1] / 255f, value[2] / 255f);
+    internal static Vector3 Rgb(byte[] value) => new(value[0] / 255f, value[1] / 255f, value[2] / 255f);
 }

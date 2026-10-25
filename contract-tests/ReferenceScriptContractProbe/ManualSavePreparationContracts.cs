@@ -172,6 +172,27 @@ internal static class ManualSavePreparationContracts
         using var loopRegistration = looping.Register(loop, voice.Reference, "source-loop", () => true, () => { },
             sourceReference: voice.Reference, finiteWait: () => loopProof, prepareSaveDrain: () => new Lease(loopProof, () => false));
         Reject(() => looping.PrepareFiniteSaveDrain());
+
+        // A CELL handoff owns only its overlapping source references. Independent
+        // interface voices do not join that continuation, while a new selected
+        // source generation invalidates it even if that registration has ended.
+        var scoped = new FalloutSoundVoices(records);
+        var scopedActive = true;
+        using var selected = scoped.Register(voice.Sound, voice.Reference, "transfer-source", () => scopedActive, () => { },
+            sourceReference: voice.Reference, finiteWait: () => voice,
+            prepareSaveDrain: () => new Lease(voice, () => !scopedActive));
+        using (var drain = scoped.PrepareFiniteSourceDrain(new HashSet<FalloutFormKey> { voice.Reference }))
+        {
+            using var unrelated = scoped.Register(voice.Sound, null, "independent-interface", () => true, () => { });
+            Require(drain.ObservePending().Single() == voice, "Independent audio contaminated the selected source handoff.");
+            using (scoped.Register(voice.Sound, voice.Reference, "new-source-prefix", () => true, () => { }, sourceReference: voice.Reference)) { }
+            Reject(() => drain.ObservePending());
+        }
+        using (var drain = scoped.PrepareFiniteSourceDrain(new HashSet<FalloutFormKey> { voice.Reference }))
+        {
+            scopedActive = false; selected.Dispose();
+            Require(drain.ObservePending().Count == 0, "Source handoff did not retain its genuine completion.");
+        }
     }
 
     private static void CompletionPauseBoundary(FalloutFiniteSoundVoice voice)

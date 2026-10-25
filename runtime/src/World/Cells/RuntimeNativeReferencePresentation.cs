@@ -1,6 +1,7 @@
 using Godot;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Formats.Gamebryo;
+using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.Presentation.Rendering;
 using OpenNV.Runtime.SceneGraph;
 
@@ -35,6 +36,37 @@ internal partial class RuntimeNativeReferencePresentation : Node
     internal int WarmNodeCount => _warmNodes.Count;
     internal bool HasPrepared(FalloutFormKey key) => _nodes.ContainsKey(key) || _warmNodes.ContainsKey(key);
 
+    internal async Task PrepareActorAudioTransferAsync(IReadOnlyList<Node> sourceProducers)
+    {
+        var sourceReferences = _nodes.Keys.Concat(_warmNodes.Keys).Distinct().Where(key =>
+            (_nodes.GetValueOrDefault(key) ?? _warmNodes.GetValueOrDefault(key).Node) is
+                OpenNV.Runtime.World.Actors.RuntimeNativeNpc or OpenNV.Runtime.World.Actors.RuntimeNativeCreature).ToHashSet();
+        if (sourceReferences.Any(key => !_world.Get(key).AnimationSoundEvents.CanCapture))
+        {
+            var tree = GetTree(); var previousPause = tree.Paused;
+            try
+            {
+                using var sounds = _world.PrepareSourceAudioTransfer(sourceReferences);
+                using var producers = new RuntimeNativeSaveProducerPause(sourceProducers);
+                tree.Paused = true;
+                sounds.Activate();
+                var started = Time.GetTicksMsec();
+                while (sounds.ObservePending().Count != 0)
+                {
+                    if (Time.GetTicksMsec() - started > RuntimeManualSavePreparation.MaximumWaitMilliseconds)
+                        throw new TimeoutException("Actor handoff timed out awaiting its original finite native sound completion.");
+                    await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                    if (!IsInsideTree() || IsQueuedForDeletion())
+                        throw new InvalidOperationException("Actor handoff lost its resident presentation.");
+                    producers.Validate();
+                }
+            }
+            finally { tree.Paused = previousPause; }
+        }
+        foreach (var key in sourceReferences)
+            if (!_world.Get(key).AnimationSoundEvents.CanCapture) _ = _world.Get(key).AnimationSoundEvents.Capture();
+    }
+
     internal void RetireOverlappingActors(IReadOnlyList<FalloutPlacedReference> destination,
         out IReadOnlyList<(FalloutFormKey Reference, Transform3D Pose, Vector3 Velocity)> previous)
     {
@@ -43,7 +75,6 @@ internal partial class RuntimeNativeReferencePresentation : Node
             (Key: key, Node: _nodes.GetValueOrDefault(key) ?? _warmNodes.GetValueOrDefault(key).Node))
             .Where(value => value.Node is OpenNV.Runtime.World.Actors.RuntimeNativeNpc or OpenNV.Runtime.World.Actors.RuntimeNativeCreature)
             .Select(value => (value.Key, Node: (CharacterBody3D)value.Node!, Resident: _nodes.ContainsKey(value.Key))).ToArray();
-        // Validate every retained continuation before retiring any live owner.
         // Warm actors also retain bindings, despite being outside this grid.
         foreach (var (key, node, _) in actors)
         {

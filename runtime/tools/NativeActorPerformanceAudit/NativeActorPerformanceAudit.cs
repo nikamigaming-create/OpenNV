@@ -82,7 +82,7 @@ public partial class NativeActorPerformanceAudit : Node
             if (args is ["--vanilla-npc-checkpoint", var vanillaCheckpointGame, var vanillaCheckpointActor,
                 var vanillaCheckpointQuest, var vanillaCheckpointStage, var vanillaCheckpointOwner, var vanillaCheckpointHour])
             {
-                NpcCheckpoint(vanillaCheckpointGame, null, null, vanillaCheckpointActor, vanillaCheckpointQuest,
+                await NpcCheckpoint(vanillaCheckpointGame, null, null, vanillaCheckpointActor, vanillaCheckpointQuest,
                     short.Parse(vanillaCheckpointStage, System.Globalization.CultureInfo.InvariantCulture), vanillaCheckpointOwner, [],
                     float.Parse(vanillaCheckpointHour, System.Globalization.CultureInfo.InvariantCulture));
                 GetTree().Quit(); return;
@@ -90,7 +90,7 @@ public partial class NativeActorPerformanceAudit : Node
             if (args is ["--npc-checkpoint", var checkpointGame, var checkpointMod, var checkpointRoot,
                 var checkpointActor, var checkpointQuest, var checkpointStage, var checkpointOwner, .. var checkpointDependencies])
             {
-                NpcCheckpoint(checkpointGame, checkpointMod, checkpointRoot, checkpointActor, checkpointQuest,
+                await NpcCheckpoint(checkpointGame, checkpointMod, checkpointRoot, checkpointActor, checkpointQuest,
                     short.Parse(checkpointStage, System.Globalization.CultureInfo.InvariantCulture), checkpointOwner, checkpointDependencies);
                 GetTree().Quit(); return;
             }

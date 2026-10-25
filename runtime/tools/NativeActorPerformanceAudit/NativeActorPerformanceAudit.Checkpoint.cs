@@ -9,7 +9,7 @@ using OpenNV.Runtime.World.Cells;
 
 public partial class NativeActorPerformanceAudit
 {
-    private void NpcCheckpoint(string game, string? mod, string? root, string actorId, string questId,
+    private async Task NpcCheckpoint(string game, string? mod, string? root, string actorId, string questId,
         short stage, string expected, string[] dependencies, float? scheduleHour = null)
     {
         var fixture = new Node3D(); AddChild(fixture);
@@ -123,6 +123,7 @@ public partial class NativeActorPerformanceAudit
                 using var handoffLifetime = new PackageFixtureLifetime(handoff);
                 handoff.Register(caller, initial);
                 var beforeHandoff = JsonSerializer.Serialize(handoffWorld.Get(caller).Capture());
+                await handoff.PrepareActorAudioTransferAsync([]);
                 handoff.RetireOverlappingActors([placed], out var previous);
                 if (GodotObject.IsInstanceValid(initial) || previous.Count != 1 || handoff.HasPrepared(caller) ||
                     handoffWorld.Get(caller).CaptureHeadTracking is not null || handoffWorld.Get(caller).HeadTracking is null)
@@ -132,6 +133,7 @@ public partial class NativeActorPerformanceAudit
                     JsonSerializer.Serialize(handoffWorld.Get(caller).Capture()) != beforeHandoff)
                     throw new InvalidDataException("Actor overlap rollback changed its retained source continuation.");
                 handoff.SetResidency([], _ => throw new InvalidDataException("Warm retirement must not rematerialize."), _ => true);
+                await handoff.PrepareActorAudioTransferAsync([]);
                 handoff.RetireOverlappingActors([placed], out var warmPrevious);
                 if (warmPrevious.Count != 0 || handoff.HasPrepared(caller) ||
                     handoffWorld.Get(caller).CaptureHeadTracking is not null)
