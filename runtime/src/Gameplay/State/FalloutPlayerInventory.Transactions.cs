@@ -29,8 +29,21 @@ internal sealed partial class FalloutPlayerInventory
         });
     }
 
+    internal void ConsumeOne(FalloutFormKey item, FalloutInventoryChangeLease effects)
+    {
+        ArgumentNullException.ThrowIfNull(effects);
+        ApplyRemovalTransaction(null, (source, _) =>
+        {
+            if (source.Item(item) is not { Count: > 0 }) throw new InvalidOperationException("Consumed item is no longer present.");
+            source.RemoveCore(item, 1, true);
+        }, effects);
+    }
+
+    internal void ConsumeWorldItem(FalloutInventoryChangeLease effects) =>
+        ApplyRemovalTransaction(null, (_, _) => { }, effects);
+
     private void ApplyRemovalTransaction(FalloutPlayerInventory? other,
-        Action<FalloutPlayerInventory, FalloutPlayerInventory?> plan)
+        Action<FalloutPlayerInventory, FalloutPlayerInventory?> plan, FalloutInventoryChangeLease? effects = null)
     {
         if (ReferenceEquals(this, other)) throw new InvalidOperationException("Inventory transfer needs distinct owners.");
         if (_changeInProgress || other?._changeInProgress == true)
@@ -46,7 +59,7 @@ internal sealed partial class FalloutPlayerInventory
             var after = staged.Capture(); var afterOther = stagedOther?.Capture();
             var changed = !SameSnapshot(before.Capture(), after);
             var otherChanged = other is not null && !SameSnapshot(beforeOther!.Capture(), afterOther!);
-            if (!changed && !otherChanged) return;
+            if (!changed && !otherChanged && effects is null) return;
             var revision = Revision; var otherRevision = other?.Revision ?? 0;
             if (changed) _ = checked(revision + 1);
             if (otherChanged) _ = checked(otherRevision + 1);
@@ -56,21 +69,21 @@ internal sealed partial class FalloutPlayerInventory
             {
                 if (changed) PublishPrepared(staged, revision + 1);
                 if (otherChanged) other!.PublishPrepared(stagedOther!, otherRevision + 1);
-                first?.Commit(); second?.Commit();
+                first?.Commit(); second?.Commit(); effects?.Commit();
             }
             catch
             {
                 // Rollback callbacks run with the original item state restored.
                 if (changed) PublishPrepared(before, revision);
                 if (otherChanged) other!.PublishPrepared(beforeOther!, otherRevision);
-                second?.Dispose(); first?.Dispose();
+                effects?.Dispose(); second?.Dispose(); first?.Dispose();
                 throw;
             }
-            first?.Complete(); second?.Complete();
+            first?.Complete(); second?.Complete(); effects?.Complete();
         }
         finally
         {
-            second?.Dispose(); first?.Dispose();
+            effects?.Dispose(); second?.Dispose(); first?.Dispose();
             _changeInProgress = false;
             if (other is not null) other._changeInProgress = false;
         }

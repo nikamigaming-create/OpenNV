@@ -13,7 +13,8 @@ internal sealed record FalloutSandboxActivityProgress(FalloutSandboxActivity Act
             !float.IsFinite(Duration) || Duration < 0 || Preferences is null)
             throw new InvalidDataException("Saved Sandbox activity is invalid.");
         _ = new FalloutSandboxPreferences(Preferences);
-        if ((Activity == FalloutSandboxActivity.Dialogue) != Target.HasValue ||
+        if (Activity == FalloutSandboxActivity.Dialogue && !Target.HasValue ||
+            Activity is not (FalloutSandboxActivity.Dialogue or FalloutSandboxActivity.Eat) && Target.HasValue ||
             Target is { } target && (string.IsNullOrWhiteSpace(target.OwnerPlugin) || target.ObjectId == 0))
             throw new InvalidDataException("Saved Sandbox activity target is invalid.");
     }

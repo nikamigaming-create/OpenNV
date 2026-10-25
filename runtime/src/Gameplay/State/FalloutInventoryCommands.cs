@@ -11,7 +11,8 @@ internal sealed record FalloutInventoryCommand(FalloutInventoryCommandKind Kind,
 // Shared state owner for result/object/quest commands and both player views.
 internal sealed class FalloutInventoryCommands(FalloutPluginStack records, FalloutReferenceWorld world,
     FalloutPlayerInventory player, Func<int> level, FalloutGlobalState? globals = null,
-    Action<FalloutFormKey>? prepareActorChange = null, Func<FalloutFormKey, bool>? weaponDrawn = null)
+    Action<FalloutFormKey>? prepareActorChange = null, Func<FalloutFormKey, bool>? weaponDrawn = null,
+    Action<FalloutFormKey, FalloutFormKey>? consumeIngestible = null)
 {
     private bool IsPlayer(FalloutFormKey target) => target == records.RuntimeFormKey(0x14);
     private FalloutPlayerInventory Inventory(FalloutFormKey target) => IsPlayer(target) ? player : world.Inventory(target, level(), globals).Contents;
@@ -84,6 +85,13 @@ internal sealed class FalloutInventoryCommands(FalloutPluginStack records, Fallo
                 break;
             case FalloutInventoryCommandKind.Equip:
                 var item = command.Item ?? throw new InvalidDataException("EquipItem has no item.");
+                if (records.GetEffective(item).Signature == "ALCH")
+                {
+                    if (inventory.Item(item) is null) return;
+                    if (command.NoUnequip) throw new NotSupportedException("An ingestible cannot retain an equipped lock.");
+                    (consumeIngestible ?? throw new NotSupportedException("EquipItem has no bound ingestible transaction."))(command.Target, item);
+                    return;
+                }
                 if (records.GetEffective(item).Signature is not ("ARMO" or "WEAP"))
                     throw new NotSupportedException("EquipItem consumption requires its book/ammo/ingestible owner.");
                 if (inventory.Item(item) is null) return;

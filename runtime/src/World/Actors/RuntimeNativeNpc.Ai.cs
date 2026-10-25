@@ -55,7 +55,7 @@ internal partial class RuntimeNativeNpc
 
     // These are script-visible engine procedure codes. The currently owned
     // travel procedure ends on arrival; furniture exit has its own transition.
-    private int CurrentAiProcedure => Combat?.ScriptCombatProcedure ?? (_requestedSelection is not null || _aiError is not null
+    private int CurrentAiProcedure => Combat?.ScriptCombatProcedure ?? Combat?.ScriptEatProcedure ?? (_requestedSelection is not null || _aiError is not null
         ? throw new NotSupportedException("Current AI procedure has no admitted native continuation.")
         : _sitting == 2
         ? throw new NotSupportedException("Furniture entry needs its native script-visible procedure code.")
@@ -121,7 +121,7 @@ internal partial class RuntimeNativeNpc
             Activity.Revision,
         },
         factions = _factions.Select(value => new { faction = value.Key.ToString(), rank = value.Value }).ToArray(),
-        currentProcedure = Combat?.ScriptCombatProcedure ?? (_sitting == 2 || _requestedSelection is not null || _aiError is not null || _guardPackage is not null || _sandboxPackage is not null ? (int?)null : CurrentAiProcedure),
+        currentProcedure = Combat?.ScriptCombatProcedure ?? Combat?.ScriptEatProcedure ?? (_sitting == 2 || _requestedSelection is not null || _aiError is not null || _guardPackage is not null || _sandboxPackage is not null ? (int?)null : CurrentAiProcedure),
         navigation = TravelState,
         escort = EscortState,
         editorTravel = EditorTravelState,

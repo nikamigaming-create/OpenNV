@@ -54,7 +54,6 @@ internal sealed record FalloutIngestible(FalloutFormKey Form, string Hash, byte 
                 group.Where(field => field.Signature == "CTDA").Select(field => FalloutCondition.Read(record, field.Data.Span)).ToArray()));
             index = end - 1;
         }
-        if (effects.Count == 0) throw new InvalidDataException("Ingestible has no source effects.");
         return new(form, HashOf(record), header[4], script.IsEmpty ? null :
             record.Plugin.AdjustOptionalFormId(BinaryPrimitives.ReadUInt32LittleEndian(script.Span)),
             record.Plugin.AdjustOptionalFormId(BinaryPrimitives.ReadUInt32LittleEndian(header[8..])), chance,

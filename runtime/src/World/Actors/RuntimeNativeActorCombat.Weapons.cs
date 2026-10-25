@@ -57,15 +57,15 @@ internal sealed partial class RuntimeNativeActorCombat
         {
             var skills = stats.ReadSubrecords().Single(field => field.Signature == "DNAM").Data.ToArray();
             if (data.Length != 11 || skills.Length != 28) throw new NotSupportedException("NPC attack stat/skill extent is unbound.");
-            _enemySkillValues = skills; _enemyStrength = data[4];
+            _enemySkillValues = skills;
         }
         else
         {
             if (data.Length != 17) throw new NotSupportedException("Creature attack stat extent is unbound.");
             _enemySkillValues = Enumerable.Repeat(data[1], 28).ToArray();
-            _enemyStrength = data[10];
         }
-        _enemyDamage = new(_records, owned.Contents, value => value is >= 32 and <= 45 ? _enemySkillValues[value - 32] :
+        _enemyDamage = new(_records, owned.Contents, value => value is >= 32 and <= 45 ?
+            _actor is RuntimeNativeNpc ? _world.ActorValue(_state.Reference, FalloutActorValue.SourceSlot(value)) : _enemySkillValues[value - 32] :
             throw new NotSupportedException("Actor weapon skill is outside its source skill block."), () => _world.PerkEntries(_state.Reference).ToArray());
         var group = _enemyWeapon.AnimationGroup;
         var style = _world.CombatStyle(_state.Reference);

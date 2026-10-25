@@ -5,6 +5,24 @@ internal enum FalloutActorValuePool { Permanent, Temporary, Damage }
 
 internal sealed record FalloutActorValue(float Base, float Permanent = 0, float Temporary = 0, float Damage = 0)
 {
+    private static readonly string[] SpecialNames = ["strength", "perception", "endurance", "charisma", "intelligence", "agility", "luck"];
+    private static readonly string[] SkillNames = ["barter", "bigguns", "energyweapons", "explosives", "lockpick", "medicine", "meleeweapons", "repair", "science", "smallguns", "sneak", "speech", "survival", "unarmed"];
+    internal static string SourceSlot(int value) => value is >= 5 and <= 11 ? SpecialNames[value - 5] :
+        value is >= 32 and <= 45 ? SkillNames[value - 32] : UserSlot(value);
+    internal static string SourceSlot(string name)
+    {
+        var canonical = name.ToLowerInvariant();
+        if (canonical == "guns") canonical = "smallguns";
+        return SpecialNames.Contains(canonical) || SkillNames.Contains(canonical) ? canonical : UserSlot(canonical);
+    }
+    internal static int SourceIndex(string name)
+    {
+        var canonical = SourceSlot(name);
+        var special = Array.IndexOf(SpecialNames, canonical);
+        if (special >= 0) return special + 5;
+        var skill = Array.IndexOf(SkillNames, canonical);
+        return skill >= 0 ? skill + 32 : -1;
+    }
     internal float Current => Base + Permanent + Temporary + Damage;
     internal bool IsFinite => float.IsFinite(Base) && float.IsFinite(Permanent) && float.IsFinite(Temporary) &&
         float.IsFinite(Damage) && float.IsFinite(Current);

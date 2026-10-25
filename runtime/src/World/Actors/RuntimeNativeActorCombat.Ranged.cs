@@ -538,7 +538,8 @@ internal sealed partial class RuntimeNativeActorCombat
 
         var running = Activity.Running;
         return (_enemyWeaponSpread ??= new(_records)).NpcLaunchExtentRadians(shot,
-            skillValues[shot.SkillActorValue - 32], _enemyStrength,
+            _actor is RuntimeNativeNpc ? _world.ActorValue(_state.Reference, FalloutActorValue.SourceSlot(shot.SkillActorValue)) : skillValues[shot.SkillActorValue - 32],
+            _world.ActorValue(_state.Reference, "strength"),
             moving: running, running: running, sneaking: Activity.Sneaking,
             leftArmCrippled: Crippled(leftArms), rightArmCrippled: Crippled(rightArms),
             _state.ProjectileLaunch, _world.PerkEntries(_state.Reference).ToArray());

@@ -13,6 +13,23 @@ internal sealed partial class RuntimeNativeActorCombat
     private NativeActorCombatAnimation? _packageSneakWalk, _packageSneakRun, _packageSneakIdle;
     private NativeOwnedAnimationSoundPlayer? _packageSounds;
     private readonly Dictionary<FalloutFormKey, string> _packageHashes = [];
+    private NativeOwnedAnimationSoundPlayer PackageSounds()
+    {
+        if (_packageSounds is not null) return _packageSounds;
+        _packageSounds = new(_records, _content, _actor, _skeleton.UnitsToMetres,
+            _state.SoundRandom, _state.AnimationSoundEvents);
+        _actor.AddChild(_packageSounds); return _packageSounds;
+    }
+
+    internal void UseIngestible(FalloutFormKey item)
+    {
+        var context = _context ?? throw new NotSupportedException("Actor ingestible use has no gameplay context.");
+        var use = _world.PrepareActorIngestible(_state.Reference, item, context.Level(), context.Globals,
+            _world.PlayerHardcore);
+        if (use.Sound is { } sound) PackageSounds().PrepareSound(sound);
+        use.Commit();
+        if (use.Sound is { } consumedSound) PackageSounds().DispatchSound(consumedSound);
+    }
     internal bool PackageOwnsPose { get; private set; }
     internal bool PackageMoving { get; private set; }
     private Vector3 _packageDestination;
@@ -244,13 +261,7 @@ internal sealed partial class RuntimeNativeActorCombat
         // locomotion must not prevent that real observation, nor leave an
         // idle cached as a false indication that every movement clip loaded.
         var clip = SelectPackageMotionClip(moving, running, sneaking);
-        if (_packageSounds is null)
-        {
-            var sounds = new NativeOwnedAnimationSoundPlayer(_records, _content, _actor, _skeleton.UnitsToMetres,
-                _state.SoundRandom, _state.AnimationSoundEvents);
-            _actor.AddChild(sounds);
-            _packageSounds = sounds;
-        }
+        _ = PackageSounds();
         PreparePackageWeapon(package, weaponDrawn, sneaking);
         PackageMoving = moving;
         var retained = deferred is null ? _state.PackageMotion : null;

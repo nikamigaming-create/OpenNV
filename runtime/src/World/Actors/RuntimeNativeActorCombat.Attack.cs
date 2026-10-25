@@ -14,7 +14,6 @@ internal sealed partial class RuntimeNativeActorCombat
     private NativeActorWeaponAttachment? _enemyObject;
     private FalloutWeaponDamageResolver? _enemyDamage;
     private byte[]? _enemySkillValues;
-    private int _enemyStrength;
     private float _naturalDamage, _attackRange, _baseWeaponDamage;
     private NativeOwnedAnimationSoundPlayer? _enemySounds;
     private readonly Dictionary<string, NativeActorCombatAnimation> _combatClips = new(StringComparer.OrdinalIgnoreCase);
