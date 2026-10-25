@@ -61,13 +61,22 @@ internal static class CampaignBotContracts
         var busy = new BotCampaignSkill(true, "combat-awaiting-shot", null, null);
         Require(bot.Tick(next with { Sample = 4 }, busy, .2f).Kind == BotCampaignCommandKind.None,
             "Campaign replaced an active receipt-verified combat/navigation skill.");
-        var higher = State(5, 2) with
+        var objectiveAdvanced = State(5, 2) with
+        {
+            Scene = "cell-b",
+            Goals = [new("quest:20:0:cell-b", "quest", 20, "next-target", "next-target", "shoot", 100)]
+        };
+        var advancedCommand = bot.Tick(objectiveAdvanced, busy, .2f);
+        Require(advancedCommand.Kind == BotCampaignCommandKind.Reference && advancedCommand.Reference == "next-target" &&
+            advancedCommand.Mode == "shoot" && advancedCommand.Distance == 6f,
+            "An active skill was not preempted when its objective completed and a new equal-priority objective appeared.");
+        var higher = State(6, 2) with
         {
             Goals = [new("side", "side-quest", 1, "side", "side", "travel", 10),
                 new("active", "active-quest", 2, "active", "active", "interact", 1000)]
         };
         Require(bot.Tick(higher, Idle, .2f).Reference == "active", "Source active-quest priority was ignored.");
-        var travelOnly = State(6, 3) with
+        var travelOnly = State(7, 3) with
         {
             Goals = [new("side-travel", "side-quest", 1, "marker", "marker", "travel", 10)]
         };

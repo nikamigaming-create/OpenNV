@@ -63,6 +63,14 @@ Write-Host "Building OpenNV solution ($Configuration)..."
 & dotnet build $solution --configuration $Configuration --nologo
 if ($LASTEXITCODE -ne 0) { throw "OpenNV solution build failed." }
 
+if ($Configuration -eq "Release") {
+    # The Godot editor runner with --path always loads assemblies from .godot/mono/temp/bin/Debug.
+    # Promote the Release build outputs into Debug so headless bot runs use full JIT optimizations.
+    $debugDir = Join-Path $runtime ".godot\mono\temp\bin\Debug"
+    $releaseDir = Join-Path $runtime ".godot\mono\temp\bin\Release"
+    Copy-Item (Join-Path $releaseDir "OpenNV.*") $debugDir -Force
+}
+
 Write-Host "=========================================="
 Write-Host " OpenNV Autonomous Campaign Bot"
 Write-Host " Configuration: $Configuration"

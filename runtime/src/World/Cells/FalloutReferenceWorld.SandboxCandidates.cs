@@ -12,6 +12,16 @@ internal sealed record FalloutSandboxCandidateSource(FalloutSandboxActivity Acti
 
 internal sealed partial class FalloutReferenceWorld
 {
+    private readonly Dictionary<FalloutFormKey, uint> _furnitureMarkerFlags = [];
+    private readonly Dictionary<FalloutFormKey, string> _baseSignatures = [];
+
+    private string BaseSignature(FalloutFormKey baseForm)
+    {
+        if (!_baseSignatures.TryGetValue(baseForm, out var sig))
+            _baseSignatures[baseForm] = sig = records.GetEffective(baseForm).Signature;
+        return sig;
+    }
+
     internal IReadOnlyList<FalloutSandboxCandidateSource> SandboxCandidateSources(FalloutFormKey actor,
         FalloutSandboxPackage package, int level, FalloutGlobalState? globals, float unitsToMetres)
     {
@@ -27,13 +37,13 @@ internal sealed partial class FalloutReferenceWorld
         {
             if (instance.Reference == actor || instance.Reference == records.RuntimeFormKey(0x14) ||
                 instance.Deleted || instance.DeletePending || instance.Taken || !IsEnabled(instance.Reference)) continue;
-            var basis = records.GetEffective(instance.Base);
-            var activity = basis.Signature switch
+            var signature = BaseSignature(instance.Base);
+            var activity = signature switch
             {
                 "NPC_" or "CREA" => FalloutSandboxActivity.Dialogue,
                 "IDLM" => FalloutSandboxActivity.IdleMarker,
                 "INGR" or "ALCH" when FalloutActorFood.IsFood(records, instance.Base) => FalloutSandboxActivity.Eat,
-                "FURN" => FurnitureActivity(basis, package.Activities),
+                "FURN" => FurnitureActivity(instance.Base, package.Activities),
                 _ => (FalloutSandboxActivity?)null
             };
             if (activity is not { } kind || !package.Activities.Allows(kind)) continue;
@@ -58,12 +68,19 @@ internal sealed partial class FalloutReferenceWorld
         return result;
     }
 
-    private static FalloutSandboxActivity? FurnitureActivity(FalloutPluginRecord furniture, FalloutSandboxActivities activities)
+    private FalloutSandboxActivity? FurnitureActivity(FalloutFormKey furnitureKey, FalloutSandboxActivities activities)
     {
-        var fields = furniture.ReadSubrecords().Where(field => field.Signature == "MNAM").ToArray();
-        if (fields.Length != 1 || fields[0].Data.Length != 4)
-            throw new InvalidDataException("Sandbox furniture has an invalid marker declaration.");
-        var flags = BinaryPrimitives.ReadUInt32LittleEndian(fields[0].Data.Span);
+        if (!activities.Allows(FalloutSandboxActivity.Sleep) && !activities.Allows(FalloutSandboxActivity.Furniture))
+            return null;
+        if (!_furnitureMarkerFlags.TryGetValue(furnitureKey, out var flags))
+        {
+            var furniture = records.GetEffective(furnitureKey);
+            var fields = furniture.ReadSubrecords().Where(field => field.Signature == "MNAM").ToArray();
+            if (fields.Length != 1 || fields[0].Data.Length != 4)
+                throw new InvalidDataException("Sandbox furniture has an invalid marker declaration.");
+            flags = BinaryPrimitives.ReadUInt32LittleEndian(fields[0].Data.Span);
+            _furnitureMarkerFlags[furnitureKey] = flags;
+        }
         if ((flags & 0x80000000) != 0 && activities.Allows(FalloutSandboxActivity.Sleep))
             return FalloutSandboxActivity.Sleep;
         if (activities.Allows(FalloutSandboxActivity.Furniture) &&

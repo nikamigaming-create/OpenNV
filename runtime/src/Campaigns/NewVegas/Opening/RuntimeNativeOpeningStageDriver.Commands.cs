@@ -285,6 +285,38 @@ internal partial class RuntimeNativeOpeningStageDriver
         if (condition.Function == 74)
             return (_globals ?? throw new InvalidOperationException("Recipe condition has no global state owner.")).Get(condition.FormArgument1);
         if (condition.Function == 84) return _scripts.References!.GetDeadCount(condition.FormArgument1);
+        if (condition.Function == 46)
+        {
+            var subject = condition.RunOn switch
+            {
+                1 => _pluginStack.RuntimeFormKey(0x14),
+                2 => condition.Owner.Plugin.AdjustFormId(condition.Reference),
+                _ => _pluginStack.RuntimeFormKey(0x14),
+            };
+            return DialogueActorDead(subject) ? 1 : 0;
+        }
+        if (condition.Function == 242)
+        {
+            var subject = condition.RunOn switch
+            {
+                1 => _pluginStack.RuntimeFormKey(0x14),
+                2 => condition.Owner.Plugin.AdjustFormId(condition.Reference),
+                _ => _pluginStack.RuntimeFormKey(0x14),
+            };
+            if (subject == _pluginStack.RuntimeFormKey(0x14))
+                return Vitals.HitPoints == 0 ? 1 : 0;
+            return _scripts.References!.IsUnconscious(subject) ? 1 : 0;
+        }
+        if (condition.Function == 157)
+        {
+            var subject = condition.RunOn switch
+            {
+                1 => _pluginStack.RuntimeFormKey(0x14),
+                2 => condition.Owner.Plugin.AdjustFormId(condition.Reference),
+                _ => _pluginStack.RuntimeFormKey(0x14),
+            };
+            return _scripts.References!.Get(subject).Destroyed ? 1 : 0;
+        }
         if (condition.Function == 80 && FalloutInventoryConditions.TargetsPlayer(_pluginStack, condition)) return SourcePlayerLevel;
         if (condition.Function == 492 && condition.RunOn == 2)
             return _scripts.References!.MapMarkerVisibility(condition.Owner.Plugin.AdjustFormId(condition.Reference));
@@ -305,6 +337,32 @@ internal partial class RuntimeNativeOpeningStageDriver
     internal float EvaluateMessageCondition(FalloutCondition condition) => condition.Function == 53 && condition.RunOn == 0
         ? (float)_scripts.References!.ReadVariable(_quests, condition.FormArgument1, condition.Argument2)
         : EvaluateRecipeCondition(condition);
+
+    internal float EvaluateTargetCondition(FalloutFormKey targetReference, FalloutCondition condition)
+    {
+        var subject = condition.RunOn switch
+        {
+            0 => targetReference,
+            1 => _pluginStack.RuntimeFormKey(0x14),
+            2 => condition.Owner.Plugin.AdjustFormId(condition.Reference),
+            _ => targetReference,
+        };
+        if (condition.Function == 242)
+        {
+            if (subject == _pluginStack.RuntimeFormKey(0x14))
+                return Vitals.HitPoints == 0 ? 1 : 0;
+            return _scripts.References!.IsUnconscious(subject) ? 1 : 0;
+        }
+        if (condition.Function == 46)
+            return DialogueActorDead(subject) ? 1 : 0;
+        if (condition.Function == 157)
+            return _scripts.References!.Get(subject).Destroyed ? 1 : 0;
+        if (condition.Function == 159)
+            return ActorSitting(subject);
+        if (condition.Function == 53 && condition.RunOn == 0)
+            return (float)_scripts.References!.ReadVariable(_quests, condition.FormArgument1, condition.Argument2);
+        return EvaluateRecipeCondition(condition);
+    }
 
     private void CloseRecipeMenu()
     {

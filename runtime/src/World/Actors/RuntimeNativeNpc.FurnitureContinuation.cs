@@ -101,7 +101,7 @@ internal partial class RuntimeNativeNpc
         if (clip is not null) StartFurnitureAnimation(clip);
         else PlayLocomotion(false);
         if (saved.IdleState?.ActiveAnimation is { } animation) RestoreFurnitureIdleAnimation(animation);
-        _aiQuestRevision = _questState!.Revision; _aiActivityRevision = Activity.Revision;
+        _aiQuestRevision = _questState!.ProgressRevision; _aiActivityRevision = Activity.Revision;
         _aiPollRemaining = saved.PollRemaining; _aiScheduleTime = saved.ScheduleTime;
         _aiReferenceState!.ProcedureCaptureBlocker = FindFurnitureCaptureBlocker;
     }
