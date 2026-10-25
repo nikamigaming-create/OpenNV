@@ -180,7 +180,31 @@ internal static class ReferenceBotContracts
         failedCancellation.Tick(.016f);
         if (Phase(failedCancellation) != "blocked" || input.Forward || !Error(failedCancellation).Contains("route owner retired", StringComparison.Ordinal))
             throw new Exception("Failed route cancellation prevented known-fault input release.");
+        CheckFurnitureExit();
         Console.WriteLine("Reference bot: semantic control progress, camera/audio loop rejection, pause/loading suspension, modal lock and immediate fault release PASS.");
+    }
+
+    private static void CheckFurnitureExit()
+    {
+        var observation = new BotObservation("cell", Vector3.Zero, Vector3.UnitY, Vector3.UnitZ,
+            new(0, 0, 6), new(0, 1, 6), null, false, false, true, true, null, "idle",
+            FurnitureActive: true, FurniturePhase: 3);
+        SteeringIntent input = default;
+        var activates = 0;
+        var bot = new ReactiveReferenceBot(_ => observation, (_, end, _) => new([end], end, end, true),
+            (intent, activate) => { input = intent; if (activate) activates++; });
+        bot.Start("target", "travel", 2);
+        bot.Tick(.016f);
+        if (activates != 1 || Phase(bot) != "exiting-furniture")
+            throw new Exception("Occupied furniture did not pulse activate to request exit.");
+        observation = observation with { FurniturePhase = 4 };
+        bot.Tick(.016f);
+        if (activates != 1 || Phase(bot) != "exiting-furniture")
+            throw new Exception("Exiting furniture pulsed duplicate activate during exit animation.");
+        observation = observation with { FurnitureActive = false, FurniturePhase = 0, MovementEnabled = true };
+        bot.Tick(.016f);
+        if (Phase(bot) == "exiting-furniture" || !input.Forward)
+            throw new Exception("Completed furniture exit did not resume ordinary navigation.");
     }
 
     private static JsonDocument State(ReactiveReferenceBot bot) => JsonDocument.Parse(JsonSerializer.Serialize(bot.State));

@@ -56,9 +56,10 @@ public partial class RuntimeCoordinator
                 driver.Vitals.HitPoints <= 0 ? "Player defeated before manual save committed." : null;
             RuntimeManualSaveAdmission Admission()
             {
-                if (scripts.Scripts.Sounds.ActiveVoices != 0 || scripts.Scripts.Sounds.LastError is not null)
+                if (scripts.Scripts.Sounds.HasActiveLoops || scripts.Scripts.Sounds.LastError is not null ||
+                    world.Sounds.HasActiveLoops || world.Sounds.LastError is not null)
                     return new(RuntimeManualSaveAdmissionKind.Refused,
-                        $"unsupported-script-sound-continuation: active={scripts.Scripts.Sounds.ActiveVoices} error={scripts.Scripts.Sounds.LastError ?? "none"}");
+                        $"unsupported-script-sound-continuation: active={scripts.Scripts.Sounds.ActiveVoices + world.Sounds.ActiveVoices} error={scripts.Scripts.Sounds.LastError ?? world.Sounds.LastError ?? "none"}");
                 var menus = NativeActiveMenus() ?? [];
                 if (menus.Any(code => menu is null || code != 1013 && code != FalloutScriptMenus.Category(1013)))
                     return new(RuntimeManualSaveAdmissionKind.Refused, "unsupported-native-menu");

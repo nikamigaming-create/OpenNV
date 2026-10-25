@@ -29,6 +29,7 @@ internal partial class RuntimeNativePlayer
     internal Func<RuntimeNativeNpc>? CreateFurnitureBody { get; set; }
     internal FalloutFormKey? CurrentFurniture => _furniturePhase >= 2 ? _furnitureReference : null;
     internal bool FurnitureActive => _furniturePhase != 0;
+    internal int FurniturePhase => _furniturePhase;
     internal int SittingState => _furnitureError is not null
         ? throw new NotSupportedException($"Player furniture continuation failed: {_furnitureError}")
         : _furniturePhase == 1 ? 0 : _furniturePhase;

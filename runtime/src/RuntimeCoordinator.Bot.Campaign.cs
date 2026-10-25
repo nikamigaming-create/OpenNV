@@ -109,8 +109,14 @@ public partial class RuntimeCoordinator
             NativeSourceManualSaveBlocker() is null &&
             !_nativeManualSaves.Pending &&
             _nativeManualSavePreparation is null &&
-            (_nativeQuestScripts is null || _nativeQuestScripts.Scripts.Sounds.ActiveVoices == 0) &&
+            (_nativeQuestScripts is null || !_nativeQuestScripts.Scripts.Sounds.HasActiveLoops) &&
+            (world is null || !world.Sounds.HasActiveLoops) &&
+            world is not null &&
+            world.PendingProcedureCaptureCount == 0 &&
+            world.PendingHitEventCount == 0 &&
+            !world.PlayerMoves.Pending &&
             driver is not null && !driver.SpeechActive &&
+            driver.PresentedConversationSpeaker is null &&
             driver.ObserveManualSaveAdmission().Kind != RuntimeManualSaveAdmissionKind.Refused;
         return new(binding, (long)Engine.GetProcessFrames(), scene, driver?.Quests.ProgressRevision ?? 0,
             loading, GetTree().Paused, player.ModalInput, defeated, canSave, goals, choices, save, error,

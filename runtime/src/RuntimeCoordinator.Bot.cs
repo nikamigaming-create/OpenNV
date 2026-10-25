@@ -230,7 +230,8 @@ public partial class RuntimeCoordinator
             player.GetMeta("opennv_source_looking_enabled", false).AsBool(), resident && player.CollisionResident,
             player.BlockingShape, interaction.Revision.ToString(CultureInfo.InvariantCulture), travelReady, door,
             _nativeQuestState?.ProgressRevision ?? 0, menus, controlMask, player.ModalInput, loading, Combat: combatObservation,
-            InteractionPending: interaction.PendingFurniture, SpeechActive: _nativeOpeningStageDriver?.SpeechActive == true);
+            InteractionPending: interaction.PendingFurniture, SpeechActive: _nativeOpeningStageDriver?.SpeechActive == true,
+            FurnitureActive: player.FurnitureActive, FurniturePhase: player.FurniturePhase);
     }
 
     private static System.Numerics.Vector3 Vector3ToNumeric(Vector3 value) => new(value.X, value.Y, value.Z);

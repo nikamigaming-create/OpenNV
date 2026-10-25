@@ -67,6 +67,13 @@ internal static class CampaignBotContracts
                 new("active", "active-quest", 2, "active", "active", "interact", 1000)]
         };
         Require(bot.Tick(higher, Idle, .2f).Reference == "active", "Source active-quest priority was ignored.");
+        var travelOnly = State(6, 3) with
+        {
+            Goals = [new("side-travel", "side-quest", 1, "marker", "marker", "travel", 10)]
+        };
+        var travelCommand = bot.Tick(travelOnly, Idle, .2f);
+        Require(travelCommand.Kind == BotCampaignCommandKind.Reference && travelCommand.Mode == "travel" && travelCommand.Distance == .5f,
+            "Campaign travel goal did not request close destination standoff.");
     }
 
     private static void SourceMenus()

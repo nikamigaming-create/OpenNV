@@ -7,7 +7,8 @@ internal sealed record BotObservation(string Scene, Vector3 Position, Vector3 Ca
     bool LookingEnabled, bool Resident, string? Blocker, string InteractionState, bool TravelReady = false,
     BotDoorObservation? Door = null, long ProgressRevision = 0, string ActiveMenus = "", int ControlMask = 0,
     bool ModalInput = false, bool Loading = false, string? ExecutionFault = null, bool Defeated = false,
-    BotCombatObservation? Combat = null, bool InteractionPending = false, bool SpeechActive = false);
+    BotCombatObservation? Combat = null, bool InteractionPending = false, bool SpeechActive = false,
+    bool FurnitureActive = false, int FurniturePhase = 0);
 
 internal sealed record BotDoorObservation(bool Open, bool Moving, bool Pending, string? Error = null);
 
@@ -257,13 +258,35 @@ internal sealed partial class ReactiveReferenceBot
                 if (_waiting > 3) throw new InvalidOperationException("Activation had no observed gameplay response.");
                 return;
             }
+            if (state.FurnitureActive && _phase != "awaiting-interaction")
+            {
+                if (state.FurniturePhase == 3 && _phase != "exiting-furniture")
+                {
+                    CancelRoute(); _path = null; _steering.Reset();
+                    _input(default, true);
+                    _phase = "exiting-furniture";
+                    _waiting = 0;
+                    return;
+                }
+                _input(default, false);
+                if (state.SpeechActive) _waiting = 0;
+                else _waiting += seconds;
+                if (_waiting > 5) throw new InvalidOperationException("Player furniture exit did not finish within 5 seconds.");
+                return;
+            }
+            if (_phase == "exiting-furniture")
+            {
+                _phase = "observing";
+                _waiting = 0;
+            }
             if (state.ModalInput || !state.MovementEnabled || !state.LookingEnabled ||
                 !(state.Resident || _mode == "travel" && state.TravelReady))
             {
                 CancelRoute(); _path = null;
-                _input(default, false); _steering.Reset(); _phase = "waiting-for-player-control";
+                _input(default, false); _steering.Reset();
                 _controlWaitReason = state.ModalInput ? "modal input is held" : !state.MovementEnabled ? "source movement is disabled" :
                     !state.LookingEnabled ? "source looking is disabled" : "the source target or collision is not resident";
+                _phase = "waiting-for-player-control";
                 _controlWaitSeconds += seconds;
                 if (_controlWaitSeconds > ControlWaitLimitSeconds)
                     throw new InvalidOperationException($"No quest, objective, menu, scene or control progress for {ControlWaitLimitSeconds} seconds while {_controlWaitReason}.");
