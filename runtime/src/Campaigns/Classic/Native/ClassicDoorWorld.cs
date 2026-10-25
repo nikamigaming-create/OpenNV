@@ -292,7 +292,7 @@ internal sealed partial class ClassicDoorWorld(ClassicPlayerSession player)
     {
         player.ValidateRandomCommit(result.State.RandomState);
         var world = result.WorldObjects;
-        if (world.AnimationCommands.Count != 0 || result.State.ValueStack.Count != 0 || result.MessageEffects.Any(row => row.Text is null || row.ObjectHandle is not null || row.Color is not null) || result.SoundEffects.Count != 0 ||
+        if (world.AnimationCommands.Count != 0 || result.State.ValueStack.Count != 0 || result.MessageEffects.Any(row => row.Text is null || row.ObjectHandle is not null || row.Color is not null) ||
             world.CreatedObjects.Count != 0 || world.Inventory.Count != 0 || world.MapStartOverride is not null ||
             world.AttackRequests.Count != 0 || world.Movements.Count != 0 || world.TraitAssignments.Count != 0 ||
             world.DialogueSystemEntered || world.DialogueStart is not null || world.LightLevel is not null)
@@ -323,6 +323,8 @@ internal sealed partial class ClassicDoorWorld(ClassicPlayerSession player)
             if (state.Open != pose.Open) pose = pose with { Open = state.Open, Direction = state.Open ? 1 : -1, Elapsed = 0 };
             updates.Add((key, target with { Pose = pose }));
         }
+        var sounds = player.Sounds.Prepare(result.SoundEffects);
+        player.Sounds.Commit(sounds);
         foreach (var (key, update) in updates) _entries[key] = update;
         foreach (var (key, state) in execution.States)
             _entries[key] = _entries[key] with { State = state with { RandomState = null }, Failure = null };

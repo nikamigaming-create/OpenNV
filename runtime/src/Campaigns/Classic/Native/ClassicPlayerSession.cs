@@ -91,6 +91,7 @@ internal sealed class ClassicPlayerSession
     // use their actual encounter lifecycle, including unknown/refused states.
     internal Func<bool?>? CombatActive { get; }
 
+    internal ClassicScriptSounds Sounds { get; }
     internal ClassicCampaignInitialization? Initialization { get; private set; }
     internal int ArmorClass => Stats.ArmorClass + (Inventory.Worn?.Definition.Armor?.ArmorClass ?? 0);
 
@@ -103,6 +104,7 @@ internal sealed class ClassicPlayerSession
         ClassicRetailRandomLifecycleState? savedRandom = null, ClassicCombatContracts? combatContracts = null, ClassicActorScriptsSave? savedActors = null)
     {
         _catalog = source as ClassicMapCatalog ?? new ClassicMapCatalog(source, choice.Campaign);
+        Sounds = new(choice.Campaign, path => _catalog.Read(path, out _), () => _catalog.SoundSettings);
         _premades = ClassicPremadeReader.Load(_catalog.Campaign, path => _catalog.Read(path, out _));
         choice.Validate(_catalog.Campaign, source.ProfileId, _premades);
         // Freeze all arrays in the accepted character; an open editor cannot
