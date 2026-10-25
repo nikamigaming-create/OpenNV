@@ -44,7 +44,7 @@ public partial class RuntimeCoordinator
                 _campaignGoalStack = records; _campaignTargets.Clear(); _campaignPortals = null;
             }
             foreach (var quest in driver!.Quests.Capture().Where(quest =>
-                         !quest.Completed && quest.Running == true &&
+                         !quest.Completed && (quest.Running == true || quest.Active) &&
                          quest.Objectives?.Any(objective => objective.Displayed && !objective.Completed) == true))
             {
                 var priority = quest.Active ? 1000 : 0;
@@ -79,7 +79,8 @@ public partial class RuntimeCoordinator
                                         (world.Lock(reference) is not { } gate ||
                                             gate.Key is { } key && _nativeInventory.Item(key) is not null));
                                 if (route.Count == 0) throw new InvalidDataException("Cross-cell campaign goal has no source portal action.");
-                                action = route[0]; mode = "interact";
+                                action = route[0];
+                                mode = world.IsResident(action) ? "interact" : "travel";
                             }
                             else if (placement.Cell != current.FormKey) mode = "travel";
                             goals.Add(new(identity, quest.Quest.ToString(), target.Objective, target.Reference.ToString(),

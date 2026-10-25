@@ -224,7 +224,7 @@ internal sealed partial class ReactiveReferenceBot
                 return;
             }
             _elapsed += seconds;
-            if (_elapsed > (_mode == "travel" ? 900 : 180)) throw new InvalidOperationException("Goal exceeded its execution bound.");
+            if (_elapsed > (_mode == "travel" || _phase != "awaiting-interaction" ? 900 : 180)) throw new InvalidOperationException("Goal exceeded its execution bound.");
             if (_routeDoor is not null)
             {
                 var door = state.Door ?? throw new InvalidOperationException("Route door lost its resident source motion owner.");
