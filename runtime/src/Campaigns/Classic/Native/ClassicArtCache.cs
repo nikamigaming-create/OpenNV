@@ -107,6 +107,9 @@ internal sealed class ClassicArtCache(Func<string, byte[]> read)
     }
 
     internal (string Path, int Frame) Critter(uint fid, int storedFrame)
+        => ResolveCritter(Read, fid, storedFrame);
+
+    internal static (string Path, int Frame) ResolveCritter(Func<string, byte[]> read, uint fid, int storedFrame)
     {
         const string weapons = "adefghijklm";
         var index = (int)(fid & 0xfff);
@@ -115,7 +118,7 @@ internal sealed class ClassicArtCache(Func<string, byte[]> read)
         var splitDirection = (int)(fid >> 28);
         if (splitDirection > 6 || weapon >= weapons.Length)
             throw new NotSupportedException($"Classic critter FID {fid:x8} has unsupported packed art fields.");
-        var entries = System.Text.Encoding.ASCII.GetString(Read("art/critters/critters.lst"))
+        var entries = System.Text.Encoding.ASCII.GetString(read("art/critters/critters.lst"))
             .Replace("\r", "", StringComparison.Ordinal).Split('\n');
         if (index >= entries.Length) throw new InvalidDataException($"Critter FID {fid:x8} exceeds critters.lst.");
         var terminal = animation is >= 48 and <= 62;
@@ -132,12 +135,12 @@ internal sealed class ClassicArtCache(Func<string, byte[]> read)
         var extension = splitDirection == 0 ? ".frm" : $".fr{splitDirection - 1}";
         string PathFor(string entry) => $"art/critters/{entry.Split(',')[0].Trim()}{Suffix()}{extension}";
         var path = PathFor(entries[index]);
-        try { Read(path); }
+        try { read(path); }
         catch (FileNotFoundException) when (fields.Length > 1 && int.TryParse(fields[1], out var alias) &&
             alias >= 0 && alias < entries.Length && alias != index)
         {
             path = PathFor(entries[int.Parse(fields[1], System.Globalization.CultureInfo.InvariantCulture)]);
-            Read(path);
+            read(path);
         }
         return (path, terminal ? -1 : storedFrame);
     }
