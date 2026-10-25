@@ -1,4 +1,6 @@
 using OpenNV.Runtime.Campaigns.Classic.Native;
+using OpenNV.Runtime.Campaigns.Classic;
+using OpenNV.Runtime.Campaigns.Fallout1;
 using Godot;
 using OpenNV.Runtime.Campaigns.Fallout1.Native;
 using OpenNV.Runtime.Content;
@@ -14,6 +16,8 @@ public sealed partial class ClassicWorldAudit : Node
         try
         {
             var args = OS.GetCmdlineUserArgs();
+            var inspectViews = args.Contains("--views", StringComparer.Ordinal);
+            args = args.Where(argument => argument != "--views").ToArray();
             if (args.Length < 1) throw new ArgumentException("Provide an owned classic installation, optional MAP/output/campaign/model prefix, and optional candidate recipe/model root.");
             using IFalloutClassicOwnedSource source = args.Length > 3 && args[3] == "fallout-2"
                 ? Fo2NativeOwnedSource.LoadInstall(args[0]) : Fallout1OwnedContentSource.LoadInstall(args[0]);
@@ -45,6 +49,40 @@ public sealed partial class ClassicWorldAudit : Node
                                     foreach (var node in selected.Skip(1)) bounds = bounds.Merge(ClassicSceneryPlacement.Bounds(node));
                                     world.Camera.StopShot(); world.Camera.Pitch = .65f;
                                     world.Camera.FrameLevel(bounds); world.Camera.SaveView();
+                                    if (inspectViews)
+                                    {
+                                        InspectFloors(source, map, elevation, bounds, args[2]);
+                                        var views = new (string Name, float Yaw, float Pitch)[]
+                                        { ("front", 0, .65f), ("back", MathF.PI, .65f),
+                                            ("left", -MathF.PI / 2, .65f), ("right", MathF.PI / 2, .65f),
+                                            ("overhead", 0, 1.55f), ("low-oblique", .4f, .28f) };
+                                        var distance = world.Camera.Distance;
+                                        foreach (var view in views)
+                                        { world.Camera.InspectOrbit(view.Yaw, view.Pitch); world.Camera.FrameLevel(bounds); distance = Math.Max(distance, world.Camera.Distance); }
+                                        Directory.CreateDirectory(args[2]);
+                                        var poses = new List<object>();
+                                        foreach (var view in views)
+                                        {
+                                            world.Camera.Distance = distance; world.Camera.InspectOrbit(view.Yaw, view.Pitch);
+                                            for (var frame = 0; frame < 4; frame++) await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+                                            using var capture = GetViewport().GetTexture().GetImage();
+                                            if (capture.SavePng(Path.Combine(args[2], view.Name + ".png")) != Error.Ok) throw new IOException("Inspection capture failed.");
+                                            poses.Add(new
+                                            {
+                                                view.Name,
+                                                view.Yaw,
+                                                view.Pitch,
+                                                distance,
+                                                camera = world.Camera.GlobalTransform.ToString(),
+                                                focus = world.Camera.Focus.ToString(),
+                                                sourceMap = path,
+                                                elevation,
+                                                world.SourceSha256
+                                            });
+                                        }
+                                        File.WriteAllText(Path.Combine(args[2], "inspection-views.json"), JsonSerializer.Serialize(poses));
+                                        world.Camera.RestoreView();
+                                    }
                                     Directory.CreateDirectory(args[2]);
                                     File.WriteAllText(Path.Combine(args[2], "authored-placement.json"), JsonSerializer.Serialize(selected.Select(node => new
                                     {
@@ -78,6 +116,43 @@ public sealed partial class ClassicWorldAudit : Node
             GetTree().Quit(failures.Count == 0 ? 0 : 1);
         }
         catch (Exception error) { GD.PushError(error.ToString()); GetTree().Quit(1); }
+    }
+
+    private static void InspectFloors(IFalloutClassicOwnedSource source, Fallout1NativeMap map,
+        int elevation, Aabb bounds, string output)
+    {
+        var names = Fallout1NativeLists.Read(source.Read("art/tiles/tiles.lst", out _));
+        var region = bounds.Grow(3);
+        var squares = map.Elevations[elevation].Select((packed, index) => new
+        { index, id = (int)(packed & 0xfff), center = Fo1HexMath.FloorPatchCenter(index) })
+            .Where(row => row.id != 1 && region.HasPoint(new Vector3(row.center.X, region.GetCenter().Y, row.center.Z))).ToArray();
+        var files = squares.Select(row => row.id).Distinct().Select(id =>
+        {
+            var frame = Fallout1NativeFrmReader.ReadFrame(source.Read("art/tiles/" + names[id], out _), 0, 0);
+            var spans = Enumerable.Range(0, frame.Height).Select(y =>
+            {
+                var opaque = Enumerable.Range(0, frame.Width).Where(x => frame.PaletteIndexes[y * frame.Width + x] != 0).ToArray();
+                return new { y, first = opaque.FirstOrDefault(-1), last = opaque.LastOrDefault(-1), count = opaque.Length };
+            }).ToArray();
+            return new { id, name = names[id], frame.Width, frame.Height, spans };
+        }).ToArray();
+        Directory.CreateDirectory(output);
+        File.WriteAllText(Path.Combine(output, "floor-registration.json"), JsonSerializer.Serialize(new
+        {
+            map.MapIndex,
+            elevation,
+            scope = "actual nearby source floor pixels and production mapping; not native pixel parity",
+            sourceSampleCorners = new[] { ClassicMapProjection.FloorSample(0, 0), ClassicMapProjection.FloorSample(1, 0),
+                ClassicMapProjection.FloorSample(1, 1), ClassicMapProjection.FloorSample(0, 1) },
+            squares = squares.Select(row => new
+            {
+                row.index,
+                row.id,
+                world = row.center.ToString(),
+                sourceTopLeft = ClassicMapProjection.FloorScreen(row.index)
+            }),
+            files
+        }, new JsonSerializerOptions { IncludeFields = true }));
     }
 
     internal static void ValidateWallShell(int visibleSourceWalls, MeshInstance3D? walls)

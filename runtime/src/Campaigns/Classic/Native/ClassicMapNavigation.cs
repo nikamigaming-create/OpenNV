@@ -10,7 +10,8 @@ internal sealed class ClassicMapNavigation
     internal IReadOnlySet<int> FloorBacked { get; }
 
     internal ClassicMapNavigation(Fallout1NativeMap map, Fallout1NativeObjectGraph graph, int elevation,
-        Func<Fallout1NativeMapObject, bool?>? dynamicBlock = null)
+        Func<Fallout1NativeMapObject, bool?>? dynamicBlock = null,
+        Func<Fallout1NativeMapObject, int>? currentTile = null)
     {
         var tiles = map.Elevations[elevation]; var blocked = new HashSet<int>();
         foreach (var placed in graph.TopLevelObjects.Where(row => row.Elevation == elevation && row.Tile >= 0))
@@ -19,8 +20,9 @@ internal sealed class ClassicMapNavigation
             // do not become solid merely because their FRM has opaque pixels.
             if ((placed.Flags & 1) != 0 || placed.Prototype.ObjectType is not (1 or 2 or 3)) continue;
             if (!(dynamicBlock?.Invoke(placed) ?? ((placed.Flags & 0x10) == 0))) continue;
-            blocked.Add(placed.Tile);
-            if ((placed.Flags & 0x800) != 0) blocked.UnionWith(ClassicHexGrid.Neighbors(placed.Tile));
+            var tile = currentTile?.Invoke(placed) ?? placed.Tile;
+            blocked.Add(tile);
+            if ((placed.Flags & 0x800) != 0) blocked.UnionWith(ClassicHexGrid.Neighbors(tile));
         }
         Blocked = blocked;
         FloorBacked = Enumerable.Range(0, ClassicHexGrid.Count)

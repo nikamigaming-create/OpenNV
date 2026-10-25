@@ -143,7 +143,8 @@ public sealed partial class ClassicStudioAudit : Node
                     var combatWorld = (ClassicWorldPreview)live.GetParent();
                     var targets = live.Player.Level.Objects.TopLevelObjects.Where(row => row.Prototype.ObjectType == 1 &&
                         row.Elevation == live.Player.Elevation && row.Inventory.Count == 0 && row.InstanceValues.Count == 11 && !ClassicCritterInstance.Read(row).Dead)
-                        .Select(row => (Source: row, Front: ClassicHexGrid.Neighbor(row.Tile, live.Player.Combat.SourceParticipant(row.Serial).Rotation)))
+                        .Select(row => (Source: row, Actor: live.Player.Combat.SourceParticipant(row.Serial)))
+                        .Select(row => (row.Source, Front: ClassicHexGrid.Neighbor(row.Actor.Tile, row.Actor.Rotation)))
                         .Where(row => live.Player.Walkable.Contains(row.Front))
                         .Select(row => (row.Source, row.Front, Path: ClassicHexGrid.Path(live.Player.Tile, row.Front, live.Player.Walkable)))
                         .Where(row => row.Path.Length > 0).OrderBy(row => row.Path.Length).ToArray();
@@ -174,6 +175,7 @@ public sealed partial class ClassicStudioAudit : Node
                         phase = encounter.Phase.ToString(),
                         encounter.Failure,
                         sourceActorFailures = live.Player.Actors.Failures.ToArray(),
+                        actorWalks = live.Player.ActorMotion.Save(),
                         actions = encounter.Actions?.Length,
                         deaths = encounter.Deaths?.Length,
                         live.Player.Experience

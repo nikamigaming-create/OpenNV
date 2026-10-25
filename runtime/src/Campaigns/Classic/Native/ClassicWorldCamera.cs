@@ -23,6 +23,12 @@ internal sealed partial class ClassicWorldCamera : Camera3D
     }
     internal void CinematicPass() { if (_savedView is null) SaveView(); RestoreView(); _shotSeconds = 0; }
     internal void StopShot() => _shotSeconds = -1;
+    internal void InspectOrbit(float yaw, float pitch)
+    {
+        if (!float.IsFinite(yaw) || !float.IsFinite(pitch) || pitch is <= 0 or >= MathF.PI / 2)
+            throw new ArgumentOutOfRangeException(nameof(pitch));
+        _shotSeconds = -1; _yaw = yaw; Pitch = pitch; UpdateCamera();
+    }
     internal event Action? ToggleGrid;
     internal event Action? ToggleRoofs;
     internal void SwitchGrid() => ToggleGrid?.Invoke();

@@ -61,6 +61,7 @@ internal sealed class ClassicPlayerSession
     internal ClassicInventory Inventory { get; }
     internal ClassicDoorWorld Doors { get; }
     internal ClassicActorScripts Actors { get; }
+    internal ClassicActorMotion ActorMotion { get; }
     internal ClassicObjectAnimation Animations { get; }
     internal ClassicCombatEncounter Combat { get; }
     internal ClassicCampaignEvents CampaignEvents { get; }
@@ -91,6 +92,7 @@ internal sealed class ClassicPlayerSession
     // use their actual encounter lifecycle, including unknown/refused states.
     internal Func<bool?>? CombatActive { get; }
 
+    internal ClassicScriptSounds Sounds { get; }
     internal ClassicCampaignInitialization? Initialization { get; private set; }
     internal int ArmorClass => Stats.ArmorClass + (Inventory.Worn?.Definition.Armor?.ArmorClass ?? 0);
 
@@ -103,6 +105,7 @@ internal sealed class ClassicPlayerSession
         ClassicRetailRandomLifecycleState? savedRandom = null, ClassicCombatContracts? combatContracts = null, ClassicActorScriptsSave? savedActors = null)
     {
         _catalog = source as ClassicMapCatalog ?? new ClassicMapCatalog(source, choice.Campaign);
+        Sounds = new(choice.Campaign, path => _catalog.Read(path, out _), () => _catalog.SoundSettings);
         _premades = ClassicPremadeReader.Load(_catalog.Campaign, path => _catalog.Read(path, out _));
         choice.Validate(_catalog.Campaign, source.ProfileId, _premades);
         // Freeze all arrays in the accepted character; an open editor cannot
@@ -132,6 +135,7 @@ internal sealed class ClassicPlayerSession
         var map = _level.Map;
         Elevation = elevation ?? map.EnteringElevation; Tile = tile ?? map.EnteringTile; Rotation = rotation ?? map.EnteringRotation;
         _navigation = new(map, _level.Objects, Elevation);
+        ActorMotion = new ClassicActorMotion(this);
         Combat = new ClassicCombatEncounter(this, combatModes, freshCampaign, null, combatContracts);
         CombatActive = combatActive ?? (() => Combat.Active);
         Inventory = new ClassicInventory(this);
@@ -146,13 +150,15 @@ internal sealed class ClassicPlayerSession
         if (savedCampaignEvents is not null) CampaignEvents.Restore(savedCampaignEvents);
         Combat.CommittedExit += CampaignEvents.CommittedCombatExit;
         Combat.WorldChanged += RefreshNavigation;
+        ActorMotion.Changed += RefreshNavigation;
         Doors.PassageChanged += RefreshNavigation; RefreshNavigation();
         if (!Walkable.Contains(Tile)) throw new InvalidDataException("Source MAP entry is blocked; map initialization must resolve it before player admission.");
     }
 
     private void RefreshNavigation()
     {
-        _navigation = new(_level.Map, _level.Objects, Elevation, row => Combat.Dead(row.Serial) ? false : Doors.Blocks(row));
+        _navigation = new(_level.Map, _level.Objects, Elevation, row => Combat.Dead(row.Serial) ? false : Doors.Blocks(row),
+            row => ActorMotion.Tile(MapPath, row));
         if (Moving && StepFraction == 0 && !Walkable.Contains(NextTile))
         { _path.Clear(); _redirect = null; Status = "The passage is blocked."; }
         Changed?.Invoke();

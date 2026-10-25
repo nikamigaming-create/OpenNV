@@ -346,6 +346,7 @@ ClassicModuleInitializerProbe.Run(gameContext);
 ClassicEventDispatchProbe.Run(gameContext);
 ClassicMapLocalsProbe.Run(gameContext);
 ClassicAcmProbe.Run();
+ClassicScriptSoundsProbe.Run();
 ClassicComparisonProbe.Run(gameContext);
 ClassicFo1StartingSkillsProbe.Run(gameContext);
 ClassicItemTransferProbe.Run(gameContext);

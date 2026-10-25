@@ -164,7 +164,7 @@ internal sealed partial class ClassicDoorWorld(ClassicPlayerSession player)
         if (level.Path != player.MapPath) throw new InvalidOperationException("Script event belongs to an inactive map.");
         const int dude = int.MaxValue;
         var objects = level.Objects.TopLevelObjects.ToDictionary(item => item.Serial + 1,
-            item => new ClassicIntWorldObject(item.Serial + 1, item.Pid, item.Tile, item.Elevation, (item.Flags & 1) == 0));
+            item => new ClassicIntWorldObject(item.Serial + 1, item.Pid, player.ActorMotion.Tile(level.Path, item), item.Elevation, (item.Flags & 1) == 0));
         objects.Add(dude, new(dude, 0x01000000, player.Tile, player.Elevation, true));
         // Source map scripts have an internal system-script object, not a
         // presented actor or hand-placed gameplay entity.
@@ -206,7 +206,7 @@ internal sealed partial class ClassicDoorWorld(ClassicPlayerSession player)
         var result = ClassicIntEvents.Execute(program, player.Choice.Campaign, action, state, context, world, player.RandomContract,
             initializeModule: initializeModule);
         var changed = result.WorldObjects;
-        Validate(result with { WorldObjects = changed with { AnimationCommands = [], TraitAssignments = actorEvent ? [] : changed.TraitAssignments } }, level.Path);
+        Validate(result with { WorldObjects = changed with { AnimationCommands = [], Movements = [], TraitAssignments = actorEvent ? [] : changed.TraitAssignments } }, level.Path);
         if ((!actorEvent && changed.ScriptOverrides) || changed.CombatActive != combatActive || changed.ItemInstances.Count != 0 ||
             !changed.Objects.OrderBy(item => item.Key).SequenceEqual(objects.OrderBy(item => item.Key)) ||
             !changed.Doors.OrderBy(item => item.Key).SequenceEqual(doors.OrderBy(item => item.Key)) ||
@@ -217,9 +217,11 @@ internal sealed partial class ClassicDoorWorld(ClassicPlayerSession player)
         // All effects must validate before either owner changes. The callback
         // prepares the entire command list before publishing its replacement.
         var commitTraits = actorEvent ? player.Actors.PrepareTraits(changed.TraitAssignments) : null;
+        var commitWalks = player.ActorMotion.Prepare(changed.Movements);
         player.ValidateRandomCommit(result.State.RandomState);
         acceptAnimations(changed.AnimationCommands);
         commitTraits?.Invoke();
+        commitWalks();
         if (actorEvent) _timers = changed.Timers;
         player.CommitRandom(result.State.RandomState);
         _globals = new(result.State.GlobalVariables); _mapVariables[level.Path] = new(result.State.MapVariables);
@@ -292,7 +294,7 @@ internal sealed partial class ClassicDoorWorld(ClassicPlayerSession player)
     {
         player.ValidateRandomCommit(result.State.RandomState);
         var world = result.WorldObjects;
-        if (world.AnimationCommands.Count != 0 || result.State.ValueStack.Count != 0 || result.MessageEffects.Any(row => row.Text is null || row.ObjectHandle is not null || row.Color is not null) || result.SoundEffects.Count != 0 ||
+        if (world.AnimationCommands.Count != 0 || result.State.ValueStack.Count != 0 || result.MessageEffects.Any(row => row.Text is null || row.ObjectHandle is not null || row.Color is not null) ||
             world.CreatedObjects.Count != 0 || world.Inventory.Count != 0 || world.MapStartOverride is not null ||
             world.AttackRequests.Count != 0 || world.Movements.Count != 0 || world.TraitAssignments.Count != 0 ||
             world.DialogueSystemEntered || world.DialogueStart is not null || world.LightLevel is not null)
@@ -323,6 +325,8 @@ internal sealed partial class ClassicDoorWorld(ClassicPlayerSession player)
             if (state.Open != pose.Open) pose = pose with { Open = state.Open, Direction = state.Open ? 1 : -1, Elapsed = 0 };
             updates.Add((key, target with { Pose = pose }));
         }
+        var sounds = player.Sounds.Prepare(result.SoundEffects);
+        player.Sounds.Commit(sounds);
         foreach (var (key, update) in updates) _entries[key] = update;
         foreach (var (key, state) in execution.States)
             _entries[key] = _entries[key] with { State = state with { RandomState = null }, Failure = null };

@@ -1257,7 +1257,8 @@ internal static class ClassicIntProcedureVm
                         var worldObject = WorldObject(handle);
                         movements.Add(new ClassicIntMovement(
                             handle, worldObject.Tile, destination, speed));
-                        objects[handle] = worldObject with { Tile = destination };
+                        // Registering a walk is not a teleport. The live actor
+                        // owner publishes each reached hex on its source clock.
                         break;
                     }
                 case SetObjectVisibility:
