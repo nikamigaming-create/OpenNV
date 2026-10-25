@@ -5,21 +5,19 @@ FO1 remains an incomplete classic preview with selected movement, inventory,
 equipment, door and save flows. Complete campaign execution and 1:1 3D art are
 unverified. See [current-work.md](current-work.md) for the active owner.
 
-Classic reconstruction is parked. Accepted main39d95f45 (PR309) contains the
+Classic reconstruction is parked. Accepted main0d35117d (PR310) contains the
 bounded source critter/event and conditional combat foundation. Unpublished
 actor locomotion follow-up is preserved at59aecc9d; it is not native complete
 combat. Arroyo ground decomposition and full scene likeness remain unaccepted.
 
-The active New Vegas batch adds actor-owned ingestible transactions and timers,
-reversible SPECIAL modifiers, and selected Eat approach/animation continuation.
-Debug builds, focused ownership/rollback/cold contracts and the actual cactus /
-Stimpak owned-data audit pass. Native smoke36 confirms ordinary load/recovery,
-Pip-Boy Stimpak consumption and movement/dialogue with Sunny, with no publication
-failure; it does not prove native actor eating or campfire completion. Actual
-Gecko Meat use refuses its radiation effect before consumption. Creature skill /
-source-pose variants and other unsupported effects remain visible. This batch is
-not yet on main; publication state is maintained in current-work.
-
+Main PR310 delivers actor-owned ingestion, reversible SPECIAL modifiers and
+selected Eat approach/animation continuation. Current uncommitted follow-through
+adds resistance-adjusted radiation, source creature food scaling, nested eating
+IDLE predicates, optional no-file results and ANIO bindings. Debug and focused /
+owned-data audits pass. Ordinary smoke37 consumes Gecko Meat through Pip-Boy
+without error; timed healing/radiation effects are active and radiation accumulates.
+Native actor consumption and campfire completion remain unaccepted. No complete
+radiation illness, Hardcore, conditional or lethal-effect support is claimed.
 The following FNV inventory is active repair work. FO3 and classic work are preserved.
 The user rejected package g's physical FNV VR playtest. It is not a playable or
 headset-ready handoff. See [implementation-plan.md](implementation-plan.md) for

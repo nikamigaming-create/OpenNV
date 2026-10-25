@@ -90,7 +90,8 @@ internal sealed partial class FalloutReferenceWorld
         {
             FalloutIngestibleApplications.Validate(effect, value => value is >= 5 and <= 11);
             var magnitude = FalloutIngestibleApplications.Magnitude(records, source, effect,
-                value => ActorValue(reference, FalloutActorValue.SourceSlot(value)));
+                value => value == 20 ? ActorRadiationResistance(reference, level, globals) :
+                    ActorValue(reference, FalloutActorValue.SourceSlot(value)), player: false);
             if (FalloutIngestibleApplications.Reversible(effect)) Modify(effect.ActorValue, magnitude);
             else if (effect.EffectiveDuration == 0) ApplyActorIngestibleIncrement(reference, afterValues, ref afterInjury, effect, magnitude);
             if (effect.EffectiveDuration > 0) active.Add(new(item, effect.Index, source.Hash, effect.Hash, magnitude, 0, effect.EffectiveDuration));
@@ -134,6 +135,15 @@ internal sealed partial class FalloutReferenceWorld
     private void ApplyActorIngestibleIncrement(FalloutFormKey reference, Dictionary<string, FalloutActorValue> values,
         ref FalloutActorInjury injury, FalloutIngestibleEffect effect, float amount)
     {
+        if (effect.ActorValue == 54)
+        {
+            var previous = values.GetValueOrDefault("radiationrads", new(0));
+            var radiation = previous.Current - amount;
+            if (!float.IsFinite(radiation)) throw new InvalidDataException("Actor radiation overflowed.");
+            values["radiationrads"] = previous with
+            { Damage = Math.Max(0, radiation) - previous.Base - previous.Permanent - previous.Temporary };
+            return;
+        }
         var health = values["health"]; var maximum = health.Base + health.Permanent + health.Temporary;
         if (!float.IsFinite(amount) || !float.IsFinite(maximum) || maximum <= 0 || health.Current + amount <= 0)
             throw new NotSupportedException("Actor ingestible increment requires its lethal or invalid-health transition owner.");
@@ -148,6 +158,44 @@ internal sealed partial class FalloutReferenceWorld
             limbs[part.Type] = Math.Clamp(limbs.GetValueOrDefault(part.Type) - capacity * amount / 100, 0, capacity);
         }
         injury = injury with { LimbDamage = limbs };
+    }
+
+    private readonly FalloutAbilityModifiers _ingestibleAbilities = new(records);
+    private float ActorRadiationResistance(FalloutFormKey reference, int level, FalloutGlobalState? globals)
+    {
+        var actor = Actor(reference);
+        var resistance = (ActorValue(reference, "endurance") + records.NumericSettings.Float("fAVDRadResistEnduranceOffset")) *
+            records.NumericSettings.Float("fAVDRadResistEnduranceMult");
+        var effects = FalloutActorTemplateOwner.Resolve(records, records.GetEffective(actor.Base), 8, actor.Templates);
+        foreach (var field in effects.ReadSubrecords().Where(field => field.Signature == "SPLO"))
+        {
+            if (field.Data.Length != 4) throw new InvalidDataException("Actor resistance ability identity is invalid.");
+            var form = effects.Plugin.AdjustOptionalFormId(BinaryPrimitives.ReadUInt32LittleEndian(field.Data.Span));
+            if (form is { } spell) Add(spell);
+        }
+        foreach (var armor in EquippedArmor(reference, level, globals))
+        {
+            var form = records.GetEffective(armor);
+            foreach (var field in form.ReadSubrecords().Where(field => field.Signature == "EITM"))
+            {
+                if (field.Data.Length != 4) throw new InvalidDataException("Armor resistance effect identity is invalid.");
+                var enchantment = form.Plugin.AdjustOptionalFormId(BinaryPrimitives.ReadUInt32LittleEndian(field.Data.Span));
+                if (enchantment is { } spell) Add(spell);
+            }
+        }
+        foreach (var modifier in PerkModifiers(reference).Where(value => value.ActorValue == 20)) Apply(modifier);
+        return float.IsFinite(resistance) ? resistance : throw new InvalidDataException("Actor radiation resistance is not finite.");
+
+        void Add(FalloutFormKey spell)
+        {
+            foreach (var modifier in _ingestibleAbilities.Spell(spell).Where(value => value.ActorValue == 20)) Apply(modifier);
+        }
+        void Apply(FalloutAbilityModifier modifier)
+        {
+            if (modifier.Conditions.Count != 0)
+                throw new NotSupportedException("Conditional actor radiation resistance needs its live condition owner.");
+            resistance += modifier.Amount;
+        }
     }
 
     internal void ValidateActorIngestibles(FalloutFormKey reference, FalloutActorIngestiblesSnapshot state)
@@ -182,6 +230,7 @@ internal sealed partial class FalloutReferenceWorld
             if (record.Signature != "IDLE" || !Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(record.ReadData()))
                 .Equals(meal.IdleSha256, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidDataException("Retained Eat IDLE differs from its winning source.");
+            FalloutActorIdleObjectBinding.ValidateSources(records, FalloutActorIdleSource.Resolve(records, record), meal.Objects);
         }
     }
 

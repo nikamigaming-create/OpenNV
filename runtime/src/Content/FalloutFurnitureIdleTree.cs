@@ -37,9 +37,46 @@ internal sealed class FalloutFurnitureIdleTree
     internal FalloutPluginRecord Select(Func<FalloutCondition, float> evaluate)
         => SelectRoots(branch => branch.Conditions.Any(condition => condition.Function is 159 or 49), evaluate, "Furniture");
 
-    internal FalloutPluginRecord SelectProcedure(int procedure, Func<FalloutCondition, float> evaluate) =>
-        SelectRoots(branch => branch.Conditions.Where(condition => condition.Function == 143)
-            .Any(condition => FalloutCondition.AllPass([condition], _ => procedure)), evaluate, "Actor procedure " + procedure);
+    internal FalloutPluginRecord? SelectProcedure(int procedure, Func<FalloutCondition, float> evaluate)
+    {
+        var byForm = _branches.ToDictionary(branch => branch.Record.FormKey);
+        var requested = _branches.Where(branch => branch.Conditions.Any(condition => condition.Function == 143 &&
+            condition.RunOn == 0 && condition.Argument1 == 0 && condition.Argument2 == 0 &&
+            (condition.Flags & 0xe4) == 0 && condition.Comparison == procedure)).Select(branch => branch.Record.FormKey).ToHashSet();
+        var roots = new HashSet<FalloutFormKey>();
+        foreach (var key in requested)
+        {
+            var branch = byForm[key]; var seen = new HashSet<FalloutFormKey>();
+            while (branch.Parent is { } parent)
+            {
+                if (!seen.Add(branch.Record.FormKey)) throw new InvalidDataException("Procedure IDLE ancestry is cyclic.");
+                if (!byForm.TryGetValue(parent, out branch!)) throw new NotSupportedException("Procedure IDLE has an unavailable model ancestor.");
+            }
+            roots.Add(branch.Record.FormKey);
+        }
+        var eligible = roots.Select(root => byForm[root]).Where(branch => FalloutCondition.AllPass(branch.Conditions, evaluate)).ToArray();
+        var matches = eligible.Select(branch => Visit(branch, false, [])).Where(record => record is not null).DistinctBy(record => record!.FormKey).ToArray();
+        if (matches.Length > 1) throw new NotSupportedException($"Actor procedure {procedure} has {matches.Length} eligible source KF leaves.");
+        if (matches.Length == 0 && eligible.Any(branch => (branch.Group & 0x80) == 0))
+            throw new NotSupportedException($"Actor procedure {procedure} requires a source file but no eligible leaf was returned.");
+        return matches.SingleOrDefault();
+
+        FalloutPluginRecord? Visit(FalloutIdleBranch branch, bool ownsProcedure, HashSet<FalloutFormKey> ancestors)
+        {
+            if (!ancestors.Add(branch.Record.FormKey)) throw new InvalidDataException("Procedure IDLE parent cycle.");
+            ownsProcedure |= requested.Contains(branch.Record.FormKey);
+            if (branch.Model.EndsWith(".kf", StringComparison.OrdinalIgnoreCase)) return ownsProcedure ? branch.Record : null;
+            foreach (var child in Order(_branches.Where(value => value.Parent == branch.Record.FormKey)
+                .OrderBy(value => _pluginOrder[value.Record.FormKey.OwnerPlugin]).ToArray()))
+            {
+                if (!FalloutCondition.AllPass(child.Conditions, evaluate)) continue;
+                var selected = Visit(child, ownsProcedure, new(ancestors));
+                if (selected is not null) return selected;
+                if ((child.Group & 0x80) != 0) return null;
+            }
+            return null;
+        }
+    }
 
     private FalloutPluginRecord SelectRoots(Func<FalloutIdleBranch, bool> requested,
         Func<FalloutCondition, float> evaluate, string owner)

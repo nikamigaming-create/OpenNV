@@ -27,6 +27,7 @@ internal sealed partial class FalloutReferenceWorld
     private float SourceActorValue(FalloutReferenceInstance actor, string slot)
     {
         var index = FalloutActorValue.SourceIndex(slot);
+        if (index == 54) return 0; // Accumulated radiation starts in an empty engine value pool.
         if (index < 0) return 0; // Declared user slots have zero initial pools.
         var source = FalloutActorTemplateOwner.Resolve(records, records.GetEffective(actor.Base), 2, actor.Templates);
         var data = source.ReadSubrecords().Single(field => field.Signature == "DATA").Data.Span;
@@ -41,6 +42,9 @@ internal sealed partial class FalloutReferenceWorld
         if (source.Signature != "CREA" || data.Length != 17) throw new InvalidDataException("Creature actor-value DATA extent is invalid.");
         if (index is >= 5 and <= 11) return data[index + 5];
         if (index is 33 or 34 or 35 or 38 or 41 or 45) return data[1];
+        // These noncombat skills have an empty native creature base pool;
+        // they do not borrow combatSkill or an NPC's DNAM table.
+        if (index is 37 or 44) return 0;
         throw new NotSupportedException($"Creature {slot} requires its source skill owner.");
     }
 

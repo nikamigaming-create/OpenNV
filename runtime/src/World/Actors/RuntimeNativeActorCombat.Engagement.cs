@@ -350,6 +350,7 @@ internal sealed partial class RuntimeNativeActorCombat
             if (_state.CanCaptureCorpseEquipment == CorpseEquipmentCaptureReady) _state.CanCaptureCorpseEquipment = null;
             if (_state.CaptureCorpseEquipment == CaptureCorpseEquipment) _state.CaptureCorpseEquipment = null;
             DisposeRouteSearch();
+            _eatObjects?.Dispose(); _eatObjects = null;
         }
     }
 
