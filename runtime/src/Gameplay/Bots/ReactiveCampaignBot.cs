@@ -138,10 +138,26 @@ internal sealed class ReactiveCampaignBot
         if (_goal is null && skill.Active)
             return Fail("input-owner", "An active reference skill belongs to a different campaign attempt.", !observation.Paused);
         if (skill.Active && _pendingChoice is null && observation.Choices.Count == 0 && !observation.ModalInput)
-        { Phase = "executing-skill"; return new(BotCampaignCommandKind.None); }
+        {
+            var highestGoal = observation.Goals.OrderByDescending(value => value.Priority).FirstOrDefault();
+            if (_goal is not null && highestGoal is not null &&
+                (highestGoal.Priority > _goal.Priority ||
+                 (highestGoal.Identity != _goal.Identity &&
+                  (!observation.Goals.Any(g => g.Identity == _goal.Identity) ||
+                   !_attemptedGoals.TryGetValue(highestGoal.Identity, out var previous) || previous != observation.Progress))))
+            {
+                if (string.IsNullOrWhiteSpace(highestGoal.Reference) || highestGoal.Mode is not ("interact" or "travel" or "approach" or "shoot" or "follow" or "combat"))
+                    return Fail("observation-loss", "Source campaign goal has no supported ordinary reference action.");
+                _goal = highestGoal; _attemptedGoals[highestGoal.Identity] = observation.Progress; ++_goalAttempts;
+                Phase = "starting-source-goal";
+                var preemptDistance = highestGoal.Mode == "travel" ? .5f : highestGoal.Mode is "shoot" or "combat" ? 6f : highestGoal.Mode == "follow" ? 3.5f : 1.5f;
+                return new(BotCampaignCommandKind.Reference, highestGoal.Reference, highestGoal.Mode, Distance: preemptDistance);
+            }
+            Phase = "executing-skill"; return new(BotCampaignCommandKind.None);
+        }
         if (observation.Paused && observation.Choices.Count == 0 && !observation.ModalInput)
         { Phase = "paused"; return new(BotCampaignCommandKind.None); }
-        if (observation.SpeechActive) _idle = 0;
+        if (observation.SpeechActive || skill.Phase == "following-at-distance") _idle = 0;
         _idle += seconds;
         if (_idle > ProgressLimitSeconds)
             return Fail("bot-policy", "No observed quest/objective, menu or scene progress within the campaign bound.");
@@ -192,11 +208,11 @@ internal sealed class ReactiveCampaignBot
             return new(BotCampaignCommandKind.None);
         }
         if (goal.Error is { } goalError) return Fail("engine-owner", goalError);
-        if (string.IsNullOrWhiteSpace(goal.Reference) || goal.Mode is not ("interact" or "travel" or "approach"))
+        if (string.IsNullOrWhiteSpace(goal.Reference) || goal.Mode is not ("interact" or "travel" or "approach" or "shoot" or "follow" or "combat"))
             return Fail("observation-loss", "Source campaign goal has no supported ordinary reference action.");
         _goal = goal; _attemptedGoals[goal.Identity] = observation.Progress; ++_goalAttempts;
         Phase = "starting-source-goal";
-        var distance = goal.Mode == "travel" ? .5f : 1.5f;
+        var distance = goal.Mode == "travel" ? .5f : goal.Mode is "shoot" or "combat" ? 6f : goal.Mode == "follow" ? 3.5f : 1.5f;
         return new(BotCampaignCommandKind.Reference, goal.Reference, goal.Mode, Distance: distance);
     }
 

@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.Security.Cryptography;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.World.Actors;
@@ -512,6 +513,10 @@ internal sealed class FalloutReferenceScriptDefinition(FalloutPluginRecord recor
     internal IReadOnlyDictionary<string, uint> Locals { get; } = FalloutScriptLocals.Read(record);
     internal IReadOnlyDictionary<string, FalloutScriptLocalDeclaration> Declarations { get; } =
         FalloutScriptLocals.ReadDeclarations(record);
+    internal IReadOnlySet<FalloutFormKey> ReferencedForms { get; } = record.ReadSubrecords()
+        .Where(field => field.Signature == "SCRO" && field.Data.Length == 4)
+        .Select(field => record.Plugin.AdjustFormId(BinaryPrimitives.ReadUInt32LittleEndian(field.Data.Span)))
+        .ToHashSet();
 }
 
 // World lifetime is independent of draw/resource lifetime. A disabled or model-less
@@ -606,6 +611,9 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
             instances.Select(instance => instance.Reference).Distinct().Count() != instances.Length)
             throw new InvalidDataException("Resident cell has conflicting reference ownership.");
         _residentCells.Add(scene.Cell.FormKey, instances);
+        _placementSourceCells.TryAdd(scene.Cell.FormKey, scene);
+        foreach (var reference in scene.References)
+            _placementSourceReferences.TryAdd(reference.FormKey, reference);
         foreach (var instance in instances)
             _residentReferences[instance.Reference] = _residentReferences.GetValueOrDefault(instance.Reference) + 1;
         return instances;

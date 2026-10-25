@@ -65,7 +65,7 @@ internal partial class RuntimeNativeNpc
         _aiRandom.Restore(saved.RandomState);
         if (saved.Blink is { } blink) (_blink ?? throw new InvalidDataException("Saved dialogue has no source face owner.")).Restore(blink);
         else if (_blink is not null) throw new InvalidDataException("Saved dialogue is missing its source blink queue.");
-        _aiQuestRevision = _questState!.Revision; _aiActivityRevision = Activity.Revision;
+        _aiQuestRevision = _questState!.ProgressRevision; _aiActivityRevision = Activity.Revision;
         _aiPollRemaining = saved.PollRemaining; _aiScheduleTime = saved.ScheduleTime;
         Transform = ReadFurniturePose(saved.Pose);
     }

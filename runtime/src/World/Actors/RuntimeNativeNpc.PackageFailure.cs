@@ -128,7 +128,7 @@ internal partial class RuntimeNativeNpc
             if (failure.IdleState is { } state) _packageIdles.Restore(state.Collection);
             _aiError = failure.Error; _failedPackage = failure.Package;
             _aiPollRemaining = failure.PollRemaining; _aiScheduleTime = failure.ScheduleTime;
-            _aiQuestRevision = _questState!.Revision; _aiActivityRevision = Activity.Revision;
+            _aiQuestRevision = _questState!.ProgressRevision; _aiActivityRevision = Activity.Revision;
         }
         else _requestedSelection = new(package, declaration);
         _selectedSourcePackage = package.FormKey; _sourceSelectionKnown = true;

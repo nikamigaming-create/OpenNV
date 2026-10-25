@@ -388,9 +388,9 @@ internal partial class RuntimeNativeNpc
         _aiPollRemaining -= delta;
         var scheduleTime = _aiClock?.ScheduleTime();
         if (scheduleTime is { } moment) scheduleTime = moment with { Hour = MathF.Floor(moment.Hour) };
-        if (_requestedSelection is null && _aiQuestRevision == _questState.Revision && _aiActivityRevision == Activity.Revision &&
+        if (_requestedSelection is null && _aiQuestRevision == _questState.ProgressRevision && _aiActivityRevision == Activity.Revision &&
             _aiScheduleTime == scheduleTime && _aiPollRemaining > 0) return;
-        _aiQuestRevision = _questState.Revision;
+        _aiQuestRevision = _questState.ProgressRevision;
         _aiActivityRevision = Activity.Revision;
         _aiScheduleTime = scheduleTime;
         _aiPollRemaining = 10;

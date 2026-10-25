@@ -38,6 +38,7 @@ public partial class RuntimeCoordinator
         internal NativeNavigationWorkSnapshot? Work;
         internal double SourceMilliseconds, MaximumSliceMilliseconds;
         internal BotNavigationProjection? PriorProjection;
+        internal float PrefixLength = 8f;
     }
 
     private sealed record NativeBotProjectionArrival(RuntimeNativePlayer Player, FalloutCellScene Scene,
@@ -128,10 +129,38 @@ public partial class RuntimeCoordinator
             if (current.CoarseError is null && current.RefinedSpacing < current.Spacing)
             {
                 current.CoarseError = error.Message; current.Spacing = current.RefinedSpacing;
+                var corridorRadius = current.ArrivalRadius > 0 ? current.ArrivalRadius :
+                    (!current.Intent!.ReferenceApproach && current.Intent.Projection is null ? 0.45f : 0f);
                 current.Search = NativeCapsuleNavigation.Search(player, Native(start), current.LocalTarget,
                     _configuration.Player.StepHeightMeters, current.Spacing, NativeCollisionResident, maximumNodes: 3600, probe: current.Probe,
-                    targetRadius: current.ArrivalRadius, corridor: current.Intent!.Corridor, arrival: current.Arrival).GetEnumerator();
+                    targetRadius: corridorRadius, corridor: current.Intent!.Corridor, arrival: current.Arrival).GetEnumerator();
                 return null;
+            }
+            if (current.Intent is not null && !current.Intent.ReferenceApproach && current.PrefixLength > 2.0f)
+            {
+                var origin = Native(start);
+                var nextPrefix = Math.Max(2.0f, current.PrefixLength * 0.5f);
+                var fallbackIntent = NativeCapsuleNavigation.Intent(origin, current.WorldPath, Native(current.Target), current.Distance,
+                    length: nextPrefix,
+                    projection: current.Projection > 0 ? new(Native(current.End), current.WorldPath[^1], current.Projection) : null);
+                if (origin.DistanceTo(fallbackIntent.Target) > 0.2f && fallbackIntent.Target != current.LocalTarget)
+                {
+                    current.PrefixLength = nextPrefix;
+                    current.Intent = fallbackIntent;
+                    current.LocalTarget = fallbackIntent.Target;
+                    current.Resume = fallbackIntent.Resume;
+                    current.ArrivalRadius = fallbackIntent.ArrivalRadius;
+                    IReadOnlyList<Vector3> corridor = fallbackIntent.ReferenceApproach ? [fallbackIntent.Target] : fallbackIntent.Corridor;
+                    current.Probe = new(NativeCapsuleNavigation.FirstCorridorContact(current.Player, origin, corridor), current.Events.CollisionReference);
+                    current.Spacing = Math.Max(.3f, _configuration.Player.CapsuleRadiusMeters);
+                    current.RefinedSpacing = NativeCapsuleNavigation.RefinementSpacing(current.Spacing,
+                        _configuration.Player.CapsuleRadiusMeters, current.Player.GlobalBasis.X.Length());
+                    current.CoarseError = null;
+                    current.Search = NativeCapsuleNavigation.Search(player, origin, current.LocalTarget,
+                        _configuration.Player.StepHeightMeters, current.Spacing, NativeCollisionResident,
+                        probe: current.Probe, targetRadius: current.ArrivalRadius, corridor: fallbackIntent.Corridor, arrival: current.Arrival).GetEnumerator();
+                    return null;
+                }
             }
             if (current.Probe is { RejectedContact: { Reference: { } reference } } probe &&
                 events.PlayerRouteDoor(reference) is { Reference: not null } door)
@@ -181,10 +210,18 @@ public partial class RuntimeCoordinator
         if (intent is null)
         {
             _botProjectionArrival = null;
-            request.SourcePath = _botNavigation!.FindPath(Source(request.Start), Source(request.End),
-                destinationRadiusGameUnits: request.Projection / units);
+            try
+            {
+                request.SourcePath = _botNavigation!.FindPath(Source(request.Start), Source(request.End),
+                    destinationRadiusGameUnits: request.Projection / units);
+            }
+            catch (InvalidOperationException) when (request.Distance > 0 || request.Projection > 0)
+            {
+                request.SourcePath = _botNavigation!.FindPath(Source(request.Start), Source(request.End));
+            }
             request.WorldPath = request.SourcePath.Select(World).ToArray();
             intent = NativeCapsuleNavigation.Intent(origin, request.WorldPath, Native(request.Target), request.Distance,
+                length: request.PrefixLength,
                 projection: request.Projection > 0 ? new(Native(request.End), request.WorldPath[^1], request.Projection) : null);
         }
         request.Intent = intent;

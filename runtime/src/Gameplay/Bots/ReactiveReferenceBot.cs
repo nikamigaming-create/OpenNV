@@ -8,7 +8,7 @@ internal sealed record BotObservation(string Scene, Vector3 Position, Vector3 Ca
     BotDoorObservation? Door = null, long ProgressRevision = 0, string ActiveMenus = "", int ControlMask = 0,
     bool ModalInput = false, bool Loading = false, string? ExecutionFault = null, bool Defeated = false,
     BotCombatObservation? Combat = null, bool InteractionPending = false, bool SpeechActive = false,
-    bool FurnitureActive = false, int FurniturePhase = 0);
+    bool FurnitureActive = false, int FurniturePhase = 0, bool TargetHit = false);
 
 internal sealed record BotDoorObservation(bool Open, bool Moving, bool Pending, string? Error = null);
 
@@ -156,9 +156,9 @@ internal sealed partial class ReactiveReferenceBot
         float? minimumCombatHitPoints = null, float? maximumCombatSimulationSeconds = null)
     {
         ValidateCombatLimits(mode, minimumCombatHitPoints, maximumCombatSimulationSeconds);
-        if ((mode != "combat" && string.IsNullOrWhiteSpace(reference)) || mode is not ("interact" or "approach" or "follow" or "travel" or "combat") ||
-            !float.IsFinite(distance) || distance is < .5f or > 5)
-            throw new ArgumentException("Bot goal requires interact/approach/follow/travel with a source reference, or combat with an optional source threat; distance is 0.5-5 metres.");
+        if ((mode != "combat" && string.IsNullOrWhiteSpace(reference)) || mode is not ("interact" or "approach" or "follow" or "travel" or "combat" or "shoot") ||
+            !float.IsFinite(distance) || distance is < .5f or > 20)
+            throw new ArgumentException("Bot goal requires interact/approach/follow/travel/shoot with a source reference, or combat with an optional source threat; distance is 0.5-20 metres.");
         Stop(); _goalReference = string.IsNullOrWhiteSpace(reference) ? null : reference;
         _reference = _goalReference ?? CombatObservationIdentity; _mode = mode;
         _distance = _approachDistance = distance; _phase = "observing";
@@ -224,7 +224,8 @@ internal sealed partial class ReactiveReferenceBot
                 return;
             }
             _elapsed += seconds;
-            if (_elapsed > (_mode == "travel" || _phase != "awaiting-interaction" ? 900 : 180)) throw new InvalidOperationException("Goal exceeded its execution bound.");
+            var bound = _mode is "travel" or "follow" or "shoot" or "combat" ? 900 : 180;
+            if (_elapsed > bound) throw new InvalidOperationException("Goal exceeded its execution bound.");
             if (_routeDoor is not null)
             {
                 var door = state.Door ?? throw new InvalidOperationException("Route door lost its resident source motion owner.");
@@ -335,12 +336,12 @@ internal sealed partial class ReactiveReferenceBot
                 // Follow consumes one verified segment before refreshing its
                 // moving target. Cancelling each pending query on target drift
                 // can otherwise prevent any route from reaching the executor.
-                if (_mode != "follow" && _path is not null && Vector3.Distance(state.Target, _plannedTarget) > .4f)
+                if (_path is not null && Vector3.Distance(state.Target, _plannedTarget) > (_mode == "follow" ? 5.0f : .4f))
                 { CancelRoute(); _path = null; _projectionRadius = 2; _endpointReplans = 0; }
                 if (_path is null)
                 {
                     if (_request is { } pending && (Vector3.Distance(pending.Start, state.Position) > .2f ||
-                        _mode != "follow" && Vector3.Distance(pending.Target, state.Target) > .4f)) CancelRoute();
+                        Vector3.Distance(pending.Target, state.Target) > (_mode == "follow" ? 5.0f : .4f))) CancelRoute();
                     _request ??= new(state.Position, state.Target - (offset.Length() > .001f ? Vector3.Normalize(offset) * _approachDistance : Vector3.Zero), state.Target);
                     var request = _request;
                     var destination = request.Endpoint;
@@ -372,11 +373,11 @@ internal sealed partial class ReactiveReferenceBot
                     _segmentStartDistance = FlatDistance(state.Position, _path[^1]);
                     // A short segment must close most of its own distance;
                     // a fixed 20 cm tolerance can consume it before any input.
-                    _arrivalRadius = Math.Clamp(_segmentStartDistance * .25f, .02f, .2f);
+                    _arrivalRadius = Math.Clamp(_segmentStartDistance * .25f, _mode == "follow" ? .2f : .02f, .2f);
                     _progressWaypoint = -1; _endpointAiming = 0;
                 }
-                while (_waypoint < _path.Count && FlatDistance(state.Position, _path[_waypoint]) <= (_waypoint == _path.Count - 1 ? _arrivalRadius : .2f) &&
-                    MathF.Abs(state.Position.Y - _path[_waypoint].Y) < .6f) _waypoint++;
+                while (_waypoint < _path.Count && FlatDistance(state.Position, _path[_waypoint]) <= (_waypoint == _path.Count - 1 ? _arrivalRadius : .4f) &&
+                    MathF.Abs(state.Position.Y - _path[_waypoint].Y) < 2.0f) _waypoint++;
                 if (_waypoint == _path.Count)
                 {
                     if (!_navigation!.ReachesProjectedEndpoint)
@@ -452,6 +453,85 @@ internal sealed partial class ReactiveReferenceBot
             if (_stalled > .7f || _motionlessSeconds > .7f)
             {
                 ReplanObstruction(state.Blocker ?? "no capsule closing progress");
+                return;
+            }
+            if (_mode == "shoot")
+            {
+                if (state.TargetHit)
+                {
+                    Complete("target-already-hit");
+                    return;
+                }
+                if (state.SpeechActive)
+                {
+                    CancelRoute();
+                    _input(default, false); _steering.Reset();
+                    _phase = "waiting-for-speech";
+                    return;
+                }
+                if (_phase == "firing-at-target")
+                {
+                    _waiting += seconds;
+                    if (state.TargetHit || state.ProgressRevision != _progressRevisionBefore)
+                    {
+                        Complete("target-shot");
+                        return;
+                    }
+                    if (_waiting > 1.5f)
+                    {
+                        _phase = "aiming";
+                        _waiting = 0;
+                    }
+                }
+                if (move)
+                {
+                    _phase = "approaching";
+                    _input(intent, false);
+                    return;
+                }
+                CancelRoute();
+                var weaponDrawn = state.Combat?.Weapon?.Drawn == true;
+                if (!weaponDrawn)
+                {
+                    _waiting += seconds;
+                    _phase = "drawing-weapon";
+                    if (_waiting > .5f)
+                    {
+                        _waiting = 0;
+                        _input(intent with { Combat = new BotCombatInput(Fire: true) }, false);
+                    }
+                    else _input(intent, false);
+                    return;
+                }
+                if (state.Combat?.Weapon is { Loaded: 0, Reserve: > 0 })
+                {
+                    _waiting += seconds;
+                    _phase = "reloading";
+                    if (_waiting > 1.0f)
+                    {
+                        _waiting = 0;
+                        _input(intent with { Combat = new BotCombatInput(Reload: true) }, false);
+                    }
+                    else _input(intent, false);
+                    return;
+                }
+                var aimDirection = Vector3.Normalize(state.Aim - state.Camera);
+                var alignment = Vector3.Dot(state.Forward, aimDirection);
+                var aimed = state.AimedReference == _reference || alignment > 0.998f;
+                if (aimed && _phase != "firing-at-target")
+                {
+                    _waiting += seconds;
+                    _phase = "aiming";
+                    if (_waiting > .3f)
+                    {
+                        _waiting = 0;
+                        _progressRevisionBefore = state.ProgressRevision;
+                        _phase = "firing-at-target";
+                        _input(intent with { Combat = new BotCombatInput(Fire: true) }, false);
+                        return;
+                    }
+                }
+                _input(intent, false);
                 return;
             }
             _phase = move ? "approaching" : !near ? "aiming-at-projected-endpoint" : _mode == "follow" ? "following-at-distance" : "aiming";

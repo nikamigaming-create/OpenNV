@@ -79,7 +79,19 @@ internal sealed partial class ReactiveReferenceBot
         if (!step.Finished) return true;
         var feedback = _combat.Feedback!;
         if (!feedback.Success && feedback.FailureKind != "cancelled")
-        { Fail(feedback.Error ?? "Combat stopped without attributable gameplay receipts.", feedback.FailureKind ?? "bot-policy"); return true; }
+        {
+            if (_mode != "combat" && (feedback.FailureKind == "safety-stop" || feedback.Error?.Contains("repositioning") == true))
+            {
+                PublishCombatFeedback();
+                _combat = null;
+                if (_phaseBeforeCombat is "awaiting-interaction" or "awaiting-route-door")
+                    _phase = _phaseBeforeCombat;
+                else Replan("combat-suspended");
+                return false;
+            }
+            Fail(feedback.Error ?? "Combat stopped without attributable gameplay receipts.", feedback.FailureKind ?? "bot-policy");
+            return true;
+        }
         if (_mode == "combat")
         {
             Complete(feedback.Success ? "combat-observed" : "combat-cancelled");

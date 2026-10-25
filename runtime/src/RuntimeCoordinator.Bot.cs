@@ -17,6 +17,7 @@ public partial class RuntimeCoordinator
     private Aabb _botLocalBounds;
     private RuntimeSimulatorBotInput? _botSimulatorInput;
     private readonly BotInteractionEvidence _botInteractions = new();
+    private ulong _lastBotAidUseMsec;
 
     private bool NativeBotLoading(FalloutReferenceWorld world) =>
         _nativeDoorLoading || _nativeSessionTransitioning || _retiringNativeSession || world.PlayerMoves.Pending ||
@@ -102,6 +103,7 @@ public partial class RuntimeCoordinator
 
     private BotObservation ObserveNativeBot(string identity)
     {
+        CheckNativeBotHealing();
         var combat = ObserveNativeBotCombat();
         if (identity == ReactiveReferenceBot.CombatObservationIdentity) return NativeBotCombatControlObservation(combat);
         try { return ObserveNativeBotGoal(identity, combat); }
@@ -111,6 +113,22 @@ public partial class RuntimeCoordinator
             // A nonresident/faulted travel goal cannot suppress a genuine local
             // threat. Its failure is still re-observed before navigation resumes.
             return NativeBotCombatControlObservation(combat) with { ExecutionFault = "Gameplay execution stopped: " + error.Message };
+        }
+    }
+
+    private void CheckNativeBotHealing()
+    {
+        if (_nativeOpeningStageDriver is null || _nativeReferences is null || NativeBotLoading(_nativeReferences) || GetTree().Paused) return;
+        var vitals = _nativeOpeningStageDriver.Vitals;
+        if (vitals.HitPoints <= 0 || vitals.MaximumHitPoints <= 0 || vitals.HitPoints >= vitals.MaximumHitPoints * 0.65f) return;
+        var now = Time.GetTicksMsec();
+        if (now - _lastBotAidUseMsec < 2000) return;
+        var aid = _nativeInventory.Items.FirstOrDefault(item => item.RecordType == "ALCH" && item.Count > 0 &&
+            (item.EditorId == "Stimpak" || item.EditorId == "NVSuperStimpak"));
+        if (aid is not null)
+        {
+            _lastBotAidUseMsec = now;
+            _nativeOpeningStageDriver.UseAid(aid.FormKey);
         }
     }
 
@@ -224,6 +242,10 @@ public partial class RuntimeCoordinator
             (controls.PointOfView ? 8 : 0) | (controls.Looking ? 16 : 0) | (controls.RolloverText ? 32 : 0) | (controls.Sneaking ? 64 : 0);
         var menus = string.Join(',', (NativeActiveMenus() ?? []).Order());
         if (_nativeOpeningStageDriver?.PresentedConversationSpeaker is { } speaker) menus += "|conversation:" + speaker;
+        var targetHit = referenceState.Deleted || referenceState.Taken ||
+            referenceState.DeathCount > 0 ||
+            referenceState.Variables.Values.Any(v => v != 0) ||
+            RuntimeNativeActorCombat.Find(node) is { Dead: true };
         return new(_nativeActiveCell!.Cell.FormKey.ToString(), Numeric(player.GlobalPosition), Numeric(player.Camera.GlobalPosition),
             Numeric(-player.Camera.GlobalBasis.Z), Numeric(target), Numeric(aim), aimed, GetTree().Paused,
             player.GetMeta("opennv_source_movement_enabled", false).AsBool() && !player.FurnitureActive,
@@ -231,7 +253,7 @@ public partial class RuntimeCoordinator
             player.BlockingShape, interaction.Revision.ToString(CultureInfo.InvariantCulture), travelReady, door,
             _nativeQuestState?.ProgressRevision ?? 0, menus, controlMask, player.ModalInput, loading, Combat: combatObservation,
             InteractionPending: interaction.PendingFurniture, SpeechActive: _nativeOpeningStageDriver?.SpeechActive == true,
-            FurnitureActive: player.FurnitureActive, FurniturePhase: player.FurniturePhase);
+            FurnitureActive: player.FurnitureActive, FurniturePhase: player.FurniturePhase, TargetHit: targetHit);
     }
 
     private static System.Numerics.Vector3 Vector3ToNumeric(Vector3 value) => new(value.X, value.Y, value.Z);
@@ -279,7 +301,15 @@ public partial class RuntimeCoordinator
         }
         var origin = new Vector3(start.X, start.Y, start.Z);
         var now = Time.GetTicksMsec();
-        var path = _botNavigation!.FindPath(Source(start), Source(end), destinationRadiusGameUnits: projectionRadius / units);
+        IReadOnlyList<Vector3> path;
+        try
+        {
+            path = _botNavigation!.FindPath(Source(start), Source(end), destinationRadiusGameUnits: projectionRadius / units);
+        }
+        catch (InvalidOperationException) when (projectionRadius > 0 || approachRadius > 0)
+        {
+            path = _botNavigation!.FindPath(Source(start), Source(end));
+        }
         var worldPath = path.Select(World).ToArray();
         var intent = NativeCapsuleNavigation.Intent(origin, worldPath, approachTarget is { } referenceTarget ?
             new(referenceTarget.X, referenceTarget.Y, referenceTarget.Z) : null, approachRadius,

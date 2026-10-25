@@ -277,11 +277,14 @@ internal sealed partial class RuntimeNativeActorCombat
         Activity.SetMovement(running && moving, sneaking);
         MoveActor(moving ? clip.RootDisplacement(seconds, next) : Vector3.Zero, delta, destination);
         foreach (var key in clip.Events.Crossed(seconds, next, includeStart)) _packageSounds!.Dispatch(key);
-        _skeleton.Node.ResetBonePoses();
-        var root = _skeleton.BoneIndex(clip.Animation.Sequence.TargetName);
-        if (root >= 0) _skeleton.Node.SetBonePose(root, Transform3D.Identity);
-        clip.Animation.ApplySourceTime(clip.Time(next));
-        if (weaponDrawn) { _packageAim?.Animation.ApplySourceTime(_packageAim.Time(next)); _packageGrip?.Animation.ApplySourceTime(_packageGrip.Time(next)); }
+        if (DisplayServer.GetName() != "headless")
+        {
+            _skeleton.Node.ResetBonePoses();
+            var root = _skeleton.BoneIndex(clip.Animation.Sequence.TargetName);
+            if (root >= 0) _skeleton.Node.SetBonePose(root, Transform3D.Identity);
+            clip.Animation.ApplySourceTime(clip.Time(next));
+            if (weaponDrawn) { _packageAim?.Animation.ApplySourceTime(_packageAim.Time(next)); _packageGrip?.Animation.ApplySourceTime(_packageGrip.Time(next)); }
+        }
         var position = _actor.GlobalPosition; var rotation = _actor.GlobalBasis.Orthonormalized().GetRotationQuaternion();
         // A committed Accompany portal receipt ends at this first actual
         // destination-body observation, without repeating its source event.

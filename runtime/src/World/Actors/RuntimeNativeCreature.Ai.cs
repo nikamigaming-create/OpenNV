@@ -403,11 +403,11 @@ internal sealed partial class RuntimeNativeCreature
                 _patrol is not null && _patrolProgress?.Complete != true && !_evaluateRequested;
             if (!_packageSelectionAttempted || !PackageEndIdlePending && !(_travelPackage?.MustReach == true && _travelProgress?.Complete == false) &&
                 !patrolHolding &&
-                (_evaluateRequested || _packageClock <= 0 || scheduleTime != _aiScheduleTime || _aiQuestRevision != _aiQuests!.Revision))
+                (_evaluateRequested || _packageClock <= 0 || scheduleTime != _aiScheduleTime || _aiQuestRevision != _aiQuests!.ProgressRevision))
             {
                 _evaluateRequested = false; _packageClock = 10;
                 _aiScheduleTime = scheduleTime;
-                _aiQuestRevision = _aiQuests!.Revision;
+                _aiQuestRevision = _aiQuests!.ProgressRevision;
                 // A failed first selection still used this evaluation window.
                 // Keep cold continuation separate: it is consumed only after
                 // a successful selection. Explicit requests and changed inputs

@@ -124,7 +124,7 @@ internal partial class RuntimeNativeNpc
         _sourceSelectionKnown = failure.SourceSelectionKnown; _selectedSourcePackage = null;
         _selectionCaptureBlocker = _aiReferenceState!.ProcedureCaptureBlocker;
         _aiPollRemaining = failure.PollRemaining; _aiScheduleTime = failure.ScheduleTime;
-        _aiQuestRevision = _questState!.Revision; _aiActivityRevision = Activity.Revision;
+        _aiQuestRevision = _questState!.ProgressRevision; _aiActivityRevision = Activity.Revision;
         Transform = ReadFurniturePose(failure.Pose);
     }
 

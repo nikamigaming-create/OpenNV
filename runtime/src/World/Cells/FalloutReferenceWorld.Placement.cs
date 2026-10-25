@@ -17,27 +17,42 @@ internal sealed record FalloutReferencePlacement(FalloutFormKey Cell, float[] Po
 internal sealed partial class FalloutReferenceWorld
 {
     private readonly Dictionary<FalloutFormKey, FalloutCellScene> _placementSourceCells = [];
+    private readonly Dictionary<FalloutFormKey, FalloutPlacedReference> _placementSourceReferences = [];
     internal long PlacementRevision { get; private set; }
 
     private FalloutCellScene PlacementSource(FalloutReferenceInstance instance)
     {
         if (!_placementSourceCells.TryGetValue(instance.Cell, out var scene))
+        {
             _placementSourceCells.Add(instance.Cell, scene = FalloutCellSceneReader.Read(records, instance.Cell));
+            foreach (var reference in scene.References)
+                _placementSourceReferences.TryAdd(reference.FormKey, reference);
+        }
         return scene;
+    }
+
+    private FalloutPlacedReference PlacementSourceReference(FalloutReferenceInstance instance)
+    {
+        if (!_placementSourceReferences.TryGetValue(instance.Reference, out var source))
+        {
+            PlacementSource(instance);
+            source = _placementSourceReferences[instance.Reference];
+        }
+        return source;
     }
 
     internal FalloutReferencePlacement Placement(FalloutFormKey reference)
     {
         var instance = Get(reference);
         if (instance.Placement is { } retained) return retained.Copy();
-        var source = PlacementSource(instance).References.Single(value => value.FormKey == reference);
+        var source = PlacementSourceReference(instance);
         return new(instance.Cell, (float[])source.Position.Clone(), (float[])source.RotationRadians.Clone());
     }
 
     internal FalloutReferencePlacement EditorPlacement(FalloutFormKey reference)
     {
         var instance = Get(reference);
-        var source = PlacementSource(instance).References.Single(value => value.FormKey == reference);
+        var source = PlacementSourceReference(instance);
         return new(instance.Cell, (float[])source.Position.Clone(), (float[])source.RotationRadians.Clone());
     }
 

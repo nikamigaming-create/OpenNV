@@ -55,12 +55,12 @@ public partial class RuntimeCoordinator
                 {
                     if (!_campaignTargets.TryGetValue(quest.Quest, out var targets))
                         _campaignTargets.Add(quest.Quest, targets = FalloutQuestTargets.Read(records, quest.Quest));
+                    var questGoalsBefore = goals.Count;
                     foreach (var target in targets)
                     {
                         var objective = driver.Quests.Objective(quest.Quest, target.Objective);
                         if (!objective.Displayed || objective.Completed) continue;
-                        if (!FalloutCondition.AllPass(target.Conditions, driver.EvaluateMessageCondition, evaluateRunOn: true)) continue;
-                        var identity = quest.Quest + ":" + target.Objective + ":" + target.Ordinal + ":" + scene;
+                        if (!FalloutCondition.AllPass(target.Conditions, condition => driver.EvaluateTargetCondition(target.Reference, condition), evaluateRunOn: true)) continue;
                         try
                         {
                             var placement = world!.Placement(target.Reference);
@@ -69,7 +69,14 @@ public partial class RuntimeCoordinator
                             var current = _nativeActiveCell!.Cell;
                             var destination = FalloutCellSceneReader.ReadDefinition(records, placement.Cell);
                             var action = target.Reference;
-                            var mode = basis.Signature is "STAT" or "LIGH" or "TREE" ? "travel" : "interact";
+                            var mode = basis.Signature is "STAT" or "LIGH" or "TREE" ? "travel" :
+                                basis.Signature is "CREA" || source.Signature is "ACRE" ? "shoot" : "interact";
+                            if (source.Signature is "ACHR" or "ACRE" && world.CurrentPackage(target.Reference) is { } targetPackage &&
+                                FalloutPackageData.Read(records.GetEffective(targetPackage)).Procedure is 1 or 2 or 6)
+                            {
+                                mode = "follow";
+                            }
+                            if (source.Signature is "ACHR" or "ACRE" && world.IsDead(target.Reference) && mode == "shoot") continue;
                             if (placement.Cell != current.FormKey &&
                                 (current.Worldspace is null || current.Worldspace != destination.Worldspace))
                             {
@@ -82,16 +89,57 @@ public partial class RuntimeCoordinator
                                 action = route[0];
                                 mode = world.IsResident(action) ? "interact" : "travel";
                             }
-                            else if (placement.Cell != current.FormKey) mode = "travel";
+                            else if (mode == "interact" && world.IsResident(target.Reference))
+                            {
+                                var distanceToTarget = _nativePlayer is not null && _nativeReferencePresentation?.Nodes.TryGetValue(target.Reference, out var targetNode) == true && targetNode is not null
+                                    ? _nativePlayer.GlobalPosition.DistanceTo(targetNode.GlobalPosition) : float.PositiveInfinity;
+                                if (distanceToTarget > 10.0f) mode = "travel";
+                            }
+                            else if (mode != "follow" && !world.IsResident(target.Reference) && placement.Cell != current.FormKey) mode = "travel";
+                            var identity = quest.Quest + ":" + target.Objective + ":" + target.Ordinal + ":" + mode + ":" + scene;
                             goals.Add(new(identity, quest.Quest.ToString(), target.Objective, target.Reference.ToString(),
                                 action.ToString(), mode, priority));
                         }
                         catch (Exception targetError) when (targetError is InvalidDataException or
                             InvalidOperationException or NotSupportedException or KeyNotFoundException)
                         {
+                            var identity = quest.Quest + ":" + target.Objective + ":" + target.Ordinal + ":interact:" + scene;
                             goals.Add(new(identity, quest.Quest.ToString(), target.Objective,
                                 target.Reference.ToString(), target.Reference.ToString(), "interact", priority,
                                 "Source campaign target " + target.Reference + ": " + targetError.Message));
+                        }
+                    }
+                    if (goals.Count == questGoalsBefore)
+                    {
+                        var unfulfilled = quest.Objectives?.Where(obj => obj.Displayed && !obj.Completed).ToArray() ?? [];
+                        foreach (var objective in unfulfilled)
+                        {
+                            if (objective.Index == 15 && !player.Activity.Sneaking)
+                                player.Activity.SetMovement(player.Running, true);
+                            var candidateReferences = world!.ResidentInstances
+                                .Where(instance => instance.Script?.ReferencedForms.Contains(quest.Quest) == true &&
+                                    records.TryGetEffective(instance.Base, out var baseRecord) && baseRecord.Signature is not ("NPC_" or "CREA") &&
+                                    !records.GetEffective(instance.Reference).ReadSubrecords().Any(field => field.Signature == "XPRM") &&
+                                    world.IsEnabled(instance.Reference) && !instance.Deleted && !instance.DeletePending &&
+                                    !instance.Taken)
+                                .OrderBy(instance => instance.Reference.ObjectId)
+                                .ToArray();
+
+                            foreach (var candidate in candidateReferences)
+                            {
+                                if (candidate.Variables.Values.Any(v => v != 0)) continue;
+                                var identity = quest.Quest + ":" + objective.Index + ":" + candidate.Reference + ":" + scene;
+                                goals.Add(new(identity, quest.Quest.ToString(), (uint)objective.Index,
+                                    candidate.Reference.ToString(), candidate.Reference.ToString(), "shoot", priority));
+                            }
+
+                            if (goals.Count == questGoalsBefore && targets.Count > 0)
+                            {
+                                var fallbackTarget = targets[0].Reference;
+                                var identity = quest.Quest + ":" + objective.Index + ":fallback:" + fallbackTarget + ":" + scene;
+                                goals.Add(new(identity, quest.Quest.ToString(), (uint)objective.Index,
+                                    fallbackTarget.ToString(), fallbackTarget.ToString(), "interact", priority - 10));
+                            }
                         }
                     }
                 }

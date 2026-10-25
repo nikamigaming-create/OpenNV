@@ -258,6 +258,7 @@ internal sealed class FalloutQuestState(FalloutPluginStack stack, FalloutHudNoti
         if (stack.GetEffective(next).Signature != "QUST") throw new InvalidDataException("Next-quest identity is not QUST.");
         Require(quest).NextQuest = next;
         Revision++;
+        ProgressRevision++;
     }
     internal void SetRunning(FalloutFormKey quest, bool running)
     {
@@ -265,6 +266,7 @@ internal sealed class FalloutQuestState(FalloutPluginStack stack, FalloutHudNoti
         if (state.Running == running) return;
         state.Running = running;
         Revision++;
+        ProgressRevision++;
     }
     internal bool StageDone(FalloutFormKey quest, short stage) => Require(quest).Stages.Contains(stage);
 
