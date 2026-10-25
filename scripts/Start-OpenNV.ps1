@@ -8,7 +8,11 @@ param(
     [ValidateSet('none')][string]$NativePlugins = 'none',
     [ValidateSet('vanilla', 'installed')][string]$ContentSelection = 'vanilla',
     [ValidateSet('newvegas', 'fallout3', 'fallout1', 'fallout2')][string]$Game = 'newvegas',
-    [string]$ProfileRoot = ''
+    [string]$ProfileRoot = '',
+    [switch]$Direct,
+    [switch]$NewGame,
+    [string]$DataRoot = '',
+    [string]$SavePath = ''
 )
 
 $ErrorActionPreference = "Stop"
@@ -108,9 +112,104 @@ if ([string]::IsNullOrWhiteSpace($ProfileRoot)) {
     $ProfileRoot = Join-Path ([Environment]::GetFolderPath('ApplicationData')) 'Godot/app_userdata/OpenNV/vanilla'
 }
 $ProfileRoot = [IO.Path]::GetFullPath($ProfileRoot)
-$launchArguments = @('--xr-mode', $(if ($Vr) { 'on' } else { 'off' }), '--', '--launcher',
-    '--launcher-game', $Game, '--presentation', $(if ($Vr) { 'openxr' } else { 'first-person' }),
-    '--native-plugins', $NativePlugins, '--content-selection', $ContentSelection, '--profile-root', $ProfileRoot)
+
+if ($Direct) {
+    if ([string]::IsNullOrWhiteSpace($DataRoot)) {
+        $profilesJsonPath = Join-Path $ProfileRoot 'launcher/profiles-v1.json'
+        if (-not (Test-Path -LiteralPath $profilesJsonPath -PathType Leaf)) {
+            $profilesJsonPath = Join-Path ([Environment]::GetFolderPath('ApplicationData')) 'Godot/app_userdata/OpenNV/launcher/profiles-v1.json'
+        }
+        if (Test-Path -LiteralPath $profilesJsonPath -PathType Leaf) {
+            try {
+                $profilesData = Get-Content -LiteralPath $profilesJsonPath -Raw | ConvertFrom-Json
+                if ($profilesData.profiles.$Game.installRoot) {
+                    $DataRoot = $profilesData.profiles.$Game.installRoot
+                }
+            } catch {}
+        }
+    }
+    if ([string]::IsNullOrWhiteSpace($DataRoot)) {
+        if ($Game -eq 'newvegas') {
+            $regKey = Get-ItemProperty -Path 'HKLM:\SOFTWARE\WOW6432Node\Bethesda Softworks\FalloutNV' -ErrorAction SilentlyContinue
+            if ($regKey -and $regKey.'installed path') { $DataRoot = $regKey.'installed path'.TrimEnd('\', '/') }
+            if (-not $DataRoot) {
+                $regKey2 = Get-ItemProperty -Path 'HKLM:\SOFTWARE\Bethesda Softworks\FalloutNV' -ErrorAction SilentlyContinue
+                if ($regKey2 -and $regKey2.'installed path') { $DataRoot = $regKey2.'installed path'.TrimEnd('\', '/') }
+            }
+        } elseif ($Game -eq 'fallout3') {
+            $regKey = Get-ItemProperty -Path 'HKLM:\SOFTWARE\WOW6432Node\Bethesda Softworks\Fallout3' -ErrorAction SilentlyContinue
+            if ($regKey -and $regKey.'installed path') { $DataRoot = $regKey.'installed path'.TrimEnd('\', '/') }
+        }
+    }
+    if ([string]::IsNullOrWhiteSpace($DataRoot)) {
+        $candidates = @()
+        if ($Game -eq 'newvegas') {
+            $candidates = @(
+                "D:\SteamLibrary\steamapps\common\Fallout New Vegas",
+                "C:\Program Files (x86)\Steam\steamapps\common\Fallout New Vegas",
+                "C:\Steam\steamapps\common\Fallout New Vegas",
+                "C:\GOG Games\Fallout New Vegas",
+                "D:\GOG Games\Fallout New Vegas"
+            )
+        } elseif ($Game -eq 'fallout3') {
+            $candidates = @(
+                "D:\SteamLibrary\steamapps\common\Fallout 3 goty",
+                "D:\SteamLibrary\steamapps\common\Fallout 3",
+                "C:\Program Files (x86)\Steam\steamapps\common\Fallout 3 goty",
+                "C:\Steam\steamapps\common\Fallout 3 goty"
+            )
+        } elseif ($Game -eq 'fallout1') {
+            $candidates = @(
+                "D:\SteamLibrary\steamapps\common\Fallout",
+                "C:\Program Files (x86)\Steam\steamapps\common\Fallout"
+            )
+        } elseif ($Game -eq 'fallout2') {
+            $candidates = @(
+                "D:\SteamLibrary\steamapps\common\Fallout 2",
+                "C:\Program Files (x86)\Steam\steamapps\common\Fallout 2"
+            )
+        }
+        foreach ($candidate in $candidates) {
+            if (Test-Path -LiteralPath $candidate -PathType Container) {
+                $DataRoot = $candidate
+                break
+            }
+        }
+    }
+
+    if ([string]::IsNullOrWhiteSpace($DataRoot)) {
+        throw "Could not automatically resolve installation for $Game. Pass -DataRoot explicitly or run without -Direct to use the launcher."
+    }
+
+    $campaignName = switch ($Game) {
+        'newvegas' { 'fallout-new-vegas' }
+        'fallout3' { 'fallout-3' }
+        'fallout1' { 'fallout-1' }
+        'fallout2' { 'fallout-2' }
+    }
+
+    if ([string]::IsNullOrWhiteSpace($SavePath)) {
+        $saveFileName = switch ($Game) {
+            'newvegas' { 'courier-v1.json' }
+            'fallout3' { 'capital-wasteland-v1.json' }
+            'fallout1' { 'vault-dweller-v1.json' }
+            'fallout2' { 'chosen-v1.json' }
+        }
+        $SavePath = Join-Path $ProfileRoot "profiles/$Game/$saveFileName"
+    }
+
+    $launchArguments = @('--xr-mode', $(if ($Vr) { 'on' } else { 'off' }), '--',
+        '--data-root', $DataRoot, '--campaign', $campaignName, '--save-path', $SavePath,
+        '--presentation', $(if ($Vr) { 'openxr' } else { 'first-person' }),
+        '--native-plugins', $NativePlugins, '--content-selection', $ContentSelection, '--profile-root', $ProfileRoot)
+    if ($NewGame) {
+        $launchArguments += '--new-game'
+    }
+} else {
+    $launchArguments = @('--xr-mode', $(if ($Vr) { 'on' } else { 'off' }), '--', '--launcher',
+        '--launcher-game', $Game, '--presentation', $(if ($Vr) { 'openxr' } else { 'first-person' }),
+        '--native-plugins', $NativePlugins, '--content-selection', $ContentSelection, '--profile-root', $ProfileRoot)
+}
 
 if ($Configuration -eq "Release") {
     # The editor's --path runner always loads Debug OpenNV and GodotSharp.

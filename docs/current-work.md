@@ -1,29 +1,33 @@
 # Current work
 
-## Active batch: FNV Campaign autonomous progression (VCG02 and VMQ01)
+## Active batch: Direct game launch and retail installation auto-discovery
 
-Work continues on user instruction ("Consolidate all that shit down and be working on one", "get this thing 100% playable end-to-end, one-to-one with retail").
-Active branch is `codex/fnv-campaign-bottle-shooting` based on `main`. The full required runtime gate
+Work addresses user report ("it didnt launch only the luancher").
+Active branch is `codex/fix-launcher-launch` based on `main`. The full required runtime gate
 (`Test-GodotRuntime.ps1` and `git diff --check`) passes cleanly with 0 warnings,
 0 errors, clean git diff, and verified Godot runtime audits (`OPENNV_CSHARP_GODOT_GATE_PASS`).
 
-### Verified capabilities and progression
+### Verified capabilities and fixes
 
-1. **FNV Tutorial Quest (`VCG02` - "Back in the Saddle") Fully Autonomous**:
-   - **Stage 10 (Bottle Shooting)**: All 3 sunset sarsaparilla bottles (`10a202`, `10a203`, `10a204`) acquired, targeted with >0.998 aim alignment, fired upon, and verified hit.
-   - **Stage 20 (Goodsprings Trail Follow)**: Followed Sunny Smiles south over 180m past Goodsprings Cemetery down to Goodsprings Source (Well 1).
-   - **Stage 30 (Well 1 Gecko Combat)**: Engaged aggressive geckos (`10a1fe`, `10a1fd`) live in-engine via single-ray combat skill, verified damage and deaths, repositioned upon miss/obstruction, and talked to Sunny Smiles.
-   - **Stage 40 (Well 2 Escort & Exterior Traversal)**: Traversed rocky exterior cell terrain down to Well 2, reached Sunny Smiles, initiated dialogue, selected responses, and advanced to Stage 50 (Progress 14).
-   - **Adaptive Navigation Refinement**: Added corridor prefix-length halving and arrival tolerance in `RuntimeCoordinator.Bot.Planning.cs` to prevent 8-meter path cuts from stalling on static terrain obstacle margins.
+1. **Automatic Retail Game Installation Discovery**:
+   - Implemented `AutoDiscoverInstallations()` and drive / registry probes in `GodotLauncherProfileStore`.
+   - On Windows, queries standard Bethesda Softworks and GOG registry paths, plus scans all drive roots for Steam and GOG common directories.
+   - Automatically seeds and validates installations (`Fallout New Vegas`, `Fallout 3`, `Fallout 1`, `Fallout 2`) via `NativeGameInstallation.Detect`.
+   - When the in-engine launcher opens, installed games are automatically configured so the "Play", "New Game", and "Continue" buttons are immediately active.
 
-2. **Main Quest Handoff (`VMQ01` - "They Went That-a-Way")**:
-   - Automated curriculum seamlessly transitions between high-priority campaign objectives and main quest goals (Deputy Beagle / Primm).
+2. **Direct Game Launch Support**:
+   - Added `-Direct`, `-NewGame`, `-DataRoot`, and `-SavePath` switches to `scripts/Start-OpenNV.ps1`.
+   - Running `.\scripts\Start-OpenNV.ps1 -Direct` bypasses the launcher UI completely and launches directly into the game's start menu.
+   - Adding `-NewGame` begins character creation immediately.
 
-3. **Full Runtime Gate Verification**:
+3. **Desktop Launcher Integration**:
+   - Reconnected `launch(request)` in `desktop/src/main.mjs` to invoke the Godot runtime directly via `Start-OpenNV.ps1 -Direct`.
+
+4. **Full Runtime Gate Verification**:
    - Release and Debug C# builds, managed and native contracts, launcher tests, and Godot runtime audits pass cleanly (`OPENNV_CSHARP_GODOT_GATE_PASS`).
    - Clean git diff with 0 warnings, 0 errors.
 
 ### Next steps
 
-1. Push `codex/fnv-campaign-bottle-shooting`, open checked PR, verify CI, and squash-merge into `main`.
-2. Continue autonomous campaign bot progression along the Highway 15 corridor towards Primm and Novac.
+1. Push `codex/fix-launcher-launch`, open checked PR, verify CI, and squash-merge into `main`.
+2. Continue autonomous campaign progression.

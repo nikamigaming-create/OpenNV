@@ -38,16 +38,35 @@ internal sealed class GodotLauncherProfileStore
 
     internal static GodotLauncherProfileStore Load(string? profileRoot = null)
     {
+        GodotLauncherProfileStore store;
         if (profileRoot is not null)
         {
             if (!Path.IsPathFullyQualified(profileRoot))
                 throw new ArgumentException("The launcher profile root must be an absolute directory.", nameof(profileRoot));
             var root = Path.GetFullPath(profileRoot);
-            return Open(Path.Combine(root, "launcher", "profiles-v1.json"), Path.Combine(root, "profiles"));
+            var profilePath = Path.Combine(root, "launcher", "profiles-v1.json");
+            var defaultUserPath = ProjectSettings.GlobalizePath("user://launcher/profiles-v1.json");
+            if (!File.Exists(profilePath) && File.Exists(defaultUserPath) && !profilePath.Equals(defaultUserPath, StringComparison.OrdinalIgnoreCase))
+            {
+                try
+                {
+                    Directory.CreateDirectory(Path.GetDirectoryName(profilePath)!);
+                    File.Copy(defaultUserPath, profilePath, overwrite: false);
+                }
+                catch
+                {
+                    // Best effort copy
+                }
+            }
+            store = Open(profilePath, Path.Combine(root, "profiles"));
         }
-        var path = ProjectSettings.GlobalizePath("user://launcher/profiles-v1.json");
-        var store = Open(path, ProjectSettings.GlobalizePath("user://profiles"));
+        else
+        {
+            var path = ProjectSettings.GlobalizePath("user://launcher/profiles-v1.json");
+            store = Open(path, ProjectSettings.GlobalizePath("user://profiles"));
+        }
         store.ImportLegacyRegistrations();
+        store.AutoDiscoverInstallations();
         return store;
     }
 
@@ -245,6 +264,168 @@ internal sealed class GodotLauncherProfileStore
         changed |= ImportFo2Profile(legacy);
         if (changed)
             Persist();
+    }
+
+    internal void AutoDiscoverInstallations()
+    {
+        var changed = false;
+        foreach (var campaignId in new[] { "newvegas", "fallout3", "fallout1", "fallout2" })
+        {
+            if (_profiles.ContainsKey(campaignId))
+                continue;
+
+            var discoveredRoot = DiscoverInstallationRoot(campaignId);
+            if (discoveredRoot is not null)
+            {
+                _profiles[campaignId] = new GodotLauncherProfile(campaignId, discoveredRoot, SavePath(campaignId));
+                changed = true;
+            }
+        }
+
+        if (changed)
+        {
+            if (SelectedGame is null || !_profiles.ContainsKey(SelectedGame))
+            {
+                if (_profiles.ContainsKey("newvegas"))
+                    SelectedGame = "newvegas";
+                else if (_profiles.Count > 0)
+                    SelectedGame = _profiles.Keys.First();
+            }
+            Persist();
+        }
+    }
+
+    private static string? DiscoverInstallationRoot(string campaignId)
+    {
+        var expectedGame = campaignId switch
+        {
+            "fallout1" => NativeGame.Fallout1,
+            "fallout2" => NativeGame.Fallout2,
+            "fallout3" => NativeGame.Fallout3,
+            "newvegas" => NativeGame.FalloutNewVegas,
+            _ => (NativeGame?)null,
+        };
+        if (expectedGame is null) return null;
+
+        var candidates = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        if (OperatingSystem.IsWindows())
+        {
+            AddRegistryCandidates(campaignId, candidates);
+        }
+
+        AddFileSystemCandidates(campaignId, candidates);
+
+        foreach (var candidate in candidates)
+        {
+            try
+            {
+                if (!Directory.Exists(candidate)) continue;
+                var installation = NativeGameInstallation.Detect(candidate);
+                if (installation.Game == expectedGame.Value)
+                    return Path.GetFullPath(candidate);
+            }
+            catch
+            {
+                // Best effort: candidate is not a matching game installation
+            }
+        }
+
+        return null;
+    }
+
+    private static void AddRegistryCandidates(string campaignId, HashSet<string> candidates)
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        try
+        {
+            if (campaignId == "newvegas")
+            {
+                AddRegistryValue(candidates, @"SOFTWARE\WOW6432Node\Bethesda Softworks\FalloutNV", "Installed Path");
+                AddRegistryValue(candidates, @"SOFTWARE\Bethesda Softworks\FalloutNV", "Installed Path");
+                AddRegistryValue(candidates, @"SOFTWARE\WOW6432Node\GOG.com\Games\1312824884", "path");
+                AddRegistryValue(candidates, @"SOFTWARE\GOG.com\Games\1312824884", "path");
+            }
+            else if (campaignId == "fallout3")
+            {
+                AddRegistryValue(candidates, @"SOFTWARE\WOW6432Node\Bethesda Softworks\Fallout3", "Installed Path");
+                AddRegistryValue(candidates, @"SOFTWARE\Bethesda Softworks\Fallout3", "Installed Path");
+                AddRegistryValue(candidates, @"SOFTWARE\WOW6432Node\GOG.com\Games\1445589087", "path");
+                AddRegistryValue(candidates, @"SOFTWARE\GOG.com\Games\1445589087", "path");
+            }
+            else if (campaignId == "fallout1")
+            {
+                AddRegistryValue(candidates, @"SOFTWARE\WOW6432Node\GOG.com\Games\1440163926", "path");
+                AddRegistryValue(candidates, @"SOFTWARE\GOG.com\Games\1440163926", "path");
+            }
+            else if (campaignId == "fallout2")
+            {
+                AddRegistryValue(candidates, @"SOFTWARE\WOW6432Node\GOG.com\Games\1440163927", "path");
+                AddRegistryValue(candidates, @"SOFTWARE\GOG.com\Games\1440163927", "path");
+            }
+        }
+        catch
+        {
+            // Best effort
+        }
+    }
+
+    private static void AddRegistryValue(HashSet<string> candidates, string subKeyName, string valueName)
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        try
+        {
+            using var key = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(subKeyName);
+            if (key?.GetValue(valueName) is string path && !string.IsNullOrWhiteSpace(path))
+            {
+                candidates.Add(path.TrimEnd('\\', '/'));
+            }
+        }
+        catch
+        {
+            // Best effort
+        }
+    }
+
+    private static void AddFileSystemCandidates(string campaignId, HashSet<string> candidates)
+    {
+        var gameSubdirs = campaignId switch
+        {
+            "newvegas" => new[] { "Fallout New Vegas", "Fallout: New Vegas", "Fallout New Vegas en" },
+            "fallout3" => new[] { "Fallout 3 goty", "Fallout 3", "Fallout 3 - Game of the Year Edition" },
+            "fallout1" => new[] { "Fallout", "Fallout 1" },
+            "fallout2" => new[] { "Fallout 2", "Fallout2" },
+            _ => [],
+        };
+
+        var commonPrefixes = new List<string>();
+        try
+        {
+            foreach (var drive in DriveInfo.GetDrives())
+            {
+                if (!drive.IsReady) continue;
+                var driveRoot = drive.RootDirectory.FullName;
+                commonPrefixes.Add(Path.Combine(driveRoot, "SteamLibrary", "steamapps", "common"));
+                commonPrefixes.Add(Path.Combine(driveRoot, "Program Files (x86)", "Steam", "steamapps", "common"));
+                commonPrefixes.Add(Path.Combine(driveRoot, "Program Files", "Steam", "steamapps", "common"));
+                commonPrefixes.Add(Path.Combine(driveRoot, "Steam", "steamapps", "common"));
+                commonPrefixes.Add(Path.Combine(driveRoot, "Games", "Steam", "steamapps", "common"));
+                commonPrefixes.Add(Path.Combine(driveRoot, "GOG Games"));
+                commonPrefixes.Add(Path.Combine(driveRoot, "Games", "GOG Games"));
+            }
+        }
+        catch
+        {
+            // Best effort
+        }
+
+        foreach (var prefix in commonPrefixes)
+        {
+            foreach (var subdir in gameSubdirs)
+            {
+                candidates.Add(Path.Combine(prefix, subdir));
+            }
+        }
     }
 
     private bool ImportDataRegistration(string legacyRoot, string campaignId, string fileName)
