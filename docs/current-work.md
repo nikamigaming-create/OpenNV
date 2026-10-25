@@ -3,30 +3,24 @@
 ## Active batch: FNV autonomous campaign playthrough - Goodsprings progression
 
 Work continues on user instruction ("FNV 100% go"). Active branch is
-`codex/fnv-autonomous-playthrough` based on `main`. The full required runtime gate
+`codex/fnv-goodsprings-progression` based on `main`. The full required runtime gate
 (`Test-GodotRuntime.ps1` and `git diff --check`) passes cleanly with 0 warnings,
 0 errors, clean git diff, and verified Godot runtime audits.
 
 ### Verified capabilities and progression
 
-1. **Autonomous chargen completion**:
-   - Trait menu: tagged unselected selectable trait rows with `chargen` metadata and matched continue button `LUM_ContinueButton` alongside `TM_DoneButton`.
-   - Couch exit: added furniture active/phase observation to `ReactiveReferenceBot` and automated stand-up activation pulse when starting movement while seated.
+1. **Active quest goal selection**:
+   - Quest filtering in `RuntimeCoordinator.Bot.Campaign.cs`: admitted active quests alongside running quests (`!quest.Completed && (quest.Running == true || quest.Active) && quest.Objectives?.Any(objective => objective.Displayed && !objective.Completed) == true`), correctly prioritizing the player's active quest `VCG02` ("Back in the Saddle", Priority 1075) over distant quests across the wasteland (`VMQ01:30` at Primm).
+   - Cross-cell portal navigation: set portal approach mode to `"travel"` when portal entrance doors are not resident in the current exterior cell (`mode = world.IsResident(action) ? "interact" : "travel"`), preventing premature interaction attempts on non-resident doors.
 
-2. **Trigger contact and farewell dialogue**:
-   - Added close destination standoff (`Distance = 0.5f`) for `travel` mode goals in `ReactiveCampaignBot`, enabling the player to step firmly inside trigger volume `FalloutNV.esm:107236` (`GSDocMitchellExitTrigger`) and advance `VCG01` to Stage 115.
-   - Verified Doc Mitchell farewell greeting, item/Pip-Boy handover, and Hardcore message dialog choice.
+2. **Wasteland navigation bound**:
+   - Navigation execution bound in `ReactiveReferenceBot.cs`: extended execution timeout to 900 seconds while actively navigating towards distant goals (`_mode == "travel" || _phase != "awaiting-interaction"`), allowing the bot to complete long exterior wasteland traverses without stalling or timing out.
 
-3. **Exterior transition and save admission**:
-   - Fixed save checkpoint admission: removed overly restrictive `PendingPackageEventCount == 0` check which was blocked by unloaded actors in non-resident cells (e.g. `0d7f59`).
-   - Added `checkpointReady` support for finite, non-looping `PlaySound`/`PlaySound3D` script voices (`!voice.Request.Source.IsLooping`) in `FalloutScriptSounds.cs`, allowing one-shot audio stingers (such as `ui_radio_signalfound2.wav` on cell entry) to finish without blocking save creation.
-   - Guarded manual save preparation in `RuntimeNativeManualSavePreparation.cs` to check admission before preparing finite save drains.
-   - Verified checkpoint creation in Goodsprings exterior cell `FalloutNV.esm:0da726` and cold continuation from checkpoint.
-
-4. **Wasteland navigation**:
-   - Autonomous bot navigated over 60 meters along the Goodsprings street towards the Prospector Saloon door (`FalloutNV.esm:10636f`) for quest `VMQ01`.
+3. **Goodsprings exterior traversal**:
+   - Autonomous bot selects `FalloutNV.esm:10a214:3` ("Back in the Saddle", Objective 3: Talk to Sunny Smiles) and navigates down the Goodsprings street towards the Prospector Saloon door (`FalloutNV.esm:10636f`), steadily closing distance across multi-segment navmesh corridors.
 
 ### Next steps
 
-1. Commit and push `codex/fnv-autonomous-playthrough`, open PR, verify CI, and merge into `main`.
-2. Resume autonomous campaign bot on fresh branch to continue from the Prospector Saloon into the Sunny Smiles tutorial and Goodsprings quest chain.
+1. Execute required gate (`Test-GodotRuntime.ps1` and `git diff --check`).
+2. Commit and push `codex/fnv-goodsprings-progression`, open PR, verify CI, and merge into `main`.
+3. Launch autonomous campaign bot on next branch to complete entry into Prospector Saloon, initiate Sunny Smiles dialogue, and progress the tutorial.
