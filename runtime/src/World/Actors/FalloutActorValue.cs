@@ -8,16 +8,18 @@ internal sealed record FalloutActorValue(float Base, float Permanent = 0, float 
     private static readonly string[] SpecialNames = ["strength", "perception", "endurance", "charisma", "intelligence", "agility", "luck"];
     private static readonly string[] SkillNames = ["barter", "bigguns", "energyweapons", "explosives", "lockpick", "medicine", "meleeweapons", "repair", "science", "smallguns", "sneak", "speech", "survival", "unarmed"];
     internal static string SourceSlot(int value) => value is >= 5 and <= 11 ? SpecialNames[value - 5] :
-        value is >= 32 and <= 45 ? SkillNames[value - 32] : UserSlot(value);
+        value is >= 32 and <= 45 ? SkillNames[value - 32] : value == 54 ? "radiationrads" : UserSlot(value);
     internal static string SourceSlot(string name)
     {
         var canonical = name.ToLowerInvariant();
+        if (canonical == "radiationrads") return canonical;
         if (canonical == "guns") canonical = "smallguns";
         return SpecialNames.Contains(canonical) || SkillNames.Contains(canonical) ? canonical : UserSlot(canonical);
     }
     internal static int SourceIndex(string name)
     {
         var canonical = SourceSlot(name);
+        if (canonical == "radiationrads") return 54;
         var special = Array.IndexOf(SpecialNames, canonical);
         if (special >= 0) return special + 5;
         var skill = Array.IndexOf(SkillNames, canonical);

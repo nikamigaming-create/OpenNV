@@ -139,6 +139,7 @@ internal sealed partial class RuntimeNativeActorCombat
 
     internal void StopPackageMotion()
     {
+        _eatObjects?.SetVisible(false);
         PackageOwnsPose = false;
         PackageMoving = false;
         _packageWeapon?.Root.Hide();

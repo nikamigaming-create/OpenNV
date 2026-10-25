@@ -5,7 +5,7 @@ namespace OpenNV.Runtime.Content;
 
 internal sealed record FalloutIngestibleEffect(int Index, FalloutFormKey Form, string Hash,
     uint Archetype, int ActorValue, uint Flags, float Magnitude, uint Duration,
-    uint Area, uint Range, bool AdditionalPresentation, IReadOnlyList<FalloutCondition> Conditions)
+    uint Area, uint Range, bool AdditionalPresentation, IReadOnlyList<FalloutCondition> Conditions, int Resistance = -1)
 {
     internal uint EffectiveDuration => (Flags & 0x80) == 0 ? Duration : 0;
 }
@@ -51,7 +51,8 @@ internal sealed record FalloutIngestible(FalloutFormKey Form, string Hash, byte 
                 BinaryPrimitives.ReadInt32LittleEndian((flags & 0x180000) != 0 ? data[16..] : definition[68..]), flags,
                 BinaryPrimitives.ReadUInt32LittleEndian(data), BinaryPrimitives.ReadUInt32LittleEndian(data[8..]),
                 BinaryPrimitives.ReadUInt32LittleEndian(data[4..]), BinaryPrimitives.ReadUInt32LittleEndian(data[12..]), presentation,
-                group.Where(field => field.Signature == "CTDA").Select(field => FalloutCondition.Read(record, field.Data.Span)).ToArray()));
+                group.Where(field => field.Signature == "CTDA").Select(field => FalloutCondition.Read(record, field.Data.Span)).ToArray(),
+                BinaryPrimitives.ReadInt32LittleEndian(definition[16..])));
             index = end - 1;
         }
         return new(form, HashOf(record), header[4], script.IsEmpty ? null :

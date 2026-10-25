@@ -73,6 +73,24 @@ internal static class OwnedIngestibleProbe
         if (foodPools.ReadCurrent(7) != endurance || food.Capture().Effects.Count != 0)
             throw new InvalidDataException("Owned cactus modifier did not expire once at its source duration.");
         Console.WriteLine("OPENNV_OWNED_FOOD_EFFECT_PASS cactus=true survivalScale=true timedHealth=true temporaryEndurance=true hardcoreConditions=false nativeEat=unverified");
+        var meat = FalloutDialogueTopic.Find(records, "ALCH", "NVGeckoMeat").FormKey;
+        var meatInventory = new FalloutPlayerInventory(); meatInventory.Add(records, meat, 1, 1, true);
+        var meatVitals = new FalloutPlayerVitals(records, player, new(5, 5, 5, 5, 5, 5, 5));
+        meatVitals.Damage(50);
+        var meatBefore = meatVitals.State.ExactHitPoints;
+        var meatOwner = new FalloutPlayerIngestibles(records, meatInventory, meatVitals, body,
+            value => value == 20 ? 25 : 50, _ => false, () => false, foodPools);
+        var meatEffects = FalloutIngestible.Read(records, meat).Effects;
+        var rads = meatEffects.Single(effect => effect.ActorValue == 54);
+        meatOwner.Prepare(meat).Commit(); meatOwner.Advance(60);
+        var healing = meatEffects.Single(effect => effect.ActorValue == 16);
+        var healingScale = FalloutGameSettingFloats.Read(records, "fMagicSurvivalSkillBase") +
+            FalloutGameSettingFloats.Read(records, "fMagicSurvivalSkillMult") * .5f;
+        if (meatInventory.Item(meat) is { Count: > 0 } ||
+            MathF.Abs(meatVitals.State.RadiationRads - rads.Magnitude * Math.Max(1, rads.EffectiveDuration) * .75f) > .001f ||
+            MathF.Abs(meatVitals.State.ExactHitPoints - meatBefore - healing.Magnitude * Math.Max(1, healing.EffectiveDuration) * healingScale) > .001f)
+            throw new InvalidDataException("Owned meat consumption lost health or resistance-adjusted radiation.");
+        Console.WriteLine("OPENNV_OWNED_MEAT_EFFECT_PASS consume=true health=true radiation=true sourceResistance=true native=unverified");
         var label = FalloutGameSettingStrings.Read(records, "sInventoryUse");
         if (string.IsNullOrWhiteSpace(label)) throw new InvalidDataException("Owned Aid action label is absent.");
         Console.WriteLine("OPENNV_OWNED_INGESTIBLE_PASS stimpak=true normalInstant=true hardcoreTimed=true medicine=true consumeSound=true coldRemainder=true nativeUse=separate");

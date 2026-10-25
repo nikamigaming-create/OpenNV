@@ -151,6 +151,12 @@ internal sealed class FalloutPlayerIngestibles(FalloutPluginStack records, Fallo
     private GameplayVitals Apply(GameplayVitals state, FalloutIngestibleEffect effect, float amount)
     {
         if (!float.IsFinite(amount)) throw new InvalidDataException("Ingestible effect increment is invalid.");
+        if (effect.ActorValue == 54)
+        {
+            var radiation = state.RadiationRads - amount;
+            if (!float.IsFinite(radiation)) throw new InvalidDataException("Ingestible radiation overflowed.");
+            return state with { RadiationRads = Math.Max(0, radiation) };
+        }
         var health = Math.Clamp(state.ExactHitPoints + amount, 0, state.MaximumHitPoints);
         var displayed = (int)MathF.Ceiling(health);
         state = state with { HitPoints = displayed, HitPointFraction = displayed - health };

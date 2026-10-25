@@ -18,7 +18,7 @@ internal sealed partial class FalloutReferenceWorld
         {
             4 => "aggression",
             16 => "health",
-            >= 5 and <= 11 or >= 32 and <= 45 => FalloutActorValue.SourceSlot(value),
+            54 or >= 5 and <= 11 or >= 32 and <= 45 => FalloutActorValue.SourceSlot(value),
             >= 62 and <= 71 => FalloutActorValue.UserSlot(value),
             _ => throw new NotSupportedException($"AI actor value slot {value} has no shared source owner."),
         });

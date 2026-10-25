@@ -15,28 +15,49 @@ internal static class IngestibleContracts
         try
         {
             var actor = new byte[24]; actor[8] = 1;
+            var creatureStats = new byte[17]; creatureStats[1] = 30;
+            BinaryPrimitives.WriteInt16LittleEndian(creatureStats.AsSpan(4), 50);
+            for (var index = 10; index < 17; index++) creatureStats[index] = 5;
             var bytes = Join(Record("TES4", 0, Field("HEDR", new byte[12])),
                 Record("NPC_", 7, Field("ACBS", actor), Field("DATA", [100, 0, 0, 0, 5, 5, 5, 5, 5, 5, 5]),
                     Field("NAM4", new byte[4]), Field("DNAM", Enumerable.Repeat((byte)50, 28).ToArray())),
+                Record("CREA", 0x20, Field("ACBS", actor), Field("DATA", creatureStats),
+                    Field("NAM4", new byte[4]), Field("PNAM", BitConverter.GetBytes(0x1du))),
+                Idle(0x30, "Test/IdleAnims", 0, 0x87, Predicate(143, 10)),
+                Idle(0x31, "Test/IdleAnims/Meal.kf", 0x30, 7, Predicate(246, 1, 6)),
+                Idle(0x32, "Test2/IdleAnims", 0, 0x87, Predicate(159, 3)),
+                Idle(0x33, "Test2/IdleAnims/Food", 0x32, 7, Predicate(143, 10)),
+                Idle(0x34, "Test2/IdleAnims/Meal.kf", 0x33, 7),
                 Item(1, Effect(10, 20, 0)), Item(2, Effect(11, 4, 6, true)),
                 Item(3, Effect(10, 20, 0), Effect(12, 1, 0)),
-                Item(4, Effect(13, 20, 99)), Item(5, Effect(14, 50, 0)),
+                Item(4, Effect(13, 20, 99)), Item(5, Effect(11, 0, 0), Effect(14, 50, 0)),
                 Food(6, Effect(11, 4, 5), Effect(15, 1, 8, actorValue: 7)),
-                Modifier(15, 0, 0x76, 7), Modifier(10, 34, 0x70), Modifier(11, 0, 0x70), Modifier(12, 1, 0x70), Modifier(13, 0, 0xf0), Modifier(14, 0, 0x70, 54),
+                Modifier(15, 0, 0x76, 7), Modifier(10, 34, 0x70), Modifier(11, 0, 0x70), Modifier(12, 1, 0x70), Modifier(13, 0, 0xf0), Modifier(14, 0, 0x1000075, 54, 20),
                 Setting(100, "fMagicMedicineSkillBase", 1), Setting(101, "fMagicMedicineSkillMult", 2),
                 Setting(110, "fMagicSurvivalSkillBase", 1), Setting(111, "fMagicSurvivalSkillMult", 2),
                 Setting(112, "fAVDNPCHealthEnduranceOffset", 0), Setting(113, "fAVDNPCHealthEnduranceMult", 0),
-                Setting(114, "fAVDNPCHealthLevelMult", 0),
+                Setting(114, "fAVDNPCHealthLevelMult", 0), Setting(115, "fPlayerMaxResistance", 85),
+                Setting(116, "fAVDRadResistEnduranceOffset", 0), Setting(117, "fAVDRadResistEnduranceMult", 2),
                 Setting(102, "fAVDHealthEnduranceMult", 20), Setting(103, "fAVDHealthLevelMult", 5),
                 Setting(104, "fAVDActionPointsBase", 65), Setting(105, "fAVDActionPointsMult", 3),
                 Record("GMST", 106, Field("EDID", Text("iXPBase")), Field("DATA", BitConverter.GetBytes(200))),
                 Record("GMST", 107, Field("EDID", Text("iXPBumpBase")), Field("DATA", BitConverter.GetBytes(150))),
                 Record("BPTD", 0x1d, Field("BPNN", Text("Root")), Field("BPND", new byte[84])), Record("CELL", 0x80, Field("DATA", [1])),
                 ReferenceGroup(Record("ACHR", 0x91, Field("NAME", BitConverter.GetBytes(7u)), Field("DATA", new byte[24])),
-                    Record("REFR", 0x92, Field("NAME", BitConverter.GetBytes(6u)), Field("DATA", new byte[24]))));
+                    Record("REFR", 0x92, Field("NAME", BitConverter.GetBytes(6u)), Field("DATA", new byte[24])),
+                    Record("ACRE", 0x94, Field("NAME", BitConverter.GetBytes(0x20u)), Field("DATA", new byte[24]))));
             File.WriteAllBytes(path, bytes);
             using var records = FalloutPluginStack.Load(directory, ["Test.esm"]);
             FalloutFormKey Key(uint id) => new("Test.esm", id);
+            var idles = new FalloutFurnitureIdleTree(records, "meshes/Test/skeleton.nif");
+            Check(idles.SelectProcedure(10, condition => condition.Function == 143 ? 10 : 0) is null,
+                "A source-authorized no-file selection fabricated an animation.");
+            Check(idles.SelectProcedure(10, condition => condition.Function == 143 ? 10 : 1)?.FormKey == Key(0x31),
+                "Item-conditioned eating failed to select its source leaf.");
+            var nested = new FalloutFurnitureIdleTree(records, "meshes/Test2/skeleton.nif");
+            Check(nested.SelectProcedure(10, condition => condition.Function == 143 ? 10 : 0) is null &&
+                nested.SelectProcedure(10, condition => condition.Function == 143 ? 10 : 3)?.FormKey == Key(0x34),
+                "Procedure selection bypassed furniture ancestry or required a root-only predicate.");
             var inventory = new FalloutPlayerInventory();
             foreach (var id in new[] { 1u, 2u, 3u, 4u, 5u }) inventory.Add(records, Key(id), 3, 1, true);
             var initial = new GameplayVitals(1, 100, 200, 50, 50, 0, 100, LimbDamage: new Dictionary<byte, float> { [1] = 80 });
@@ -57,8 +78,10 @@ internal static class IngestibleContracts
             var before = vitals.State; var count = inventory.Item(Key(3))!.Count;
             Reject(() => owner.Prepare(Key(3)));
             Check(vitals.State == before && inventory.Item(Key(3))!.Count == count, "Unsupported later effect partially consumed/healed.");
-            Reject(() => owner.Prepare(Key(5)));
-            Check(vitals.State == before && inventory.Item(Key(5))!.Count == 3, "Unbound radiation behavior consumed an item or changed vitals.");
+            owner.Prepare(Key(5)).Commit();
+            Check(vitals.State.RadiationRads == 25 && vitals.State.ExactHitPoints == before.ExactHitPoints &&
+                inventory.Item(Key(5))!.Count == 2, "Radiation lost source resistance, changed health, or consumed twice.");
+            before = vitals.State;
             var stale = owner.Prepare(Key(1)); inventory.Remove(Key(1), 1, true);
             Reject(() => stale.Commit());
             Check(vitals.State == before && inventory.Item(Key(1))!.Count == 1, "Stale use changed health or consumed twice.");
@@ -151,6 +174,27 @@ internal static class IngestibleContracts
             first.Commit(); Reject(() => second.Commit());
             Check(world.Get(Key(0x92)).Taken && actorInventory.Item(Key(6))!.Count == 1,
                 "World food was consumed twice or removed unrelated carried food.");
+            actorInventory.Add(records, Key(5), 1, 1, true);
+            world.PrepareActorIngestible(consumer.Reference, Key(5), 1, null, false).Commit();
+            // The still-active cactus reduced this actor's Endurance to4:
+            // derived resistance8%, independent from the player's50% fixture.
+            Check(world.ActorValue(consumer.Reference, "radiationrads") == 46,
+                "Actor radiation used player resistance or lost its accumulation pool.");
+            var creature = world.Get(Key(0x94)); _ = world.Health(creature.Reference);
+            creature.ActorValues["health"] = creature.ActorValues["health"] with { Damage = -30 };
+            var creatureInventory = world.Inventory(creature.Reference, 1, null).Contents;
+            creatureInventory.Add(records, Key(6), 1, 1, true);
+            Check(world.ActorValue(creature.Reference, "survival") == 0 && world.ActorValue(creature.Reference, "medicine") == 0,
+                "Creature noncombat skills borrowed its combat rating.");
+            world.PrepareActorIngestible(creature.Reference, Key(6), 1, null, false).Commit();
+            world.AdvanceActorIngestibles(8);
+            Check(world.Health(creature.Reference).Current == 40 && world.ActorValue(creature.Reference, "endurance") == 5,
+                "Creature food lost the qualified empty skill pool or source modifier lifetime.");
+            new FalloutActorEatProgress(Key(6), FalloutIngestible.Read(records, Key(6)).Hash, null,
+                Consumed: true, NoIdle: true).Validate();
+            Reject(() => new FalloutActorEatProgress(Key(6), FalloutIngestible.Read(records, Key(6)).Hash, null,
+                Consumed: false, NoIdle: true).Validate());
+            Console.WriteLine("OPENNV_FOOD_RADIATION_CONTRACT_PASS playerResistance=true actorResistance=true separatePools=true creatureSkill=true noIdleReceipt=true");
             Console.WriteLine("OPENNV_ACTOR_INGESTIBLE_CONTRACT_PASS ownInventory=true worldContention=true reversible=true cold=true");
             Console.WriteLine("OPENNV_INGESTIBLE_CONTRACT_PASS sourceMagnitude=true limbs=true atomic=true staleInput=true duration=true finalRemainder=true noDuration=true cold=true driftRejected=true");
         }
@@ -161,6 +205,17 @@ internal static class IngestibleContracts
     {
         var header = new byte[20]; header[0] = 20; header[4] = 5;
         return Record("ALCH", id, Field("EDID", Text("Aid" + id)), Field("DATA", BitConverter.GetBytes(1f)), Field("ENIT", header), Join(effects));
+    }
+    private static byte[] Predicate(ushort function, float comparison, uint argument = 0)
+    {
+        var bytes = new byte[28]; BitConverter.GetBytes(comparison).CopyTo(bytes, 4);
+        BinaryPrimitives.WriteUInt16LittleEndian(bytes.AsSpan(8), function); UInt(bytes, 12, argument);
+        return Field("CTDA", bytes);
+    }
+    private static byte[] Idle(uint id, string path, uint parent, byte group, params byte[][] conditions)
+    {
+        var related = new byte[8]; UInt(related, 0, parent);
+        return Record("IDLE", id, Field("MODL", Text(path)), Field("ANAM", related), Field("DATA", [group, 0, 0, 0, 0, 0]), Join(conditions));
     }
     private static byte[] Food(uint id, params byte[][] effects)
     {
@@ -173,9 +228,9 @@ internal static class IngestibleContracts
         Encoding.ASCII.GetBytes("GRUP").CopyTo(bytes, 0); UInt(bytes, 4, (uint)bytes.Length);
         UInt(bytes, 8, 0x80); UInt(bytes, 12, 6); data.CopyTo(bytes, 24); return bytes;
     }
-    private static byte[] Modifier(uint id, uint archetype, uint flags, uint actorValue = 16)
+    private static byte[] Modifier(uint id, uint archetype, uint flags, uint actorValue = 16, int resistance = -1)
     {
-        var data = new byte[72]; UInt(data, 0, flags); UInt(data, 64, archetype); UInt(data, 68, actorValue);
+        var data = new byte[72]; UInt(data, 16, unchecked((uint)resistance)); UInt(data, 0, flags); UInt(data, 64, archetype); UInt(data, 68, actorValue);
         return Record("MGEF", id, Field("DATA", data));
     }
     private static byte[] Effect(uint id, uint magnitude, uint duration, bool hardcore = false, uint actorValue = 16)
