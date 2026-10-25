@@ -1,4 +1,5 @@
 import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
+import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readdirSync, readSync, renameSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -1124,6 +1125,30 @@ async function chooseModProfile(kind) {
 }
 
 function launch(request) {
+  const repoRoot = path.resolve(here, "../..");
+  const startScript = path.join(repoRoot, "scripts", "Start-OpenNV.ps1");
+  if (existsSync(startScript)) {
+    const pwsh = process.platform === "win32" ? "powershell.exe" : "pwsh";
+    const args = ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", startScript, "-Direct"];
+    const game = request?.campaign?.id;
+    if (game === "fallout3" || game === "fallout1" || game === "fallout2" || game === "newvegas") {
+      args.push("-Game", game);
+    }
+    if (request?.presentation === "openxr" || request?.enableVr) {
+      args.push("-Vr");
+    }
+    const child = spawn(pwsh, args, {
+      cwd: repoRoot,
+      detached: true,
+      stdio: "ignore",
+      windowsHide: false
+    });
+    child.unref();
+    return {
+      ok: true,
+      message: "OpenNV launched directly into Godot runtime."
+    };
+  }
   return {
     ok: false,
     code: "godot-native-entry-point",
