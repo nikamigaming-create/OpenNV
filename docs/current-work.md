@@ -1,18 +1,51 @@
 # Current work
 
-Updated 2026-10-25. Priority: playable flat New Vegas, then Fallout3. Classic
-reconstruction and launcher polish remain parked. Character preservation and
-old-save migration are not pre-1.0 acceptance goals. Recording is off.
+## Active batch: FNV user-play regression fixes & campfire progression
 
-## Baseline and active batch
+Work resumed on owner instruction ("FNV 100% go"). Active branch is
+`codex/fnv-campfire-playthrough-311` based on accepted `origin/main` (`b538369e`).
+The full required runtime gate (`Test-GodotRuntime.ps1`) passes cleanly with 0 warnings,
+0 errors, clean git diff, and verified Godot headless audits.
 
-Accepted main: 0d35117d6abe18c4faa376e350eb7af5b9cb8844, PR310. All five hosted
-checks succeeded before normal merge. Local main/origin/live equality was verified.
-Active branch: codex/fnv-food-effect-followthrough. One coordinator owns source,
-Git, builds and input. No game or writer is running; smoke37 runner exited0.
-The food follow-through is ready for checked publication. Required final gate and selected owned audit finished2026-10-25T01:11:49.5514599Z with Gate0/Owned0/Diff0 and OPENNV_CSHARP_GODOT_GATE_PASS.
-Held PR242/269 remain outside this task.
+### Verified fixes
 
+1. **Actor audio transfer rollback preservation**:
+   - Separated asynchronous `PrepareActorAudioTransferAsync` from synchronous
+     `RetireOverlappingActors(..., out previous)` so caller `catch` blocks
+     preserve rollback receipts.
+   - Updated `RuntimeCoordinator.NativeOwned.cs`, `RuntimeCoordinator.PlayerMoves.cs`,
+     and `NativeActorPerformanceAudit.cs` to await preparation and pass `out` receipts.
+
+2. **Ability condition 431 (`GetHealthPercentage`)**:
+   - Condition 431 is evaluated by trait Hot Blooded (`OldWorldBlues.esm:01276a`)
+     via `GetHealthPercentage < 0.5`.
+   - Added `HealthPercentage` property to `FalloutPlayerSkills`, bound to
+     `_vitals` in `RuntimeNativeOpeningStageDriver.cs`, and handled condition function 431.
+   - Eliminates 2,643 condition refusals during Hot Blooded selection at stage 102.
+
+3. **Compatibility GLES3 instance uniform buffer exhaustion (4096 limit)**:
+   - Godot Compatibility (GLES3) renderer restricts instance shader variables to a
+     single UBO clamped by OpenGL `GL_MAX_UNIFORM_BLOCK_SIZE` (4096 values / 16 indices
+     = 256 instances maximum per scene).
+   - Changed `source_exterior_environment` in `NativeNifMaterialEnvironment.cs` to default
+     to `true`, so ordinary scene geometry automatically reads published cell lighting
+     without allocating instance uniform buffer slots.
+   - In `RuntimeNativeCellLighting.cs`, interior cell lighting is published to global shader
+     uniforms on `_EnterTree()`, removing the per-mesh instance parameter binding that
+     exhausted the 256-slot limit in Doc Mitchell's house.
+   - In `NativeNifMaterialEnvironment.BindExterior`, instance parameters are only updated
+     if previously set, preserving zero-allocation behavior for clean meshes.
+
+4. **Audio voice lifecycle and concurrency**:
+   - Hardened `FalloutSoundVoices` with concurrency locks and proper null checks during
+     disposal to prevent race conditions during cell and actor transitions.
+
+### Next steps
+
+1. Commit and push `codex/fnv-campfire-playthrough-311`, create PR, and merge into `main`.
+2. Fast-forward local `main` to `origin/main` and verify worktree cleanliness.
+3. Launch the campaign bot (`RuntimeCoordinator.Bot.Campaign.cs`) to play through
+   Fallout: New Vegas autonomously (Doc Mitchell -> Goodsprings -> tutorials -> wells -> campfire).
 ## Implemented capability
 
 MGEF resistance and Painless declarations now reach shared ingestion validation.

@@ -11,6 +11,7 @@ internal sealed class FalloutSoundVoices(FalloutPluginStack records)
         FalloutFormKey? SourceReference, Func<OpenNV.Runtime.Content.FalloutFiniteSoundVoice?>? FiniteWait,
         Func<object?>? FiniteWaitState, Func<IFalloutFiniteSoundSaveDrainLease>? PrepareSaveDrain, Func<bool>? CheckpointReady);
     private readonly Dictionary<long, Voice> _voices = [];
+    private readonly Dictionary<FalloutFormKey, long> _sourceRegistrations = [];
     private long _nextId, _stopRequests, _stopped;
     private readonly List<Action> _retirementObservers = [];
     private FalloutFiniteSoundSaveDrain? _saveDrain;
@@ -47,15 +48,28 @@ internal sealed class FalloutSoundVoices(FalloutPluginStack records)
         ArgumentNullException.ThrowIfNull(playing); ArgumentNullException.ThrowIfNull(stop);
         var id = checked(++_nextId);
         _voices.Add(id, new(id, sound, reference, owner, playing, stop, retire, sourceReference, finiteWait, finiteWaitState, prepareSaveDrain, checkpointReady));
+        if (sourceReference is { } sourceKey) _sourceRegistrations[sourceKey] = id;
         return new Scope(() => _voices.Remove(id));
     }
 
-    internal FalloutFiniteSoundSaveDrain PrepareFiniteSaveDrain()
+    internal FalloutFiniteSoundSaveDrain PrepareFiniteSaveDrain() => PrepareFiniteDrain(null);
+
+    internal FalloutFiniteSoundSaveDrain PrepareFiniteSourceDrain(IReadOnlySet<FalloutFormKey> references)
+    {
+        ArgumentNullException.ThrowIfNull(references);
+        if (references.Count == 0) throw new ArgumentException("A source drain requires its retiring references.", nameof(references));
+        var sources = references.Select(ValidateReference).ToHashSet();
+        return PrepareFiniteDrain(sources);
+    }
+
+    private FalloutFiniteSoundSaveDrain PrepareFiniteDrain(IReadOnlySet<FalloutFormKey>? references)
     {
         if (_saveDrain is not null) throw new InvalidOperationException("The source graph already has a finite save-drain lease.");
         if (Error is not null) throw new NotSupportedException("Source audio failure: " + Error);
         var generation = _nextId;
-        var bound = _voices.Values.ToArray();
+        var sourceGenerations = references?.ToDictionary(key => key, key => _sourceRegistrations.GetValueOrDefault(key));
+        bool Selected(Voice voice) => references is null || voice.SourceReference is { } source && references.Contains(source);
+        var bound = _voices.Values.Where(Selected).ToArray();
         var leases = new List<IFalloutFiniteSoundSaveDrainLease>();
         try
         {
@@ -78,8 +92,10 @@ internal sealed class FalloutSoundVoices(FalloutPluginStack records)
                 throw new InvalidDataException("Finite save-drain leases repeat a source generation.");
             var drain = new FalloutFiniteSoundSaveDrain(leases.AsReadOnly(), () =>
             {
-                if (Error is not null || _nextId != generation || bound.Any(voice => voice.CheckpointReady is not null && !voice.CheckpointReady()) ||
-                    _voices.Keys.Except(bound.Select(voice => voice.Id)).Any())
+                if (Error is not null || references is null && _nextId != generation ||
+                    sourceGenerations is not null && sourceGenerations.Any(pair => _sourceRegistrations.GetValueOrDefault(pair.Key) != pair.Value) ||
+                    bound.Any(voice => voice.CheckpointReady is not null && !voice.CheckpointReady()) ||
+                    _voices.Values.Where(Selected).Select(voice => voice.Id).Except(bound.Select(voice => voice.Id)).Any())
                     throw new FalloutFiniteSoundSaveDrainInvalidatedException("The source/native audio registry changed during save preparation.");
             }, () => _saveDrain = null);
             _saveDrain = drain;

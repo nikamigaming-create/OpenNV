@@ -5,19 +5,19 @@ FO1 remains an incomplete classic preview with selected movement, inventory,
 equipment, door and save flows. Complete campaign execution and 1:1 3D art are
 unverified. See [current-work.md](current-work.md) for the active owner.
 
-Classic reconstruction is parked. Accepted main0d35117d (PR310) contains the
+Classic reconstruction is parked. Accepted mainb538369e (PR311) contains the
 bounded source critter/event and conditional combat foundation. Unpublished
 actor locomotion follow-up is preserved at59aecc9d; it is not native complete
 combat. Arroyo ground decomposition and full scene likeness remain unaccepted.
 
 Main PR310 delivers actor-owned ingestion, reversible SPECIAL modifiers and
-selected Eat approach/animation continuation. Current uncommitted follow-through
+selected Eat approach/animation continuation. PR311 follow-through
 adds resistance-adjusted radiation, source creature food scaling, nested eating
-IDLE predicates, optional no-file results and ANIO bindings. Debug and focused /
-owned-data audits pass. Ordinary smoke37 consumes Gecko Meat through Pip-Boy
-without error; timed healing/radiation effects are active and radiation accumulates.
-Native actor consumption and campfire completion remain unaccepted. No complete
-radiation illness, Hardcore, conditional or lethal-effect support is claimed.
+IDLE predicates, optional no-file results and ANIO bindings. The current follow-through
+branch fixes actor audio transfer rollback preservation, ability condition 431
+(`GetHealthPercentage`), and the Compatibility GLES3 256 instance uniform hardware limit.
+Debug and Release builds, full gate and focused audits pass. Smoke38/39 fast travel
+and autonomous tutorial progression proceed cleanly.
 The following FNV inventory is active repair work. FO3 and classic work are preserved.
 The user rejected package g's physical FNV VR playtest. It is not a playable or
 headset-ready handoff. See [implementation-plan.md](implementation-plan.md) for
