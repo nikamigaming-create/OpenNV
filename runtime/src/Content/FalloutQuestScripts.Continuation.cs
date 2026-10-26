@@ -44,6 +44,7 @@ internal sealed partial class FalloutQuestScripts
     {
         var error = instance.Error!;
         if (error == $"No record exists for {_records.RuntimeFormKey(0x14)}." && instance.PendingCommand is null &&
+            !instance.Continuations.Any(receipt => receipt.Error == error && receipt.Statement == 0 && receipt.LegacySourceUnverified) &&
             host?.CanRetryPlayerDeathRead?.Invoke(instance.Quest, instance.Script, instance.Program) == true)
         {
             ContinueInitialPlayerDeathRead(instance, host, error);
@@ -98,7 +99,9 @@ internal sealed partial class FalloutQuestScripts
     {
         // The old GetDead implementation always failed on the engine-created
         // player. Source inspection proves this was the first reached read,
-        // before any effect; ambiguous MenuMode failures stay latched.
+        // before any effect; ambiguous MenuMode failures stay latched. The
+        // persisted receipt also latches a newly reached suffix failure that
+        // happens to have the same generic error as the old first read.
         var invocation = checked(instance.Clock.Invocations + 1);
         try
         {

@@ -1,6 +1,7 @@
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.World.Cells;
 using System.Buffers.Binary;
+using System.Text.Json;
 
 internal static class TutorialActorQueryContracts
 {
@@ -69,7 +70,57 @@ internal static class TutorialActorQueryContracts
                 state.Error == legacy && recoveredQuests.Variable(recovery.Quest, 1) == 0,
                 "Cold initial-read recovery repeated an effect prefix or left a safe first read stopped.");
         }
-        Console.WriteLine("OPENNV_TUTORIAL_ACTOR_QUERY_PASS enginePlayer=true deathGuard=true liveHealth=true actualNpcReceiver=true missingOwnerRefused=true");
+        StoppedRecoveryCannotReplay();
+        Console.WriteLine("OPENNV_TUTORIAL_ACTOR_QUERY_PASS enginePlayer=true deathGuard=true liveHealth=true actualNpcReceiver=true missingOwnerRefused=true stoppedSuffixLatched=true coldRecoveryReceipt=true");
+    }
+
+    private static void StoppedRecoveryCannotReplay()
+    {
+        using var fixture = new ScriptSaveFixture("",
+            "if player.GetDead == 1\nreturn\nendif\nset saved to saved + 1\nset suffix to player.GetPlayerTeammate");
+        var quests = new FalloutQuestState(fixture.Records);
+        var original = new FalloutQuestScripts(fixture.Records, quests, new HashSet<FalloutFormKey>(), new(),
+            references: fixture.World, defaultProcessingDelay: 0);
+        var legacy = $"No record exists for {fixture.Player}.";
+        var snapshot = original.Capture();
+        snapshot = snapshot with { Instances = snapshot.Instances.Select(instance => instance with { Error = legacy }).ToArray() };
+        var recovered = new FalloutQuestScripts(fixture.Records, quests, new HashSet<FalloutFormKey>(), new(),
+            references: fixture.World, defaultProcessingDelay: 0);
+        recovered.Restore(snapshot);
+        recovered.Host = Host(quests, fixture.World);
+        recovered.Advance(0);
+        Check(recovered, quests);
+        for (var frame = 0; frame < 8; frame++) recovered.Advance(.1);
+        Check(recovered, quests);
+
+        var savedScripts = JsonSerializer.Deserialize<FalloutQuestScriptsSnapshot>(JsonSerializer.Serialize(recovered.Capture()))!;
+        var savedQuests = JsonSerializer.Deserialize<FalloutQuestSnapshot[]>(JsonSerializer.Serialize(quests.Capture()))!;
+        using var coldWorld = new FalloutReferenceWorld(fixture.Records);
+        coldWorld.LoadCell(FalloutCellSceneReader.Read(fixture.Records, fixture.Cell));
+        var coldQuests = new FalloutQuestState(fixture.Records); coldQuests.Restore(savedQuests);
+        var cold = new FalloutQuestScripts(fixture.Records, coldQuests, new HashSet<FalloutFormKey>(), new(),
+            references: coldWorld, defaultProcessingDelay: 0);
+        cold.Restore(savedScripts);
+        cold.Host = Host(coldQuests, coldWorld);
+        for (var frame = 0; frame < 8; frame++) cold.Advance(.1);
+        Check(cold, coldQuests);
+
+        FalloutQuestScriptHost Host(FalloutQuestState state, FalloutReferenceWorld world)
+        {
+            var executor = new FalloutReferenceScripts(fixture.Records, world, state,
+                new((_, _) => false, _ => throw new InvalidDataException("Stopped recovery emitted an effect."), IsDead: _ => false));
+            return new((_, _) => throw new InvalidDataException("Stopped recovery changed a stage."), _ => 0,
+                executor.ExecuteProgram, CanRetryPlayerDeathRead: executor.CanRetryPlayerDeathRead);
+        }
+        void Check(FalloutQuestScripts scripts, FalloutQuestState state)
+        {
+            var stopped = scripts.Capture().Instances.Single();
+            Require(state.Variable(fixture.Quest, 1) == 1 && state.Variable(fixture.Quest, 2) == 0 &&
+                stopped.Error == legacy && stopped.PendingCommand is null && stopped.Executions == 0 &&
+                stopped.Continuations is { Count: 1 } receipts && receipts[0] is
+                    { Statement: 0, Disposition: "tail-stopped-prefix-retained", LegacySourceUnverified: true } && receipts[0].Error == legacy,
+                "Same-error suffix recovery replayed its mutation prefix or lost the persisted refusal receipt.");
+        }
     }
 
     private static void StatisticNames()
