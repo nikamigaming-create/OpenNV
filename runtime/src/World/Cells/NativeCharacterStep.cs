@@ -5,7 +5,7 @@ namespace OpenNV.Runtime.World.Cells;
 // The optional OpenNV controller climbs a low obstruction only after sweeping
 // its whole capsule up and forward toward a supported landing. These are the
 // real physics shapes; a wall, ceiling or missing floor cannot be bypassed.
-internal static class NativeCharacterStep
+internal static partial class NativeCharacterStep
 {
     internal static bool TestMotion(Rid body, PhysicsTestMotionParameters3D parameters, PhysicsTestMotionResult3D result)
     {
@@ -43,18 +43,22 @@ internal static class NativeCharacterStep
     // Planning uses the controller's supported-height probes and complete
     // sweeps at a supplied pose. This query never publishes that pose.
     internal static bool TryQuery(CharacterBody3D body, Transform3D from, Vector3 motion, float maximumHeight,
-        out Vector3 destination, out string? blocked, out NativeNavigationContact? contact, bool floorSupported = false)
+        out Vector3 destination, out string? blocked, out NativeNavigationContact? contact, bool floorSupported = false,
+        QueryResources? resources = null)
     {
         destination = default; contact = null;
         var floorCosine = MathF.Cos(body.FloorMaxAngle);
         blocked = "floor-support";
         if (!floorSupported)
         {
-            if (!TrySupport(body, from.Origin, maximumHeight, out _)) return false;
+            if (!TrySupport(body, from.Origin, maximumHeight, out _, resources)) return false;
         }
-        using var parameters = new PhysicsTestMotionParameters3D
-        { From = from, Motion = motion, Margin = body.SafeMargin, MaxCollisions = 4 };
-        using var result = new PhysicsTestMotionResult3D();
+        using var ownedParameters = resources is null ? new PhysicsTestMotionParameters3D
+        { Margin = body.SafeMargin, MaxCollisions = 4 } : null;
+        var parameters = resources?.MotionParameters(body) ?? ownedParameters!;
+        parameters.From = from; parameters.Motion = motion;
+        using var ownedResult = resources is null ? new PhysicsTestMotionResult3D() : null;
+        var result = resources?.MotionResult(body) ?? ownedResult!;
         var rid = body.GetRid();
         blocked = "no-obstruction";
         if (!TestMotion(rid, parameters, result)) return false;
@@ -70,7 +74,8 @@ internal static class NativeCharacterStep
         contact = new(result.GetColliderId(wall), result.GetColliderShape(wall), point,
             result.GetCollisionNormal(wall), from.Origin, from.Origin + motion, Travel: result.GetTravel());
         var forward = motion.Normalized();
-        using var ray = PhysicsRayQueryParameters3D.Create(Vector3.Zero, Vector3.Zero, body.CollisionMask, [rid]);
+        using var ownedRay = resources is null ? PhysicsRayQueryParameters3D.Create(Vector3.Zero, Vector3.Zero, body.CollisionMask, [rid]) : null;
+        var ray = resources?.SupportRay(body) ?? ownedRay!;
         blocked = "landing-support";
         for (var probe = 0; probe < 4; probe++)
         {
@@ -105,13 +110,16 @@ internal static class NativeCharacterStep
     // rounded bottom of its capsule. Planning reads this same bounded ray;
     // the receipt contains only the actual native floor and never moves it.
     internal static bool TrySupport(CharacterBody3D body, Vector3 from, float maximumHeight,
-        out NativeNavigationContact? contact)
+        out NativeNavigationContact? contact, QueryResources? resources = null)
     {
         contact = null;
         var reach = Math.Min(maximumHeight, body.FloorSnapLength);
         if (!from.IsFinite() || !float.IsFinite(reach) || reach <= 0) return false;
-        using var ray = PhysicsRayQueryParameters3D.Create(from + Vector3.Up * body.SafeMargin,
-            from - Vector3.Up * reach, body.CollisionMask, [body.GetRid()]);
+        var rayFrom = from + Vector3.Up * body.SafeMargin; var rayTo = from - Vector3.Up * reach;
+        using var ownedRay = resources is null ? PhysicsRayQueryParameters3D.Create(rayFrom, rayTo,
+            body.CollisionMask, [body.GetRid()]) : null;
+        var ray = resources?.SupportRay(body) ?? ownedRay!;
+        if (resources is not null) { ray.From = rayFrom; ray.To = rayTo; }
         using var support = QuerySupport(body, ray);
         if (support.Count == 0) return false;
         var point = support["position"].AsVector3(); var normal = support["normal"].AsVector3();
