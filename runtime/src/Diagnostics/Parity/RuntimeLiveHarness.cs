@@ -207,6 +207,7 @@ internal sealed partial class RuntimeLiveHarness : Node
         if (_inputRecording is not null && command.GetProperty("op").GetString() is "checkpoint.load" or "checkpoint.save" or "physics.sever")
             throw new InvalidOperationException("Finish the input segment before changing authoritative state through diagnostics.");
         if (DispatchCheckpoint(command, request)) return;
+        if (DispatchCreaturePose(command, request)) return;
         if (!_deliveringReplay && command.GetProperty("op").GetString() is "key" or "mouse" or "look" or "button" or "pointer" or "text" or "bot" or "physics.sever")
             _replayCheckpointPrepared = false;
         if (command.GetProperty("op").GetString() is "key" or "mouse" or "look" or "button" or "pointer" or "text")
@@ -549,6 +550,10 @@ internal sealed partial class RuntimeLiveHarness : Node
             {
                 jitOptimizationDisabled = JitOptimizationDisabled,
                 renderThreadModel = ProjectSettings.GetSetting("rendering/driver/threads/thread_model").AsInt32(),
+                renderThreadId = renderTiming?.RenderThreadId,
+                mainThreadId = renderTiming?.MainThreadId,
+                separateRenderThreadObserved = renderTiming is null ? (bool?)null : renderTiming.RenderThreadId != renderTiming.MainThreadId,
+                physicsTicksPerSecond = Engine.PhysicsTicksPerSecond,
                 contentWorkerLimit = FalloutContentWorkers.Concurrency,
                 availableProcessors = FalloutContentWorkers.AvailableProcessors,
                 availableMemoryBytes = FalloutContentWorkers.AvailableMemoryBytes,
@@ -562,6 +567,9 @@ internal sealed partial class RuntimeLiveHarness : Node
                 framesPerSecond = Godot.Performance.GetMonitor(Godot.Performance.Monitor.TimeFps),
                 processMilliseconds = 1000 * Godot.Performance.GetMonitor(Godot.Performance.Monitor.TimeProcess),
                 physicsMilliseconds = 1000 * Godot.Performance.GetMonitor(Godot.Performance.Monitor.TimePhysicsProcess),
+                activePhysicsObjects = Godot.Performance.GetMonitor(Godot.Performance.Monitor.Physics3DActiveObjects),
+                physicsCollisionPairs = Godot.Performance.GetMonitor(Godot.Performance.Monitor.Physics3DCollisionPairs),
+                physicsIslands = Godot.Performance.GetMonitor(Godot.Performance.Monitor.Physics3DIslandCount),
                 previousSummaryMilliseconds = _lastStateWriteMilliseconds,
                 previousSnapshotMilliseconds = _lastSnapshotMilliseconds,
                 previousSerializeMilliseconds = _lastSerializeMilliseconds,
@@ -662,6 +670,7 @@ internal sealed partial class RuntimeLiveHarness : Node
     public override void _ExitTree()
     {
         GD.Print($"OPENNV_LIVE_HARNESS_RETIRE phase=enter stateWritePending={_stateWrite is not null}");
+        _creaturePoseObservation?.Stop("harness-retired");
         _bot?.Stop();
         _inputPlayback?.Stop("Playback ended with its runtime owner.", ReleaseAll);
         FinishReplayDeliveryJournal("Playback ended with its runtime owner.");

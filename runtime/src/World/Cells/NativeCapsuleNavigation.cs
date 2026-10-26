@@ -174,7 +174,7 @@ internal static partial class NativeCapsuleNavigation
         bool Sweep(Vector3 from, Vector3 motion)
         {
             query.From = new(basis, from); query.Motion = motion;
-            return PhysicsServer3D.BodyTestMotion(rid, query, hit);
+            return NativeCharacterStep.TestMotion(rid, query, hit);
         }
         NativeNavigationContact? rejected = null;
         bool SingleEdge(Vector3 from, Vector3 desired, out Vector3 landing, bool allowStep)
@@ -243,7 +243,7 @@ internal static partial class NativeCapsuleNavigation
             // the same native floor beneath the controller root as well.
             supportRay.From = landing + Vector3.Up * body.SafeMargin * 8;
             supportRay.To = landing - Vector3.Up * Math.Max(stepHeight, body.FloorSnapLength);
-            using var support = body.GetWorld3D().DirectSpaceState.IntersectRay(supportRay);
+            using var support = NativeCharacterStep.QuerySupport(body, supportRay);
             if (support.Count == 0) return Reject("root-floor-missing");
             if (support["normal"].AsVector3().Dot(Vector3.Up) < floorCosine) return Reject("root-floor-slope");
             var height = landing.Y - from.Y;

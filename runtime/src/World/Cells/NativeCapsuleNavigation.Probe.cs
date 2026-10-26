@@ -129,7 +129,7 @@ internal static partial class NativeCapsuleNavigation
         {
             var motion = destination - from; motion.Y = 0;
             query.From = new(body.GlobalBasis, from); query.Motion = motion;
-            if (motion.LengthSquared() > .000001f && PhysicsServer3D.BodyTestMotion(body.GetRid(), query, hit) &&
+            if (motion.LengthSquared() > .000001f && NativeCharacterStep.TestMotion(body.GetRid(), query, hit) &&
                 Contact(hit, from, from + motion, MathF.Cos(body.FloorMaxAngle)) is { } contact) return contact;
             from = destination;
         }

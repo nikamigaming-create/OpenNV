@@ -29,8 +29,8 @@ internal static class FalloutNvseNumericExpression
     // a receiver, argument function or assignment while determining extent.
     internal static (Func<FalloutScriptValue> Value, int Count) ReadOperand(IReadOnlyList<string> tokens,
         FalloutScriptValueContext values, Func<string, FalloutScriptFunction?>? function = null,
-        Func<string, string, FalloutScriptFunction>? userFunction = null) =>
-        Parse(tokens, values, function, userFunction, nvseLogical: true, operandOnly: true);
+        Func<string, string, FalloutScriptFunction>? userFunction = null, int start = 0) =>
+        Parse(tokens, values, function, userFunction, nvseLogical: true, operandOnly: true, start: start);
 
     // Visit the complete syntax, including short-circuited operands, without
     // reading values, invoking a command or consuming random/lifecycle state.
@@ -42,12 +42,13 @@ internal static class FalloutNvseNumericExpression
     private static (Func<FalloutScriptValue> Value, int Count) Parse(IReadOnlyList<string> tokens,
         FalloutScriptValueContext values, Func<string, FalloutScriptFunction?>? function,
         Func<string, string, FalloutScriptFunction>? userFunction, bool nvseLogical, bool operandOnly,
-        Action<string>? inspectValue = null)
+        Action<string>? inspectValue = null, int start = 0)
     {
-        var at = 0;
+        if (start < 0 || start > tokens.Count) throw new ArgumentOutOfRangeException(nameof(start));
+        var at = start;
         FalloutScriptFunction? Resolve(string token)
         {
-            if (!token.Split('.')[^1].Equals("call", StringComparison.OrdinalIgnoreCase))
+            if (!token.AsSpan(token.LastIndexOf('.') + 1).Equals("call", StringComparison.OrdinalIgnoreCase))
                 return function?.Invoke(token) ?? values.Arrays?.Function(token);
             if (at >= tokens.Count || !Identifier(tokens[at]))
                 throw new NotSupportedException("Call needs a bound function identity.");
@@ -245,7 +246,7 @@ internal static class FalloutNvseNumericExpression
             throw new NotSupportedException("NVSE expression has an unbound operation.");
         // Parse the complete expression before invoking any stateful command
         // or assignment. Short-circuited branches never read or write state.
-        return (expression.Value, at);
+        return (expression.Value, at - start);
 
         bool CanStartOptionalArgument(string token, FalloutScriptArgumentKind required)
         {

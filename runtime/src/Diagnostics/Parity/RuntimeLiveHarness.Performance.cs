@@ -5,7 +5,8 @@ namespace OpenNV.Runtime.Diagnostics.Parity;
 internal sealed partial class RuntimeLiveHarness
 {
     private sealed record ViewportTiming(string Name, double CpuMilliseconds, double GpuMilliseconds);
-    private sealed record RenderTiming(long Timestamp, double SetupMilliseconds, ViewportTiming[] Viewports, string? Error);
+    private sealed record RenderTiming(long Timestamp, double SetupMilliseconds, ViewportTiming[] Viewports, string? Error,
+        ulong RenderThreadId, ulong MainThreadId);
     private sealed record RendererIdentity(string? RenderingMethod, string? GraphicsAdapter);
     private sealed record ViewportResolution(string Name, int WidthPixels, int HeightPixels, float Scaling3DScale);
     private sealed record WindowPresentation(int Id, int WidthPixels, int HeightPixels, int Screen,
@@ -78,11 +79,12 @@ internal sealed partial class RuntimeLiveHarness
                         RenderingServer.ViewportGetMeasuredRenderTimeCpu(viewport.Rid),
                         RenderingServer.ViewportGetMeasuredRenderTimeGpu(viewport.Rid))).ToArray();
                     Volatile.Write(ref _renderTiming, new(System.Diagnostics.Stopwatch.GetTimestamp(),
-                        RenderingServer.GetFrameSetupTimeCpu(), timings, null));
+                        RenderingServer.GetFrameSetupTimeCpu(), timings, null, OS.GetThreadCallerId(), OS.GetMainThreadId()));
                 }
                 catch (Exception error)
                 {
-                    Volatile.Write(ref _renderTiming, new(System.Diagnostics.Stopwatch.GetTimestamp(), 0, [], error.Message));
+                    Volatile.Write(ref _renderTiming, new(System.Diagnostics.Stopwatch.GetTimestamp(), 0, [], error.Message,
+                        OS.GetThreadCallerId(), OS.GetMainThreadId()));
                 }
                 finally { Volatile.Write(ref _renderTimingPending, 0); }
             }));

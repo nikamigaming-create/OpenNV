@@ -28,8 +28,7 @@ internal sealed class FalloutScriptFunction
     internal IReadOnlyList<FalloutScriptArgumentKind> Arguments { get; }
     internal bool ReadOnly { get; init; }
     internal FalloutScriptArgumentKind? Variadic { get; init; }
-    internal Func<IReadOnlyList<FalloutScriptArgument>, double> Invoke =>
-        arguments => InvokeValue(arguments).Number;
+    internal double Invoke(IReadOnlyList<FalloutScriptArgument> arguments) => InvokeValue(arguments).Number;
 
     internal FalloutScriptFunction(IReadOnlyList<FalloutScriptArgumentKind> arguments,
         Func<IReadOnlyList<FalloutScriptArgument>, double> invoke)
@@ -100,6 +99,7 @@ internal sealed partial class FalloutGameModeProgram
 {
     internal const int ParserVersion = 11;
     private readonly IReadOnlyList<string[]> _lines;
+    private readonly IReadOnlyList<string>[] _expressionTokens;
     private readonly IReadOnlySet<int> _baselineEndIf;
     private int _startLine = 0;
     private IReadOnlyList<bool> _enteredBranches = [];
@@ -113,11 +113,23 @@ internal sealed partial class FalloutGameModeProgram
     private FalloutGameModeProgram(IReadOnlyList<string[]> lines, IReadOnlySet<int>? baselineEndIf = null)
     {
         _lines = lines;
+        _expressionTokens = new IReadOnlyList<string>[lines.Count];
         var baseline = new HashSet<int>();
         var ifDepth = 0;
         var loops = new Stack<int>();
         for (var index = 0; index < lines.Count; ++index)
         {
+            var tokens = lines[index];
+            var offset = tokens[0].ToLowerInvariant() switch
+            {
+                "if" or "elseif" => tokens.Length > 1 && tokens[1].Equals("eval", StringComparison.OrdinalIgnoreCase) ? 2 : 1,
+                "set" => Math.Min(3, tokens.Length),
+                "while" or "let" or "eval" => 1,
+                _ => 0,
+            };
+            // These views stay inside expression readers. A command host still
+            // receives its own fresh argument array on every dispatch below.
+            _expressionTokens[index] = offset == 0 ? tokens : new ArraySegment<string>(tokens, offset, tokens.Length - offset);
             if (lines[index][0].Equals("if", StringComparison.OrdinalIgnoreCase)) ++ifDepth;
             if (lines[index][0].Equals("endif", StringComparison.OrdinalIgnoreCase))
             {
@@ -290,10 +302,10 @@ internal sealed partial class FalloutGameModeProgram
         foreach (var enteredElse in _enteredBranches) branches.Push((true, true, enteredElse));
         var loops = new Stack<(int Start, int End, int Branches)>();
         var active = true;
-        bool Condition(string[] tokens) => tokens.Length > 1 && tokens[1].Equals("eval", StringComparison.OrdinalIgnoreCase)
-            ? Expression(tokens[2..]).Truth
-            : typed ? Expression(tokens[1..], nvseLogical: false).Truth :
-                Evaluate(tokens[1..], variable, function) != 0;
+        bool Condition(string[] tokens, IReadOnlyList<string> expression) => tokens.Length > 1 && tokens[1].Equals("eval", StringComparison.OrdinalIgnoreCase)
+            ? Expression(expression).Truth
+            : typed ? Expression(expression, nvseLogical: false).Truth :
+                Evaluate(expression, variable, function) != 0;
         for (var line = _startLine; line < _lines.Count; ++line)
         {
             budget.Spend();
@@ -302,13 +314,13 @@ internal sealed partial class FalloutGameModeProgram
             switch (tokens[0].ToLowerInvariant())
             {
                 case "if":
-                    var result = active && Condition(tokens);
+                    var result = active && Condition(tokens, _expressionTokens[line]);
                     branches.Push((active, result, false));
                     active = result;
                     break;
                 case "elseif":
                     var prior = branches.Pop();
-                    active = prior.Parent && !prior.Taken && Condition(tokens);
+                    active = prior.Parent && !prior.Taken && Condition(tokens, _expressionTokens[line]);
                     // Else has already selected this chain; a later ElseIf stays dead.
                     branches.Push((prior.Parent, prior.Taken || active, prior.Else));
                     break;
@@ -326,8 +338,8 @@ internal sealed partial class FalloutGameModeProgram
                     if (!_baselineEndIf.Contains(line)) active = branches.Pop().Parent;
                     break;
                 case "while":
-                    if (!active || !(typed ? Expression(tokens[1..]).Truth :
-                        FalloutNvseNumericExpression.Evaluate(tokens[1..], variable, assign, function, userFunction) != 0))
+                    if (!active || !(typed ? Expression(_expressionTokens[line]).Truth :
+                        FalloutNvseNumericExpression.Evaluate(_expressionTokens[line], variable, assign, function, userFunction) != 0))
                         line = _loopEnds[line];
                     else loops.Push((line, _loopEnds[line], branches.Count));
                     break;
@@ -340,12 +352,12 @@ internal sealed partial class FalloutGameModeProgram
                 case "set" when active:
                     if (tokens.Length < 4 || !tokens[2].Equals("to", StringComparison.OrdinalIgnoreCase))
                         throw new NotSupportedException("Script assignment syntax is unbound.");
-                    if (typed) values.Write(tokens[1], Expression(tokens[3..], nvseLogical: false));
-                    else assign(tokens[1], Evaluate(tokens[3..], variable, function));
+                    if (typed) values.Write(tokens[1], Expression(_expressionTokens[line], nvseLogical: false));
+                    else assign(tokens[1], Evaluate(_expressionTokens[line], variable, function));
                     break;
                 case "let" or "eval" when active:
-                    _ = typed ? Expression(tokens[1..]) :
-                        FalloutNvseNumericExpression.Evaluate(tokens[1..], variable, assign, function, userFunction);
+                    _ = typed ? Expression(_expressionTokens[line]) :
+                        FalloutNvseNumericExpression.Evaluate(_expressionTokens[line], variable, assign, function, userFunction);
                     break;
                 case "return" when active: yield break;
                 default:
@@ -506,7 +518,7 @@ internal sealed partial class FalloutGameModeProgram
                 // complete grouped/indexed/postfix extent, including method
                 // arguments; a closing bracket cannot split the receiver
                 // from its method and leak separate tokens to the host.
-                var operand = FalloutNvseNumericExpression.ReadOperand(tokens.Skip(index).ToArray(), values, function, userFunction);
+                var operand = FalloutNvseNumericExpression.ReadOperand(tokens, values, function, userFunction, start: index);
                 result.Add(CommandValue(operand.Value()));
                 index += operand.Count;
                 continue;

@@ -7,6 +7,18 @@ namespace OpenNV.Runtime.World.Cells;
 // real physics shapes; a wall, ceiling or missing floor cannot be bypassed.
 internal static class NativeCharacterStep
 {
+    internal static bool TestMotion(Rid body, PhysicsTestMotionParameters3D parameters, PhysicsTestMotionResult3D result)
+    {
+        using var scope = OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Measure(OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Owner.NativeCapsuleSweep);
+        return PhysicsServer3D.BodyTestMotion(body, parameters, result);
+    }
+
+    internal static Godot.Collections.Dictionary QuerySupport(CharacterBody3D body, PhysicsRayQueryParameters3D ray)
+    {
+        using var scope = OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Measure(OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Owner.NativeSupportRay);
+        return body.GetWorld3D().DirectSpaceState.IntersectRay(ray);
+    }
+
     internal static bool TryStep(CharacterBody3D body, Vector3 motion, float maximumHeight)
         => TryStep(body, motion, maximumHeight, out _);
 
@@ -45,7 +57,7 @@ internal static class NativeCharacterStep
         using var result = new PhysicsTestMotionResult3D();
         var rid = body.GetRid();
         blocked = "no-obstruction";
-        if (!PhysicsServer3D.BodyTestMotion(rid, parameters, result)) return false;
+        if (!TestMotion(rid, parameters, result)) return false;
         var wall = Enumerable.Range(0, result.GetCollisionCount())
             .Where(index => result.GetCollisionNormal(index).Dot(Vector3.Up) < floorCosine)
             .OrderBy(index => result.GetCollisionNormal(index).Dot(motion)).DefaultIfEmpty(-1).First();
@@ -66,7 +78,7 @@ internal static class NativeCharacterStep
             var ahead = point + forward * reach;
             ahead.Y = from.Origin.Y + maximumHeight + body.SafeMargin;
             ray.From = ahead; ray.To = ahead - Vector3.Up * maximumHeight;
-            using var landing = body.GetWorld3D().DirectSpaceState.IntersectRay(ray);
+            using var landing = QuerySupport(body, ray);
             if (landing.Count == 0 || landing["normal"].AsVector3().Dot(Vector3.Up) < floorCosine) continue;
             var up = landing["position"].AsVector3().Y - from.Origin.Y + body.SafeMargin;
             blocked = "step-height";
@@ -74,14 +86,14 @@ internal static class NativeCharacterStep
             parameters.From = from;
             parameters.Motion = Vector3.Up * up;
             blocked = "headroom";
-            if (PhysicsServer3D.BodyTestMotion(rid, parameters, result)) continue;
+            if (TestMotion(rid, parameters, result)) continue;
             parameters.From = from.Translated(parameters.Motion);
             parameters.Motion = motion;
             blocked = "forward-clearance";
             // A sloped landing's first ray can be too low to clear the whole
             // capsule. Try the remaining supported heights within the same
             // step bound; each candidate still needs both complete sweeps.
-            if (PhysicsServer3D.BodyTestMotion(rid, parameters, result)) continue;
+            if (TestMotion(rid, parameters, result)) continue;
             destination = parameters.From.Origin + motion;
             blocked = null;
             return true;
@@ -100,7 +112,7 @@ internal static class NativeCharacterStep
         if (!from.IsFinite() || !float.IsFinite(reach) || reach <= 0) return false;
         using var ray = PhysicsRayQueryParameters3D.Create(from + Vector3.Up * body.SafeMargin,
             from - Vector3.Up * reach, body.CollisionMask, [body.GetRid()]);
-        using var support = body.GetWorld3D().DirectSpaceState.IntersectRay(ray);
+        using var support = QuerySupport(body, ray);
         if (support.Count == 0) return false;
         var point = support["position"].AsVector3(); var normal = support["normal"].AsVector3();
         contact = new(checked((ulong)support["collider_id"].AsInt64()), support["shape"].AsInt32(),
