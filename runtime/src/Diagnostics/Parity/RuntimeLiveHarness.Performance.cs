@@ -11,8 +11,17 @@ internal sealed partial class RuntimeLiveHarness
     private sealed record ViewportResolution(string Name, int WidthPixels, int HeightPixels, float Scaling3DScale);
     private sealed record WindowPresentation(int Id, int WidthPixels, int HeightPixels, int Screen,
         int ScreenWidthPixels, int ScreenHeightPixels, double? ReportedRefreshHz, string VsyncMode, string Mode);
+    private sealed record HeadsetResolution(double WidthPixels, double HeightPixels);
+    private sealed record HeadsetConfiguration(string Interface, bool Initialized, string? SessionState,
+        Dictionary<string, string> SystemInfo, double? DisplayRefreshHz, double[] AvailableDisplayRefreshHz,
+        HeadsetResolution? RenderTarget, HeadsetResolution? RecommendedTarget, int? ViewCount,
+        double? RenderTargetSizeMultiplier, string? Error)
+    {
+        public string PhysicalHeadsetCompositorAndMissedFrames =>
+            "unverified; runtime identity/settings do not establish physical headset presentation or simulator equivalence";
+    }
     private sealed record PresentationConfiguration(long Timestamp, string DisplayServer, int MaximumFramesPerSecond,
-        WindowPresentation? Window, ViewportResolution[] Viewports, string? Error);
+        WindowPresentation? Window, ViewportResolution[] Viewports, string? Error, HeadsetConfiguration? Headset = null);
     private RenderTiming? _renderTiming;
     private int _renderTimingPending;
     private ulong _drawCallbackThreadId;
@@ -36,6 +45,7 @@ internal sealed partial class RuntimeLiveHarness
         var timestamp = System.Diagnostics.Stopwatch.GetTimestamp();
         var displayServer = DisplayServer.GetName();
         var maximumFramesPerSecond = Engine.MaxFps;
+        var headset = SampleHeadsetConfiguration();
         try
         {
             var resolutions = _viewports.Select(viewport =>
@@ -55,12 +65,42 @@ internal sealed partial class RuntimeLiveHarness
                     double.IsFinite(refresh) && refresh > 0 ? refresh : null, DisplayServer.WindowGetVsyncMode(windowId).ToString(),
                     DisplayServer.WindowGetMode(windowId).ToString());
             }
-            return _presentationConfiguration = new(timestamp, displayServer, maximumFramesPerSecond, window, resolutions, null);
+            return _presentationConfiguration = new(timestamp, displayServer, maximumFramesPerSecond, window, resolutions, null, headset);
         }
         catch (Exception error)
         {
-            return _presentationConfiguration = new(timestamp, displayServer, maximumFramesPerSecond, null, [], error.Message);
+            return _presentationConfiguration = new(timestamp, displayServer, maximumFramesPerSecond, null, [], error.Message, headset);
         }
+    }
+
+    private static HeadsetConfiguration? SampleHeadsetConfiguration()
+    {
+        // Observe only the already-selected primary interface. Never initialize
+        // XR, select a runtime, or request a refresh rate from diagnostics.
+        if (XRServer.PrimaryInterface is not OpenXRInterface xr) return null;
+        var sample = new HeadsetConfiguration(xr.GetName().ToString(), xr.IsInitialized(), null,
+            new(StringComparer.Ordinal), null, [], null, null, null, null, null);
+        if (!sample.Initialized) return sample;
+        try
+        {
+            using var information = xr.GetSystemInfo();
+            var strings = new Dictionary<string, string>(StringComparer.Ordinal);
+            foreach (var entry in information) strings.Add(entry.Key.AsString(), entry.Value.ToString());
+            using var available = xr.GetAvailableDisplayRefreshRates();
+            var rates = available.Select(rate => rate.AsDouble()).Where(rate => double.IsFinite(rate) && rate > 0).ToArray();
+            var refresh = xr.DisplayRefreshRate;
+            var target = xr.GetRenderTargetSize(); var recommended = xr.GetRecommendedTargetSize();
+            var multiplier = xr.RenderTargetSizeMultiplier; var views = checked((int)xr.GetViewCount());
+            return sample with
+            {
+                SessionState = xr.GetSessionState().ToString(), SystemInfo = strings,
+                DisplayRefreshHz = double.IsFinite(refresh) && refresh > 0 ? refresh : null, AvailableDisplayRefreshHz = rates,
+                RenderTarget = new(target.X, target.Y), RecommendedTarget = new(recommended.X, recommended.Y),
+                ViewCount = views > 0 ? views : null,
+                RenderTargetSizeMultiplier = double.IsFinite(multiplier) && multiplier > 0 ? multiplier : null
+            };
+        }
+        catch (Exception error) { return sample with { Error = error.Message }; }
     }
 
     private RenderTiming? SampleRenderTiming()
