@@ -78,9 +78,15 @@ public partial class NativePlayerPresentationAudit
             var sleeping = restoredBody.CapturePhysics();
             restoredBody.RestorePhysics(sleeping);
             Require(restoredBody.Sleeping, "Restoring physical state woke a sleeping body.");
+            // Retire the body before its sibling presentation, as happens in
+            // whole-cell/session teardown. The last live state must win over
+            // the older campaign snapshot even after native body disposal.
+            restoredBody.Free();
             coldScene.Free();
+            Require(JsonSerializer.Serialize(cold.Get(reference.FormKey).ObjectPhysics!.Single()) == JsonSerializer.Serialize(sleeping),
+                "Post-order teardown lost the final physical continuation or reused the old saved state.");
             GD.Print($"OPENNV_NATIVE_OBJECT_PHYSICS_PASS reference={reference.FormKey} source={path} " +
-                "jsonRoundtrip=true detachedRestore=true motionContinues=true sleep=true sourceDriftRefused=true unloadRetained=true");
+                "jsonRoundtrip=true detachedRestore=true motionContinues=true sleep=true sourceDriftRefused=true unloadRetained=true postOrderRetained=true");
         }
         finally { scene.Free(); prototype.Scene.Root.Free(); }
 

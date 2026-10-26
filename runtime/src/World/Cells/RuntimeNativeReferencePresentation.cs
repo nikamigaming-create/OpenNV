@@ -189,6 +189,7 @@ internal partial class RuntimeNativeReferencePresentation : Node
 
     internal void Register(FalloutFormKey key, Node3D node)
     {
+        _unresolvable.Remove(key);
         _publishedAppearanceRevision = -1;
         if (_nodes.ContainsKey(key)) throw new InvalidOperationException($"Reference {key} is already registered.");
         RefreshGeometry(key, node);
@@ -210,13 +211,14 @@ internal partial class RuntimeNativeReferencePresentation : Node
         PublishOpacity(key);
     }
 
-    internal Node3D? TryResolve(FalloutFormKey key) => _unresolvable.Contains(key) ? null : (_enabled.ContainsKey(key) ? Resolve(key) : null);
+    internal Node3D? TryResolve(FalloutFormKey key) => _enabled.ContainsKey(key) ? Resolve(key) : null;
 
     internal Node3D? Resolve(FalloutFormKey key)
     {
         if (_nodes.TryGetValue(key, out var node)) return node;
         if (_unresolvable.Contains(key)) return null;
-        if (!_referencesByKey.TryGetValue(key, out var source)) return null;
+        if (!_referencesByKey.TryGetValue(key, out var source))
+            throw new NotSupportedException($"Reference {key} is outside this resident presentation.");
         node = _materialize(source);
         if (node is null)
         {

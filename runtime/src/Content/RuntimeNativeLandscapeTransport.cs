@@ -147,7 +147,6 @@ internal static class RuntimeNativeLandscapeTransportBuilder
         {
             Name = $"LAND_Geometry_{source.Landscape}",
             Mesh = mesh,
-            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
         };
         geometry.SetMeta("opennv_land_render_status", "source-layers-and-vertex-alpha; retail-pixels-unverified");
         geometry.SetMeta("opennv_land_surfaces", mesh.GetSurfaceCount());
