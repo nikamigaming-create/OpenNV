@@ -78,7 +78,8 @@ internal sealed partial class RuntimeLiveHarness
         // Observe only the already-selected primary interface. Never initialize
         // XR, select a runtime, or request a refresh rate from diagnostics.
         if (XRServer.PrimaryInterface is not OpenXRInterface xr) return null;
-        var sample = new HeadsetConfiguration(xr.GetName().ToString(), xr.IsInitialized(), null,
+        using var interfaceName = xr.GetName();
+        var sample = new HeadsetConfiguration(interfaceName.ToString(), xr.IsInitialized(), null,
             new(StringComparer.Ordinal), null, [], null, null, null, null, null);
         if (!sample.Initialized) return sample;
         try
