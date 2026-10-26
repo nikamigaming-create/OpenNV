@@ -65,6 +65,7 @@ internal sealed partial class NativeNifBillboard : Node
     }
     public override void _Process(double delta)
     {
+        using var frameWork = OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Measure(OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Owner.Billboard);
         for (var i = 0; i < _meshes.Count; i++)
         {
             var (mesh, material, last) = _meshes[i]; var local = Local(mesh);

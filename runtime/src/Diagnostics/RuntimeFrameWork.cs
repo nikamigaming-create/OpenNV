@@ -5,7 +5,7 @@ namespace OpenNV.Runtime.Diagnostics;
 // Main-thread inclusive owner timings. Nested owners are not additive.
 internal static class RuntimeFrameWork
 {
-    internal enum Owner { Opening, QuestScripts, ReferenceEvents, ReferencePresentation, ObjectAnimation, Particle, AnimationAudio, NpcAnimation, NpcPackages, CreatureAnimation, CreaturePackages, Combat, PlayerPhysics, PlayerPresentation, NativeCapsuleSweep, NativeSupportRay, ActorMove }
+    internal enum Owner { Opening, QuestScripts, ReferenceEvents, ReferencePresentation, ObjectAnimation, Particle, AnimationAudio, NpcAnimation, NpcPackages, CreatureAnimation, CreaturePackages, Combat, PlayerPhysics, PlayerPresentation, NativeCapsuleSweep, NativeSupportRay, ActorMove, EmbeddedSkin, AlphaSort, Billboard }
     private static readonly long[] Calls = new long[Enum.GetValues<Owner>().Length];
     private static readonly long[] Ticks = new long[Calls.Length];
     private static readonly long[] Maximum = new long[Calls.Length];

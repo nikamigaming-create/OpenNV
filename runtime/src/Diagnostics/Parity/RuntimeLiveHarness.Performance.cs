@@ -10,11 +10,12 @@ internal sealed partial class RuntimeLiveHarness
     private sealed record RendererIdentity(string? RenderingMethod, string? GraphicsAdapter);
     private sealed record ViewportResolution(string Name, int WidthPixels, int HeightPixels, float Scaling3DScale);
     private sealed record WindowPresentation(int Id, int WidthPixels, int HeightPixels, int Screen,
-        int ScreenWidthPixels, int ScreenHeightPixels, double? ReportedRefreshHz, string VsyncMode);
+        int ScreenWidthPixels, int ScreenHeightPixels, double? ReportedRefreshHz, string VsyncMode, string Mode);
     private sealed record PresentationConfiguration(long Timestamp, string DisplayServer, int MaximumFramesPerSecond,
         WindowPresentation? Window, ViewportResolution[] Viewports, string? Error);
     private RenderTiming? _renderTiming;
     private int _renderTimingPending;
+    private ulong _drawCallbackThreadId;
     private RendererIdentity? _rendererIdentity;
     private PresentationConfiguration? _presentationConfiguration;
     private readonly LiveHarnessPublicationSelection _publicationSelection = new();
@@ -44,7 +45,8 @@ internal sealed partial class RuntimeLiveHarness
                 var screenSize = DisplayServer.ScreenGetSize(screen);
                 var refresh = DisplayServer.ScreenGetRefreshRate(screen);
                 window = new(windowId, size.X, size.Y, screen, screenSize.X, screenSize.Y,
-                    double.IsFinite(refresh) && refresh > 0 ? refresh : null, DisplayServer.WindowGetVsyncMode(windowId).ToString());
+                    double.IsFinite(refresh) && refresh > 0 ? refresh : null, DisplayServer.WindowGetVsyncMode(windowId).ToString(),
+                    DisplayServer.WindowGetMode(windowId).ToString());
             }
             return _presentationConfiguration = new(timestamp, displayServer, maximumFramesPerSecond, window, resolutions, null);
         }

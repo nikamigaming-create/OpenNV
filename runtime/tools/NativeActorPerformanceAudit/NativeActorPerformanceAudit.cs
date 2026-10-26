@@ -10,6 +10,10 @@ public partial class NativeActorPerformanceAudit : Node
         try
         {
             var args = OS.GetCmdlineUserArgs();
+            if (args is ["--pursuit-waypoint"])
+            {
+                await CheckPursuitWaypoint(); GetTree().Quit(); return;
+            }
             if (args is ["--owned-creature-pose-handoff", var poseData, var poseCreature])
             {
                 await OwnedCreaturePoseHandoff(poseData, poseCreature);

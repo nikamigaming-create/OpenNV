@@ -553,6 +553,7 @@ internal sealed partial class RuntimeLiveHarness : Node
                 renderThreadId = renderTiming?.RenderThreadId,
                 mainThreadId = renderTiming?.MainThreadId,
                 separateRenderThreadObserved = renderTiming is null ? (bool?)null : renderTiming.RenderThreadId != renderTiming.MainThreadId,
+                drawCallbackThreadId = _drawCallbackThreadId,
                 physicsTicksPerSecond = Engine.PhysicsTicksPerSecond,
                 contentWorkerLimit = FalloutContentWorkers.Concurrency,
                 availableProcessors = FalloutContentWorkers.AvailableProcessors,
@@ -611,6 +612,7 @@ internal sealed partial class RuntimeLiveHarness : Node
 
     private void AfterDraw()
     {
+        _drawCallbackThreadId = OS.GetThreadCallerId();
         _frameIntervals.Record(Stopwatch.GetTimestamp() * (1000.0 / Stopwatch.Frequency));
         if (_pendingCapture == 0 && _liveFrames is null && _trace?.Pending != true)
             return;

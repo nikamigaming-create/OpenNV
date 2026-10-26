@@ -39,19 +39,13 @@ internal sealed partial class RuntimeNativeActorCombat
         if (_routeDoor is not null && target.DistanceTo(_routeTarget) > _radius) ResetDoorNavigation();
         // Finish this bounded query against its captured destination. Repeated
         // target motion must not discard every query before pursuit can move.
-        while (_pursuitCursor < _pursuitPath.Length)
+        ConsumeReachedPursuitWaypoints();
+        if (_pursuitCursor < _pursuitPath.Length)
         {
             var offset = _pursuitPath[_pursuitCursor] - _actor.GlobalPosition;
             var distance = new Vector2(offset.X, offset.Z).Length();
-            if (distance > _mover.SafeMargin * 8)
-            {
-                _routeStall = distance < _waypointDistance - .001f ? 0 : _routeStall + delta;
-                _waypointDistance = distance;
-                break;
-            }
-            _pursuitCursor++;
-            _waypointDistance = float.PositiveInfinity;
-            _routeStall = 0;
+            _routeStall = distance < _waypointDistance - .001f ? 0 : _routeStall + delta;
+            _waypointDistance = distance;
         }
         if (_routeDoor is not null)
         {
@@ -109,8 +103,27 @@ internal sealed partial class RuntimeNativeActorCombat
                 _routeMaximumSliceMilliseconds = 0;
             }
         }
-        if (_routeSearch is not null) AdvanceRouteSearch();
+        if (_routeSearch is not null)
+        {
+            AdvanceRouteSearch();
+            // Completion can publish an already-reached endpoint or prefix.
+            // Consume it before choosing a movement clip this same tick, but
+            // do not charge another stall delta or change retry admission.
+            ConsumeReachedPursuitWaypoints();
+        }
         return _pursuitCursor < _pursuitPath.Length ? _pursuitPath[_pursuitCursor] : null;
+    }
+
+    private void ConsumeReachedPursuitWaypoints()
+    {
+        while (_pursuitCursor < _pursuitPath.Length)
+        {
+            var offset = _pursuitPath[_pursuitCursor] - _actor.GlobalPosition;
+            if (new Vector2(offset.X, offset.Z).Length() > _mover!.SafeMargin * 8) break;
+            _pursuitCursor++;
+            _waypointDistance = float.PositiveInfinity;
+            _routeStall = 0;
+        }
     }
 
     // An iterator with no movement intent is an unused native query, not an

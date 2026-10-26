@@ -33,6 +33,7 @@ internal partial class RuntimeNifEmbeddedSkin : Skeleton3D
 
     internal void Publish()
     {
+        using var frameWork = OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Measure(OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Owner.EmbeddedSkin);
         for (var bone = 0; bone < _bones.Length; bone++)
         {
             var pose = Relative(_root, _bones[bone]);

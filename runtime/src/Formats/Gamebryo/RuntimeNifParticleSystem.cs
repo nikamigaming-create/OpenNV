@@ -33,12 +33,13 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
     private double _nextBoundsRefresh;
     private int _visibleCount;
     private ParticleDistanceOrder _distanceOrder = null!;
-    private static long _publicationCalls, _publishedParticles, _sortTicks, _packTicks, _uploadTicks;
+    private static long _publicationCalls, _publishedParticles, _uploadedFloats, _sortTicks, _packTicks, _uploadTicks;
     internal static object PublicationTiming => new
     {
         scope = "process-cumulative-main-thread;upload-includes-native-call-not-GPU-execution",
         calls = _publicationCalls,
         particles = _publishedParticles,
+        uploadedFloats = _uploadedFloats,
         sortMilliseconds = _sortTicks * (1000.0 / Stopwatch.Frequency),
         packMilliseconds = _packTicks * (1000.0 / Stopwatch.Frequency),
         uploadMilliseconds = _uploadTicks * (1000.0 / Stopwatch.Frequency)
@@ -639,6 +640,7 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
         _uploadTicks += Stopwatch.GetTimestamp() - uploadStarted;
         ++_publicationCalls;
         _publishedParticles += ActiveCount;
+        _uploadedFloats += _drawBuffer.Length;
     }
 
     internal static Color ParticleColor(FalloutNifParticleColor source, float fraction)
