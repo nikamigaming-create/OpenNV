@@ -16,6 +16,10 @@ public partial class NativeNifInstanceAudit : Node
             {
                 ExerciseShaderNoFade(); GetTree().Quit(); return;
             }
+            if (OS.GetCmdlineUserArgs() is ["--material-channel-interleaving"])
+            {
+                ExerciseTextureAddressing(); GetTree().Quit(); return;
+            }
             if (OS.GetCmdlineUserArgs() is ["--external-animation-targets"])
             {
                 ExerciseExternalAnimationTargets(); GetTree().Quit(); return;
@@ -23,6 +27,10 @@ public partial class NativeNifInstanceAudit : Node
             if (OS.GetCmdlineUserArgs() is ["--particle-shapes-colors"])
             {
                 ExerciseParticleShapesColors(); GetTree().Quit(); return;
+            }
+            if (OS.GetCmdlineUserArgs() is ["--particle-transform-cache"])
+            {
+                ExerciseParticleTransformCache(); GetTree().Quit(); return;
             }
             if (OS.GetCmdlineUserArgs() is ["--particle-gravity"])
             {
@@ -211,6 +219,7 @@ public partial class NativeNifInstanceAudit : Node
             ExerciseMorphBasis();
             ExerciseManagedMorph();
             ExerciseParticleChannels();
+            ExerciseParticleTransformCache();
             ExerciseParticleShapesColors();
             await ExerciseParticleGravity();
             ExerciseDdsImages();

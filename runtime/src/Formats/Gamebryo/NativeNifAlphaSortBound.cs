@@ -6,6 +6,8 @@ namespace OpenNV.Runtime.Formats.Gamebryo;
 // copied with the source prototype; each instance resolves its own geometry.
 internal sealed partial class NativeNifAlphaSortBound : Node
 {
+    private static readonly StringName CenterMetadata = "center";
+    private static readonly StringName StaticMetadata = "static";
     private Node3D _owner = null!;
     private GeometryInstance3D[] _geometry = [];
     public override void _Ready()
@@ -18,8 +20,8 @@ internal sealed partial class NativeNifAlphaSortBound : Node
     public override void _Process(double delta)
     {
         if (GetViewport().GetCamera3D() is not { } camera) return;
-        var center = _owner.ToGlobal(GetMeta("center").AsVector3());
-        if (!GetMeta("static").AsBool() && _geometry.Length != 0)
+        var center = _owner.ToGlobal(GetMeta(CenterMetadata).AsVector3());
+        if (!GetMeta(StaticMetadata).AsBool() && _geometry.Length != 0)
         {
             var bounds = _geometry[0].GlobalTransform * _geometry[0].GetAabb();
             foreach (var geometry in _geometry.Skip(1)) bounds = bounds.Merge(geometry.GlobalTransform * geometry.GetAabb());

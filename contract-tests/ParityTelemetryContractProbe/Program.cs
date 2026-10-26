@@ -32,6 +32,33 @@ catch (InvalidDataException) { pendingClockRefused = true; }
 if (!pendingClockRefused) throw new InvalidOperationException("A regressed pending writer clock became a valid deferred request.");
 Console.WriteLine("OPENNV_PUBLICATION_CADENCE_CONTRACT_PASS intervalMilliseconds=250 forcedSnapshotResets=true currentClock=true regressionVisible=true pendingWriterFaultUnchanged=true");
 
+var publicationSelection = new LiveHarnessPublicationSelection();
+var selectionReads = 0;
+var selectedGameplay = new object();
+var selectedControls = new object();
+(string StateKey, ulong EventOrdinal) CaptureSelectionIdentity() { selectionReads++; return ("source-state", 41); }
+object CaptureSelectionGameplay() { selectionReads++; return selectedGameplay; }
+object CaptureSelectionControls() { selectionReads++; return selectedControls; }
+var fullSelection = publicationSelection.Capture(CaptureSelectionIdentity, CaptureSelectionGameplay, CaptureSelectionControls);
+if (publicationSelection.Scope != "full" || fullSelection is null || selectionReads != 3 ||
+    fullSelection.Identity != ("source-state", 41UL) || !ReferenceEquals(fullSelection.Gameplay, selectedGameplay) ||
+    !ReferenceEquals(fullSelection.Controls, selectedControls))
+    throw new InvalidOperationException("Default full publication changed its authoritative observation owners.");
+publicationSelection.SetMode("performance");
+if (publicationSelection.Capture(CaptureSelectionIdentity, CaptureSelectionGameplay, CaptureSelectionControls) is not null || selectionReads != 3)
+    throw new InvalidOperationException("Performance publication invoked an omitted gameplay/identity/control owner.");
+foreach (var invalidMode in new string?[] { null, "", "Full", "hidden" })
+{
+    var refused = false;
+    try { publicationSelection.SetMode(invalidMode); } catch (ArgumentException) { refused = true; }
+    if (!refused || publicationSelection.Scope != "performance")
+        throw new InvalidOperationException("An invalid publication mode changed diagnostic selection.");
+}
+publicationSelection.SetMode("full");
+if (publicationSelection.Capture(CaptureSelectionIdentity, CaptureSelectionGameplay, CaptureSelectionControls) is null || selectionReads != 6)
+    throw new InvalidOperationException("Restoring full publication did not resume its real observations.");
+Console.WriteLine("OPENNV_PUBLICATION_SELECTION_CONTRACT_PASS defaultFull=true omittedFactoriesSkipped=true explicitNullOmissions=true fullResumes=true invalidModeRefused=true");
+
 var traceDirectory = Path.Combine(Path.GetTempPath(), "opennv-trace-contract-" + Guid.NewGuid().ToString("N"));
 try
 {
@@ -124,12 +151,31 @@ try
     double timestamp = 0;
     cadence.Record(timestamp);
     for (var index = 0; index < 100; index++) cadence.Record(timestamp += index == 99 ? 100 : 10);
-    if (cadence.Capture() is not { Samples: 100, MedianMilliseconds: 10, P95Milliseconds: 10, MaximumMilliseconds: 100 })
+    if (cadence.Capture() is not { Samples: 100, MedianMilliseconds: 10, P95Milliseconds: 10, MaximumMilliseconds: 100, OverBudgetIntervals: 100 })
         throw new InvalidOperationException("Frame cadence concealed a single long hitch.");
     for (var index = 0; index < 512; index++) cadence.Record(timestamp += 12);
-    if (cadence.Capture() is not { Samples: 512, MedianMilliseconds: 12, P99Milliseconds: 12, MaximumMilliseconds: 12 })
+    if (cadence.Capture() is not { Samples: 512, MedianMilliseconds: 12, P99Milliseconds: 12, MaximumMilliseconds: 12, OverBudgetIntervals: 512 })
         throw new InvalidOperationException("Frame cadence did not retire its bounded previous window.");
-    Console.WriteLine($"OPENNV_LIVE_DIAGNOSTIC_CONTRACT_OK replacementWithReader=64 oldSnapshotIntact=true commandReadRetry=true transientSharingRetry={OperatingSystem.IsWindows()} persistentSharingRefused={OperatingSystem.IsWindows()} boundedCadence=512 hitchVisible=true");
+    for (var index = 0; index < 512; index++) cadence.Record(timestamp += 5);
+    if (cadence.Capture() is not { Samples: 512, MedianMilliseconds: 5, OverBudgetIntervals: 0, OverBudgetFraction: 0 })
+        throw new InvalidOperationException("Frame cadence retained retired over-budget intervals.");
+    var thresholdCadence = new FrameIntervalWindow();
+    thresholdCadence.Record(0);
+    timestamp = FrameIntervalWindow.FrameBudgetMilliseconds;
+    thresholdCadence.Record(timestamp);
+    thresholdCadence.Record(timestamp += FrameIntervalWindow.FrameBudgetMilliseconds + 0.001);
+    thresholdCadence.Record(timestamp + FrameIntervalWindow.FrameBudgetMilliseconds - 0.001);
+    if (thresholdCadence.Capture() is not { Samples: 3, TargetFramesPerSecond: 144, OverBudgetIntervals: 1 } threshold ||
+        threshold.BudgetMilliseconds != 1000.0 / 144 || threshold.OverBudgetFraction != 1.0 / 3)
+        throw new InvalidOperationException("Frame cadence did not retain the strict 144 Hz budget boundary.");
+    thresholdCadence.Reset();
+    if (thresholdCadence.Capture() is not null) throw new InvalidOperationException("A new measurement retained an old interval.");
+    thresholdCadence.Record(100_000);
+    if (thresholdCadence.Capture() is not null) throw new InvalidOperationException("A new measurement included its pre-entry gap.");
+    thresholdCadence.Record(100_005);
+    if (thresholdCadence.Capture() is not { Samples: 1, MedianMilliseconds: 5, MaximumMilliseconds: 5, OverBudgetIntervals: 0 })
+        throw new InvalidOperationException("A new measurement did not resume on its own draw timestamps.");
+    Console.WriteLine($"OPENNV_LIVE_DIAGNOSTIC_CONTRACT_OK replacementWithReader=64 oldSnapshotIntact=true commandReadRetry=true transientSharingRetry={OperatingSystem.IsWindows()} persistentSharingRefused={OperatingSystem.IsWindows()} boundedCadence=512 hitchVisible=true strict144HzBudget=true lateIntervalsRetired=true measurementReset=true");
     var store = new RenderTraceBlobStore(traceDirectory);
     byte[] payload = [0, 0, 0, 0x80, 7, 3, 255];
     var first = store.Put(payload);

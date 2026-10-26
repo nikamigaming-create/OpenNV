@@ -132,9 +132,6 @@ public partial class RuntimeCoordinator : Node3D
                     _configuration.Player.DesktopInput.Cancel.Action);
                 AddChild(harness);
             }
-            GetWindow().Size = new Vector2I(
-                _configuration.Capture.ExpectedWidthPixels,
-                _configuration.Capture.ExpectedHeightPixels);
             RenderingServer.SetDefaultClearColor(_configuration.Renderer.BackgroundColorRgba.Color());
             Engine.PhysicsTicksPerSecond = _configuration.Simulation.PhysicsTicksPerSecond;
             var performanceReportPath = _options.TryGetValue(

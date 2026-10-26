@@ -7,6 +7,12 @@ namespace OpenNV.Runtime.Formats.Gamebryo;
 
 internal static partial class RuntimeNativeNifMeshBuilder
 {
+    private static readonly StringName EmissiveColorParameter = "emissive_color";
+    private static readonly StringName EmissiveMultipleParameter = "emissive_multiple";
+    private static readonly StringName SourceSpecularParameter = "source_specular";
+    private static readonly StringName BaseFactorParameter = "base_factor";
+    private static readonly StringName SourceColorMultiplierParameter = "source_color_multiplier";
+    private static readonly StringName SourceUvOffsetParameter = "source_uv_offset";
     private const ushort HiddenFlag = 0x0001;
     private const int TangentComponents = 4;
     private const uint SupportedShaderType = 1;
@@ -1157,7 +1163,7 @@ internal static partial class RuntimeNativeNifMeshBuilder
                     if (material is ShaderMaterial effect && material.ResourceName == NativeNifEffectMaterial.ResourceIdentity)
                         NativeNifEffectMaterial.ApplyEmissiveColor(effect, new Vector3(color.R, color.G, color.B));
                     else if (material is ShaderMaterial shader)
-                        shader.SetShaderParameter("emissive_color", new Vector3(color.R, color.G, color.B));
+                        shader.SetShaderParameter(EmissiveColorParameter, new Vector3(color.R, color.G, color.B));
                     else if (material is StandardMaterial3D standard)
                     {
                         standard.EmissionEnabled = true;
@@ -1194,8 +1200,8 @@ internal static partial class RuntimeNativeNifMeshBuilder
                 {
                     if (material is ShaderMaterial effect && material.ResourceName == NativeNifEffectMaterial.ResourceIdentity)
                     {
-                        var offset = effect.GetShaderParameter("source_uv_offset").AsVector2();
-                        effect.SetShaderParameter("source_uv_offset", controller.Operation == 0 ? new Vector2(value, offset.Y) : new Vector2(offset.X, value));
+                        var offset = effect.GetShaderParameter(SourceUvOffsetParameter).AsVector2();
+                        effect.SetShaderParameter(SourceUvOffsetParameter, controller.Operation == 0 ? new Vector2(value, offset.Y) : new Vector2(offset.X, value));
                     }
                     else if (material is StandardMaterial3D standard)
                         standard.Uv1Offset = controller.Operation == 0 ? new Vector3(value, standard.Uv1Offset.Y, standard.Uv1Offset.Z) : new Vector3(standard.Uv1Offset.X, value, standard.Uv1Offset.Z);
@@ -2264,15 +2270,15 @@ internal static partial class RuntimeNativeNifMeshBuilder
                         {
                             // Each controller owns one field. Other fields may
                             // be driven by a managed sequence on this material.
-                            if (controller is FalloutNifEmittanceController) lighting.SetShaderParameter("emissive_multiple", multiple);
+                            if (controller is FalloutNifEmittanceController) lighting.SetShaderParameter(EmissiveMultipleParameter, multiple);
                             else if (controller is FalloutNifMaterialColorController color)
-                                lighting.SetShaderParameter(color.TargetColor == 2 ? "source_specular" : "emissive_color",
+                                lighting.SetShaderParameter(color.TargetColor == 2 ? SourceSpecularParameter : EmissiveColorParameter,
                                     color.TargetColor == 2 ? specular : emissive);
                             else
                             {
-                                var factor = lighting.GetShaderParameter("base_factor").AsVector4();
+                                var factor = lighting.GetShaderParameter(BaseFactorParameter).AsVector4();
                                 factor.W = alpha;
-                                lighting.SetShaderParameter("base_factor", factor);
+                                lighting.SetShaderParameter(BaseFactorParameter, factor);
                             }
                         }
                         else if (material is ShaderMaterial effect && effect.ResourceName == NativeNifEffectMaterial.ResourceIdentity &&
@@ -2283,9 +2289,9 @@ internal static partial class RuntimeNativeNifMeshBuilder
                                 NativeNifEffectMaterial.ApplyEmissiveColor(effect, emissive);
                             else if (controller is FalloutNifAlphaController)
                             {
-                                var factor = effect.GetShaderParameter("source_color_multiplier").AsVector4();
+                                var factor = effect.GetShaderParameter(SourceColorMultiplierParameter).AsVector4();
                                 factor.W = alpha;
-                                effect.SetShaderParameter("source_color_multiplier", factor);
+                                effect.SetShaderParameter(SourceColorMultiplierParameter, factor);
                             }
                         }
                         else if (material is not StandardMaterial3D || property.EmissiveMultiple != multiple || property.Alpha != alpha ||

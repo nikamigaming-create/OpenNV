@@ -7,12 +7,20 @@ namespace OpenNV.Runtime.World.Cells;
 // include streamed additions; a disabled/warm reference cannot receive force.
 internal partial class RuntimeNativeWind : Node
 {
-    private const string WindGroup = "OpenNVSourceWind";
+    private static readonly StringName WindGroup = "OpenNVSourceWind";
     internal static Vector3 SampleFor(Node node)
     {
         if (!node.IsInsideTree()) return Vector3.Zero;
-        var wind = node.GetTree().GetNodesInGroup(WindGroup).OfType<RuntimeNativeWind>()
-            .SingleOrDefault(owner => owner.GetViewport() == node.GetViewport() && owner.CanProcess());
+        var owners = node.GetTree().GetNodesInGroup(WindGroup);
+        using var ownersLifetime = (Godot.Collections.Array)owners;
+        var viewport = node.GetViewport();
+        RuntimeNativeWind? wind = null;
+        foreach (var candidate in owners)
+        {
+            if (candidate is not RuntimeNativeWind owner || owner.GetViewport() != viewport || !owner.CanProcess()) continue;
+            if (wind is not null) throw new InvalidOperationException("A viewport has multiple active source wind owners.");
+            wind = owner;
+        }
         if (wind is null) return Vector3.Zero; // Interior and menu worlds have no weather wind.
         var (speed, heading) = wind._sample();
         return new Vector3(-MathF.Sin(heading), 0, -MathF.Cos(heading)) * speed;

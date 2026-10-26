@@ -7,9 +7,17 @@ namespace OpenNV.Runtime.World.Actors;
 internal sealed partial class RuntimeNativeActorCombat
 {
     private RuntimeNativeActorCombat? _opponent;
-    private IEnumerable<RuntimeNativeActorCombat> CombatActors => _actor.GetTree().GetNodesInGroup(CombatActorsGroup)
-        .OfType<RuntimeNativeActorCombat>().Where(actor => ReferenceEquals(actor._world, _world) &&
-            ReferenceEquals(actor._context, _context) && !actor.IsQueuedForDeletion());
+    private IEnumerable<RuntimeNativeActorCombat> CombatActors
+    {
+        get
+        {
+            var nodes = _actor.GetTree().GetNodesInGroup(CombatActorsGroup);
+            using var lifetime = (Godot.Collections.Array)nodes;
+            foreach (var node in nodes)
+                if (node is RuntimeNativeActorCombat actor && ReferenceEquals(actor._world, _world) &&
+                    ReferenceEquals(actor._context, _context) && !actor.IsQueuedForDeletion()) yield return actor;
+        }
+    }
 
     private Vector3 TargetPosition(RuntimeNativePlayer? player) => _opponent?._actor.GlobalPosition ?? player!.GlobalPosition;
     private float TargetRadius(RuntimeNativePlayer? player) => _opponent?._radius ?? player!.CombatRadius;

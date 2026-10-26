@@ -163,7 +163,6 @@ internal sealed partial class RuntimeNativeActorCombat
             var elapsed = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
             _routeMilliseconds += elapsed;
             _routeMaximumSliceMilliseconds = Math.Max(_routeMaximumSliceMilliseconds, elapsed);
-            _routeWork = NativeCapsuleNavigation.Work(_routeSearch) ?? _routeWork;
         }
     }
 }

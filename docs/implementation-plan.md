@@ -1,5 +1,14 @@
 # Implementation plan
 
+Current user override (2026-10-25): **144 Hz or bust**. Required frame budget:
+6.944 ms. The prior 49 FPS/720p diagnostic is rejected as a performance
+handoff. Optimize measured runtime owners while preserving gameplay, visual
+content, shadows, particles, collision and saves. Report CPU/GPU and actual
+draw-interval median/p95/p99, late frames, resolution and display refresh for
+ordinary movement, exterior streaming and combat. Distinguish uncapped engine
+throughput from 144 Hz presentation; stationary or low-resolution figures alone
+do not pass this target.
+
 Updated 2026-10-23: the user directs complete-game playability in flat Fallout:
 New Vegas before repeated deep optimization.
 Start with correct Doc Mitchell positioning and the original questionnaire,
