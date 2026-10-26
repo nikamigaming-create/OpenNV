@@ -196,21 +196,41 @@ public partial class NativeActorPerformanceAudit
             observer.Physics = null; observer.Render = null; active = null;
             object Summary(CreaturePoseWindow window) => new
             {
-                window.Name, window.PhysicsSamples, window.RenderSamples, window.PhysicsSeconds, window.RenderSeconds,
-                window.OwnerChanges, window.StationaryPackageSamples, window.EventPackageSamples, window.ScriptSamples,
+                window.Name,
+                window.PhysicsSamples,
+                window.RenderSamples,
+                window.PhysicsSeconds,
+                window.RenderSeconds,
+                window.OwnerChanges,
+                window.StationaryPackageSamples,
+                window.EventPackageSamples,
+                window.ScriptSamples,
                 first = window.First is null ? null : ClockSummary(window.First),
-                last = window.Last is null ? null : ClockSummary(window.Last), window.LargestChange
+                last = window.Last is null ? null : ClockSummary(window.Last),
+                window.LargestChange
             };
             if (!sourceHash.SequenceEqual(SHA256.HashData(declaration.ReadData())))
                 throw new InvalidDataException("Owned source creature declaration changed during pose observation.");
             GD.Print("OPENNV_NATIVE_CREATURE_POSE_OBSERVATION " + JsonSerializer.Serialize(new
             {
-                reference = caller.ToString(), cell = cell.Cell.FormKey.ToString(), skeleton = actor.Appearance.SkeletonPath,
-                targetPhysicsHz = 60, targetRenderHz = 144, displayRefreshHz = DisplayServer.ScreenGetRefreshRate(DisplayServer.WindowGetCurrentScreen(windowId)),
-                recording = false, sourceReadonly = true, sourceAi, source = Summary(sourceWindow), component = Summary(packageWindow),
-                componentUnavailable, retainedPackageRender, zeroElapsedHandoff = handoff,
+                reference = caller.ToString(),
+                cell = cell.Cell.FormKey.ToString(),
+                skeleton = actor.Appearance.SkeletonPath,
+                targetPhysicsHz = 60,
+                targetRenderHz = 144,
+                displayRefreshHz = DisplayServer.ScreenGetRefreshRate(DisplayServer.WindowGetCurrentScreen(windowId)),
+                recording = false,
+                sourceReadonly = true,
+                sourceAi,
+                source = Summary(sourceWindow),
+                component = Summary(packageWindow),
+                componentUnavailable,
+                retainedPackageRender,
+                zeroElapsedHandoff = handoff,
                 handoffBefore = handoffBefore is null ? null : ClockSummary(handoffBefore),
-                handoffAfter = handoffAfter is null ? null : ClockSummary(handoffAfter), actorError = actor.Error, sourceError = state.ScriptError,
+                handoffAfter = handoffAfter is null ? null : ClockSummary(handoffAfter),
+                actorError = actor.Error,
+                sourceError = state.ScriptError,
                 eventIdleOverlapObserved = sourceWindow.EventPackageSamples + packageWindow.EventPackageSamples > 0,
                 scriptIdleObserved = sourceWindow.ScriptSamples + packageWindow.ScriptSamples > 0,
                 fixture = "owned-source-actor-and-capsule/source-initial-quests/owned-NAVM/synthetic-flat-floor/no-target-proxies; controlled stationary request uses selected PACK",
@@ -232,8 +252,17 @@ public partial class NativeActorPerformanceAudit
 
     private static object ClockSummary(CreaturePoseSample sample) => new
     {
-        sample.Step, sample.Owner, sample.DefaultSeconds, sample.PackageSeconds, sample.EventSeconds,
-        sample.ScriptSeconds, sample.PackageOwnsPose, sample.Moving, sample.OnFloor, sample.Package, sample.Animation,
+        sample.Step,
+        sample.Owner,
+        sample.DefaultSeconds,
+        sample.PackageSeconds,
+        sample.EventSeconds,
+        sample.ScriptSeconds,
+        sample.PackageOwnsPose,
+        sample.Moving,
+        sample.OnFloor,
+        sample.Package,
+        sample.Animation,
         body = Matrix(sample.Body)
     };
     private static float[] Matrix(Transform3D value) =>

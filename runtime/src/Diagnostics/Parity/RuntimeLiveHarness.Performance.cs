@@ -93,9 +93,12 @@ internal sealed partial class RuntimeLiveHarness
             var multiplier = xr.RenderTargetSizeMultiplier; var views = checked((int)xr.GetViewCount());
             return sample with
             {
-                SessionState = xr.GetSessionState().ToString(), SystemInfo = strings,
-                DisplayRefreshHz = double.IsFinite(refresh) && refresh > 0 ? refresh : null, AvailableDisplayRefreshHz = rates,
-                RenderTarget = new(target.X, target.Y), RecommendedTarget = new(recommended.X, recommended.Y),
+                SessionState = xr.GetSessionState().ToString(),
+                SystemInfo = strings,
+                DisplayRefreshHz = double.IsFinite(refresh) && refresh > 0 ? refresh : null,
+                AvailableDisplayRefreshHz = rates,
+                RenderTarget = new(target.X, target.Y),
+                RecommendedTarget = new(recommended.X, recommended.Y),
                 ViewCount = views > 0 ? views : null,
                 RenderTargetSizeMultiplier = double.IsFinite(multiplier) && multiplier > 0 ? multiplier : null
             };

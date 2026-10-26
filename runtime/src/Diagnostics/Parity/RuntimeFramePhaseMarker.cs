@@ -43,12 +43,21 @@ internal sealed class RuntimeFramePhaseCounter(int expectedThread)
     {
         lock (_gate) return new
         {
-            calls = _calls, begins = _begins, ends = _ends, totalMilliseconds = _ticks * (1000.0 / Stopwatch.Frequency),
-            maximumMilliseconds = _maximum * (1000.0 / Stopwatch.Frequency), pending = _pending,
+            calls = _calls,
+            begins = _begins,
+            ends = _ends,
+            totalMilliseconds = _ticks * (1000.0 / Stopwatch.Frequency),
+            maximumMilliseconds = _maximum * (1000.0 / Stopwatch.Frequency),
+            pending = _pending,
             lastMilliseconds = _last * (1000.0 / Stopwatch.Frequency),
-            unpairedBegins = _unpairedBegins, unpairedEnds = _unpairedEnds, invalidPairs = _invalidPairs,
-            threadMismatches = _threadMismatches, clockRegressions = _clockRegressions,
-            expectedThreadId = expectedThread, lastBeginThreadId = _beginThread, lastEndThreadId = _endThread
+            unpairedBegins = _unpairedBegins,
+            unpairedEnds = _unpairedEnds,
+            invalidPairs = _invalidPairs,
+            threadMismatches = _threadMismatches,
+            clockRegressions = _clockRegressions,
+            expectedThreadId = expectedThread,
+            lastBeginThreadId = _beginThread,
+            lastEndThreadId = _endThread
         };
     }
 }

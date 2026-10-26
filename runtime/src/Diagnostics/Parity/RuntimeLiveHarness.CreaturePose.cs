@@ -71,9 +71,13 @@ internal sealed class RuntimeCreaturePoseObservation
         if (_sampleLimit < 2) throw new NotSupportedException("Source skeleton exceeds the bounded pose observation memory budget.");
         _observer = new()
         {
-            Name = "NativeCreaturePoseObservation", ProcessPriority = int.MaxValue, ProcessPhysicsPriority = int.MaxValue,
+            Name = "NativeCreaturePoseObservation",
+            ProcessPriority = int.MaxValue,
+            ProcessPhysicsPriority = int.MaxValue,
             ProcessMode = Node.ProcessModeEnum.Always,
-            Physics = _ => Observe("post-physics"), Render = _ => Observe("post-draw"), Heartbeat = _ => CheckDeadline()
+            Physics = _ => Observe("post-physics"),
+            Render = _ => Observe("post-draw"),
+            Heartbeat = _ => CheckDeadline()
         };
     }
 
@@ -125,13 +129,23 @@ internal sealed class RuntimeCreaturePoseObservation
         {
             _publish(new
             {
-                schema = "opennv-native-creature-pose/v1", reference = _reference, requestedSeconds = _seconds,
-                observedMilliseconds = Stopwatch.GetElapsedTime(_started).TotalMilliseconds, reason, error,
-                sampleLimit = _sampleLimit, physicsSamples = _samples.Count(sample => sample.Step == "post-physics"),
-                drawSamples = _samples.Count(sample => sample.Step == "post-draw"), boneNames = _bones, matrixLayout = "basis-X,Y,Z,origin;12-floats-per-bone",
-                captureMilliseconds = _captureMilliseconds, physicsTicksPerSecond = Engine.PhysicsTicksPerSecond,
-                maximumFramesPerSecond = Engine.MaxFps, samples = _samples,
-                recording = false, gameplayMutations = false,
+                schema = "opennv-native-creature-pose/v1",
+                reference = _reference,
+                requestedSeconds = _seconds,
+                observedMilliseconds = Stopwatch.GetElapsedTime(_started).TotalMilliseconds,
+                reason,
+                error,
+                sampleLimit = _sampleLimit,
+                physicsSamples = _samples.Count(sample => sample.Step == "post-physics"),
+                drawSamples = _samples.Count(sample => sample.Step == "post-draw"),
+                boneNames = _bones,
+                matrixLayout = "basis-X,Y,Z,origin;12-floats-per-bone",
+                captureMilliseconds = _captureMilliseconds,
+                physicsTicksPerSecond = Engine.PhysicsTicksPerSecond,
+                maximumFramesPerSecond = Engine.MaxFps,
+                samples = _samples,
+                recording = false,
+                gameplayMutations = false,
                 boundary = "Read-only existing resident actor matrices and owner clocks; diagnostic overhead included; display presentation and retail parity unverified."
             });
         }

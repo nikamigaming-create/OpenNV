@@ -22,9 +22,13 @@ internal sealed partial class RuntimeLiveHarness
         var pipeline = _pipeline = ProcessPipelineStatistics ??= new(Environment.CurrentManagedThreadId);
         RuntimeFramePhaseMarker Marker(bool head) => new()
         {
-            Name = head ? "NativeProcessPhaseHead" : "NativeProcessPhaseTail", Head = head,
-            ProcessPhase = pipeline.Process, PhysicsPhase = pipeline.Physics, ProcessMode = ProcessModeEnum.Always,
-            ProcessPriority = head ? int.MinValue : int.MaxValue, ProcessPhysicsPriority = head ? int.MinValue : int.MaxValue
+            Name = head ? "NativeProcessPhaseHead" : "NativeProcessPhaseTail",
+            Head = head,
+            ProcessPhase = pipeline.Process,
+            PhysicsPhase = pipeline.Physics,
+            ProcessMode = ProcessModeEnum.Always,
+            ProcessPriority = head ? int.MinValue : int.MaxValue,
+            ProcessPhysicsPriority = head ? int.MinValue : int.MaxValue
         };
         _pipelineHead = Marker(true); _pipelineTail = Marker(false);
         var root = GetTree().Root; root.AddChild(_pipelineHead); root.AddChild(_pipelineTail);
@@ -45,8 +49,11 @@ internal sealed partial class RuntimeLiveHarness
     }
     private object? CapturePipelinePhases() => _pipeline is null ? null : new
     {
-        processCallbacks = _pipeline.Process.Capture(), physicsCallbacks = _pipeline.Physics.Capture(), drawSubmission = _pipeline.Draw.Capture(),
-        markerOrderingPending = _pipelineOrderingPending, markerOrderingInvalidations = _pipelineOrderingInvalidations,
+        processCallbacks = _pipeline.Process.Capture(),
+        physicsCallbacks = _pipeline.Physics.Capture(),
+        drawSubmission = _pipeline.Draw.Capture(),
+        markerOrderingPending = _pipelineOrderingPending,
+        markerOrderingInvalidations = _pipelineOrderingInvalidations,
         scope = "process-lifetime cumulative main-thread head/tail node-callback spans; pre/post-draw host elapsed; inclusive, not additive, GPU/display presentation unverified"
     };
     private void RetirePipelinePhases()
@@ -65,23 +72,37 @@ internal sealed partial class RuntimeLiveHarness
         var groups = descendants.Prepend(GetTree().Root).Select(node => new
         {
             type = node.GetType().FullName ?? node.GetType().Name,
-            process = node.IsProcessing(), physics = node.IsPhysicsProcessing(),
-            internalProcess = node.IsProcessingInternal(), internalPhysics = node.IsPhysicsProcessingInternal(), canProcess = node.CanProcess(),
+            process = node.IsProcessing(),
+            physics = node.IsPhysicsProcessing(),
+            internalProcess = node.IsProcessingInternal(),
+            internalPhysics = node.IsPhysicsProcessingInternal(),
+            canProcess = node.CanProcess(),
             threadGroup = node.ProcessThreadGroup
         }).GroupBy(node => node.type).OrderBy(group => group.Key, StringComparer.Ordinal).Select(group => new
         {
-            managedType = group.Key, nodes = group.Count(), processEnabled = group.Count(node => node.process),
-            physicsEnabled = group.Count(node => node.physics), internalProcessEnabled = group.Count(node => node.internalProcess),
-            internalPhysicsEnabled = group.Count(node => node.internalPhysics), canProcess = group.Count(node => node.canProcess),
-            eligibleProcess = group.Count(node => node.process && node.canProcess), eligiblePhysics = group.Count(node => node.physics && node.canProcess),
-            eligibleInternalProcess = group.Count(node => node.internalProcess && node.canProcess), eligibleInternalPhysics = group.Count(node => node.internalPhysics && node.canProcess),
+            managedType = group.Key,
+            nodes = group.Count(),
+            processEnabled = group.Count(node => node.process),
+            physicsEnabled = group.Count(node => node.physics),
+            internalProcessEnabled = group.Count(node => node.internalProcess),
+            internalPhysicsEnabled = group.Count(node => node.internalPhysics),
+            canProcess = group.Count(node => node.canProcess),
+            eligibleProcess = group.Count(node => node.process && node.canProcess),
+            eligiblePhysics = group.Count(node => node.physics && node.canProcess),
+            eligibleInternalProcess = group.Count(node => node.internalProcess && node.canProcess),
+            eligibleInternalPhysics = group.Count(node => node.internalPhysics && node.canProcess),
             explicitSubThreadGroupNodes = group.Count(node => node.threadGroup == ProcessThreadGroupEnum.SubThread)
         }).ToArray();
         AtomicWrite(Path.Combine(_directory, $"{request:D10}.process-owners.json"), JsonSerializer.Serialize(new
         {
-            schema = "opennv-process-owners/v1", process = Environment.ProcessId, threadId = Environment.CurrentManagedThreadId,
-            drawFrame = Engine.GetFramesDrawn(), physicsFrame = Engine.GetPhysicsFrames(), sceneTreePaused = GetTree().Paused,
-            groups, scope = "one explicit read-only graph snapshot; flags and eligibility counts, not individual callback timing"
+            schema = "opennv-process-owners/v1",
+            process = Environment.ProcessId,
+            threadId = Environment.CurrentManagedThreadId,
+            drawFrame = Engine.GetFramesDrawn(),
+            physicsFrame = Engine.GetPhysicsFrames(),
+            sceneTreePaused = GetTree().Paused,
+            groups,
+            scope = "one explicit read-only graph snapshot; flags and eligibility counts, not individual callback timing"
         }, Json));
         return true;
     }

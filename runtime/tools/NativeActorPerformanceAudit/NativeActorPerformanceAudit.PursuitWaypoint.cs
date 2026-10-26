@@ -86,9 +86,13 @@ public partial class NativeActorPerformanceAudit
                 remaining >= 2 || movingPath.Length == 0 || new Vector2(movingPath[^1].X - target.X, movingPath[^1].Z - target.Z).Length() > body.SafeMargin * 8)
                 throw new InvalidDataException("Reached-waypoint consumption discarded a genuine native movement destination: " + JsonSerializer.Serialize(new
                 {
-                    position = position.ToString(), target = target.ToString(), destination = moving?.ToString(), cursor,
+                    position = position.ToString(),
+                    target = target.ToString(),
+                    destination = moving?.ToString(),
+                    cursor,
                     path = movingPath.Select(point => new[] { point.X, point.Y, point.Z }).ToArray(),
-                    horizontalProgress = horizontal.Length(), remaining
+                    horizontalProgress = horizontal.Length(),
+                    remaining
                 }));
             var motion = NativeCapsuleNavigation.RouteMotion(position, Vector3.Right * .05f, waypoint);
             body.Velocity = motion * 60 + Vector3.Down; body.MoveAndSlide();
