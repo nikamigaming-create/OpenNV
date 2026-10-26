@@ -43,19 +43,37 @@ retained recovery receipt, a healthy tutorial clock, no HUD error and no cactus
 resolution failure. An ordinary checkpoint load visibly displays the movement prompt with mapped
 W/A/S/D labels in the rendered room. The final full gate passes.
 
-Recording-free final release diagnostics use a private Doc-exit save, 49 resident
-cells and Forward+ at 1280x720. The warmed stationary sample measures 49 FPS,
-median draw interval 19.88 ms and p95 27.84 ms. This is a selected diagnostic,
-not a controlled comparison, frame-budget acceptance or retail parity. Source
-route work, particle publication/finalizers, streaming and combat remain open.
+The first 144 Hz block retains fixed native names, disposes temporary wind,
+combat and navigation collection wrappers and samples particle source transforms
+once per step without lifecycle observers. Exact native particle state, lifecycle,
+random consumption, packed buffers, callback mutations and material interleaving
+checks pass. Owned fountain/controller audits and the full runtime gate pass.
+Startup honors engine resolution; the prior capture-size override forced every
+ordinary window back to 1280x720. Default size remains 1280x720 in project settings.
 
-Next: profile recording-free CPU/GPU/frame intervals and allocation/finalizer
-cost at the required output resolution. The current Windows session reports
-3840x2160 at 60 Hz; the user's target resolution is pending. Separate uncapped
-engine throughput from actual display presentation. Retain shadows, particles,
+Release diagnostics at actual 3840x2160, scale 1, Forward+, uncapped and VSync
+disabled use a private Doc-exit save and 49 resident cells. The warmed stationary
+sample reports 72 FPS, median draw interval 12.79 ms, p95 18.32 ms, p99 21.13 ms
+and maximum 25.77 ms. All 512 intervals exceed 6.944 ms. Root GPU time is 4.72 ms
+plus 0.31 ms for first-person rendering; the latest physics step is 7.70 ms.
+The display reports 60 Hz. This is a failed selected diagnostic, not a controlled
+comparison, movement/streaming/combat acceptance or retail parity.
+
+Explicit performance publication omits full gameplay/identity/control snapshots,
+labels their null fields and keeps ordinary simulation/input running. Its sampled
+summary cost is 0.19 ms instead of the full snapshot's 7-10 ms. Recording and trace
+capture remain off. Separate source allocation sampling identifies reference-event
+closures, defensive record copies/subrecord parsing, script-expression parsing and
+navigation projection arrays. Wall-stack samples still identify creature motion,
+native route queries, particle publication and finalizers. An additional companion
+fixture stops at unowned actor-launch history; complete combat remains open.
+
+Next: remove measured source-query allocations and trace native query/finalizer
+cost before another actual-resolution release measurement. The current Windows
+session reports 3840x2160 at 60 Hz; the user's target resolution is pending.
+Separate uncapped engine throughput from actual display presentation. Retain shadows, particles,
 actors, collision and authoritative simulation. Complete ordinary movement,
 exterior streaming and combat windows with median/p95/p99 frame times and late
-frame counts before accepting 144 Hz. Fixed shader-name wrapper churn and
-per-particle native transform/group queries are the current measured owners.
+frame counts before accepting 144 Hz.
 Keep unsupported SpeedTree/Sandbox and other behavior visible. Then resume the
 remaining ordinary Doc/Goodsprings lessons and campaign coverage.
