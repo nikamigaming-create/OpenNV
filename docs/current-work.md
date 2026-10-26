@@ -1,33 +1,23 @@
 # Current work
 
-## Active batch: Direct game launch and retail installation auto-discovery
+## Active batch: Fullscreen direct game launch
 
-Work addresses user report ("it didnt launch only the luancher").
-Active branch is `codex/fix-launcher-launch` based on `main`. The full required runtime gate
-(`Test-GodotRuntime.ps1` and `git diff --check`) passes cleanly with 0 warnings,
-0 errors, clean git diff, and verified Godot runtime audits (`OPENNV_CSHARP_GODOT_GATE_PASS`).
+Work addresses user request ("launch new game for me full screnn").
+Active branch is `codex/support-fullscreen-launch` based on `main`.
 
 ### Verified capabilities and fixes
 
-1. **Automatic Retail Game Installation Discovery**:
-   - Implemented `AutoDiscoverInstallations()` and drive / registry probes in `GodotLauncherProfileStore`.
-   - On Windows, queries standard Bethesda Softworks and GOG registry paths, plus scans all drive roots for Steam and GOG common directories.
-   - Automatically seeds and validates installations (`Fallout New Vegas`, `Fallout 3`, `Fallout 1`, `Fallout 2`) via `NativeGameInstallation.Detect`.
-   - When the in-engine launcher opens, installed games are automatically configured so the "Play", "New Game", and "Continue" buttons are immediately active.
+1. **Fullscreen Launch Support**:
+   - Added `-Fullscreen` parameter to [Start-OpenNV.ps1](file:///d:/code/OpenNV/scripts/Start-OpenNV.ps1).
+   - Added `--fullscreen` option handling to engine arguments before `--` and in [RuntimeCoordinator.cs](file:///d:/code/OpenNV/runtime/src/RuntimeCoordinator.cs) via `DisplayServer.WindowSetMode(DisplayServer.WindowMode.Fullscreen)`.
+   - Forwarded `request.fullscreen` option in [desktop/src/main.mjs](file:///d:/code/OpenNV/desktop/src/main.mjs).
+   - Launched interactive New Game directly in fullscreen on the user's display using detected Fallout: New Vegas retail files.
 
-2. **Direct Game Launch Support**:
-   - Added `-Direct`, `-NewGame`, `-DataRoot`, and `-SavePath` switches to `scripts/Start-OpenNV.ps1`.
-   - Running `.\scripts\Start-OpenNV.ps1 -Direct` bypasses the launcher UI completely and launches directly into the game's start menu.
-   - Adding `-NewGame` begins character creation immediately.
-
-3. **Desktop Launcher Integration**:
-   - Reconnected `launch(request)` in `desktop/src/main.mjs` to invoke the Godot runtime directly via `Start-OpenNV.ps1 -Direct`.
-
-4. **Full Runtime Gate Verification**:
-   - Release and Debug C# builds, managed and native contracts, launcher tests, and Godot runtime audits pass cleanly (`OPENNV_CSHARP_GODOT_GATE_PASS`).
-   - Clean git diff with 0 warnings, 0 errors.
+2. **Runtime Gate and Builds**:
+   - Clean export and release builds pass.
+   - Zero git diff check errors (`git diff --check`).
 
 ### Next steps
 
-1. Push `codex/fix-launcher-launch`, open checked PR, verify CI, and squash-merge into `main`.
+1. Conclude playtest review and merge `codex/support-fullscreen-launch` into `main`.
 2. Continue autonomous campaign progression.

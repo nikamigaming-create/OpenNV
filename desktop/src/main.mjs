@@ -1137,6 +1137,9 @@ function launch(request) {
     if (request?.presentation === "openxr" || request?.enableVr) {
       args.push("-Vr");
     }
+    if (request?.fullscreen) {
+      args.push("-Fullscreen");
+    }
     const child = spawn(pwsh, args, {
       cwd: repoRoot,
       detached: true,
