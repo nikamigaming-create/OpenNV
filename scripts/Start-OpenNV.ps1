@@ -11,6 +11,7 @@ param(
     [string]$ProfileRoot = '',
     [switch]$Direct,
     [switch]$NewGame,
+    [switch]$Fullscreen,
     [string]$DataRoot = '',
     [string]$SavePath = ''
 )
@@ -198,7 +199,12 @@ if ($Direct) {
         $SavePath = Join-Path $ProfileRoot "profiles/$Game/$saveFileName"
     }
 
-    $launchArguments = @('--xr-mode', $(if ($Vr) { 'on' } else { 'off' }), '--',
+    $engineArgs = @()
+    if ($Fullscreen) {
+        $engineArgs += '--fullscreen'
+    }
+    $engineArgs += @('--xr-mode', $(if ($Vr) { 'on' } else { 'off' }))
+    $launchArguments = $engineArgs + @('--',
         '--data-root', $DataRoot, '--campaign', $campaignName, '--save-path', $SavePath,
         '--presentation', $(if ($Vr) { 'openxr' } else { 'first-person' }),
         '--native-plugins', $NativePlugins, '--content-selection', $ContentSelection, '--profile-root', $ProfileRoot)
@@ -206,7 +212,12 @@ if ($Direct) {
         $launchArguments += '--new-game'
     }
 } else {
-    $launchArguments = @('--xr-mode', $(if ($Vr) { 'on' } else { 'off' }), '--', '--launcher',
+    $engineArgs = @()
+    if ($Fullscreen) {
+        $engineArgs += '--fullscreen'
+    }
+    $engineArgs += @('--xr-mode', $(if ($Vr) { 'on' } else { 'off' }))
+    $launchArguments = $engineArgs + @('--', '--launcher',
         '--launcher-game', $Game, '--presentation', $(if ($Vr) { 'openxr' } else { 'first-person' }),
         '--native-plugins', $NativePlugins, '--content-selection', $ContentSelection, '--profile-root', $ProfileRoot)
 }
