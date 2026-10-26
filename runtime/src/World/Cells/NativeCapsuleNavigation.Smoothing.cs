@@ -4,7 +4,7 @@ namespace OpenNV.Runtime.World.Cells;
 
 internal static partial class NativeCapsuleNavigation
 {
-    private delegate bool SupportedFlatEdge(Vector3 from, Vector3 desired, out Vector3 landing);
+    private delegate IEnumerable<Vector3?> SupportedFlatEdge(Vector3 from, Vector3 desired);
 
     private static IEnumerable<IReadOnlyList<Vector3>?> SmoothRoute(IReadOnlyList<Vector3> route,
         Vector3 start, float spacing, float heightTolerance, SupportedFlatEdge edge)
@@ -32,9 +32,15 @@ internal static partial class NativeCapsuleNavigation
                 for (var sample = 1; sample <= count; sample++)
                 {
                     var desired = origin.Lerp(destination, (float)sample / count);
-                    if (!edge(from, desired, out var landing) || Math.Abs(landing.Y - origin.Y) > heightTolerance)
+                    Vector3? endpoint = null;
+                    foreach (var edgeSample in edge(from, desired))
+                    {
+                        if (edgeSample is { } landing) endpoint = landing;
+                        else yield return null;
+                    }
+                    if (endpoint is not { } accepted || Math.Abs(accepted.Y - origin.Y) > heightTolerance)
                         clear = false;
-                    else from = landing;
+                    else from = accepted;
                     // Smoothing shares the search's physics-thread work budget.
                     yield return null;
                     if (!clear) break;

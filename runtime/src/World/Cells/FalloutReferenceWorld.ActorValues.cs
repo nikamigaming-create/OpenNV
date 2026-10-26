@@ -48,17 +48,7 @@ internal sealed partial class FalloutReferenceWorld
         throw new NotSupportedException($"Creature {slot} requires its source skill owner.");
     }
 
-    private static int? LimbActorValue(string name) => name.ToLowerInvariant() switch
-    {
-        "perceptioncondition" => 25,
-        "endurancecondition" => 26,
-        "leftattackcondition" => 27,
-        "rightattackcondition" => 28,
-        "leftmobilitycondition" => 29,
-        "rightmobilitycondition" => 30,
-        "braincondition" => 31,
-        _ => null
-    };
+    private static int? LimbActorValue(string name) => FalloutBodyPartData.LimbActorValue(name);
 
     internal void ResetHealth(FalloutFormKey reference)
     {

@@ -233,6 +233,8 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
             if (name.Equals("RadiationRads", StringComparison.OrdinalIgnoreCase)) return Vitals.RadiationRads;
             if (name.Equals("ActionPoints", StringComparison.OrdinalIgnoreCase)) return Vitals.ActionPoints;
             if (name.Equals("XP", StringComparison.OrdinalIgnoreCase)) return Vitals.ExperiencePoints;
+            if (FalloutBodyPartData.LimbActorValue(name) is { } limb)
+                return DialogueActorValue(_pluginStack.RuntimeFormKey(0x14), limb);
             return IsSpecial(name) ? _playerActorValues.ReadCurrent(FalloutPlayerActorValues.SpecialValue(name)) : _playerSkills.Value(name);
         }, RequireLevelUpOwner: () => _vitals.RequireLevelUpOwner(),
             ReadPlayerActorValue: ReadPlayerActorValue, ChangePlayerActorValue: ChangePlayerActorValue,

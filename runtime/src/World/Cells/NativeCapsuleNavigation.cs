@@ -251,19 +251,24 @@ internal static partial class NativeCapsuleNavigation
             return true;
         }
         static float Flat(Vector3 a, Vector3 b) => new Vector2(a.X - b.X, a.Z - b.Z).Length();
-        bool Edge(Vector3 from, Vector3 desired, out Vector3 landing, bool allowStep = true)
+        IEnumerable<Vector3?> Edge(Vector3 from, Vector3 desired, bool allowStep = true)
         {
-            landing = from;
+            var landing = from;
             var samples = Math.Max(1, (int)Math.Ceiling(Flat(from, desired) / sampleLength));
             var origin = from;
             for (var index = 1; index <= samples; index++)
             {
-                if (!SingleEdge(landing, origin.Lerp(desired, (float)index / samples), out var next, allowStep)) return false;
+                var accepted = SingleEdge(landing, origin.Lerp(desired, (float)index / samples), out var next, allowStep);
+                // A lattice neighbor or smoothing segment can contain many
+                // complete capsule samples. Give the shared scheduler a budget
+                // boundary after each one, retaining the exact query order.
+                yield return null;
+                if (!accepted) yield break;
                 landing = next;
             }
-            return true;
+            yield return landing;
         }
-        bool FlatEdge(Vector3 from, Vector3 desired, out Vector3 landing) => Edge(from, desired, out landing, allowStep: false);
+        IEnumerable<Vector3?> FlatEdge(Vector3 from, Vector3 desired) => Edge(from, desired, allowStep: false);
 
         // Authored portal midpoints are useful seeds, not a collision bypass.
         // Validate every sampled capsule edge and root support first. A failed
@@ -349,10 +354,17 @@ internal static partial class NativeCapsuleNavigation
                 { if (result is null) work.SmoothingSteps++; yield return result; }
                 yield break;
             }
-            if (Flat(from, target) <= spacing * 1.5f && Edge(from, target, out var goal) &&
-                Math.Abs(goal.Y - target.Y) < SourceHeightTolerance && (arrival is null || arrival(goal)))
+            Vector3? goal = null;
+            if (Flat(from, target) <= spacing * 1.5f)
+                foreach (var sample in Edge(from, target))
+                {
+                    if (sample is { } landing) goal = landing;
+                    else yield return null;
+                }
+            if (goal is { } endpoint && Math.Abs(endpoint.Y - target.Y) < SourceHeightTolerance &&
+                (arrival is null || arrival(endpoint)))
             {
-                var path = new List<Vector3> { goal };
+                var path = new List<Vector3> { endpoint };
                 while (current != first) { path.Add(positions[current]); current = parents[current]; }
                 path.Reverse();
                 foreach (var result in SmoothRoute(path, start, spacing, body.SafeMargin * 8, FlatEdge))
@@ -367,7 +379,13 @@ internal static partial class NativeCapsuleNavigation
                     var candidate = new Vector3(start.X + (current.X + x) * spacing, from.Y,
                         start.Z + (current.Z + z) * spacing);
                     if (Flat(start, candidate) > bound) continue;
-                    if (!Edge(from, candidate, out var next)) { Record(current); continue; }
+                    Vector3? destination = null;
+                    foreach (var sample in Edge(from, candidate))
+                    {
+                        if (sample is { } landing) destination = landing;
+                        else yield return null;
+                    }
+                    if (destination is not { } next) { Record(current); continue; }
                     var key = Key(next);
                     var cost = costs[current] + from.DistanceTo(next);
                     if (closed.Contains(key) || costs.TryGetValue(key, out var old) && old <= cost) continue;

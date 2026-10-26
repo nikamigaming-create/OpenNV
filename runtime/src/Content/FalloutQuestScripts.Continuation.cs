@@ -43,6 +43,13 @@ internal sealed partial class FalloutQuestScripts
     private void ContinueMissingCommand(Instance instance, FalloutQuestScriptHost? host)
     {
         var error = instance.Error!;
+        if (error == $"No record exists for {_records.RuntimeFormKey(0x14)}." && instance.PendingCommand is null &&
+            !instance.Continuations.Any(receipt => receipt.Error == error && receipt.Statement == 0 && receipt.LegacySourceUnverified) &&
+            host?.CanRetryPlayerDeathRead?.Invoke(instance.Quest, instance.Script, instance.Program) == true)
+        {
+            ContinueInitialPlayerDeathRead(instance, host, error);
+            return;
+        }
         // Admission is capability-specific, never quest/location-specific.
         // Non-missing failures and unowned operations remain latched. The
         // newly bound command still validates its reference, SOUN and media.
@@ -85,6 +92,33 @@ internal sealed partial class FalloutQuestScripts
             }
             // Failure at the reconstructed command keeps its old cursor and
             // error. No suffix ran, and no failed invocation was completed.
+        }
+    }
+
+    private void ContinueInitialPlayerDeathRead(Instance instance, FalloutQuestScriptHost host, string error)
+    {
+        // The old GetDead implementation always failed on the engine-created
+        // player. Source inspection proves this was the first reached read,
+        // before any effect; ambiguous MenuMode failures stay latched. The
+        // persisted receipt also latches a newly reached suffix failure that
+        // happens to have the same generic error as the old first read.
+        var invocation = checked(instance.Clock.Invocations + 1);
+        try
+        {
+            Execute(instance, host);
+            ++instance.Executions;
+            instance.Clock.CompleteInvocation();
+            instance.Continuations.Add(new(error, ScriptHash(instance), 0, invocation,
+                "tail-completed-prefix-retained", true));
+            instance.Error = null;
+            instance.ContinuationError = null;
+            _unbound.Remove(instance.Quest.FormKey);
+        }
+        catch (Exception failure) when (failure is InvalidDataException or NotSupportedException or InvalidOperationException or KeyNotFoundException or OverflowException)
+        {
+            instance.Continuations.Add(new(error, ScriptHash(instance), 0, invocation,
+                "tail-stopped-prefix-retained", true));
+            RetainFailure(instance, failure, instance.Program, true);
         }
     }
 }

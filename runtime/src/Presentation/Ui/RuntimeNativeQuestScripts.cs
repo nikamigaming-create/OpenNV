@@ -82,7 +82,7 @@ internal sealed partial class RuntimeNativeQuestScripts : Node
         {
             var hudLayer = new CanvasLayer { Name = "NativeHudLayer", Layer = 1, ProcessMode = ProcessModeEnum.Always };
             AddChild(hudLayer);
-            _hud = new NativeOwnedHudMessages(_records, _inventory.Notifications, noteSounds: Scripts.Sounds);
+            _hud = new NativeOwnedHudMessages(_records, _inventory.Notifications, noteSounds: Scripts.Sounds, controls: () => Scripts.Controls);
             hudLayer.AddChild(_hud);
         }
         catch (Exception error)
@@ -90,6 +90,15 @@ internal sealed partial class RuntimeNativeQuestScripts : Node
             _error = error.Message;
             GD.PushError($"OPENNV_HUD_OWNER_UNBOUND {error.Message}");
         }
+    }
+
+    internal void RetireBootstrapHud()
+    {
+        if (_hud is not { } hud) return;
+        // The gameplay presenter takes the same queue and current notice. Stop
+        // the old consumer immediately; QueueFree alone allows another tick.
+        hud.SetProcess(false); hud.Hide(); hud.QueueFree();
+        _hud = null;
     }
 
     public override void _ExitTree()
@@ -123,6 +132,10 @@ internal sealed partial class RuntimeNativeQuestScripts : Node
         {
             var menus = ActiveMenus?.Invoke()?.ToList();
             if (_layer is not null) { menus ??= []; menus.AddRange([1001, 2]); }
+            // A renderer/diagnostic pause does not create a source menu. The
+            // native registry distinguishes an observed empty set from an
+            // absent identity provider; keep source clocks stopped in that case.
+            if (menus is { Count: 0 }) { Scripts.Menus.Publish(true); return; }
             Scripts.Advance(delta, gameMode: false, menus: menus);
             if (_current?.Request is { } request && !Scripts.MessageResults.IsPending(request))
             {

@@ -42,6 +42,10 @@ internal static class QuestMenuContracts
                 "Menu queries lost specific or category identity.");
             using (context.Enter(1036)) Require(context.Query(1036) == 1 && context.Query(1001) == 0, "Nested menu context retained a replaced menu.");
             Require(context.Query(1001) == 1, "Menu context did not restore its caller.");
+            foreach (var menu in new uint[] { 1007, 1013 })
+                using (context.Enter(menu))
+                    Require(context.Query(menu) == 1 && context.Query(2) == 1 && context.Query(1) == 0 && context.Query(1056) == 0,
+                        "Loading/session menu lost its identity or selected a Pip-Boy/VATS filter.");
             Reject(() => context.Publish(true, [1001])); Require(context.Query(1001) == 1, "Invalid frame mutated menu identity.");
             Reject(() => context.Query(double.NaN)); context.Publish(true);
             Require(context.Query() == 0 && context.Query(1001) == 0, "Closed menu retained script-visible identity.");

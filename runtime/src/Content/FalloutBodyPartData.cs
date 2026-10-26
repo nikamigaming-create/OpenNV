@@ -15,6 +15,18 @@ internal sealed record FalloutBodyPart(byte Type, string Name, string Node, stri
 // resources. NAM1/NAM4 follow BPND and belong to that same part.
 internal sealed record FalloutBodyPartData(FalloutFormKey Form, IReadOnlyList<FalloutBodyPart> Parts)
 {
+    internal static int? LimbActorValue(string name) => name.ToLowerInvariant() switch
+    {
+        "perceptioncondition" => 25,
+        "endurancecondition" => 26,
+        "leftattackcondition" => 27,
+        "rightattackcondition" => 28,
+        "leftmobilitycondition" => 29,
+        "rightmobilitycondition" => 30,
+        "braincondition" => 31,
+        _ => null,
+    };
+
     internal int CrippledMobilityCount(float maximumHealth, IReadOnlyDictionary<byte, float> damage)
     {
         if (!float.IsFinite(maximumHealth) || maximumHealth <= 0)
