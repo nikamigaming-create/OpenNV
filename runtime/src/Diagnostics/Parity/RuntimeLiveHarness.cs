@@ -516,6 +516,7 @@ internal sealed partial class RuntimeLiveHarness : Node
             sampledNanoseconds = Stopwatch.GetTimestamp() * (1_000_000_000.0 / Stopwatch.Frequency),
             drawCount = Engine.GetFramesDrawn(),
             physicsCount = Engine.GetPhysicsFrames(),
+            sceneTreePaused = GetTree().Paused,
             stateKey = details?.Identity.StateKey,
             semanticEventOrdinal = details is null ? (ulong?)null : details.Identity.EventOrdinal,
             statePublicationFailures = _statePublicationFailures,

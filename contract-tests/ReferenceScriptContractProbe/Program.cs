@@ -11,6 +11,12 @@ if (args is ["--destruction-contracts"])
     return;
 }
 
+if (args is ["--reference-instance-cache"])
+{
+    ReferenceInstanceCacheContracts.Run();
+    return;
+}
+
 if (args is ["--tutorial-actor-query-contracts"])
 {
     TutorialActorQueryContracts.Run();
@@ -1379,6 +1385,7 @@ ScriptDeathContracts.Run();
 ActivationParentContracts.Run();
 DefaultActivationContracts.Run();
 ScriptManualSaveContracts.Run();
+ReferenceInstanceCacheContracts.Run();
 HardcoreQueryContracts.Run();
 TutorialActorQueryContracts.Run();
 GameTimeCommandContracts.Run();
