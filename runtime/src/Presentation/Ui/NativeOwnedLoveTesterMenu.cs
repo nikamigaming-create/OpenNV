@@ -154,8 +154,9 @@ internal sealed partial class NativeOwnedLoveTesterMenu : Control
         if (!IsInsideTree() || !_camera.IsInsideTree() || Size.X <= 0 || Size.Y <= 0) return;
         _view.Size = new(Math.Max(1, (int)Size.X), Math.Max(1, (int)Size.Y)); _pixels.Size = Size;
         var horizontal = _declaration.HorizontalSlope(_settings.Number("Display", "fDefaultFOV"));
+        var verticalSlope = horizontal * Math.Min(Size.Y / Size.X, 3f / 4f);
         _camera.KeepAspect = Camera3D.KeepAspectEnum.Height;
-        _camera.Fov = MathF.Atan(horizontal * Size.Y / Size.X) * 360 / MathF.PI;
+        _camera.Fov = 2 * MathF.Atan(verticalSlope) * 180 / MathF.PI;
         _camera.Near = _settings.Number("Display", "fNearDistance"); _camera.Far = 5000;
         var angles = _declaration.RotationRadians;
         // NiMatrix33 axis constructors use the engine's row-major signs,
@@ -175,7 +176,7 @@ internal sealed partial class NativeOwnedLoveTesterMenu : Control
             for (var surface = 0; surface < mesh.Mesh.GetSurfaceCount(); surface++)
                 if (mesh.GetActiveMaterial(surface) is ShaderMaterial material && material.ResourceName == NativeNifLightingMaterial.ResourceIdentity)
                     NativeNifPointLighting.Bind(material, [light], 1, storeEncoded: true);
-        SetMeta("opennv_love_tester_projection", new Vector2(horizontal, horizontal * Size.Y / Size.X));
+        SetMeta("opennv_love_tester_projection", new Vector2(horizontal, verticalSlope));
         SynchronizeChoiceTargets();
     }
 

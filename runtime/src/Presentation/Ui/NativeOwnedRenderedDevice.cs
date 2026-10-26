@@ -77,8 +77,9 @@ internal sealed partial class NativeOwnedRenderedDevice : Control
         _image.Size = Size;
         if (_pipBoy) { LayoutPipBoy(); return; }
         var projection = FalloutRenderedMenuProjection.Read(_settings, Size.X / Size.Y, characterCreation: true);
+        var verticalSlope = projection.HorizontalSlope / Math.Min(Size.X / Size.Y, 4f / 3f);
         Camera.KeepAspect = Camera3D.KeepAspectEnum.Height;
-        Camera.Fov = 2 * MathF.Atan(projection.VerticalSlope) * 180 / MathF.PI;
+        Camera.Fov = 2 * MathF.Atan(verticalSlope) * 180 / MathF.PI;
         Camera.Near = projection.Near; Camera.Far = projection.Far;
         // The native menu protocol uses two 1.57-radian axis rotations. Keep
         // this engine convention separate from the model's own source transform.

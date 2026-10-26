@@ -266,6 +266,13 @@ public partial class RuntimeCoordinator
         foreach (var reference in grid.Scene.References.Where(reference => !previous.Contains(reference.FormKey) &&
             _nativeReferencePresentation?.HasPrepared(reference.FormKey) != true))
         {
+            var baseObject = grid.Scene.BaseObjects.GetValueOrDefault(reference.Base);
+            if (baseObject?.ModelPath is { } modelPath && modelPath.EndsWith(".spt", StringComparison.OrdinalIgnoreCase))
+            {
+                _nativeReferenceDivergences[reference.FormKey.ToString()] =
+                    $"Owned SpeedTree model {modelPath} procedural geometry decoder is unbound.";
+                continue;
+            }
             ExteriorNpcPreparation? npc = null;
             _nativeGridUploads.Enqueue((reference.FormKey.ToString(), () =>
             {
