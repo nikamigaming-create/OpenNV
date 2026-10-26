@@ -1,9 +1,11 @@
 # Current work
 
-## Active owner: ordinary lesson and campaign coverage
+## Active owner: sustained 144 Hz frame pacing
 
-The user requires one maintained `main`, reliable exterior play and all authored
-Doc Mitchell tutorials. Whole-game completion remains unverified.
+The user requires one maintained `main`, all authored gameplay and sustained
+144 Hz. The frame budget is 1000/144 = 6.944 ms. The previous 49 FPS at 720p
+diagnostic is rejected as a performance handoff. Whole-game completion and
+144 Hz acceptance remain unverified.
 
 Main retains immutable CELL definitions per plugin stack, indexes resident
 references and bounds repeated failed materialization. Unsupported SpeedTree
@@ -47,7 +49,13 @@ median draw interval 19.88 ms and p95 27.84 ms. This is a selected diagnostic,
 not a controlled comparison, frame-budget acceptance or retail parity. Source
 route work, particle publication/finalizers, streaming and combat remain open.
 
-Next: exercise the remaining optional Doc lessons through ordinary input, then
-continue Goodsprings lessons and campaign progression from
-the next reached source/runtime failure. Missing SpeedTree geometry, unsupported
-Sandbox flags and other logged owners remain visible and incomplete.
+Next: profile recording-free CPU/GPU/frame intervals and allocation/finalizer
+cost at the required output resolution. The current Windows session reports
+3840x2160 at 60 Hz; the user's target resolution is pending. Separate uncapped
+engine throughput from actual display presentation. Retain shadows, particles,
+actors, collision and authoritative simulation. Complete ordinary movement,
+exterior streaming and combat windows with median/p95/p99 frame times and late
+frame counts before accepting 144 Hz. Fixed shader-name wrapper churn and
+per-particle native transform/group queries are the current measured owners.
+Keep unsupported SpeedTree/Sandbox and other behavior visible. Then resume the
+remaining ordinary Doc/Goodsprings lessons and campaign coverage.

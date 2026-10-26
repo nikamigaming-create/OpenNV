@@ -4,6 +4,11 @@ namespace OpenNV.Runtime.Formats.Gamebryo;
 
 internal sealed class RuntimeNativeNifMaterialChannels
 {
+    private static readonly StringName EmissiveMultipleParameter = "emissive_multiple";
+    private static readonly StringName SourceSpecularParameter = "source_specular";
+    private static readonly StringName EmissiveColorParameter = "emissive_color";
+    private static readonly StringName SourceColorMultiplierParameter = "source_color_multiplier";
+    private static readonly StringName BaseFactorParameter = "base_factor";
     private sealed record Target(FalloutNifFile Source, FalloutNifObject Property, IReadOnlyList<Material> Materials, Node3D? Owner);
     private readonly Dictionary<(string Node, string Property), List<Target>> _targets = [];
     private long _revision;
@@ -94,7 +99,7 @@ internal sealed class RuntimeNativeNifMaterialChannels
                 foreach (var material in target.Materials)
                 {
                     if (material is ShaderMaterial lighting && lighting.ResourceName == NativeNifLightingMaterial.ResourceIdentity)
-                        lighting.SetShaderParameter("emissive_multiple", multiple);
+                        lighting.SetShaderParameter(EmissiveMultipleParameter, multiple);
                     else if (material is ShaderMaterial effect && effect.ResourceName == NativeNifEffectMaterial.ResourceIdentity)
                         NativeNifEffectMaterial.ApplyEmissiveMultiple(effect, multiple);
                     else throw new NotSupportedException("External KF emittance material is unsupported.");
@@ -114,7 +119,7 @@ internal sealed class RuntimeNativeNifMaterialChannels
                     throw new InvalidDataException("External KF specular color is nonfinite.");
                 foreach (var material in target.Materials)
                     if (material is ShaderMaterial shader && material.ResourceName == NativeNifLightingMaterial.ResourceIdentity)
-                        shader.SetShaderParameter("source_specular", new Vector3(value.X, value.Y, value.Z));
+                        shader.SetShaderParameter(SourceSpecularParameter, new Vector3(value.X, value.Y, value.Z));
                     else if (value.X != property.Specular.R || value.Y != property.Specular.G || value.Z != property.Specular.B)
                         throw new NotSupportedException("External KF specular has no animated material owner.");
             };
@@ -134,7 +139,7 @@ internal sealed class RuntimeNativeNifMaterialChannels
                 foreach (var material in materials)
                     if (material.ResourceName == NativeNifEffectMaterial.ResourceIdentity)
                         NativeNifEffectMaterial.ApplyEmissiveColor(material, new(value.X, value.Y, value.Z));
-                    else material.SetShaderParameter("emissive_color", new Vector3(value.X, value.Y, value.Z));
+                    else material.SetShaderParameter(EmissiveColorParameter, new Vector3(value.X, value.Y, value.Z));
             };
         }
         if (link.ControllerType == "NiAlphaController" && link.Variable1.Length == 0 && target.Property is FalloutNifMaterialProperty)
@@ -149,8 +154,8 @@ internal sealed class RuntimeNativeNifMaterialChannels
                 foreach (var material in target.Materials)
                 {
                     if (material is not ShaderMaterial shader) throw new NotSupportedException("External KF alpha shader is unsupported.");
-                    var parameter = material.ResourceName == NativeNifEffectMaterial.ResourceIdentity ? "source_color_multiplier" :
-                        material.ResourceName == NativeNifLightingMaterial.ResourceIdentity ? "base_factor" :
+                    var parameter = material.ResourceName == NativeNifEffectMaterial.ResourceIdentity ? SourceColorMultiplierParameter :
+                        material.ResourceName == NativeNifLightingMaterial.ResourceIdentity ? BaseFactorParameter :
                         throw new NotSupportedException("External KF alpha material is unsupported.");
                     var color = shader.GetShaderParameter(parameter).AsVector4(); color.W = alpha;
                     shader.SetShaderParameter(parameter, color);

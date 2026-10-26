@@ -6,6 +6,9 @@ namespace OpenNV.Runtime.Formats.Gamebryo;
 internal static class NativeNifEffectMaterial
 {
     internal const string ResourceIdentity = "Owned NIF no-lighting";
+    private static readonly StringName ColorMultiplierParameter = "source_color_multiplier";
+    private static readonly StringName EmissiveMultipleParameter = "source_emissive_multiple";
+    private static readonly StringName EmissiveColorMetadata = "opennv_source_emissive_color";
     // The no-lighting material owner substitutes white only when the complete
     // resolved emissive colour is zero, preserving texture and vertex colour.
     internal const string ColorFallbackShader = """
@@ -120,11 +123,11 @@ internal static class NativeNifEffectMaterial
         };
         if (texture is not null) result.SetShaderParameter("source_texture", texture);
         result.SetShaderParameter("source_has_texture", texture is not null);
-        result.SetShaderParameter("source_emissive_multiple", material?.EmissiveMultiple ?? 1);
-        result.SetMeta("opennv_source_emissive_color", material is null ? Vector3.One :
+        result.SetShaderParameter(EmissiveMultipleParameter, material?.EmissiveMultiple ?? 1);
+        result.SetMeta(EmissiveColorMetadata, material is null ? Vector3.One :
             new Vector3(material.Emissive.R, material.Emissive.G, material.Emissive.B));
         NativeNifEmittanceMaterial.Configure(result, source.ShaderFlags);
-        result.SetShaderParameter("source_color_multiplier", material is null ? Vector4.One :
+        result.SetShaderParameter(ColorMultiplierParameter, material is null ? Vector4.One :
             new Vector4(material.Emissive.R * material.EmissiveMultiple, material.Emissive.G * material.EmissiveMultiple,
                 material.Emissive.B * material.EmissiveMultiple, material.Alpha));
         result.SetShaderParameter("source_falloff", new Vector4(falloff.StartCosine, falloff.StopCosine, falloff.StartOpacity, falloff.StopOpacity));
@@ -150,16 +153,16 @@ internal static class NativeNifEffectMaterial
 
     internal static void ApplyEmissiveColor(ShaderMaterial material, Vector3 color)
     {
-        material.SetMeta("opennv_source_emissive_color", color);
-        var previous = material.GetShaderParameter("source_color_multiplier").AsVector4();
-        var multiple = material.GetShaderParameter("source_emissive_multiple").AsSingle();
-        material.SetShaderParameter("source_color_multiplier", new Vector4(
+        material.SetMeta(EmissiveColorMetadata, color);
+        var previous = material.GetShaderParameter(ColorMultiplierParameter).AsVector4();
+        var multiple = material.GetShaderParameter(EmissiveMultipleParameter).AsSingle();
+        material.SetShaderParameter(ColorMultiplierParameter, new Vector4(
             color.X * multiple, color.Y * multiple, color.Z * multiple, previous.W));
     }
 
     internal static void ApplyEmissiveMultiple(ShaderMaterial material, float multiple)
     {
-        material.SetShaderParameter("source_emissive_multiple", multiple);
-        ApplyEmissiveColor(material, material.GetMeta("opennv_source_emissive_color").AsVector3());
+        material.SetShaderParameter(EmissiveMultipleParameter, multiple);
+        ApplyEmissiveColor(material, material.GetMeta(EmissiveColorMetadata).AsVector3());
     }
 }

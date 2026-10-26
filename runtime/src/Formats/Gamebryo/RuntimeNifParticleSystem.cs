@@ -20,6 +20,7 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
     private readonly Dictionary<string, double> _remainders = new(StringComparer.Ordinal);
     private readonly Dictionary<int, FalloutNifMeshData> _meshes = [];
     private IReadOnlyDictionary<int, Node3D> _nodes = null!;
+    private readonly Dictionary<int, Transform3D> _stepTransforms = [];
     private readonly Random _random = new();
     private FastNoiseLite? _turbulence;
     private Particle[] _particles = [];
@@ -379,6 +380,10 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
 
     private void Step(float delta)
     {
+        // Source node poses stay fixed during this synchronous modifier pass,
+        // unless a lifecycle observer changes them. Never retain a pose across
+        // simulation steps or reuse one while callbacks own that possibility.
+        _stepTransforms.Clear();
         for (var i = 0; i < ActiveCount; i++) _particles[i].MotionSeconds = delta;
         foreach (var modifier in _modifiers)
         {
@@ -544,8 +549,15 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
         throw new NotSupportedException("Particle volume has no source sampler.");
     }
 
-    private Transform3D TransformOf(int index) => _source.WorldSpace ? _nodes[index].GlobalTransform :
-        GlobalTransform.AffineInverse() * _nodes[index].GlobalTransform;
+    private Transform3D TransformOf(int index)
+    {
+        var cacheable = _advancing && LifecycleEvent is null;
+        if (cacheable && _stepTransforms.TryGetValue(index, out var retained)) return retained;
+        var transform = _source.WorldSpace ? _nodes[index].GlobalTransform :
+            GlobalTransform.AffineInverse() * _nodes[index].GlobalTransform;
+        if (cacheable) _stepTransforms.Add(index, transform);
+        return transform;
+    }
     private float Centered() => (float)_random.NextDouble() - .5f;
     private float Vary(float value, float variation) => value + variation * Centered();
     private Vector3 RandomDirection()

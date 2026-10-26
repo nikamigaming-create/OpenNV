@@ -24,7 +24,7 @@ internal sealed record NativeActorCombatContext(Func<RuntimeNativePlayer?> Playe
 
 internal sealed partial class RuntimeNativeActorCombat
 {
-    private const string CombatActorsGroup = "OpenNVNativeCombatActors";
+    private static readonly StringName CombatActorsGroup = "OpenNVNativeCombatActors";
     private NativeActorCombatContext? _context;
     private FalloutActorThreat? _threat;
     private uint? _relation;
@@ -115,7 +115,9 @@ internal sealed partial class RuntimeNativeActorCombat
             CombatActors.SingleOrDefault(actor => actor._state.Reference == attacker);
         if (opponent is null && (attacker != _records.RuntimeFormKey(0x14) || player is not { CollisionResident: true })) return;
         var threat = _threat ??= FalloutActorThreat.Read(_records, _state.Base, _state.Templates);
-        foreach (var candidate in _actor.GetTree().GetNodesInGroup(CombatActorsGroup).OfType<RuntimeNativeActorCombat>())
+        var candidates = _actor.GetTree().GetNodesInGroup(CombatActorsGroup);
+        using var candidatesLifetime = (Godot.Collections.Array)candidates;
+        foreach (var candidate in candidates.OfType<RuntimeNativeActorCombat>())
         {
             if (candidate == this || !ReferenceEquals(candidate._world, _world) ||
                 !ReferenceEquals(candidate._context, _context)) continue;

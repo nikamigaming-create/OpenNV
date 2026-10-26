@@ -4,6 +4,11 @@ namespace OpenNV.Runtime.Formats.Gamebryo;
 
 internal static class NativeNifTextureTransform
 {
+    private static readonly StringName OffsetParameter = "source_uv_offset";
+    private static readonly StringName ScaleParameter = "source_uv_scale";
+    private static readonly StringName RotationParameter = "source_uv_rotation";
+    private static readonly StringName CenterParameter = "source_uv_center";
+    private static readonly StringName MethodParameter = "source_uv_method";
     // Column-vector order from nifxml TransformMethod. Scale, translation and
     // center are texture-space values; Maya additionally inverts the V axis.
     internal const string ShaderSource = """
@@ -30,19 +35,19 @@ internal static class NativeNifTextureTransform
     internal static void Configure(ShaderMaterial material, FalloutNifTextureTransform transform)
     {
         if (!Valid(transform)) throw new NotSupportedException("Source texture transformation is invalid or unsupported.");
-        material.SetShaderParameter("source_uv_offset", new Vector2(transform.Translation.U, transform.Translation.V));
-        material.SetShaderParameter("source_uv_scale", new Vector2(transform.Tiling.U, transform.Tiling.V));
-        material.SetShaderParameter("source_uv_rotation", transform.Rotation);
-        material.SetShaderParameter("source_uv_center", new Vector2(transform.Center.U, transform.Center.V));
-        material.SetShaderParameter("source_uv_method", (int)transform.TransformType);
+        material.SetShaderParameter(OffsetParameter, new Vector2(transform.Translation.U, transform.Translation.V));
+        material.SetShaderParameter(ScaleParameter, new Vector2(transform.Tiling.U, transform.Tiling.V));
+        material.SetShaderParameter(RotationParameter, transform.Rotation);
+        material.SetShaderParameter(CenterParameter, new Vector2(transform.Center.U, transform.Center.V));
+        material.SetShaderParameter(MethodParameter, (int)transform.TransformType);
     }
 
     internal static void Apply(ShaderMaterial material, uint operation, float value)
     {
         if (material.ResourceName != NativeNifEffectMaterial.ResourceIdentity || operation > 4 || !float.IsFinite(value))
             throw new NotSupportedException("Animated texture operation has no material owner.");
-        if (operation == 2) { material.SetShaderParameter("source_uv_rotation", value); return; }
-        var name = operation < 2 ? "source_uv_offset" : "source_uv_scale";
+        if (operation == 2) { material.SetShaderParameter(RotationParameter, value); return; }
+        var name = operation < 2 ? OffsetParameter : ScaleParameter;
         var pair = material.GetShaderParameter(name).AsVector2();
         if (operation is 0 or 3) pair.X = value; else pair.Y = value;
         material.SetShaderParameter(name, pair);

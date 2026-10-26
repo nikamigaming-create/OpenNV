@@ -79,8 +79,6 @@ internal sealed partial class RuntimeLiveHarness : Node
 
     public override void _EnterTree()
     {
-        _renderingMethod = RenderingServer.GetCurrentRenderingMethod();
-        _graphicsAdapter = RenderingServer.GetVideoAdapterName();
         foreach (var button in GetTree().Root.FindChildren("*", nameof(BaseButton), true, false).OfType<BaseButton>()) _controls.Add(button);
         TrackNode(GetTree().Root);
         foreach (var viewport in GetTree().Root.FindChildren("*", nameof(Viewport), true, false)) TrackNode(viewport);
@@ -341,6 +339,11 @@ internal sealed partial class RuntimeLiveHarness : Node
             case "state":
                 AtomicWrite(Path.Combine(_directory, $"{request:D10}.state.json"), JsonSerializer.Serialize(_captureGameplay(), Json));
                 break;
+            case "publication.mode":
+                _publicationSelection.SetMode(command.GetProperty("mode").GetString());
+                _frameIntervals.Reset();
+                PublishState();
+                break;
             case "trace":
                 _trace!.SetEnabled(command.GetProperty("enabled").GetBoolean());
                 if (_trace.Enabled) _trace.Request(request);
@@ -476,6 +479,20 @@ internal sealed partial class RuntimeLiveHarness : Node
         }
     }
 
+    private object CaptureVisibleControls() => _controls.Where(button => button.IsVisibleInTree() && !button.Disabled)
+        .Select(button =>
+        {
+            using var path = button.GetPath();
+            var rect = button.GetGlobalRect();
+            return new
+            {
+                path = path.ToString(),
+                text = button is Button labelled ? labelled.Text : button is NativeBitmapMenuButton bitmap ? bitmap.Text : button is NativeOwnedTileTarget owned ? owned.Text : button.Name.ToString(),
+                rect = new[] { rect.Position.X, rect.Position.Y, rect.Size.X, rect.Size.Y }
+            };
+        })
+        .ToArray();
+
     private void WriteState()
     {
         CompleteStateWrite();
@@ -487,30 +504,20 @@ internal sealed partial class RuntimeLiveHarness : Node
         }
         var started = Stopwatch.GetTimestamp();
         var renderTiming = SampleRenderTiming();
-        var identity = _captureIdentity();
-        var controls = _controls.Where(button => button.IsVisibleInTree() && !button.Disabled)
-            .Select(button =>
-            {
-                using var path = button.GetPath();
-                var rect = button.GetGlobalRect();
-                return new
-                {
-                    path = path.ToString(),
-                    text = button is Button labelled ? labelled.Text : button is NativeBitmapMenuButton bitmap ? bitmap.Text : button is NativeOwnedTileTarget owned ? owned.Text : button.Name.ToString(),
-                    rect = new[] { rect.Position.X, rect.Position.Y, rect.Size.X, rect.Size.Y }
-                };
-            })
-            .ToArray();
+        var rendererIdentity = Volatile.Read(ref _rendererIdentity);
+        var presentationConfiguration = SamplePresentationConfiguration();
+        var details = _publicationSelection.Capture(_captureIdentity, _captureSummary, CaptureVisibleControls);
         var snapshot = new
         {
             schema = "opennv-live-harness-state/v1",
             engine = "opennv",
+            publicationScope = _publicationSelection.Scope,
             process = System.Environment.ProcessId,
             sampledNanoseconds = Stopwatch.GetTimestamp() * (1_000_000_000.0 / Stopwatch.Frequency),
             drawCount = Engine.GetFramesDrawn(),
             physicsCount = Engine.GetPhysicsFrames(),
-            stateKey = identity.StateKey,
-            semanticEventOrdinal = identity.EventOrdinal,
+            stateKey = details?.Identity.StateKey,
+            semanticEventOrdinal = details is null ? (ulong?)null : details.Identity.EventOrdinal,
             statePublicationFailures = _statePublicationFailures,
             statePublicationSequence = checked(_statePublicationSequence + 1),
             lastStatePublicationFailure = _lastStatePublicationFailure,
@@ -520,7 +527,7 @@ internal sealed partial class RuntimeLiveHarness : Node
             lastFailedStatePublication = _statePublicationHistory.LastFailed,
             nextCommandRequest = _nextRequest,
             commandReadFailure = _commandReadFailure,
-            gameplay = _captureSummary(),
+            gameplay = details?.Gameplay,
             bot = _bot?.State,
             campaignBot = _campaignBot.State,
             botSkillStore = BotSkillStoreState,
@@ -546,8 +553,11 @@ internal sealed partial class RuntimeLiveHarness : Node
                 availableMemoryBytes = FalloutContentWorkers.AvailableMemoryBytes,
                 platform = OS.GetName(),
                 architecture = System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture.ToString(),
-                renderingMethod = _renderingMethod,
-                graphicsAdapter = _graphicsAdapter,
+                renderingMethod = rendererIdentity?.RenderingMethod,
+                graphicsAdapter = rendererIdentity?.GraphicsAdapter,
+                presentationConfiguration,
+                presentationConfigurationAgeMilliseconds = Stopwatch.GetElapsedTime(presentationConfiguration.Timestamp).TotalMilliseconds,
+                drawCadenceEvidence = "engine-frame-post-draw; display presentation unverified",
                 framesPerSecond = Godot.Performance.GetMonitor(Godot.Performance.Monitor.TimeFps),
                 processMilliseconds = 1000 * Godot.Performance.GetMonitor(Godot.Performance.Monitor.TimeProcess),
                 physicsMilliseconds = 1000 * Godot.Performance.GetMonitor(Godot.Performance.Monitor.TimePhysicsProcess),
@@ -569,7 +579,7 @@ internal sealed partial class RuntimeLiveHarness : Node
             },
             held = _held.Keys.Select(key => key.ToString()).ToArray(),
             heldMouse = _heldMouse.Keys.Select(button => button.ToString()).ToArray(),
-            controls,
+            controls = details?.Controls,
             trace = _trace?.Status,
         };
         _lastSnapshotMilliseconds = Stopwatch.GetElapsedTime(started).TotalMilliseconds;

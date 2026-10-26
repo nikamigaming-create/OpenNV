@@ -23,8 +23,27 @@ public partial class NativeNifInstanceAudit
                 material.GetShaderParameter("source_uv_scale").AsVector2() != new Vector2(2, 3) ||
                 material.GetShaderParameter("source_uv_center").AsVector2() != new Vector2(.5f, .5f))
                 throw new InvalidDataException("Independent sampler axes interfered with authored UV animation.");
+            // A different channel can publish between samples. Animated U/V
+            // and alpha/emittance owners must read the live complementary
+            // fields rather than retain their values at channel binding.
+            material.SetShaderParameter("source_uv_offset", new Vector2(-3, 8));
+            NativeNifTextureTransform.Apply(material, 0, 6);
+            material.SetShaderParameter("source_uv_scale", new Vector2(4, 7));
+            NativeNifTextureTransform.Apply(material, 4, 9);
+            material.SetShaderParameter("source_color_multiplier", new Vector4(1, 1, 1, .25f));
+            NativeNifEffectMaterial.ApplyEmissiveColor(material, new Vector3(2, 3, 4));
+            if (material.GetShaderParameter("source_color_multiplier").AsVector4() != new Vector4(2, 3, 4, .25f))
+                throw new InvalidDataException("Animated emissive color overwrote another channel's live alpha.");
+            material.SetShaderParameter("source_color_multiplier", new Vector4(2, 3, 4, .75f));
+            NativeNifEffectMaterial.ApplyEmissiveMultiple(material, 3);
+            if (material.GetShaderParameter("source_uv_offset").AsVector2() != new Vector2(6, 8) ||
+                material.GetShaderParameter("source_uv_scale").AsVector2() != new Vector2(4, 9) ||
+                material.GetShaderParameter("source_uv_rotation").AsSingle() != .7f ||
+                material.GetShaderParameter("source_color_multiplier").AsVector4() != new Vector4(6, 9, 12, .75f) ||
+                material.GetShaderParameter("source_emissive_multiple").AsSingle() != 3)
+                throw new InvalidDataException("Interleaved source material channels lost live complementary state.");
         }
-        GD.Print("OPENNV_NIF_TEXTURE_ADDRESSING_NATIVE_PASS modes=0,1,2,3 textureTransform=true pixels=unverified");
+        GD.Print("OPENNV_NIF_TEXTURE_ADDRESSING_NATIVE_PASS modes=0,1,2,3 textureTransform=true liveAxisInterleaving=true alphaEmittanceInterleaving=true pixels=unverified");
     }
 
     private void ExerciseOwnedModels(string game, string mod, string root, string[] arguments)

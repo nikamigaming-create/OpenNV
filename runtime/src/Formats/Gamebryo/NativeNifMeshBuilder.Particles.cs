@@ -6,6 +6,7 @@ internal static partial class RuntimeNativeNifMeshBuilder
 {
     private sealed partial class BuildState
     {
+        private static readonly StringName ParticleColorMultiplierParameter = "source_color_multiplier";
         private readonly Dictionary<int, (FalloutNifParticleSystem Source, RuntimeNifParticleSystem Runtime)> _particles = [];
 
         private Node3D BuildParticleSystem(FalloutNifParticleSystem source)
@@ -129,9 +130,9 @@ internal static partial class RuntimeNativeNifMeshBuilder
                 {
                     if (material is ShaderMaterial effect && effect.ResourceName == NativeNifEffectMaterial.ResourceIdentity)
                     {
-                        var color = effect.GetShaderParameter("source_color_multiplier").AsVector4();
+                        var color = effect.GetShaderParameter(ParticleColorMultiplierParameter).AsVector4();
                         color.W = alpha;
-                        effect.SetShaderParameter("source_color_multiplier", color);
+                        effect.SetShaderParameter(ParticleColorMultiplierParameter, color);
                     }
                     else throw new NotSupportedException("Animated material alpha has no shader owner.");
                 }

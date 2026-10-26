@@ -163,11 +163,14 @@ internal static partial class NativeCapsuleNavigation
         // The landing still requires a complete native sweep and floor support;
         // movement follows it with gravity rather than writing the query pose.
         var maximumDrop = stepHeight + Math.Max(stepHeight, body.FloorSnapLength);
-        var sampleLength = Math.Min(spacing, Math.Max(.03f, Math.Min(stepHeight * .5f,
-            body.GetChildren().OfType<CollisionShape3D>()
-                .Where(shape => shape.Shape is CapsuleShape3D).Select(shape =>
-                    ((CapsuleShape3D)shape.Shape).Radius * Math.Min(shape.GlobalBasis.X.Length(), shape.GlobalBasis.Z.Length()) * .5f)
-                .DefaultIfEmpty(spacing).Min())));
+        float sampleLength;
+        var children = body.GetChildren();
+        using ((Godot.Collections.Array)children)
+            sampleLength = Math.Min(spacing, Math.Max(.03f, Math.Min(stepHeight * .5f,
+                children.OfType<CollisionShape3D>()
+                    .Where(shape => shape.Shape is CapsuleShape3D).Select(shape =>
+                        ((CapsuleShape3D)shape.Shape).Radius * Math.Min(shape.GlobalBasis.X.Length(), shape.GlobalBasis.Z.Length()) * .5f)
+                    .DefaultIfEmpty(spacing).Min())));
         bool Sweep(Vector3 from, Vector3 motion)
         {
             query.From = new(basis, from); query.Motion = motion;
