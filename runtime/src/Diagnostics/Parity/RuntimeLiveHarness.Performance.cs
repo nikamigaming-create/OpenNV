@@ -20,6 +20,13 @@ internal sealed partial class RuntimeLiveHarness
     private PresentationConfiguration? _presentationConfiguration;
     private readonly LiveHarnessPublicationSelection _publicationSelection = new();
 
+    private static int? CurrentHybridCoreTypeCode()
+    {
+        if (!System.Runtime.Intrinsics.X86.X86Base.IsSupported ||
+            System.Runtime.Intrinsics.X86.X86Base.CpuId(0, 0).Eax < 0x1a) return null;
+        return (int)((uint)System.Runtime.Intrinsics.X86.X86Base.CpuId(0x1a, 0).Eax >> 24);
+    }
+
     private PresentationConfiguration SamplePresentationConfiguration()
     {
         // Display queries belong to the main thread. Cache independently from

@@ -84,6 +84,7 @@ internal sealed partial class RuntimeLiveHarness : Node
         foreach (var viewport in GetTree().Root.FindChildren("*", nameof(Viewport), true, false)) TrackNode(viewport);
         GetTree().NodeAdded += TrackNode;
         GetTree().NodeRemoved += UntrackNode;
+        Callable.From(SetupPipelinePhases).CallDeferred();
     }
     private void TrackNode(Node node)
     {
@@ -208,6 +209,7 @@ internal sealed partial class RuntimeLiveHarness : Node
             throw new InvalidOperationException("Finish the input segment before changing authoritative state through diagnostics.");
         if (DispatchCheckpoint(command, request)) return;
         if (DispatchCreaturePose(command, request)) return;
+        if (DispatchProcessOwners(command, request)) return;
         if (!_deliveringReplay && command.GetProperty("op").GetString() is "key" or "mouse" or "look" or "button" or "pointer" or "text" or "bot" or "physics.sever")
             _replayCheckpointPrepared = false;
         if (command.GetProperty("op").GetString() is "key" or "mouse" or "look" or "button" or "pointer" or "text")
@@ -555,8 +557,11 @@ internal sealed partial class RuntimeLiveHarness : Node
                 separateRenderThreadObserved = renderTiming is null ? (bool?)null : renderTiming.RenderThreadId != renderTiming.MainThreadId,
                 drawCallbackThreadId = _drawCallbackThreadId,
                 physicsTicksPerSecond = Engine.PhysicsTicksPerSecond,
+                pipelinePhases = CapturePipelinePhases(),
                 contentWorkerLimit = FalloutContentWorkers.Concurrency,
                 availableProcessors = FalloutContentWorkers.AvailableProcessors,
+                currentLogicalProcessor = System.Threading.Thread.GetCurrentProcessorId(),
+                hybridCoreTypeCode = CurrentHybridCoreTypeCode(),
                 availableMemoryBytes = FalloutContentWorkers.AvailableMemoryBytes,
                 platform = OS.GetName(),
                 architecture = System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture.ToString(),
@@ -608,10 +613,15 @@ internal sealed partial class RuntimeLiveHarness : Node
         _lastStateWriteMilliseconds = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
     }
 
-    private void BeforeDraw() => _trace?.BeforeDraw();
+    private void BeforeDraw()
+    {
+        _pipeline?.Draw.Begin();
+        _trace?.BeforeDraw();
+    }
 
     private void AfterDraw()
     {
+        _pipeline?.Draw.End();
         _drawCallbackThreadId = OS.GetThreadCallerId();
         _frameIntervals.Record(Stopwatch.GetTimestamp() * (1000.0 / Stopwatch.Frequency));
         if (_pendingCapture == 0 && _liveFrames is null && _trace?.Pending != true)
@@ -673,6 +683,7 @@ internal sealed partial class RuntimeLiveHarness : Node
     {
         GD.Print($"OPENNV_LIVE_HARNESS_RETIRE phase=enter stateWritePending={_stateWrite is not null}");
         _creaturePoseObservation?.Stop("harness-retired");
+        RetirePipelinePhases();
         _bot?.Stop();
         _inputPlayback?.Stop("Playback ended with its runtime owner.", ReleaseAll);
         FinishReplayDeliveryJournal("Playback ended with its runtime owner.");

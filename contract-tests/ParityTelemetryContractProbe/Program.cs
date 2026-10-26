@@ -6,6 +6,25 @@ NativeReferenceObservationProbe.Run();
 RecordedInputProbe.Run();
 PendingPublicationProbe.Run();
 
+var phaseCounter = new RuntimeFramePhaseCounter(7);
+phaseCounter.EndAt(1, 7);
+phaseCounter.BeginAt(10, 7); phaseCounter.BeginAt(20, 7); phaseCounter.EndAt(30, 7);
+phaseCounter.BeginAt(40, 8); phaseCounter.EndAt(50, 8);
+phaseCounter.BeginAt(60, 7); phaseCounter.EndAt(59, 7);
+phaseCounter.BeginAt(70, 7, false); phaseCounter.EndAt(80, 7);
+phaseCounter.BeginAt(90, 7); phaseCounter.Close(); phaseCounter.EndAt(100, 7);
+phaseCounter.BeginAt(110, 7); phaseCounter.EndAt(130, 7);
+var phaseSummary = System.Text.Json.JsonSerializer.SerializeToElement(phaseCounter.Capture());
+if (phaseSummary.GetProperty("calls").GetInt64() != 2 || phaseSummary.GetProperty("begins").GetInt64() != 7 ||
+    phaseSummary.GetProperty("ends").GetInt64() != 7 || phaseSummary.GetProperty("unpairedBegins").GetInt64() != 2 ||
+    phaseSummary.GetProperty("unpairedEnds").GetInt64() != 2 || phaseSummary.GetProperty("invalidPairs").GetInt64() != 3 ||
+    phaseSummary.GetProperty("threadMismatches").GetInt64() != 2 || phaseSummary.GetProperty("clockRegressions").GetInt64() != 1 ||
+    phaseSummary.GetProperty("pending").GetBoolean() ||
+    phaseSummary.GetProperty("totalMilliseconds").GetDouble() != 30 * (1000.0 / Stopwatch.Frequency) ||
+    phaseSummary.GetProperty("maximumMilliseconds").GetDouble() != 20 * (1000.0 / Stopwatch.Frequency))
+    throw new InvalidOperationException("Pipeline counters lost cumulative valid spans or accepted unpaired/wrong-thread/clock/ordering faults.");
+Console.WriteLine("OPENNV_PIPELINE_PHASE_CONTRACT_PASS cumulative=true closeRetainsTotals=true orphanAndOverwrittenPairsVisible=true wrongThreadGuarded=true invalidOrderingGuarded=true clockRegressionGuarded=true");
+
 var publicationCadence = new LiveHarnessPublicationCadence();
 if (publicationCadence.Due(249) || !publicationCadence.Due(250))
     throw new InvalidOperationException("Live-state publication changed its exact 250 ms interval.");
