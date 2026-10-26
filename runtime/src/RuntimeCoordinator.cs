@@ -83,7 +83,7 @@ public partial class RuntimeCoordinator : Node3D
             _options = _nextSessionOptions ?? ParseOptions(OS.GetCmdlineUserArgs());
             RuntimeLaunchValidator.NormalizePresentation(_options);
             if (_options.ContainsKey("fullscreen") && DisplayServer.GetName() != "headless")
-                DisplayServer.WindowSetMode(DisplayServer.WindowMode.Fullscreen);
+                GetWindow().Mode = Window.ModeEnum.Fullscreen;
             _continueAfterRestart = _nextSessionContinue;
             _pauseAfterCheckpointLoad = _nextSessionPauseAfterCheckpointLoad;
             _pendingCheckpointRestore = _nextSessionCheckpoint;
