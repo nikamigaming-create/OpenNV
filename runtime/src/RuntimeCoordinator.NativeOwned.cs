@@ -818,6 +818,13 @@ public partial class RuntimeCoordinator
             {
                 if (_nativeSessionTransitioning || _retiringNativeSession)
                     throw new OperationCanceledException("CELL construction session retired.");
+                var baseObject = cell.BaseObjects.GetValueOrDefault(reference.Base);
+                if (baseObject?.ModelPath is { } modelPath && modelPath.EndsWith(".spt", StringComparison.OrdinalIgnoreCase))
+                {
+                    _nativeReferenceDivergences[reference.FormKey.ToString()] =
+                        $"Owned SpeedTree model {modelPath} procedural geometry decoder is unbound.";
+                    continue;
+                }
                 referenceWatch.Restart();
                 maximumStepMilliseconds = Math.Max(maximumStepMilliseconds,
                     await PlaceNativeCellReferenceResponsive(root, cell, reference,
@@ -1089,7 +1096,11 @@ public partial class RuntimeCoordinator
         if (!_nativeNifPrototypes.TryGetValue(baseObject.ModelPath, out var prototype))
         {
             if (baseObject.ModelPath.EndsWith(".spt", StringComparison.OrdinalIgnoreCase))
-                throw new NotSupportedException($"Owned SpeedTree model {baseObject.ModelPath} procedural geometry decoder is unbound.");
+            {
+                _nativeReferenceDivergences[reference.FormKey.ToString()] =
+                    $"Owned SpeedTree model {baseObject.ModelPath} procedural geometry decoder is unbound.";
+                return;
+            }
             if (!source.TryRead(baseObject.ModelPath, null, out var nif, out var nifSource))
                 throw new FileNotFoundException(
                     $"Winning model {baseObject.ModelPath} for {baseObject.FormKey} is missing.");

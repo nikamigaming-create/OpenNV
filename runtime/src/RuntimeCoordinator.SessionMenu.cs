@@ -304,6 +304,11 @@ public partial class RuntimeCoordinator
             if (_pendingSaveActivation is not null) RejectNativePendingLoad(new OperationCanceledException("Selected load was cancelled by quitting."));
             _nativeScriptStorage?.Controls?.Flush();
             _retiringNativeSession = true;
+            if (_nativeCurrentCellRoot?.GetChildren().OfType<RuntimeNativeReferencePresentation>().SingleOrDefault() is { } presentation)
+            {
+                try { presentation.RetireBindings(); }
+                catch (Exception error) { GD.PushError($"OPENNV_NATIVE_SESSION_RETIRE_FAILURE {error.Message}"); }
+            }
             PrepareNativeOpenXrExit();
             GD.Print($"OPENNV_NATIVE_SESSION_QUIT prototypes={_nativeNifPrototypes.Count} sourceReaders=drained");
             GetTree().Quit();

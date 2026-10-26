@@ -17,6 +17,8 @@ internal partial class RuntimeNativeReferencePresentation : Node
     private Func<FalloutPlacedReference, Node3D?> _materialize;
     private readonly Dictionary<FalloutFormKey, Node3D> _nodes = [];
     private readonly Dictionary<FalloutFormKey, (FalloutPlacedReference Source, Node3D Node)> _warmNodes = [];
+    private readonly Dictionary<FalloutFormKey, FalloutPlacedReference> _referencesByKey = [];
+    private readonly HashSet<FalloutFormKey> _unresolvable = [];
     private readonly Dictionary<FalloutFormKey, bool> _enabled;
     private long _publishedStateRevision = -1, _publishedAppearanceRevision = -1;
     private readonly Dictionary<FalloutFormKey, GeometryInstance3D[]> _fadeGeometry = [];
@@ -34,7 +36,7 @@ internal partial class RuntimeNativeReferencePresentation : Node
     internal IEnumerable<OpenNV.Runtime.World.Actors.RuntimeNativeNpc> Actors => _nodes.Values.OfType<OpenNV.Runtime.World.Actors.RuntimeNativeNpc>();
     internal IReadOnlyDictionary<FalloutFormKey, Node3D> Nodes => _nodes;
     internal int WarmNodeCount => _warmNodes.Count;
-    internal bool HasPrepared(FalloutFormKey key) => _nodes.ContainsKey(key) || _warmNodes.ContainsKey(key);
+    internal bool HasPrepared(FalloutFormKey key) => _nodes.ContainsKey(key) || _warmNodes.ContainsKey(key) || _unresolvable.Contains(key);
 
     internal async Task PrepareActorAudioTransferAsync(IReadOnlyList<Node> sourceProducers)
     {
@@ -168,6 +170,9 @@ internal partial class RuntimeNativeReferencePresentation : Node
             if (!_enabled.ContainsKey(reference.FormKey))
                 _enabled.Add(reference.FormKey, _world.IsEnabled(reference.FormKey));
         _references = references; _materialize = materialize;
+        _referencesByKey.Clear();
+        foreach (var reference in references) _referencesByKey[reference.FormKey] = reference;
+        _unresolvable.Clear();
         _publishedStateRevision = -1; _publishedAppearanceRevision = -1;
     }
 
@@ -176,6 +181,7 @@ internal partial class RuntimeNativeReferencePresentation : Node
     {
         Name = "NativeReferencePresentation";
         _world = world; _references = references; _materialize = materialize;
+        foreach (var reference in references) _referencesByKey[reference.FormKey] = reference;
         _enabled = references.ToDictionary(reference => reference.FormKey, reference => world.IsEnabled(reference.FormKey));
         _fadeSettings = FalloutReferenceFadeSettings.Read(FalloutInstallationSettings.Read(
             RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("Reference fades need owned installation settings.")));
@@ -204,15 +210,19 @@ internal partial class RuntimeNativeReferencePresentation : Node
         PublishOpacity(key);
     }
 
-    internal Node3D? TryResolve(FalloutFormKey key) => _enabled.ContainsKey(key) ? Resolve(key) : null;
+    internal Node3D? TryResolve(FalloutFormKey key) => _unresolvable.Contains(key) ? null : (_enabled.ContainsKey(key) ? Resolve(key) : null);
 
     internal Node3D? Resolve(FalloutFormKey key)
     {
         if (_nodes.TryGetValue(key, out var node)) return node;
-        var source = _references.SingleOrDefault(reference => reference.FormKey == key) ??
-            throw new NotSupportedException($"Reference {key} is outside this resident presentation.");
+        if (_unresolvable.Contains(key)) return null;
+        if (!_referencesByKey.TryGetValue(key, out var source)) return null;
         node = _materialize(source);
-        if (node is null) return null;
+        if (node is null)
+        {
+            _unresolvable.Add(key);
+            return null;
+        }
         Register(key, node);
         Materialized?.Invoke(key, node);
         return node;

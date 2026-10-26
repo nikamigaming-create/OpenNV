@@ -39,7 +39,9 @@ internal partial class RuntimeNativeReferencePresentation
             foreach (var (state, body) in restored) body.RestorePhysics(state);
         }
         if (bodies.Length == 0) return;
-        IReadOnlyList<FalloutObjectPhysicsSnapshot> Capture() => bodies.Select(body => body.CapturePhysics()).ToArray();
+        IReadOnlyList<FalloutObjectPhysicsSnapshot> Capture() =>
+            bodies.All(body => body.IsInsideTree()) ? bodies.Select(body => body.CapturePhysics()).ToArray() :
+            (instance.ObjectPhysics ?? []);
         var active = IsInsideTree();
         _physicsBindings.Add(key, (instance, Capture, active));
         if (active) instance.BindObjectPhysicsCapture(Capture);

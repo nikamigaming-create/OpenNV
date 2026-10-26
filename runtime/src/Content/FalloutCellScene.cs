@@ -284,13 +284,19 @@ internal static class FalloutCellSceneReader
             BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan(TeleportDestinationBytes - sizeof(uint))));
     }
 
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<FalloutPluginStack, System.Collections.Concurrent.ConcurrentDictionary<FalloutFormKey, FalloutCellDefinition>>
+        DefinitionCache = new();
+
     internal static FalloutCellDefinition ReadDefinition(FalloutPluginStack stack, FalloutFormKey cellKey)
     {
         ArgumentNullException.ThrowIfNull(stack);
-        var record = stack.GetEffective(cellKey);
-        if (record.Signature != "CELL")
-            throw new InvalidDataException($"Requested cell {cellKey} is {record.Signature}, not CELL.");
-        return ReadDefinition(cellKey, record, Values(record));
+        return DefinitionCache.GetOrCreateValue(stack).GetOrAdd(cellKey, key =>
+        {
+            var record = stack.GetEffective(key);
+            if (record.Signature != "CELL")
+                throw new InvalidDataException($"Requested cell {key} is {record.Signature}, not CELL.");
+            return ReadDefinition(key, record, Values(record));
+        });
     }
 
     private static FalloutCellDefinition ReadDefinition(
