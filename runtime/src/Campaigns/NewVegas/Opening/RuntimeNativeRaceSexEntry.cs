@@ -93,6 +93,14 @@ internal partial class RuntimeNativeRaceSexEntry : CanvasLayer
         var source = RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("Creation has no owned content source.");
         _settings = FalloutInstallationSettings.Read(source);
         _creation = new(records, contract, current, _settings);
+        var backdrop = new ColorRect
+        {
+            Name = "RaceSexBackdrop",
+            Color = new Color(0f, 0f, 0f, 1f),
+            MouseFilter = Control.MouseFilterEnum.Ignore,
+        };
+        backdrop.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
+        AddChild(backdrop);
         _device = new(modelPath ?? FalloutExecutableStringTable.ReadNativeRaceMenuModel(source.FalloutExecutablePath), _settings)
         { Size = GetViewport().GetVisibleRect().Size };
         AddChild(_device);

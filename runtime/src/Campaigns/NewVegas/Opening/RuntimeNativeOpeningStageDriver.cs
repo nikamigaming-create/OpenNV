@@ -549,6 +549,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         {
             if (_raceSexEntry is not null)
             {
+                _player.SetModalInput(false);
                 _raceSexEntry.QueueFree();
                 _raceSexEntry = null;
             }
@@ -563,12 +564,14 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         var modelPath = RaceMenuModel(_raceMenuCommand);
         var entry = new RuntimeNativeRaceSexEntry();
         AddChild(entry);
+        _player.SetModalInput(true);
         entry.Accepted += AcceptCharacter;
         entry.Failed += error =>
         {
             ExecutionError = error.Message;
             if (!ReferenceEquals(_raceSexEntry, entry)) return;
             _raceSexEntry = null;
+            _player.SetModalInput(false);
             entry.ReleasePause();
             entry.QueueFree();
         };
@@ -579,6 +582,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         }
         catch
         {
+            _player.SetModalInput(false);
             entry.ReleasePause();
             entry.QueueFree();
             throw;
@@ -602,6 +606,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
             _raceSexEntry.QueueFree();
             _raceSexEntry = null;
         }
+        _player.SetModalInput(false);
         if (DisplayServer.GetName() != "headless")
             Input.MouseMode = Input.MouseModeEnum.Captured;
         GD.Print(

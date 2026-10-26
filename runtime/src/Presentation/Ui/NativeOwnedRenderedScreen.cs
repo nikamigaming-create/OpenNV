@@ -130,7 +130,7 @@ internal sealed partial class NativeOwnedRenderedScreen : Node
         if (input is not InputEventMouse mouse) return;
         var point = SourcePoint(mouse.Position - _device.GlobalPosition);
         using var copy = (InputEventMouse)mouse.Duplicate();
-        var position = point is { } canvas ? canvas * new Vector2(ContentView.Size.X / 1280f, ContentView.Size.Y / 960f) : new Vector2(-1, -1);
+        var position = point ?? new Vector2(-1, -1);
         copy.Position = copy.GlobalPosition = position;
         if (copy is InputEventMouseMotion motion) motion.Relative = _lastPointer is { } previous ? position - previous : Vector2.Zero;
         _lastPointer = position;
@@ -170,10 +170,9 @@ internal sealed partial class NativeOwnedRenderedScreen : Node
     private void ResizeCanvas()
     {
         if (!IsInsideTree()) return;
-        var target = FalloutRenderedMenuProjection.RenderTargetSize(_device.View.Size.X, _device.View.Size.Y);
-        var size = new Vector2I(target.Width, target.Height);
+        var size = new Vector2I(1280, 960);
         ContentView.Size = size;
-        ContentView.CanvasTransform = new Transform2D(0, new Vector2(size.X / 1280f, size.Y / 960f), 0, Vector2.Zero);
+        ContentView.CanvasTransform = Transform2D.Identity;
         _material.SetShaderParameter("c0", new Vector4(1f / size.X, 1f / size.Y, 0, 0));
         _constants[0] = new(1f / size.X, 1f / size.Y, 0, 0);
     }

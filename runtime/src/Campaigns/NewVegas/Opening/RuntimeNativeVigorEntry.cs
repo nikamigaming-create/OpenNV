@@ -22,6 +22,14 @@ internal partial class RuntimeNativeVigorEntry : CanvasLayer
             initial.Values.Sum() > contract.RequiredTotal)
             throw new InvalidDataException("Native initial SPECIAL allocation is invalid.");
         Name = "NativeVigorEntry"; Layer = 120; ProcessMode = ProcessModeEnum.Always;
+        var backdrop = new ColorRect
+        {
+            Name = "VigorBackdrop",
+            Color = new Color(0f, 0f, 0f, 1f),
+            MouseFilter = Control.MouseFilterEnum.Ignore,
+        };
+        backdrop.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
+        AddChild(backdrop);
         var menu = new NativeOwnedLoveTesterMenu(contract, initial, records)
         {
             LayoutMode = 1,

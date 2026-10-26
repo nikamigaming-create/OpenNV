@@ -1088,14 +1088,14 @@ public partial class RuntimeCoordinator
             return;
         if (!_nativeNifPrototypes.TryGetValue(baseObject.ModelPath, out var prototype))
         {
+            if (baseObject.ModelPath.EndsWith(".spt", StringComparison.OrdinalIgnoreCase))
+                throw new NotSupportedException($"Owned SpeedTree model {baseObject.ModelPath} procedural geometry decoder is unbound.");
             if (!source.TryRead(baseObject.ModelPath, null, out var nif, out var nifSource))
                 throw new FileNotFoundException(
                     $"Winning model {baseObject.ModelPath} for {baseObject.FormKey} is missing.");
             GD.Print(
                 $"OPENNV_NATIVE_NIF_LOADING model={baseObject.ModelPath} source={nifSource} " +
                 $"base={baseObject.FormKey}");
-            if (baseObject.ModelPath.EndsWith(".spt", StringComparison.OrdinalIgnoreCase))
-                throw new NotSupportedException($"Owned SpeedTree model {baseObject.ModelPath} is present at {nifSource}; its procedural geometry decoder is unbound.");
             prototype = preparedModel is null ? new RuntimeNativeNifPrototype(nif, _configuration.World.GameUnitsToMeters) :
                 new RuntimeNativeNifPrototype(preparedModel, _configuration.World.GameUnitsToMeters);
             var built = prototype.Scene;
