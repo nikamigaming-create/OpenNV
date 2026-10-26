@@ -2,6 +2,17 @@ using Godot;
 
 namespace OpenNV.Runtime.Formats.Gamebryo;
 
+// Keep the distance beside its draw-only index. The default generic value sort
+// uses IComparable<T> directly, without an interface comparer/delegate per sort.
+internal readonly record struct NativeParticleDrawOrder(float Distance, int Index) : IComparable<NativeParticleDrawOrder>
+{
+    public int CompareTo(NativeParticleDrawOrder other)
+    {
+        var distance = other.Distance.CompareTo(Distance);
+        return distance != 0 ? distance : Index.CompareTo(other.Index);
+    }
+}
+
 internal static class NativeParticleDrawBuffer
 {
     // MultiMesh 3D rows, RGBA, then the four source atlas coordinates.

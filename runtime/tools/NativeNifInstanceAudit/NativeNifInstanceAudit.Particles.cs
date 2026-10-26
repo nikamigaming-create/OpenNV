@@ -6,6 +6,7 @@ public partial class NativeNifInstanceAudit
 {
     private static void ExerciseParticleBuffer()
     {
+        ExerciseParticleDrawOrdering();
         var random = new Random(73);
         for (var index = 0; index < 1000; index++)
         {
@@ -50,11 +51,48 @@ public partial class NativeNifInstanceAudit
             NativeParticleDrawBuffer.Write(buffer.AsSpan(index * NativeParticleDrawBuffer.Stride), transform, color, atlas);
         }
         bulk.Buffer = buffer;
+        scalar.VisibleInstanceCount = bulk.VisibleInstanceCount = 1;
         var expected = System.Runtime.InteropServices.MemoryMarshal.AsBytes(scalar.Buffer.AsSpan());
         var observed = System.Runtime.InteropServices.MemoryMarshal.AsBytes(bulk.Buffer.AsSpan());
-        if (expected.Length != buffer.Length * sizeof(float) || !expected.SequenceEqual(observed))
+        if (bulk.InstanceCount != 3 || bulk.VisibleInstanceCount != 1 ||
+            expected.Length != buffer.Length * sizeof(float) || !expected.SequenceEqual(observed))
             throw new InvalidOperationException("Batched particle bytes differ from Godot's scalar transform/color/atlas setters.");
-        GD.Print("OPENNV_PARTICLE_BUFFER_PASS nativeScalarBytes=exact transforms=3 billboardPoses=1000 nonuniformScale=true rotation=true colors=true atlas=true");
+        GD.Print("OPENNV_PARTICLE_BUFFER_PASS nativeScalarBytes=exact transforms=3 visible=1 capacityRetained=true billboardPoses=1000 nonuniformScale=true rotation=true colors=true atlas=true");
+    }
+
+    private static void ExerciseParticleDrawOrdering()
+    {
+        var random = new Random(917);
+        foreach (var count in new[] { 0, 1, 2, 3, 15, 16, 17, 32, 65, 256, 1024 })
+        {
+            var distances = Enumerable.Range(0, count).Select(_ => (float)random.Next(-4, 17)).ToArray();
+            float[] special = [float.NaN, float.PositiveInfinity, float.NegativeInfinity, 0f, -0f, float.Epsilon, float.MaxValue, float.NaN];
+            special.AsSpan(0, Math.Min(count, special.Length)).CopyTo(distances);
+            var expected = Enumerable.Range(0, count).ToArray();
+            Array.Sort(expected, (a, b) =>
+            {
+                var distance = distances[b].CompareTo(distances[a]);
+                return distance != 0 ? distance : a.CompareTo(b);
+            });
+            var observed = new NativeParticleDrawOrder[count + 3];
+            Array.Fill(observed, new(float.PositiveInfinity, -1));
+            for (var index = 0; index < count; ++index) observed[index] = new(distances[index], index);
+            Array.Sort(observed, 0, count);
+            if (!observed.Take(count).Select(key => key.Index).SequenceEqual(expected) || observed.Skip(count).Any(key => key.Index != -1))
+                throw new InvalidDataException("Particle distance/index sort changed the reference order or touched unused capacity.");
+        }
+        var reuse = new NativeParticleDrawOrder[256];
+        void SortAgain()
+        {
+            for (var index = 0; index < reuse.Length; ++index) reuse[index] = new((index * 17) % 43, index);
+            Array.Sort(reuse);
+        }
+        for (var iteration = 0; iteration < 128; ++iteration) SortAgain();
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        for (var iteration = 0; iteration < 128; ++iteration) SortAgain();
+        var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+        if (allocated != 0) throw new InvalidDataException($"Reusable particle draw sorting allocated {allocated} bytes.");
+        GD.Print("OPENNV_PARTICLE_DRAW_ORDER_PASS referenceOrder=exact ties=true specialFloats=true capacityUntouched=true reusableSortAllocatedBytes=0 samples=128");
     }
 
     private async Task ExerciseParticles(string root, string model, bool checkBounds = false)
