@@ -20,6 +20,9 @@ public partial class NativeReferencePresentationAudit : Node3D
             using var world = new FalloutReferenceWorld(records);
             var cell = FalloutCellSceneReader.Read(records, FalloutDialogueTopic.Find(records, "CELL", "GSDocMitchellHouse").FormKey);
             world.LoadCell(cell);
+            if (!ReferenceEquals(FalloutCellSceneReader.ReadDefinition(records, cell.Cell.FormKey),
+                    FalloutCellSceneReader.ReadDefinition(records, cell.Cell.FormKey)))
+                throw new InvalidOperationException("Immutable cell definition was decoded again for the same source stack.");
             var cards = new[] { "TempRorschachTest01REF" }
                 .Select(name => cell.References.Single(reference => reference.EditorId == name)).ToArray();
             var path = cell.BaseObjects[cards[0].Base].ModelPath!;
@@ -116,6 +119,21 @@ public partial class NativeReferencePresentationAudit : Node3D
             projection.SetResidency([], _ => null, _ => false);
             if (projection.WarmNodeCount != 0 || projection.HasPrepared(cards[0].FormKey) || !first.IsQueuedForDeletion())
                 throw new InvalidOperationException("Expired warm 3D was not evicted.");
+            var failedMaterializations = 0;
+            projection.SetResidency(cards, _ => { failedMaterializations++; return null; });
+            for (var attempt = 0; attempt < 120; attempt++)
+                if (projection.TryResolve(cards[0].FormKey) is not null)
+                    throw new InvalidOperationException("Missing source geometry acquired a proxy presentation.");
+            if (failedMaterializations != 1)
+                throw new InvalidOperationException("Missing source geometry was retried on every query.");
+            projection.SetResidency(cards, _ => { failedMaterializations++; return null; });
+            _ = projection.Resolve(cards[0].FormKey);
+            if (failedMaterializations != 2)
+                throw new InvalidOperationException("A changed residency retained an obsolete materialization failure.");
+            var registered = prototype.Instantiate(); root.AddChild(registered);
+            projection.Register(cards[0].FormKey, registered);
+            if (projection.TryResolve(cards[0].FormKey) != registered || failedMaterializations != 2)
+                throw new InvalidOperationException("Explicit source publication did not replace its earlier negative resolution.");
             GD.Print("OPENNV_NATIVE_REFERENCE_PRESENTATION_AUDIT_PASS sharedModel=true instanceTexture=true ownedDds=true enable=true disable=true noRebuild=true fadeOpacity=true reversal=true warmBoundary=true indexedEvents=true lateMaterialization=true inactiveContactsRejected=true boundedEviction=true pixels=unverified");
             GetTree().Quit();
         }

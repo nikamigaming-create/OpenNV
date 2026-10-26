@@ -1,28 +1,31 @@
 # Current work
 
-## Active batch: Menu overlay parity and exterior streaming performance
+## Active owner: exterior frame pacing and the Doc Mitchell tutorial
 
-Work addresses user request ("bad overlay with reflectron and vigor tester anmd outside was very low fps").
-Active branch is `codex/fix-menu-overlays-and-exterior-performance` based on `main`.
+The user requests one maintained `main`, reliable exterior play and all authored
+Doc Mitchell tutorials. Whole-game completion remains unverified.
 
-### Verified capabilities and fixes
+The pending exterior/session PR retains immutable CELL definitions per source
+stack, indexes resident references and avoids repeatedly attempting missing
+presentations. Unsupported SpeedTree references remain explicit divergences.
+Terrain shadow casting is retained. Dynamic bodies capture their final live
+physics before teardown; an old saved snapshot is not a teardown substitute.
 
-1. **Reflectron & Vigor Tester Presentation**:
-   - Added solid dark backdrops behind both the Reflectron terminal ([RuntimeNativeRaceSexEntry.cs](file:///d:/code/OpenNV/runtime/src/Campaigns/NewVegas/Opening/RuntimeNativeRaceSexEntry.cs)) and the Vit-o-matic Vigor Tester ([RuntimeNativeVigorEntry.cs](file:///d:/code/OpenNV/runtime/src/Campaigns/NewVegas/Opening/RuntimeNativeVigorEntry.cs)) to prevent 1st-person interior geometry bleed-through.
-   - Enforced player modal input throughout opening character generation in [RuntimeNativeOpeningStageDriver.cs](file:///d:/code/OpenNV/runtime/src/Campaigns/NewVegas/Opening/RuntimeNativeOpeningStageDriver.cs), suppressing reticle, action prompts, and gameplay HUD draw.
-   - Fixed 16:9 vertical squashing defect in [NativeOwnedRenderedScreen.cs](file:///d:/code/OpenNV/runtime/src/Presentation/Ui/NativeOwnedRenderedScreen.cs) so the 4:3 CRT mesh receives a non-squashed 1280x960 texture with 1:1 mouse tracking.
-   - Preserved vertical camera framing on widescreen displays in [NativeOwnedRenderedDevice.cs](file:///d:/code/OpenNV/runtime/src/Presentation/Ui/NativeOwnedRenderedDevice.cs) and [NativeOwnedLoveTesterMenu.cs](file:///d:/code/OpenNV/runtime/src/Presentation/Ui/NativeOwnedLoveTesterMenu.cs) so machines fit on-screen without clipping.
+Selected owned checks pass for reference enable/fade/material/warm residency,
+negative resolution invalidation, and skull/grenade physical continuation,
+including freeing the body before the presentation owner. Full runtime gate
+and checked publication are in progress.
 
-2. **Exterior Streaming Performance**:
-   - Fast-rejected unbound SpeedTree `.spt` files in [RuntimeCoordinator.NativeOwned.cs](file:///d:/code/OpenNV/runtime/src/RuntimeCoordinator.NativeOwned.cs) before file queries occur.
-   - Filtered `.spt` shrub references in [RuntimeCoordinator.Exterior.cs](file:///d:/code/OpenNV/runtime/src/RuntimeCoordinator.Exterior.cs), recording telemetry divergences directly and eliminating main-thread zlib decompression hitches during cell streaming.
+Recording-free exterior reproduction uses a private copy of the Doc-exit save,
+49 resident cells and Forward+ at 1280x720. The pending exported build measures
+27-30 FPS with rolling draw median 36.45 ms and p95 65.57 ms. A separate 10-second
+CPU sample attributes 4.84 seconds to creature native route search. These are
+diagnostic observations, not a retail comparison or performance acceptance.
 
-3. **Runtime Gate and Builds**:
-   - Clean Release and Debug C# builds pass.
-   - Test suites, contract probes, and launcher checks pass (`OPENNV_CSHARP_GODOT_GATE_PASS`).
-   - Zero git diff check errors (`git diff --check`).
-
-### Next steps
-
-1. Launch interactive fullscreen playtest to verify crisp menus and smooth exterior FPS.
-2. Publish PR, merge into `main`, and continue autonomous campaign progression.
+Next repairs are shared capsule-search budget boundaries and the source
+tutorial's player-state queries. `CGTutorial` currently halts on player.GetDead
+because the player reference is incorrectly treated as an ESM placed record.
+Fix the authoritative query owner, execute the real source script, then check
+ordinary New Game through Doc exit and exterior play with recording disabled.
+Keep all reached unsupported owners visible, prove save/cold continuation, run
+the owned audits and required gate, and merge each checked block into `main`.

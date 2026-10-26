@@ -453,6 +453,13 @@ public partial class RuntimeCoordinator
             (node is RuntimeNativeNpc actor ? actor.Appearance.Reference == reference.FormKey :
                 node.GetMeta("opennv_reference_form_key", "").AsString() == reference.FormKey.ToString()));
         if (Find() is { } existing) return existing;
+        var baseObject = cell.BaseObjects.GetValueOrDefault(reference.Base);
+        if (baseObject?.ModelPath is { } modelPath && modelPath.EndsWith(".spt", StringComparison.OrdinalIgnoreCase))
+        {
+            _nativeReferenceDivergences[reference.FormKey.ToString()] =
+                $"Owned SpeedTree model {modelPath} procedural geometry decoder is unbound.";
+            return null;
+        }
         var before = root.GetChildCount();
         try { PlaceNativeReference(root, cell, reference, materializeDisabled: true); return Find(); }
         catch (Exception error) when (error is InvalidDataException or NotSupportedException or FileNotFoundException)

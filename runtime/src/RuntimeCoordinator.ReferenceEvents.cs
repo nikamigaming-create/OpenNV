@@ -35,7 +35,8 @@ public partial class RuntimeCoordinator
             _nativeReferenceEvents!.SetResidency(updated, root);
             foreach (var instance in moved.Where(instance => world.IsResident(instance.Reference)))
             {
-                var reference = updated.References.Single(value => value.FormKey == instance.Reference);
+                var reference = updated.References.FirstOrDefault(value => value.FormKey == instance.Reference);
+                if (reference is null) continue;
                 if (_nativeReferencePresentation.Nodes.GetValueOrDefault(instance.Reference) is { } node ||
                     world.IsEnabled(instance.Reference) && (node = _nativeReferencePresentation.Resolve(instance.Reference)) is not null)
                 {

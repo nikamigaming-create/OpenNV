@@ -7,11 +7,35 @@ namespace OpenNV.Runtime.Formats.Gamebryo;
 internal partial class RuntimeNifRigidBody
 {
     private FalloutObjectPhysicsSnapshot? _pendingPhysics;
+    private bool _physicsExited;
+    private FalloutObjectPhysicsSnapshot? _exitPhysics;
+    private Exception? _exitPhysicsFailure;
     internal int SourceBody => GetMeta("opennv_nif_collision_body", -1).AsInt32();
     internal string SourceSha256 => GetMeta("opennv_nif_source_sha256", "").AsString();
 
+    public override void _EnterTree()
+    {
+        _physicsExited = false;
+        _exitPhysics = null;
+        _exitPhysicsFailure = null;
+    }
+
+    public override void _ExitTree()
+    {
+        // Sibling presentation owners may retire after this body leaves the
+        // tree or is freed. Retain the final live state before native teardown;
+        // an earlier campaign snapshot cannot represent this continuation.
+        if (!Freeze)
+            try { _exitPhysics = CapturePhysics(); }
+            catch (Exception error) { _exitPhysicsFailure = error; }
+        _physicsExited = true;
+    }
+
     internal FalloutObjectPhysicsSnapshot CapturePhysics()
     {
+        if (_physicsExited)
+            return _exitPhysics ?? throw new InvalidOperationException(
+                "Object physics retirement could not retain its final live state.", _exitPhysicsFailure);
         if (!IsInsideTree() || _visual is null || Freeze)
             throw new InvalidOperationException("Object physics capture requires its live dynamic body.");
         if (_grab is not null)
