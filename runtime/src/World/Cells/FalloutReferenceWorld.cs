@@ -636,6 +636,11 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         if (_instances.TryGetValue(key, out var instance)) return instance;
+        return CreateInstance(key);
+    }
+
+    private FalloutReferenceInstance CreateInstance(FalloutFormKey key)
+    {
         var record = records.GetEffective(key);
         var baseKey = FalloutDialogueTopic.RequiredForm(record, "NAME");
         // Engine primitive bases need no ESM base record; their XPRM reference
@@ -646,7 +651,7 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
         FalloutReferenceScriptDefinition? definition = null;
         if (script is not null && !_definitions.TryGetValue(script.FormKey, out definition))
             _definitions.Add(script.FormKey, definition = new(script));
-        instance = new(record, definition, () => IsEnabled(key));
+        var instance = new FalloutReferenceInstance(record, definition, () => IsEnabled(key));
         instance.TerminalHackState = InitialTerminalHackState(instance);
         _instances.Add(key, instance);
         instance.BindStateChanges(_instances.Count, TrackReferenceWork);

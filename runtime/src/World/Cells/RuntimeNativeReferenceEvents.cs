@@ -439,9 +439,8 @@ internal partial class RuntimeNativeReferenceEvents : Node
         if (relay is not null) _dispatchingActivationRelays.Add(binding.Reference.FormKey);
         try
         {
-            results = _scripts.DispatchFrame(binding.Reference.FormKey, events, delta,
-                playerInput ? () => ObservePlayerActivationBegin?.Invoke(binding.Reference.FormKey) : null,
-                playerInput ? () => ObservePlayerActivationEnd?.Invoke(binding.Reference.FormKey, true) : null);
+            results = playerInput ? DispatchPlayerInputFrame(binding, events, delta)
+                : _scripts.DispatchFrame(binding.Reference.FormKey, events, delta);
         }
         finally { if (relay is not null) _dispatchingActivationRelays.Remove(binding.Reference.FormKey); }
         if (relay is not null) _world.ConsumeActivationRelay(relay);
@@ -456,6 +455,15 @@ internal partial class RuntimeNativeReferenceEvents : Node
         if (grabBatch is not null) _world.ConsumeGrabEvents(binding.Reference.FormKey, grabBatch);
         Report(binding, results);
     }
+
+    // Capturing a binding belongs only to admitted player input. Keeping these
+    // callbacks out of ProcessBinding avoids allocating a closure before its
+    // no-work guards for every ordinary resident reference on every frame.
+    private IReadOnlyList<FalloutReferenceScriptEventResult> DispatchPlayerInputFrame(Binding binding,
+        IReadOnlyList<FalloutReferenceScriptEvent> events, double delta) =>
+        _scripts.DispatchFrame(binding.Reference.FormKey, events, delta,
+            () => ObservePlayerActivationBegin?.Invoke(binding.Reference.FormKey),
+            () => ObservePlayerActivationEnd?.Invoke(binding.Reference.FormKey, true));
 
     private void Report(Binding binding, IReadOnlyList<FalloutReferenceScriptEventResult> results)
     {

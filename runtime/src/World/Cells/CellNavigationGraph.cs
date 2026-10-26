@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -17,6 +18,7 @@ internal sealed partial class CellNavigationGraph
     private const float BarycentricUnit = 1.0f;
 
     private readonly IReadOnlyList<NavigationMeshRecord> _navmeshes;
+    private readonly NavigationMeshRecord[] _projectionMeshes;
     private readonly IReadOnlyDictionary<string, NavigationMeshRecord> _navmeshesByFormId;
     internal string SourceSha256 { get; private set; } = "";
 
@@ -26,6 +28,9 @@ internal sealed partial class CellNavigationGraph
         _navmeshesByFormId = navmeshes.ToDictionary(
             value => value.FormId,
             StringComparer.OrdinalIgnoreCase);
+        // Projection ties use FormID order; other graph operations retain the
+        // original source order, including source-bound random selection.
+        _projectionMeshes = navmeshes.OrderBy(value => value.FormId, StringComparer.OrdinalIgnoreCase).ToArray();
     }
 
     internal int NavMeshes => _navmeshes.Count;
@@ -152,21 +157,38 @@ internal sealed partial class CellNavigationGraph
         if (_navmeshes.Count == 0)
             throw new InvalidOperationException(
                 "Owned CELL has no navigation mesh for actor travel.");
-        NearestNodeResult? best = null;
-        foreach (var candidate in _navmeshes.Select(mesh => (Mesh: mesh, Distance: mesh.BoundsDistanceSquared(point)))
-                     .OrderBy(value => value.Distance).ThenBy(value => value.Mesh.FormId, StringComparer.OrdinalIgnoreCase))
+        ProjectionCandidate[]? rented = null;
+        Span<ProjectionCandidate> candidates = _projectionMeshes.Length <= 64
+            ? stackalloc ProjectionCandidate[_projectionMeshes.Length]
+            : (rented = ArrayPool<ProjectionCandidate>.Shared.Rent(_projectionMeshes.Length)).AsSpan(0, _projectionMeshes.Length);
+        try
         {
-            // Source mesh bounds are a lower distance bound, not a replacement
-            // for triangle projection. Keep equal-distance candidates so the
-            // existing FormID tie order remains deterministic.
-            if (best is not null && candidate.Distance > best.DistanceSquared) break;
-            var nearest = candidate.Mesh.NearestTriangle(point);
-            if (best is null || nearest.DistanceSquared < best.DistanceSquared ||
-                nearest.DistanceSquared == best.DistanceSquared &&
-                StringComparer.OrdinalIgnoreCase.Compare(candidate.Mesh.FormId, best.Node.NavMesh.FormId) < 0)
-                best = new(new(candidate.Mesh, nearest.Index), nearest.Point, nearest.DistanceSquared);
+            for (var index = 0; index < candidates.Length; index++)
+                candidates[index] = new(_projectionMeshes[index].BoundsDistanceSquared(point), index);
+            candidates.Sort();
+            var hasBest = false;
+            NearestNodeResult best = default;
+            foreach (var candidate in candidates)
+            {
+                // Retain sorted visitation as well as strict pruning: a mesh
+                // without a finite floor must still fail if actually visited.
+                if (hasBest && candidate.Distance > best.DistanceSquared) break;
+                var mesh = _projectionMeshes[candidate.MeshIndex];
+                var nearest = mesh.NearestTriangle(point);
+                if (!hasBest || nearest.DistanceSquared < best.DistanceSquared ||
+                    nearest.DistanceSquared == best.DistanceSquared &&
+                    StringComparer.OrdinalIgnoreCase.Compare(mesh.FormId, best.Node.NavMesh.FormId) < 0)
+                {
+                    best = new(new(mesh, nearest.Index), nearest.Point, nearest.DistanceSquared);
+                    hasBest = true;
+                }
+            }
+            return best;
         }
-        return best!;
+        finally
+        {
+            if (rented is not null) ArrayPool<ProjectionCandidate>.Shared.Return(rented);
+        }
     }
 
     private IReadOnlyList<NavigationNode> FindTrianglePath(
@@ -538,7 +560,17 @@ internal sealed partial class CellNavigationGraph
         }
     }
 
-    private sealed record NearestTriangleResult(
+    private readonly record struct ProjectionCandidate(float Distance, int MeshIndex) : IComparable<ProjectionCandidate>
+    {
+        public int CompareTo(ProjectionCandidate other)
+        {
+            // float.CompareTo matches OrderBy's handling of NaN and infinity.
+            var distance = Distance.CompareTo(other.Distance);
+            return distance != 0 ? distance : MeshIndex.CompareTo(other.MeshIndex);
+        }
+    }
+
+    private readonly record struct NearestTriangleResult(
         int Index,
         Vector3 Point,
         float DistanceSquared);
@@ -550,7 +582,7 @@ internal sealed partial class CellNavigationGraph
         internal Vector3 Centroid => NavMesh.Centroid(TriangleIndex);
     }
 
-    private sealed record NearestNodeResult(
+    private readonly record struct NearestNodeResult(
         NavigationNode Node,
         Vector3 Point,
         float DistanceSquared);

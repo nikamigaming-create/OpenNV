@@ -349,6 +349,66 @@ internal static partial class NativeNavigationContracts
             if (graph.FindNearestPoint(point) != expected)
                 throw new InvalidOperationException("Bounded projection changed exhaustive triangle distance or deterministic floor ties.");
         }
-        Console.WriteLine("OPENNV_NAVIGATION_PROJECTION_PASS exhaustiveAgreement=400 stackedFloors=true distantQueries=true formIdTies=true");
+        object Mesh(string formId, float x, float z, uint flags = 0, bool broadBounds = false) => new
+        {
+            formId,
+            cellFormId = "cell",
+            version = 11,
+            verticesGameUnits = broadBounds
+                ? new float[][] { [x - 2, -2, z], [x + 2, -2, z], [x, 2, z], [-100, -100, -100], [100, 100, 100] }
+                : new float[][] { [x - 2, -2, z], [x + 2, -2, z], [x, 2, z] },
+            triangles = new[] { new { vertexIndices = new[] { 0, 1, 2 }, adjacentTriangles = new[] { -1, -1, -1 }, flags } },
+            externalConnections = Array.Empty<object>()
+        };
+        void Refuses(CellNavigationGraph selected, Vector3 point, string formId)
+        {
+            try { _ = selected.FindNearestPoint(point); }
+            catch (InvalidDataException error) when (error.Message == $"Owned NAVM {formId} has no finite floor projection.") { return; }
+            throw new InvalidOperationException("Projection changed the first visited nonfinite/disabled floor failure.");
+        }
+
+        // Identical broad-phase bounds and equal true distances must still use
+        // case-insensitive FormID order, independent of input mesh order.
+        var tied = Graph([Mesh("B-form", 0, -1, broadBounds: true), Mesh("a-form", 0, 1, broadBounds: true)]);
+        if (tied.FindNearestPoint(Vector3.Zero) != new Vector3(0, 0, 1))
+            throw new InvalidOperationException("Equal bounds/floor distances lost case-insensitive FormID ties.");
+        var pruned = Graph([Mesh("a-disabled", 100, 0, flags: 8), Mesh("z-floor", 0, 0)]);
+        if (pruned.FindNearestPoint(Vector3.Zero) != Vector3.Zero)
+            throw new InvalidOperationException("Projection visited a disabled mesh beyond the winning distance bound.");
+        Refuses(Graph([Mesh("a-floor", 100, 0), Mesh("z-disabled", 0, 0, flags: 8)]), Vector3.Zero, "z-disabled");
+        Refuses(Graph([Mesh("b-disabled", 0, -1, flags: 8), Mesh("a-floor", 0, 1)]), Vector3.Zero, "b-disabled");
+        foreach (var point in new Vector3[] { new(float.NaN, 0, 0), new(float.PositiveInfinity, 0, 0),
+                     new(float.NegativeInfinity, 0, 0), new(float.MaxValue, 0, 0) })
+            Refuses(tied, point, "a-form");
+
+        var pooled = Graph(Enumerable.Range(0, 96).Select(index => Mesh($"pool-{index:D3}", index * 10, 0)).Reverse().ToArray());
+        Parallel.For(0, 768, index =>
+        {
+            var x = index % 96 * 10;
+            if (pooled.FindNearestPoint(new(x, .125f, 2)) != new Vector3(x, .125f, 0))
+                throw new InvalidOperationException("Concurrent projection corrupted another query's candidate storage.");
+        });
+        // Exercise pooled cleanup on failure, then reuse the pool for valid
+        // queries and measure only warmed ordinary projection on this thread.
+        var pooledFailure = Graph(Enumerable.Range(0, 96).Select(index =>
+            Mesh($"pool-{index:D3}", index * 10, 0, flags: index == 0 ? 8u : 0u)).ToArray());
+        Refuses(pooledFailure, Vector3.Zero, "pool-000");
+        long Allocated(CellNavigationGraph measured)
+        {
+            Vector3 checksum = default;
+            for (var index = 0; index < 512; index++) checksum += measured.FindNearestPoint(new(index % 20, .125f, 2));
+            var before = GC.GetAllocatedBytesForCurrentThread();
+            for (var index = 0; index < 2048; index++) checksum += measured.FindNearestPoint(new(index % 20, .125f, 2));
+            var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+            if (!checksum.IsFinite()) throw new InvalidOperationException("Warmed projection produced a nonfinite checksum.");
+            return allocated;
+        }
+        var stackBytes = Allocated(graph);
+        var pooledBytes = Allocated(pooled);
+        if (stackBytes != 0 || pooledBytes != 0)
+            throw new InvalidOperationException($"Warmed projection still allocates: stack={stackBytes}, pooled={pooledBytes} bytes per 2048 queries.");
+        Console.WriteLine($"OPENNV_NAVIGATION_PROJECTION_PASS exhaustiveAgreement=400 stackedFloors=true distantQueries=true formIdTies=true " +
+            $"equalBounds=true strictPruning=true prunedDisabled=true visitedDisabledRefused=true nonfiniteRefused=true concurrentQueries=768 " +
+            $"pooledFailureRefused=true warmedQueries=2048 stackAllocatedBytes={stackBytes} pooledAllocatedBytes={pooledBytes}");
     }
 }

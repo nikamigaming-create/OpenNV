@@ -153,6 +153,7 @@ internal static partial class NativeCapsuleNavigation
             throw new InvalidDataException("Native route has competing source and reference arrival regions.");
         using var query = new PhysicsTestMotionParameters3D { Margin = body.SafeMargin, MaxCollisions = 4 };
         using var hit = new PhysicsTestMotionResult3D();
+        using var stepQueries = new NativeCharacterStep.QueryResources(body);
         var rid = body.GetRid();
         using var supportRay = PhysicsRayQueryParameters3D.Create(Vector3.Zero, Vector3.Zero, body.CollisionMask, [rid]);
         var basis = body.GlobalBasis;
@@ -174,7 +175,7 @@ internal static partial class NativeCapsuleNavigation
         bool Sweep(Vector3 from, Vector3 motion)
         {
             query.From = new(basis, from); query.Motion = motion;
-            return PhysicsServer3D.BodyTestMotion(rid, query, hit);
+            return NativeCharacterStep.TestMotion(rid, query, hit);
         }
         NativeNavigationContact? rejected = null;
         bool SingleEdge(Vector3 from, Vector3 desired, out Vector3 landing, bool allowStep)
@@ -198,7 +199,7 @@ internal static partial class NativeCapsuleNavigation
                 if (obstacle is not null)
                 {
                     if (!NativeCharacterStep.TryQuery(body, new(basis, from), motion, stepHeight,
-                        out var stepped, out var reason, out var contact)) return Reject("step-" + reason, contact ?? obstacle);
+                        out var stepped, out var reason, out var contact, resources: stepQueries)) return Reject("step-" + reason, contact ?? obstacle);
                     drop += stepped.Y - from.Y;
                     supportedFrom = stepped;
                 }
@@ -230,7 +231,7 @@ internal static partial class NativeCapsuleNavigation
             NativeNavigationContact? reconciledFloor = null;
             if (!Enumerable.Range(0, hit.GetCollisionCount())
                 .Any(index => hit.GetCollisionNormal(index).Dot(Vector3.Up) >= floorCosine) &&
-                !NativeCharacterStep.TrySupport(body, landing, stepHeight, out reconciledFloor)) return Reject("landing-slope",
+                !NativeCharacterStep.TrySupport(body, landing, stepHeight, out reconciledFloor, stepQueries)) return Reject("landing-slope",
                     FirstContact(hit, supportedFrom, supportedFrom + downward));
             // The rounded bottom can stop on a steep stair edge although the
             // same pose has a walkable root floor within the mover's snap
@@ -243,7 +244,7 @@ internal static partial class NativeCapsuleNavigation
             // the same native floor beneath the controller root as well.
             supportRay.From = landing + Vector3.Up * body.SafeMargin * 8;
             supportRay.To = landing - Vector3.Up * Math.Max(stepHeight, body.FloorSnapLength);
-            using var support = body.GetWorld3D().DirectSpaceState.IntersectRay(supportRay);
+            using var support = NativeCharacterStep.QuerySupport(body, supportRay);
             if (support.Count == 0) return Reject("root-floor-missing");
             if (support["normal"].AsVector3().Dot(Vector3.Up) < floorCosine) return Reject("root-floor-slope");
             var height = landing.Y - from.Y;

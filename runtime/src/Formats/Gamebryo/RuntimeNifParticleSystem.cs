@@ -25,20 +25,19 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
     private FastNoiseLite? _turbulence;
     private Particle[] _particles = [];
     private float[] _drawBuffer = [];
-    private int[] _drawOrder = [];
-    private float[] _drawDistances = [];
+    private NativeParticleDrawOrder[] _drawOrder = [];
     private MultiMesh _draw = null!;
     private MultiMeshInstance3D _visual = null!;
     private Aabb _publishedBounds;
     private double _nextBoundsRefresh;
     private int _visibleCount;
-    private ParticleDistanceOrder _distanceOrder = null!;
-    private static long _publicationCalls, _publishedParticles, _sortTicks, _packTicks, _uploadTicks;
+    private static long _publicationCalls, _publishedParticles, _uploadedFloats, _sortTicks, _packTicks, _uploadTicks;
     internal static object PublicationTiming => new
     {
         scope = "process-cumulative-main-thread;upload-includes-native-call-not-GPU-execution",
         calls = _publicationCalls,
         particles = _publishedParticles,
+        uploadedFloats = _uploadedFloats,
         sortMilliseconds = _sortTicks * (1000.0 / Stopwatch.Frequency),
         packMilliseconds = _packTicks * (1000.0 / Stopwatch.Frequency),
         uploadMilliseconds = _uploadTicks * (1000.0 / Stopwatch.Frequency)
@@ -152,15 +151,6 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
         internal Color InitialColor;
     }
 
-    private sealed class ParticleDistanceOrder(float[] distances) : IComparer<int>
-    {
-        public int Compare(int a, int b)
-        {
-            var distance = distances[b].CompareTo(distances[a]);
-            return distance != 0 ? distance : a.CompareTo(b);
-        }
-    }
-
     private void ConfigureSource(FalloutNifFile file, FalloutNifParticleSystem source,
         IReadOnlyDictionary<int, Node3D> nodes, Material material, float units)
     {
@@ -246,9 +236,7 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
             FalloutNifParticleGrowFade or FalloutNifParticleColor or FalloutNifParticleColorKeys).ToArray();
         _activeDrawModifiers = new FalloutNifParticleModifier[_drawModifiers.Length];
         _particles = new Particle[_data.Maximum];
-        _drawOrder = new int[_data.Maximum];
-        _drawDistances = new float[_data.Maximum];
-        _distanceOrder = new(_drawDistances);
+        _drawOrder = new NativeParticleDrawOrder[_data.Maximum];
         _drawBuffer = new float[checked(_data.Maximum * NativeParticleDrawBuffer.Stride)];
         if (material is not ShaderMaterial shader || shader.ResourceName != NativeNifEffectMaterial.ResourceIdentity)
             throw new NotSupportedException("Particle material has no admitted source shader.");
@@ -583,13 +571,12 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
         {
             var origin = _source.WorldSpace ? camera.GlobalPosition : ToLocal(camera.GlobalPosition);
             // Rendering never reorders simulation storage or its identity map.
-            // Compute each key once and sort compact, reusable draw indices.
+            // Compute each key once and sort reusable distance/index values.
             for (var index = 0; index < ActiveCount; index++)
             {
-                _drawOrder[index] = index;
-                _drawDistances[index] = _particles[index].Position.DistanceSquaredTo(origin);
+                _drawOrder[index] = new(_particles[index].Position.DistanceSquaredTo(origin), index);
             }
-            Array.Sort(_drawOrder, 0, ActiveCount, _distanceOrder);
+            Array.Sort(_drawOrder, 0, ActiveCount);
         }
         var packStarted = Stopwatch.GetTimestamp();
         var minimum = new Vector3(float.PositiveInfinity, float.PositiveInfinity, float.PositiveInfinity);
@@ -601,7 +588,7 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
             if (_active[modifier.Name]) _activeDrawModifiers[drawModifierCount++] = modifier;
         for (var i = 0; i < ActiveCount; i++)
         {
-            ref var particle = ref _particles[camera is null ? i : _drawOrder[i]];
+            ref var particle = ref _particles[camera is null ? i : _drawOrder[i].Index];
             var radius = particle.Radius;
             var color = particle.InitialColor;
             for (var modifierIndex = 0; modifierIndex < drawModifierCount; modifierIndex++)
@@ -639,6 +626,7 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
         _uploadTicks += Stopwatch.GetTimestamp() - uploadStarted;
         ++_publicationCalls;
         _publishedParticles += ActiveCount;
+        _uploadedFloats += _drawBuffer.Length;
     }
 
     internal static Color ParticleColor(FalloutNifParticleColor source, float fraction)

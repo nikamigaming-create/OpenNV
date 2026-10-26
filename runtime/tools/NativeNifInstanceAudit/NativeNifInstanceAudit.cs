@@ -12,6 +12,10 @@ public partial class NativeNifInstanceAudit : Node
     {
         try
         {
+            if (OS.GetCmdlineUserArgs() is ["--particle-publication"])
+            {
+                ExerciseParticleBuffer(); ExerciseParticleTransformCache(); GetTree().Quit(); return;
+            }
             if (OS.GetCmdlineUserArgs() is ["--shader-no-fade"])
             {
                 ExerciseShaderNoFade(); GetTree().Quit(); return;

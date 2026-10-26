@@ -19,6 +19,7 @@ internal sealed partial class NativeNifAlphaSortBound : Node
 
     public override void _Process(double delta)
     {
+        using var frameWork = OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Measure(OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Owner.AlphaSort);
         if (GetViewport().GetCamera3D() is not { } camera) return;
         var center = _owner.ToGlobal(GetMeta(CenterMetadata).AsVector3());
         if (!GetMeta(StaticMetadata).AsBool() && _geometry.Length != 0)

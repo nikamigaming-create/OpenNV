@@ -1,12 +1,21 @@
 # Implementation plan
 
-Current user override (2026-10-25): **144 Hz or bust**. Required frame budget:
+Current user override (2026-10-26): **1:1 retail and 144 Hz or bust**. Keep one
+maintained main. The user clarifies that **144 Hz targets the VR headset**.
+Desktop draw cadence is a shared-runtime diagnostic, not headset acceptance.
+Require the physical runtime's supported/active refresh, actual eye dimensions,
+CPU/GPU frame times and delivered/missed compositor frames through ordinary
+outdoor movement, streaming and combat. Simulator cadence cannot certify this.
+Cheyenne must retain continuous source-owned poses while idle
+and moving, including outside and after cold Continue. A bounded snapping fix
+does not establish matched retail animation, presentation or campaign parity.
+Required frame budget:
 6.944 ms. The prior 49 FPS/720p diagnostic is rejected as a performance
 handoff. Optimize measured runtime owners while preserving gameplay, visual
 content, shadows, particles, collision and saves. Report CPU/GPU and actual
 draw-interval median/p95/p99, late frames, resolution and display refresh for
 ordinary movement, exterior streaming and combat. Distinguish uncapped engine
-throughput from 144 Hz presentation; stationary or low-resolution figures alone
+throughput from physical 144 Hz headset presentation; stationary or low-resolution figures alone
 do not pass this target.
 
 Updated 2026-10-23: the user directs complete-game playability in flat Fallout:

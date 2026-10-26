@@ -12,6 +12,10 @@ public partial class NativeLocomotionAudit : Node3D
             GD.Print($"OPENNV_NATIVE_NAVIGATION_OWNER_BUILD ownerBuild={typeof(NativeCapsuleNavigation).Module.ModuleVersionId} " +
                 "fixture=selected-by-arguments gameplay=separate parity=unverified");
             var arguments = OS.GetCmdlineUserArgs();
+            if (arguments is ["--step-query-resources"])
+            {
+                await CheckReusableStepQueries(); GetTree().Quit(); return;
+            }
             if (arguments.FirstOrDefault() == "--owned-wander")
             {
                 NativeOwnedWanderAudit.Run(arguments.Skip(1).ToArray()); GetTree().Quit(); return;
@@ -87,6 +91,7 @@ public partial class NativeLocomotionAudit : Node3D
                 GetTree().Quit(); return;
             }
             NativeNavigationContracts.Run();
+            await CheckReusableStepQueries();
             await CheckNavigationScheduling();
             await CheckRouteAccumulation();
             await CheckRouteSmoothing();

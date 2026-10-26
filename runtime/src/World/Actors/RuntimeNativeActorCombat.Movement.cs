@@ -139,6 +139,7 @@ internal sealed partial class RuntimeNativeActorCombat
 
     private void MoveActor(Vector3 localMotion, double delta, Vector3? waypoint = null)
     {
+        using var frameWork = OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Measure(OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Owner.ActorMove);
         var body = _mover!;
         var motion = body.GlobalBasis.Orthonormalized() * localMotion * _motionScale *
             CrippledLegMovementSpeedMultiplier();
@@ -156,8 +157,12 @@ internal sealed partial class RuntimeNativeActorCombat
         if (NativeCharacterStep.TryStep(body, motion, _context.StepHeight, out _stepBlock))
         { body.Velocity = Vector3.Down * .01f; body.MoveAndSlide(); }
         else body.MoveAndSlide();
-        _movementBlock = body.IsOnWall() && body.GetSlideCollisionCount() > 0
-            ? (body.GetSlideCollision(0).GetCollider() as Node)?.GetPath().ToString() : null;
+        _movementBlock = null;
+        if (body.IsOnWall() && body.GetSlideCollisionCount() > 0 && body.GetSlideCollision(0).GetCollider() is Node collider)
+        {
+            using var path = collider.GetPath();
+            _movementBlock = path.ToString();
+        }
     }
 
     private float CrippledLegMovementSpeedMultiplier()

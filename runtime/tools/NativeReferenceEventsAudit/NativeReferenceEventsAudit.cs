@@ -20,6 +20,10 @@ public partial class NativeReferenceEventsAudit : Node
         RuntimeNativePlayer? player = null;
         try
         {
+            if (OS.GetCmdlineUserArgs() is ["--idle-reference-closures"])
+            {
+                ExerciseIdleReferenceClosures(); GetTree().Quit(); return;
+            }
             if (OS.GetCmdlineUserArgs() is ["--owned-lockpick-models", var modelGame, .. var modelOptions])
             {
                 await OwnedLockpickModels(modelGame, modelOptions.Length == 1 ? modelOptions[0] : null);
@@ -315,6 +319,7 @@ public partial class NativeReferenceEventsAudit : Node
             AnimatedActivators(records);
             DisabledSpeech(records);
             HitEvents();
+            ExerciseIdleReferenceClosures();
             await LockpickInput();
             GD.Print("OPENNV_NATIVE_REFERENCE_EVENTS_AUDIT_PASS physicalContacts=true primitiveHalfExtents=true axisConversion=true modelLess=true leave=true reentry=true retainedContacts=true retainedOnLoad=true activation=true faultReentryRetained=true faultActivationRetained=true localState=true delayedDeath=true killerFilter=true questDeathResult=true livePerkParameters=true parity=unverified");
         }

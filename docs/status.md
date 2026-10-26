@@ -1,6 +1,7 @@
 # Product status
 
-Updated 2026-10-25. User priority: **fully playable flat Fallout: New Vegas**.
+Updated 2026-10-26. User priority: **1:1 retail, fully playable flat Fallout:
+New Vegas and sustained exterior 144 Hz in the VR headset**.
 FO1 remains an incomplete classic preview with selected movement, inventory,
 equipment, door and save flows. Complete campaign execution and 1:1 3D art are
 unverified. See [current-work.md](current-work.md) for the active owner.
@@ -46,7 +47,7 @@ the evidence-backed repair inventory and work order.
 | Audio/UI | Wrist page changes are visible; complete interaction/input release remains unaccepted. Radio broadcast scheduling is unbound. Audio mix/sync is not certified by this review. |
 | Traversal | Cross-cell NPC/creature route owners, authored floor destinations and the prior Cheyenne saloon portal remain open. |
 | Fast travel | Earlier bounded flat/XR travel worked. Final population and saving after travel remain unaccepted. |
-| Performance | Source-owned immutable DDS reuse reduces the selected player construction from 208 uploads to 51 with identical 101 audited actor-part bindings and verified retirement. An ordered, contended loading pair is 30.26 versus 21.17 seconds; the latter still has a 1,063 ms interval. Streaming, combat spikes, save capture/write and headset timing remain open. |
+| Performance | Source-owned DDS reuse, fixed native names and bounded particle transform reuse are retained. The runtime removes measured reference/navigation/script allocations, reuses planning query wrappers and preserves exact particle sorting. The final selected default-renderer uncapped 4K exterior sample fails the 6.944 ms budget: median 13.09 ms, p99 24.23 ms, all 512 intervals late. Separate rendering remains experimental. The user targets 144 Hz in the physical headset; desktop data and simulator runs do not establish this. Movement, streaming, combat, loading, save stalls and headset acceptance remain open. |
 | Builds | Package g passed earlier build/hash/component checks, then failed the user's playtest. The selected private 90-second development edit is not acceptance evidence. |
 | Content | Official ESM selection logged; installed loose/resource winners still need provenance review. Native extensions disabled; pristine vanilla is not established by plugin selection alone. |
 | FO3 | Earlier rendered New Game reached birth stage 22. No accepted standalone FO3 VR release. |
