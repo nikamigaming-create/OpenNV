@@ -7,6 +7,14 @@ using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.World.Cells;
 
+if (args is ["--test-model-roots"]) { CellModelPathContracts.Run(); return; }
+if (args is ["--owned-tree-nif-models", var treeModelsRoot])
+{
+    CellModelPathContracts.Run();
+    CellModelPathContracts.Owned(treeModelsRoot);
+    return;
+}
+
 if (args is ["--test-default-landscape-physics"])
 {
     DefaultLandscapePhysicsContracts.Run();

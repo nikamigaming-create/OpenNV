@@ -207,7 +207,8 @@ internal sealed record FalloutQuestScriptHost(Func<FalloutFormKey, short, Action
     Action? ResetPlayerHealth = null, Func<FalloutFormKey, FalloutFormKey?>? CurrentPackage = null,
     Func<FalloutFormKey, int>? Sitting = null, FalloutPlayerTagSkills? TagSkills = null,
     Func<FalloutFormKey, FalloutFormKey, bool>? IsInCell = null, Action<double>? RewardXp = null,
-    FalloutGameTime? GameTime = null);
+    FalloutGameTime? GameTime = null,
+    Func<FalloutPluginRecord, FalloutPluginRecord, FalloutGameModeProgram, bool>? CanRetryPlayerDeathRead = null);
 
 internal sealed partial class FalloutQuestScripts
 {

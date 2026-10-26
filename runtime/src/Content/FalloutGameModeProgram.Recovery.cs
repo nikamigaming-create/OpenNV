@@ -2,6 +2,15 @@ namespace OpenNV.Runtime.Content;
 
 internal sealed partial class FalloutGameModeProgram
 {
+    internal bool CanRetryInitialPlayerDeathRead(Func<string, FalloutScriptFunction?> functions)
+    {
+        if (_lines.Count == 0 || !_lines[0][0].Equals("if", StringComparison.OrdinalIgnoreCase)) return false;
+        var operand = _lines[0].Skip(1).SkipWhile(token => token == "(").FirstOrDefault();
+        return operand is not null && operand.Split('.') is [var receiver, var operation] &&
+            FalloutScriptBindings.IsPlayer(receiver) && operation.Equals("GetDead", StringComparison.OrdinalIgnoreCase) &&
+            functions(operand) is { ReadOnly: true } && CanRetryMissingRead(operand, functions);
+    }
+
     internal bool CanRetryMissingCommand(string command, Func<string, FalloutScriptFunction?> functions, int argumentCount = 2)
     {
         var found = false;

@@ -36,7 +36,10 @@ internal sealed record FalloutReferenceScriptHost(Func<FalloutFormKey, FalloutFo
     Action? ResetPlayerHealth = null, Func<FalloutFormKey, FalloutFormKey?>? CurrentPackage = null,
     Func<FalloutFormKey, int>? Sitting = null, FalloutPlayerTagSkills? TagSkills = null,
     Func<FalloutFormKey, FalloutFormKey, bool>? IsInCell = null, Func<bool>? IsHardcore = null,
-    Action<double>? RewardXp = null, FalloutGameTime? GameTime = null);
+    Action<double>? RewardXp = null, FalloutGameTime? GameTime = null,
+    Func<FalloutFormKey, bool>? IsDead = null,
+    Func<FalloutFormKey, float>? HealthPercentage = null,
+    Func<string, int>? MiscStatistic = null, Func<FalloutFormKey, bool>? IsSneaking = null);
 internal sealed record FalloutReferenceScriptEventResult(FalloutFormKey Reference, string Event, int Blocks, string? Error,
     string? RecoveredError = null);
 internal sealed record FalloutReferenceScriptEvent(string Name, FalloutFormKey? ActionReference = null,
@@ -274,6 +277,24 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
         Execute(owner.FormKey, bindings, program, null, seconds);
     }
 
+    internal bool CanRetryPlayerDeathRead(FalloutPluginRecord owner, FalloutPluginRecord script, FalloutGameModeProgram program)
+    {
+        if (host.IsDead is null) return false;
+        var safe = false;
+        _ = Steps(owner.FormKey, Bindings(owner, script, script.ReadSubrecords()), program, null, 0,
+            inspectFunctions: functions => safe = program.CanRetryInitialPlayerDeathRead(functions));
+        if (!safe) return false;
+        var source = FalloutDialogueTopic.ScriptText(script.ReadSubrecords().Single(field => field.Signature == "SCTX").Data.Span);
+        foreach (var block in FalloutGameModeProgram.ReadEvents(source).Where(block =>
+            block.Event.Equals("MenuMode", StringComparison.OrdinalIgnoreCase) && block.Program.HasStatements))
+        {
+            _ = Steps(owner.FormKey, Bindings(owner, script, script.ReadSubrecords()), block.Program, null, 0,
+                inspectFunctions: functions => safe = block.Program.CanRetryInitialPlayerDeathRead(functions));
+            if (!safe) return false;
+        }
+        return safe;
+    }
+
     internal void ExecutePackageEvent(FalloutPackageEvent program, FalloutFormKey actor)
     {
         program.ValidateScript();
@@ -481,6 +502,11 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
             if (parts.Length == 1 && operation == "getdeadcount")
                 return new([FalloutScriptArgumentKind.Value], arguments => world.GetDeadCount(arguments[0].Value.FormKey(records)))
                 { ReadOnly = true };
+            if (parts.Length == 1 && operation == "getpcmiscstat")
+                return new([FalloutScriptArgumentKind.String], arguments =>
+                    (host.MiscStatistic ?? throw new NotSupportedException("Miscellaneous statistic query has no authoritative count owner."))
+                    (arguments[0].Text))
+                { ReadOnly = true };
             if (parts.Length == 1 && operation == "setonhiteventhandler")
                 return FalloutScriptHitHandlers.RegistrationFunction(records, () => Events().Hits);
             if (parts.Length == 1 && operation == "getlocationspecificloadscreensonly")
@@ -526,6 +552,14 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                     var inventory = host.Inventory ?? throw new NotSupportedException("Weapon query has no shared inventory owner.");
                     return operation == "isweaponout" ? inventory.IsWeaponOut(Target()) ? 1 : 0 : inventory.WeaponAnimationType(Target());
                 })
+                { ReadOnly = true };
+            if (parts.Length <= 2 && operation == "getweaponhealthperc")
+                return new([], _ => (host.Inventory ?? throw new NotSupportedException("Weapon condition query has no shared inventory owner."))
+                    .WeaponHealthPercentage(Target()))
+                { ReadOnly = true };
+            if (parts.Length <= 2 && operation == "issneaking")
+                return new([], _ => (host.IsSneaking ?? throw new NotSupportedException("Sneaking query has no actor activity owner."))
+                    (Target()) ? 1 : 0)
                 { ReadOnly = true };
             if (parts.Length <= 2 && operation == "getequipped")
                 return new([FalloutScriptArgumentKind.Value], arguments =>
@@ -729,7 +763,22 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
             if (parts.Length <= 2 && parts[^1].Equals("GetPlayerTeammate", StringComparison.OrdinalIgnoreCase))
                 return new([], _ => world.Get(Target()).PlayerTeammate ? 1 : 0);
             if (parts.Length <= 2 && parts[^1].Equals("GetDead", StringComparison.OrdinalIgnoreCase))
-                return new([], _ => world.IsDead(Target()) ? 1 : 0);
+                return new([], _ => (host.IsDead ?? (target => records.RuntimeFormId(target) == 0x14
+                    ? throw new NotSupportedException("Player death query has no authoritative vitals owner.")
+                    : world.IsDead(target)))(Target()) ? 1 : 0)
+                { ReadOnly = true };
+            if (parts.Length <= 2 && operation == "gethealthpercentage")
+                return new([], _ =>
+                {
+                    var target = Target();
+                    if (host.HealthPercentage is { } percentage) return percentage(target);
+                    if (records.RuntimeFormId(target) == 0x14)
+                        throw new NotSupportedException("Player health percentage has no authoritative vitals owner.");
+                    var health = world.Health(target);
+                    var maximum = health.Base + health.Permanent + health.Temporary;
+                    return maximum <= 0 ? 0 : Math.Clamp(health.Current / maximum, 0, 1);
+                })
+                { ReadOnly = true };
             if (parts.Length <= 2 && parts[^1].Equals("GetMapMarkerVisible", StringComparison.OrdinalIgnoreCase))
                 return new([], _ => world.MapMarkerVisibility(Target()));
             if (parts.Length <= 2 && parts[^1].Equals("IsInCombat", StringComparison.OrdinalIgnoreCase))

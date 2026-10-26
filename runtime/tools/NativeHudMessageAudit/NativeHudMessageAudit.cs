@@ -24,6 +24,12 @@ public partial class NativeHudMessageAudit : Node
         try
         {
             var args = OS.GetCmdlineUserArgs();
+            if (args is [var controlRoot, "--controls"])
+            {
+                _controlMode = true;
+                CheckControlHandoff(controlRoot);
+                return;
+            }
             _noteMode = args.Length == 3 && args[1] == "--note";
             _objectiveMode = args.Length is 4 or 5 && args[1] == "--objective";
             if (!_objectiveMode && !_noteMode && args.Length is < 1 or > 2) throw new ArgumentException("Expected Data [capture] or Data --objective quest index [capture].");
@@ -66,6 +72,7 @@ public partial class NativeHudMessageAudit : Node
     }
     public override void _Process(double delta)
     {
+        if (_controlMode) return;
         if (_hud is null || ++_frames < 4) return;
         if (!_shown)
         {

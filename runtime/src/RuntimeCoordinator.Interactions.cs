@@ -18,6 +18,7 @@ public partial class RuntimeCoordinator
     private NativeOwnedPipBoy? _nativePipBoy;
     private void AddNativeGameplayHud()
     {
+        if (_nativeXr is null) _nativeQuestScripts!.RetireBootstrapHud();
         var layer = new CanvasLayer { Name = "NativeGameplayHud", Layer = 2 };
         _nativeGameplayHud = new(_nativePluginStack!, _configuration.Player.DesktopInput.Activate.PhysicalKey,
             NativeAimedTarget, () => _nativeXr is null && _nativePlayer is { ModalInput: false } &&
@@ -27,7 +28,8 @@ public partial class RuntimeCoordinator
         layer.AddChild(_nativeGameplayHud);
         _nativeHudMessages = new(_nativePluginStack!, _nativeInventory.Notifications,
             () => _nativeXr is null && _nativePlayer is { ModalInput: false } && !_nativeDoorLoading && !GetTree().Paused, _nativeQuestState,
-            () => _nativeLoadingScreens is not null || _nativeLoadingLayer is not null, _nativeQuestScripts!.Scripts.Sounds);
+            () => _nativeLoadingScreens is not null || _nativeLoadingLayer is not null, _nativeQuestScripts!.Scripts.Sounds,
+            controls: () => _nativeScriptStorage?.Controls);
         layer.AddChild(_nativeHudMessages);
         layer.AddChild(_nativeSubtitles ?? throw new InvalidOperationException("Source subtitles were not prepared with the player.")); AddChild(layer);
         _nativePlayer!.OpenPipBoy += OpenNativePipBoy;

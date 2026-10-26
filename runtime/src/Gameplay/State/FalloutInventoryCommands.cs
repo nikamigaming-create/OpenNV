@@ -29,6 +29,10 @@ internal sealed class FalloutInventoryCommands(FalloutPluginStack records, Fallo
     internal uint WeaponAnimationType(FalloutFormKey target) => EquippedObject(target, 5) is { } weapon
         ? FalloutWeaponPresentation.ReadScriptAnimationType(records.GetEffective(weapon)) : 0;
 
+    internal float WeaponHealthPercentage(FalloutFormKey target) => EquippedObject(target, 5) is { } weapon
+        ? FalloutWeaponCondition.SelectedCondition(Inventory(target).Item(weapon) ??
+            throw new InvalidDataException("Equipped weapon has no inventory instance.")) * 100 : 100;
+
     internal bool IsEquipped(FalloutFormKey target, FalloutFormKey item)
     {
         return IsPlayer(target)

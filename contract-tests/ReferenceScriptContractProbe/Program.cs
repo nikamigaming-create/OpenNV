@@ -11,6 +11,24 @@ if (args is ["--destruction-contracts"])
     return;
 }
 
+if (args is ["--tutorial-actor-query-contracts"])
+{
+    TutorialActorQueryContracts.Run();
+    return;
+}
+
+if (args is ["--owned-tutorial-queries", var tutorialRoot])
+{
+    OwnedTutorialProbe.Run(tutorialRoot);
+    return;
+}
+
+if (args is ["--quest-menu-contracts"])
+{
+    QuestMenuContracts.Run();
+    return;
+}
+
 if (args is ["--remove-note-receiver-contracts", .. var removalReceiverExecutor])
 {
     QuestStateQueryContracts.RunRemoveNoteReceivers(removalReceiverExecutor.SingleOrDefault());
@@ -1362,6 +1380,7 @@ ActivationParentContracts.Run();
 DefaultActivationContracts.Run();
 ScriptManualSaveContracts.Run();
 HardcoreQueryContracts.Run();
+TutorialActorQueryContracts.Run();
 GameTimeCommandContracts.Run();
 ActorAlertContracts.Run();
 StageConditionScopeContracts.Run();

@@ -27,7 +27,7 @@ public partial class NativeLocomotionAudit
             scene.AddChild(body); return body;
         }
         var first = Body(-1); var second = Body(1);
-        IEnumerator<IReadOnlyList<Vector3>?>? a = null, b = null, retired = null;
+        IEnumerator<IReadOnlyList<Vector3>?>? a = null, b = null, lattice = null, retired = null;
         try
         {
             await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
@@ -55,6 +55,27 @@ public partial class NativeLocomotionAudit
                 workA.State != "completed" || workB.State != "completed" || workA.Grants == 0 || workB.Grants == 0 ||
                 workA.GuidedSamples == 0 || workB.GuidedSamples == 0 || NativeCapsuleNavigation.RegisteredSearches != baseline)
                 throw new InvalidOperationException("Two scheduled actual capsule queries lost progress, support or registration cleanup.");
+            // With no guide, a coarse neighbor contains several complete
+            // capsule samples. Expanding all eight neighbors in one MoveNext
+            // used to bypass the shared time budget until the node completed.
+            var probe = new NativeNavigationProbe(null);
+            lattice = NativeCapsuleNavigation.Search(first, first.GlobalPosition, targetA, .4f, .9f,
+                _ => true, 512, probe).GetEnumerator();
+            IReadOnlyList<Vector3>? latticePath = null;
+            for (var step = 0; step < 20000 && latticePath is null; step++)
+            {
+                var samples = probe.SampledEdges;
+                if (!lattice.MoveNext()) throw new InvalidOperationException("Lattice query ended without a supported route.");
+                if (probe.SampledEdges - samples > 1)
+                    throw new InvalidOperationException("One lattice/smoothing iterator step ran multiple complete capsule samples.");
+                latticePath = lattice.Current;
+                if (step % 128 == 0 && latticePath is null) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            }
+            var latticeWork = NativeCapsuleNavigation.Work(lattice)!;
+            if (latticePath is null || latticePath[^1].DistanceTo(targetA) > .02f || latticeWork.ExpandedNodes == 0 ||
+                latticeWork.SmoothingSteps == 0 || probe.SampledEdges <= latticeWork.ExpandedNodes * 8 ||
+                latticeWork.State != "completed" || NativeCapsuleNavigation.RegisteredSearches != baseline)
+                throw new InvalidOperationException("Resumable lattice did not retain its sampled native route and smoothing.");
             retired = NativeCapsuleNavigation.Search(first, first.GlobalPosition, targetA, .4f, .3f, _ => true).GetEnumerator();
             scene.RemoveChild(first);
             if (NativeCapsuleNavigation.Work(retired) is not { State: "owner-retired", IteratorSteps: 0 } ||
@@ -67,11 +88,12 @@ public partial class NativeLocomotionAudit
             GD.Print($"OPENNV_NATIVE_NAVIGATION_SCHEDULING_PASS firstSteps={workA.IteratorSteps} secondSteps={workB.IteratorSteps} " +
                 $"firstGrants={workA.Grants} secondGrants={workB.Grants} firstDeniedBudget={workA.DeniedBudget} " +
                 $"secondDeniedBudget={workB.DeniedBudget} firstDeniedTurn={workA.DeniedTurn} secondDeniedTurn={workB.DeniedTurn} " +
+                $"latticeNodes={latticeWork.ExpandedNodes} latticeSamples={probe.SampledEdges} resumableSamples=true " +
                 "nativeBodyRetirement=true collisionAdmission=unchanged gameplay=separate parity=unverified");
         }
         finally
         {
-            a?.Dispose(); b?.Dispose(); retired?.Dispose();
+            a?.Dispose(); b?.Dispose(); lattice?.Dispose(); retired?.Dispose();
             if (GodotObject.IsInstanceValid(first) && !first.IsInsideTree()) first.Free();
             scene.Free();
         }

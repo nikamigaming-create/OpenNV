@@ -118,7 +118,12 @@ internal partial class RuntimeNativeOpeningStageDriver
                 ReadActorValue: ReadActorValue, ChangeActorValue: ChangeActorValue, Inventory: InventoryCommands, Challenges: _scripts.Challenges,
                 HeadingAngle: ReferenceHeadingAngle, ResetPlayerHealth: _vitals.ResetHealth,
                 CurrentPackage: CurrentActorPackage, Sitting: ActorSitting, TagSkills: _tagSkills, IsInCell: IsInCell, IsHardcore: () => _scripts.Session.Hardcore,
-                RewardXp: value => _experience.Reward(value), GameTime: _gameTime));
+                RewardXp: value => _experience.Reward(value), GameTime: _gameTime,
+                IsDead: DialogueActorDead, HealthPercentage: ActorHealthPercentage,
+                MiscStatistic: name => _scripts.MiscStatistics.Read(FalloutMiscStatisticNames.Index(
+                    RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("Statistic declarations have no owned source."), name)),
+                IsSneaking: actor => _pluginStack.RuntimeFormId(actor) == 0x14 ? _player.Activity.Sneaking :
+                    throw new NotSupportedException("NPC sneaking query has no retained actor activity owner.")));
         _resultScripts = results;
         _stageResults = new(_pluginStack, _quests, results.StageSteps,
             EvaluateMessageCondition, () => !_moviePlaying, evaluateRunOn: true);
@@ -126,6 +131,7 @@ internal partial class RuntimeNativeOpeningStageDriver
         _scriptHost = _scriptHost with
         {
             ExecuteProgram = results.ExecuteProgram,
+            CanRetryPlayerDeathRead = results.CanRetryPlayerDeathRead,
             InvokeFunction = results.InvokeFunction,
             TagSkills = _tagSkills,
             IsInCell = IsInCell
@@ -141,14 +147,7 @@ internal partial class RuntimeNativeOpeningStageDriver
                 ? _pluginStack.RuntimeFormId(reference) == 0x14 ? _activeCell : _scripts.References!.Placement(reference).Cell
                 : null,
             _ => null,
-        }, actor =>
-        {
-            if (_pluginStack.RuntimeFormId(actor) == 0x14)
-                return Vitals.ExactHitPoints / Vitals.MaximumHitPoints;
-            var health = _scripts.References!.Health(actor);
-            var maximum = health.Base + health.Permanent + health.Temporary;
-            return maximum <= 0 ? 0 : Math.Clamp(health.Current / maximum, 0, 1);
-        }, DialogueActorValue, actor => _scripts.References!.Get(actor).Templates,
+        }, ActorHealthPercentage, DialogueActorValue, actor => _scripts.References!.Get(actor).Templates,
             actor => _scripts.References!.Get(actor).TalkedToPlayer = true,
             actor => _scripts.References!.Get(actor).TalkedToPlayer,
             actor => _scripts.References!.ActorFactions(actor), () => _character.Female,
@@ -184,6 +183,15 @@ internal partial class RuntimeNativeOpeningStageDriver
         var world = _scripts.References!;
         world.InitializeSourceCorpse(actor);
         return world.IsDead(actor);
+    }
+
+    private float ActorHealthPercentage(FalloutFormKey actor)
+    {
+        if (_pluginStack.RuntimeFormId(actor) == 0x14)
+            return Vitals.MaximumHitPoints <= 0 ? 0 : Math.Clamp(Vitals.ExactHitPoints / Vitals.MaximumHitPoints, 0, 1);
+        var health = _scripts.References!.Health(actor);
+        var maximum = health.Base + health.Permanent + health.Temporary;
+        return maximum <= 0 ? 0 : Math.Clamp(health.Current / maximum, 0, 1);
     }
 
     private float DialogueActorValue(FalloutFormKey actor, int value)

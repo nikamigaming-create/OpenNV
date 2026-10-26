@@ -21,6 +21,7 @@ internal sealed class NativeNavigationProbe(NativeNavigationContact? corridorCon
     internal NativeNavigationContact? RejectedContact { get; private set; }
     internal Vector3[] Approach { get; private set; } = [];
     internal int RejectedEdges { get; private set; }
+    internal long SampledEdges { get; private set; }
     internal NativeNavigationRejection? LastRejection { get; private set; }
     internal NativeNavigationRejection? GuideRejection { get; private set; }
     internal NativeNavigationSweep? LastDownwardSweep { get; private set; }
@@ -40,7 +41,7 @@ internal sealed class NativeNavigationProbe(NativeNavigationContact? corridorCon
         if (_rejections.ContainsKey(reason) || _rejections.Count < 16) _rejections[reason] = LastRejection;
         else OmittedRejectionObservations++;
     }
-    internal void BeginEdge() => LastDownwardSweep = null;
+    internal void BeginEdge() { SampledEdges++; LastDownwardSweep = null; }
     internal void ObserveDownward(NativeNavigationSweep sweep)
     {
         LastDownwardSweep = sweep with

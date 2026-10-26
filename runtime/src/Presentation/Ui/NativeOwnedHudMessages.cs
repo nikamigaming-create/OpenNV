@@ -12,6 +12,11 @@ internal sealed partial class NativeOwnedHudMessages : Control
     private readonly FalloutPluginStack _records;
     private readonly FalloutHudNotifications _queue;
     private readonly FalloutScriptSounds? _noteSounds;
+    private readonly Func<FalloutInputControls?> _controls;
+    private FalloutInputControls? _displayedControlOwner;
+    private long _controlRevision = -1;
+    internal long AdvanceCount { get; private set; }
+    internal double AdvancedSeconds { get; private set; }
     private readonly Func<bool> _shown;
     private readonly Func<bool> _loading;
     private readonly FalloutHudMessageLayout _declaration;
@@ -34,15 +39,18 @@ internal sealed partial class NativeOwnedHudMessages : Control
         noteSound = _noteSounds?.LastRequest,
         visible = Visible,
         elapsed = _queue.Elapsed,
+        advances = AdvanceCount,
+        advancedSeconds = AdvancedSeconds,
         text = _tiles.String(IsObjective(_queue.Current?.Event) ? _objective : _text),
         icon = _displayIcon,
         error = Error,
         source = "owned-HUDMainMenu-templates-fonts-declarations",
-        unbound = "native-fade-clock,glow,event-alignment,note-feedback-readiness,cross-kind-tail-dedup"
+        unbound = "native-fade-clock,glow,event-alignment,note-feedback-readiness,cross-kind-tail-dedup,retail-control-glyph-and-plain-minus-format"
     };
 
     internal NativeOwnedHudMessages(FalloutPluginStack records, FalloutHudNotifications queue, Func<bool>? shown = null,
-        FalloutQuestState? quests = null, Func<bool>? loading = null, FalloutScriptSounds? noteSounds = null)
+        FalloutQuestState? quests = null, Func<bool>? loading = null, FalloutScriptSounds? noteSounds = null,
+        Func<FalloutInputControls?>? controls = null)
     {
         Name = "HUDMainMenuMessages";
         MouseFilter = MouseFilterEnum.Ignore;
@@ -50,6 +58,7 @@ internal sealed partial class NativeOwnedHudMessages : Control
         _records = records;
         _queue = queue;
         _noteSounds = noteSounds;
+        _controls = controls ?? (() => null);
         _quests = quests ?? new(records);
         _shown = shown ?? (() => true);
         _loading = loading ?? (() => false);
@@ -151,7 +160,15 @@ internal sealed partial class NativeOwnedHudMessages : Control
             }
             Visible = !loading && _shown();
             if (!Visible) return; // Hidden menus must not consume unseen notifications.
+            var controls = _controls();
+            if (!ReferenceEquals(_displayedControlOwner, controls) || _controlRevision != (controls?.Revision ?? -1))
+            {
+                _displayedControlOwner = controls;
+                _controlRevision = controls?.Revision ?? -1;
+                _resolved.Clear(); _displayed = 0;
+            }
             _queue.Advance(delta, value => Resolve(value).Seconds);
+            AdvanceCount++; AdvancedSeconds += delta;
             var current = _queue.Current;
             var objective = IsObjective(current?.Event);
             if (objective)
@@ -244,7 +261,7 @@ internal sealed partial class NativeOwnedHudMessages : Control
                 if (iconRecord.Signature != "MICN") throw new InvalidDataException("Message icon is not MICN.");
                 icon = FalloutDialogueTopic.Text(iconRecord.ReadSubrecords().Single(field => field.Signature == "ICON").Data.Span);
             }
-            result = (message.Text, icon, message.DisplaySeconds.Value);
+            result = (FalloutMessageControlTokens.Resolve(message.Text, ControlLabel), icon, message.DisplaySeconds.Value);
         }
         else if (value.Kind == FalloutHudEventKind.RadioDiscovered)
         {
@@ -268,6 +285,15 @@ internal sealed partial class NativeOwnedHudMessages : Control
         else throw new NotSupportedException($"HUD event {value.Kind} has no presentation owner.");
         _resolved.Add(value, result);
         return result;
+    }
+    private string ControlLabel(uint control)
+    {
+        var controls = _controls() ?? throw new NotSupportedException("NativeOwnedHudMessages has no live profile control owner.");
+        var code = controls.Get(control);
+        if (code == -1) code = controls.Get(control, 1);
+        if (code == -1) throw new NotSupportedException($"NativeOwnedHudMessages control {control} is unbound in both desktop input lanes.");
+        using var input = InputSystem.NativeScriptKeys.Create(code);
+        return input is InputEventKey key ? key.AsTextPhysicalKeycode() : input.AsText();
     }
     private static bool IsObjective(FalloutHudEvent? value) => value?.Kind is FalloutHudEventKind.ObjectiveDisplayed or FalloutHudEventKind.ObjectiveCompleted;
     private static string Format(string format, IReadOnlyList<string> arguments)

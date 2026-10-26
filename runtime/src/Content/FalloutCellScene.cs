@@ -464,9 +464,12 @@ internal static class FalloutCellSceneReader
     {
         var path = FalloutBsaArchive.CanonicalPath(value.Trim().TrimStart('\\', '/'));
         if (path.StartsWith(DataPrefix, StringComparison.OrdinalIgnoreCase)) path = path[DataPrefix.Length..];
-        if (path.StartsWith(MeshesPrefix, StringComparison.OrdinalIgnoreCase) || path.StartsWith(TreesPrefix, StringComparison.OrdinalIgnoreCase))
-            return path;
-        return (signature == "TREE" && path.EndsWith(".spt", StringComparison.OrdinalIgnoreCase) ? TreesPrefix : MeshesPrefix) + path;
+        if (path.StartsWith(MeshesPrefix, StringComparison.OrdinalIgnoreCase)) return path;
+        var speedTree = signature == "TREE" && path.EndsWith(".spt", StringComparison.OrdinalIgnoreCase);
+        // NIF models remain relative to meshes even when their first folder is
+        // trees. Only SpeedTree resources use the separate Data/trees root.
+        if (speedTree && path.StartsWith(TreesPrefix, StringComparison.OrdinalIgnoreCase)) return path;
+        return (speedTree ? TreesPrefix : MeshesPrefix) + path;
     }
 
     private static float ReadFiniteSingle(

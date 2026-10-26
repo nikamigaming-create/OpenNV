@@ -2,7 +2,7 @@ using System.Buffers.Binary;
 using System.Text;
 using OpenNV.Runtime.Content;
 
-internal static class CellModelPathContracts
+internal static partial class CellModelPathContracts
 {
     internal static void Run()
     {
@@ -17,6 +17,12 @@ internal static class CellModelPathContracts
                 ("TREE", "Data/Trees/Shrub.SPT", "trees\\shrub.spt"),
                 ("TREE", "\\Trees\\Shrub.SPT", "trees\\shrub.spt"),
                 ("TREE", "Plants/Tree.NIF", "meshes\\plants\\tree.nif"),
+                ("TREE", "Trees/Tree.NIF", "meshes\\trees\\tree.nif"),
+                ("STAT", "trees\\barrel_cactus\\NV_barrelcactus01.NIF", "meshes\\trees\\barrel_cactus\\nv_barrelcactus01.nif"),
+                ("STAT", "trees\\barrel_cactus\\NV_barrelcactus02.NIF", "meshes\\trees\\barrel_cactus\\nv_barrelcactus02.nif"),
+                ("STAT", "trees\\prickly_pear_cactus\\NV_pricklypearcactus02.NIF", "meshes\\trees\\prickly_pear_cactus\\nv_pricklypearcactus02.nif"),
+                ("STAT", "Data/Trees/Tree.NIF", "meshes\\trees\\tree.nif"),
+                ("STAT", "Meshes/Trees/Tree.NIF", "meshes\\trees\\tree.nif"),
                 ("STAT", "Data/Meshes/Rock.NIF", "meshes\\rock.nif"),
                 ("STAT", "\\Architecture\\Rock.NIF", "meshes\\architecture\\rock.nif"),
                 ("TREE", "Meshes/Custom.SPT", "meshes\\custom.spt")
@@ -45,7 +51,13 @@ internal static class CellModelPathContracts
                     throw new InvalidDataException("Winning model normalization lost its authored resource root or format.");
             if (cell.References.Count != cases.Length || cell.References.Single(reference => reference.FormKey.ObjectId == 0x300).Flags != 0x8000)
                 throw new InvalidDataException("Model resource dispatch changed the source reference denominator or distant flag.");
-            Console.WriteLine("OPENNV_CELL_MODEL_ROOT_CONTRACT_PASS sourceRoots=true speedTree=true nif=true placementsRetained=true");
+            foreach (var invalid in new[] { "", "trees/../outside.nif", "meshes/./tree.nif", "trees//tree.nif", "C:/outside.nif" })
+            {
+                try { FalloutCellSceneReader.NormalizeModelPath(invalid, "STAT"); }
+                catch (InvalidDataException) { continue; }
+                throw new InvalidDataException("Malformed model path entered the resource namespace.");
+            }
+            Console.WriteLine("OPENNV_CELL_MODEL_ROOT_CONTRACT_PASS sourceRoots=true speedTree=true treesNif=true nif=true placementsRetained=true malformedRefused=true");
         }
         finally { Directory.Delete(directory, true); }
     }

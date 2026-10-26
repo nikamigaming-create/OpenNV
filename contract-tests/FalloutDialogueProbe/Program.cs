@@ -3,6 +3,8 @@ using System.Text;
 using OpenNV.Runtime.Content;
 
 if (args is ["--head-persistence-contracts"]) { HeadTrackingProbe.Run(); return; }
+if (args is ["--hud-control-token-contracts"]) { HudControlTokenProbe.Run(); return; }
+if (args is ["--owned-hud-control-tokens", var tokenRoot]) { HudControlTokenProbe.Run(); HudControlTokenProbe.Owned(tokenRoot); return; }
 
 BitmapFontEncodingProbe.Run();
 if (args is ["--font-encoding-contracts"]) return;
@@ -35,6 +37,7 @@ ActorPackageCommandProbe.Exercise();
 IdleCollectionProbe.Run();
 IdleConditionProbe.Run();
 HudDeclarationsProbe.Run();
+HudControlTokenProbe.Run();
 SubtitleDeclarationsProbe.Run();
 RaceMenuDevicesProbe.Run();
 MessageMenuDeclarationsProbe.Run();
