@@ -15,9 +15,12 @@ internal partial class RuntimeNativeReferencePresentation
 
     private void BindObjectAnimation(FalloutFormKey key, Node3D node)
     {
-        BindObjectPhysics(key, node);
         if (node is RuntimeNativeNpc or RuntimeNativeCreature) return;
-        var controllers = NodeTraversal.SelfAndDescendants<RuntimeNifControllerPlayer>(node).ToArray();
+        // Physics and animation bind the same source hierarchy. Snapshot it
+        // once in source child order before restoring either owner.
+        var sourceNodes = NodeTraversal.SelfAndDescendants<Node>(node).ToArray();
+        BindObjectPhysics(key, sourceNodes.OfType<RuntimeNifRigidBody>().Where(body => !body.Freeze).ToArray());
+        var controllers = sourceNodes.OfType<RuntimeNifControllerPlayer>().ToArray();
         var managed = controllers.Where(controller => controller.SourceController >= 0).ToArray();
         if (managed.GroupBy(controller => (controller.SourceSha256, controller.SourceController)).Any(group => group.Count() != 1))
             throw new NotSupportedException($"Reference {key} has ambiguous source animation controllers.");

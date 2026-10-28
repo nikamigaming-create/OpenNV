@@ -13,6 +13,12 @@ public partial class NativeReferencePresentationAudit : Node3D
         try
         {
             var args = OS.GetCmdlineUserArgs();
+            if (args is [var exteriorMode, var exteriorRoot] && exteriorMode is "--exterior-index" or "--exterior-statics")
+            {
+                AuditExteriorIndex(exteriorRoot, exteriorMode == "--exterior-statics");
+                GetTree().Quit();
+                return;
+            }
             if (args.Length != 1) throw new ArgumentException("Reference presentation audit needs one owned root.");
             RuntimeLiveContentSource.Configure(args[0], RuntimeLiveContentSource.FalloutNewVegasGame);
             using var content = RuntimeLiveContentSource.Current!;
@@ -102,7 +108,12 @@ public partial class NativeReferencePresentationAudit : Node3D
                 throw new InvalidOperationException("Disable left rendering, processing or contact queries active.");
             world.SetEnabled(cards[0].FormKey, true);
             projection.Advance(0);
-            projection.SetResidency([], _ => throw new InvalidOperationException("Inactive cache constructed new 3D."), _ => true);
+            var residencyTiming = new Dictionary<string, double>();
+            projection.SetResidency([], _ => throw new InvalidOperationException("Inactive cache constructed new 3D."), _ => true, residencyTiming);
+            string[] phases = ["index", "departing", "departing-unbind", "departing-sound", "departing-disable", "departing-retain", "warm", "warm-reentry", "warm-eviction", "enable-state", "publish-index"];
+            if (residencyTiming.Count != phases.Length || phases.Any(phase =>
+                    !residencyTiming.TryGetValue("reference-residency-" + phase, out var elapsed) || !double.IsFinite(elapsed) || elapsed < 0))
+                throw new InvalidOperationException("Residency phase timing is incomplete or invalid.");
             events.SetResidency(scene with { References = [] }, root);
             if (events.AimedPresentation(Target(first)) is not null || events.TryActivate(Target(first)))
                 throw new InvalidOperationException("Warm nonresident geometry retained gameplay activation.");
@@ -139,5 +150,116 @@ public partial class NativeReferencePresentationAudit : Node3D
         }
         catch (Exception error) { GD.PushError(error.ToString()); GetTree().Quit(1); }
         finally { root?.Free(); prototype?.Scene.Root.Free(); }
+    }
+
+    private void AuditExteriorIndex(string ownedRoot, bool includeStatics)
+    {
+        RuntimeLiveContentSource.Configure(ownedRoot, RuntimeLiveContentSource.FalloutNewVegasGame);
+        using var content = RuntimeLiveContentSource.Current!;
+        using var records = FalloutPluginStack.Load(content.PluginSources);
+        var interior = FalloutCellSceneReader.Read(records, FalloutDialogueTopic.Find(records, "CELL", "GSDocMitchellHouse").FormKey);
+        var exit = FalloutDoorTransitionResolver.ResolveInteriorExits(records, interior).Single();
+        var position = exit.SourceDoor.Teleport!.Position;
+        var diameter = checked((int)FalloutInstallationSettings.Read(content).Unsigned("General", "uGridsToLoad"));
+        var grid = new FalloutExteriorGrid(records);
+        var first = grid.Resolve(exit.DestinationWorldspace, exit.DestinationScene.Cell.FormKey, position[0], position[1], diameter);
+        var second = grid.Resolve(exit.DestinationWorldspace, exit.DestinationScene.Cell.FormKey, position[0] + 4096, position[1], diameter);
+        using var world = new FalloutReferenceWorld(records);
+        world.LoadCell(first.Scene);
+        var root = new Node3D();
+        AddChild(root);
+        var prototypes = new Dictionary<string, RuntimeNativeNifPrototype>(StringComparer.OrdinalIgnoreCase);
+        Node3D? Materialize(FalloutPlacedReference reference)
+        {
+            var path = first.Scene.BaseObjects[reference.Base].ModelPath ?? throw new InvalidDataException("Source static has no model.");
+            if (!prototypes.TryGetValue(path, out var prototype))
+            {
+                if (!content.TryRead(path, null, out var bytes, out _)) throw new FileNotFoundException(path);
+                prototype = new(bytes, RuntimeConfiguration.Load().World.GameUnitsToMeters);
+                prototypes.Add(path, prototype);
+            }
+            var units = RuntimeConfiguration.Load().World.GameUnitsToMeters;
+            var transform = new Transform3D(GamebryoCoordinate.ConvertReferenceEuler(
+                new(reference.RotationRadians[0], reference.RotationRadians[1], reference.RotationRadians[2]), reference.Scale),
+                GamebryoCoordinate.ConvertVector(new(reference.Position[0], reference.Position[1], reference.Position[2])) * units);
+            var node = prototype.InstantiatePlaced(transform); root.AddChild(node); return node;
+        }
+        var projection = new RuntimeNativeReferencePresentation(world, first.Scene.References, Materialize);
+        root.AddChild(projection);
+        try
+        {
+            var selected = 0;
+            var failures = 0;
+            if (includeStatics)
+            {
+                var next = second.Scene.References.Select(reference => reference.FormKey).ToHashSet();
+                foreach (var reference in first.Scene.References.Where(reference => !next.Contains(reference.FormKey) &&
+                    first.Scene.BaseObjects[reference.Base].Signature == "STAT" &&
+                    first.Scene.BaseObjects[reference.Base].ModelPath is not null).Take(32))
+                {
+                    try { if (projection.Resolve(reference.FormKey) is not null) selected++; }
+                    catch (Exception error) when (error is IOException or InvalidDataException or NotSupportedException)
+                    { failures++; GD.Print($"OPENNV_EXTERIOR_RESIDENCY_SOURCE_FAILURE reference={reference.FormKey} error={error.Message}"); }
+                }
+                CompareTraversalStrategies(root);
+            }
+            world.LoadCell(second.Scene);
+            world.UnloadCell(first.Scene.Cell.FormKey);
+            var timing = new Dictionary<string, double>();
+            projection.SetResidency(second.Scene.References, _ => null, _ => includeStatics, timing);
+            if (timing.Count != 11 || timing.Values.Any(value => !double.IsFinite(value) || value < 0))
+                throw new InvalidDataException("Owned exterior residency timings are incomplete.");
+            GD.Print($"OPENNV_EXTERIOR_RESIDENCY_INDEX firstReferences={first.Scene.References.Count} secondReferences={second.Scene.References.Count} " +
+                $"phases={System.Text.Json.JsonSerializer.Serialize(timing)} sampledStaticReferences={selected} sourceFailures={failures} warmNodes={projection.WarmNodeCount} gameplayAndStreaming=unverified");
+        }
+        finally
+        {
+            root.Free();
+            foreach (var prototype in prototypes.Values) prototype.Scene.Root.Free();
+        }
+    }
+
+    private static void CompareTraversalStrategies(Node root)
+    {
+        static List<Node> Snapshot(Node root)
+        {
+            var result = new List<Node>();
+            var pending = new Stack<Node>();
+            void Push(Node parent)
+            {
+                var children = parent.GetChildren();
+                using var owner = (Godot.Collections.Array)children;
+                for (var i = children.Count - 1; i >= 0; i--) pending.Push(children[i]);
+            }
+            Push(root);
+            while (pending.TryPop(out var node)) { result.Add(node); Push(node); }
+            return result;
+        }
+        var baseline = OpenNV.Runtime.SceneGraph.NodeTraversal.Descendants<Node>(root).ToArray();
+        if (!baseline.SequenceEqual(Snapshot(root))) throw new InvalidDataException("Indexed traversal changed the source tree order.");
+        var syntheticRoot = new Node();
+        var first = new Node(); var removed = new Node(); var added = new Node();
+        syntheticRoot.AddChild(new Node(), false, Node.InternalMode.Front);
+        syntheticRoot.AddChild(first); syntheticRoot.AddChild(removed);
+        var grandchild = new Node(); first.AddChild(grandchild);
+        try
+        {
+            if (!OpenNV.Runtime.SceneGraph.NodeTraversal.Descendants<Node>(syntheticRoot, first).SequenceEqual([removed]))
+                throw new InvalidDataException("Traversal included an internal child or an excluded subtree.");
+            using var walk = OpenNV.Runtime.SceneGraph.NodeTraversal.Descendants<Node>(syntheticRoot).GetEnumerator();
+            if (!walk.MoveNext() || walk.Current != first) throw new InvalidDataException("Traversal did not start in child order.");
+            syntheticRoot.RemoveChild(removed); syntheticRoot.AddChild(added);
+            if (!walk.MoveNext() || walk.Current != grandchild || !walk.MoveNext() || walk.Current != removed || walk.MoveNext())
+                throw new InvalidDataException("Traversal did not preserve its pending child snapshot across mutation.");
+        }
+        finally { removed.Free(); syntheticRoot.Free(); }
+        const int iterations = 20;
+        var start = System.Diagnostics.Stopwatch.GetTimestamp();
+        for (var i = 0; i < iterations; i++) _ = Snapshot(root);
+        var snapshotMs = System.Diagnostics.Stopwatch.GetElapsedTime(start).TotalMilliseconds;
+        start = System.Diagnostics.Stopwatch.GetTimestamp();
+        for (var i = 0; i < iterations; i++) _ = OpenNV.Runtime.SceneGraph.NodeTraversal.Descendants<Node>(root).ToArray();
+        var indexedMs = System.Diagnostics.Stopwatch.GetElapsedTime(start).TotalMilliseconds;
+        GD.Print($"OPENNV_RESIDENCY_TRAVERSAL_COMPARE nodes={baseline.Length} iterations={iterations} snapshotMs={snapshotMs:F3} indexedMs={indexedMs:F3} pendingChildMutation=verified");
     }
 }

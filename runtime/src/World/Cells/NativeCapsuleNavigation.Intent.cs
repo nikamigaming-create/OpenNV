@@ -9,6 +9,13 @@ internal sealed record NativeNavigationProjectionRegion(Vector3 Requested, Vecto
 
 internal static partial class NativeCapsuleNavigation
 {
+    // A cut within the first source triangle may use its forward region. A
+    // later region belongs to its actual preceding portal, not an interpolated
+    // point in the following segment.
+    internal static bool CanUsePrefixRegion(Vector3 target, int resume, IReadOnlyList<Vector3> path) =>
+        target.IsFinite() && resume >= 0 && resume < path.Count &&
+        (resume == 0 || target.DistanceTo(path[resume - 1]) <= .01f);
+
     internal static Vector3[] TerminalRegionCorridor(IReadOnlyList<Vector3> path, Func<Vector3, bool> arrival)
     {
         if (path.Count == 0 || !arrival(path[^1]))

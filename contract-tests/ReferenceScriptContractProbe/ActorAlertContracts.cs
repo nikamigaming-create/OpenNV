@@ -5,6 +5,59 @@ using OpenNV.Runtime.World.Cells;
 
 internal static class ActorAlertContracts
 {
+    internal static void RunStoppedCreature(FalloutPluginStack records, FalloutReferenceSnapshot snapshot)
+    {
+        using var world = new FalloutReferenceWorld(records);
+        world.Restore([snapshot]);
+        var actor = world.Get(snapshot.Reference);
+        var original = actor.SandboxAdmissionFailure!;
+        var eventsDispatched = 0;
+        foreach (var alerted in new[] { true, false })
+        {
+            var prior = actor.SandboxAdmissionFailure!;
+            world.SetActorAlert(actor.Reference, alerted ? 2 : -1);
+            var updated = actor.SandboxAdmissionFailure!;
+            var expectedActivity = prior.Activity with { Alerted = alerted, Revision = prior.Activity.Revision + 1 };
+            ScriptManualSaveContracts.Require(world.ActorAlerted(actor.Reference) == alerted &&
+                updated.Activity == expectedActivity && updated.ActivityRevision == expectedActivity.Revision &&
+                updated.SelectionAttempts == original.SelectionAttempts && updated.AiRandomState == original.AiRandomState &&
+                updated.EventRevision == original.EventRevision && updated.LastEvent == original.LastEvent &&
+                updated.Error == original.Error && actor.Animation.ElapsedSeconds == snapshot.Animation!.ElapsedSeconds,
+                "Stopped creature alert lost its shared activity revision, source failure or retained package state.");
+            var alertRevision = world.ActorAlertRevision(actor.Reference);
+            world.SetActorAlert(actor.Reference, alerted ? 1 : 0);
+            ScriptManualSaveContracts.Require(ReferenceEquals(actor.SandboxAdmissionFailure, updated) &&
+                world.ActorAlertRevision(actor.Reference) == alertRevision,
+                "Repeated stopped creature alert changed its retained receipt.");
+
+            using var cold = new FalloutReferenceWorld(records);
+            cold.Restore(JsonSerializer.Deserialize<FalloutReferenceSnapshot[]>(JsonSerializer.Serialize(world.Capture()))!);
+            cold.RestoreActorOverrides(JsonSerializer.Deserialize<FalloutActorOverrides[]>(
+                JsonSerializer.Serialize(world.CaptureActorOverrides()))!);
+            var restored = cold.Get(actor.Reference);
+            var activity = new FalloutActorActivityState();
+            cold.BindActorAlert(actor.Reference, activity);
+            restored.SandboxAdmissionFailure!.RestoreActivity(records, restored, activity);
+            var events = new FalloutPackageEvents((_, _) => eventsDispatched++);
+            restored.SandboxAdmissionFailure.RestoreEvents(records, restored, events);
+            ScriptManualSaveContracts.Require(activity.Capture() == updated.Activity &&
+                cold.ActorAlerted(actor.Reference) == alerted && events.Revision == original.EventRevision &&
+                events.LastEvent == original.LastEvent && eventsDispatched == 0,
+                "Cold stopped creature alert reset activity or replayed a retained package event.");
+
+            var invalid = updated with { ActivityRevision = updated.ActivityRevision + 1 };
+            actor.SandboxAdmissionFailure = invalid;
+            ScriptManualSaveContracts.Reject(() => world.SetActorAlert(actor.Reference, alerted ? 0 : 1));
+            ScriptManualSaveContracts.Require(world.ActorAlerted(actor.Reference) == alerted &&
+                world.ActorAlertRevision(actor.Reference) == alertRevision &&
+                ReferenceEquals(actor.SandboxAdmissionFailure, invalid),
+                "Invalid stopped creature alert partially committed its flag, revision or receipt.");
+            actor.SandboxAdmissionFailure = updated;
+        }
+        Console.WriteLine("OPENNV_STOPPED_CREATURE_ALERT_PASS signedInteger=true activityRevision=true unchangedNoOp=true " +
+            "sourceFailureRetained=true randomAndClockRetained=true cold=true noPackageEventReplay=true invalidAtomic=true");
+    }
+
     internal static void Run()
     {
         using var fixture = new ScriptSaveFixture("set saved to 1\nOther.SetAlert 2\nset suffix to 7");
@@ -61,6 +114,24 @@ internal static class ActorAlertContracts
             scripts.Advance(0);
             ScriptManualSaveContracts.Require(questFixture.World.ActorAlerted(actor) && quests.Variable(questFixture.Quest, 2) == 5,
                 "Shared/fallback quest SetAlert did not use the same actual actor flag.");
+        }
+        foreach (var shared in new[] { false, true })
+        {
+            using var questFixture = new ScriptSaveFixture("", "Other.StartCombat player\nset suffix to 5");
+            var quests = new FalloutQuestState(questFixture.Records);
+            var scripts = new FalloutQuestScripts(questFixture.Records, quests, new HashSet<FalloutFormKey>(), new(),
+                references: questFixture.World, defaultProcessingDelay: 0);
+            var executor = new FalloutReferenceScripts(questFixture.Records, questFixture.World, quests, new((_, _) => false, _ => { }));
+            scripts.Host = new((_, _) => throw new InvalidDataException("Unexpected stage"), _ => 0,
+                shared ? executor.ExecuteProgram : null);
+            scripts.Advance(0);
+            ScriptManualSaveContracts.Require(questFixture.World.Get(actor).Engagement?.Target == questFixture.Player &&
+                quests.Variable(questFixture.Quest, 2) == 5,
+                "Shared/fallback quest StartCombat lost its compiled actor, target or following statement.");
+            using var coldCombat = new FalloutReferenceWorld(questFixture.Records);
+            coldCombat.Restore(JsonSerializer.Deserialize<FalloutReferenceSnapshot[]>(JsonSerializer.Serialize(questFixture.World.Capture()))!);
+            ScriptManualSaveContracts.Require(coldCombat.Get(actor).Engagement?.Target == questFixture.Player,
+                "Quest scripted combat lost its target after cold restoration.");
         }
         using (var stopped = new ScriptSaveFixture("set saved to 1\nOther.SetAlert 1\nUnownedSuffix\nset suffix to 9"))
         {

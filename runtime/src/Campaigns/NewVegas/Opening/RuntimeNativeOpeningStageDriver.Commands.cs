@@ -12,6 +12,7 @@ namespace OpenNV.Runtime.Campaigns.NewVegas.Opening;
 internal partial class RuntimeNativeOpeningStageDriver
 {
     private FalloutRadioHudDeclaration? _radioHudDeclaration;
+    private FalloutCaravanMinimumNotice? _caravanMinimumNotice;
     internal FalloutFormKey? SourceMusic => _scriptMusic?.SourceForm;
     private bool _saveRequested;
     private CanvasLayer? _recipeLayer;
@@ -51,6 +52,11 @@ internal partial class RuntimeNativeOpeningStageDriver
         var target = parts.Length == 2 ? bindings.Reference(parts[0]) : source;
         switch (operation)
         {
+            case "addtopic" when parts.Length == 1 && arguments.Count == 1:
+                var topic = bindings.Form(arguments[0]);
+                if (topic.Signature != "DIAL") throw new InvalidDataException("AddTopic argument is not a DIAL topic.");
+                _scripts.AddedTopics.Add(topic.FormKey);
+                break;
             case "startradioconversation" when arguments.Count <= 1:
                 _speech!.StartRadioConversation(target, arguments.Count == 0 ? null : bindings.Form(arguments[0]).FormKey);
                 break;
@@ -146,6 +152,34 @@ internal partial class RuntimeNativeOpeningStageDriver
                     throw new InvalidDataException("ShowBarterMenu discount must be an integer from -100 through 100.");
                 OpenBarterMenu(target, discount);
                 break;
+            case "showcaravanmenu" when parts.Length is 1 or 2 && arguments.Count == 3:
+                if (!double.TryParse(arguments[1], System.Globalization.NumberStyles.Float,
+                        System.Globalization.CultureInfo.InvariantCulture, out var aiType) ||
+                    !double.TryParse(arguments[2], System.Globalization.NumberStyles.Float,
+                        System.Globalization.CultureInfo.InvariantCulture, out var betPercentage))
+                    throw new InvalidDataException("ShowCaravanMenu numeric arguments were not resolved.");
+                var request = FalloutCaravanCommandRequest.Read(_pluginStack, target, bindings.Form(arguments[0]), aiType, betPercentage);
+                if (_pluginStack.RuntimeFormId(target) == 0x14) break;
+                if (_pluginStack.GetEffective(target).Signature is not ("ACHR" or "ACRE"))
+                    throw new NotSupportedException("Caravan opponent reference needs its source actor resolution owner.");
+                var cards = (_scripts.References ?? throw new InvalidOperationException("Caravan collection has no world owner.")).PlayerCaravanCards;
+                if (!cards.MeetsMatchMinimum())
+                {
+                    var noticeSource = RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("Caravan notice source is absent.");
+                    _caravanMinimumNotice ??= FalloutExecutableStringTable.ReadCaravanMinimumNotice(noticeSource.FalloutExecutablePath);
+                    _ = FalloutGameSettingStrings.Read(_pluginStack, _caravanMinimumNotice.Setting);
+                    if (!noticeSource.TryRead("textures/" + _caravanMinimumNotice.Icon, null, out var icon, out _) || icon.Length == 0)
+                        throw new FileNotFoundException("Caravan notice source icon is missing.", _caravanMinimumNotice.Icon);
+                    var sound = FalloutSoundRecordReader.Find(_pluginStack, _caravanMinimumNotice.SoundEditorId);
+                    var notice = new FalloutHudEvent(FalloutHudEventKind.ExecutableNotice, target, 0, Text: _caravanMinimumNotice.Setting);
+                    _inventory.Notifications.RequirePublish([notice]);
+                    _inventory.Notifications.Publish([notice]);
+                    // Retail schedules the notice before requesting the UI sound.
+                    // A sound fault remains visible without replaying that prefix.
+                    _scripts.Sounds.Play(_pluginStack.RuntimeFormKey(0x14), sound.FormKey, systemSound: true);
+                    break;
+                }
+                throw new NotSupportedException($"Caravan menu, opponent and match owners are unbound for {request.Opponent}/{request.Deck.Form}.");
             case "playbink" when parts.Length == 1:
                 if (_moviePlaying) throw new InvalidOperationException("Movie player is already active.");
                 var movieCommand = FalloutMovieCommand.FromScript(command + " " + string.Join(' ', arguments)).Single();
@@ -233,6 +267,7 @@ internal partial class RuntimeNativeOpeningStageDriver
             FactionRelations = _scripts.References.CaptureFactionRelations(),
             Reputations = _scripts.References.CaptureReputations(),
             PlayerNotes = _scripts.References.PlayerNotes.Capture(),
+            PlayerCaravanCards = _scripts.References.PlayerCaravanCards.Capture(),
             PlayerAdvancement = _advancement?.CaptureSettled(),
             EncounterZones = _scripts.References.CaptureEncounterZones(),
             ExplosionExposure = _player.CaptureExplosionExposure(),

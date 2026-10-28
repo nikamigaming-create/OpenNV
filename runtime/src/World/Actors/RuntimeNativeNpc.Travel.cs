@@ -79,8 +79,8 @@ internal partial class RuntimeNativeNpc
     {
         var world = _aiWorld ?? throw new NotSupportedException("Marker Travel has no shared reference owner.");
         var source = FalloutTravelPackage.Read(package, ownsIdleCollection: true);
-        if (source.LocationType is not (0 or 2))
-            throw new NotSupportedException("Native marker Travel requires its reference or current-location owner.");
+        if (source.LocationType is not (0 or 2 or 3))
+            throw new NotSupportedException("Native Travel requires its reference, current-location or editor-location owner.");
         var actor = Appearance.Reference!.Value;
         var state = world.Get(actor);
         var retainedMotion = state.PackageMotion is { } motion && motion.Package == package.FormKey ? motion : null;
@@ -169,6 +169,8 @@ internal partial class RuntimeNativeNpc
         else if (initializing && restored is null && !_packageEvents.Done)
             throw new NotSupportedException("Saved active marker Travel lifecycle has no native route continuation.");
 
+        if (source.LocationType == 2 && restored is null)
+            world.SetActorPackageStartLocation(actor, new(progress.Cell, progress.Location));
         state.ProcedureCaptureBlocker = (restored is null || arrival) && !completedFromLifecycle
             ? MarkerTravelCaptureBlocker : null;
         GD.Print($"OPENNV_NATIVE_MARKER_TRAVEL_READY reference={actor} package={package.FormKey} " +

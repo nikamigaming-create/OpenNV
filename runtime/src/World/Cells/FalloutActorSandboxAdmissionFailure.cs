@@ -71,13 +71,32 @@ internal sealed record FalloutActorSandboxAdmissionFailure(FalloutFormKey Packag
         if (record.Signature != "PACK" || !FalloutActorFurnitureContinuation.RecordHash(record)
             .Equals(PackageSha256, StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException("Saved Sandbox package differs from its winning source.");
-        _ = FalloutSandboxPackage.Read(record);
+        FalloutSandboxPackage.Read(record).RequireRetainedStart(records, actor);
         var owner = FalloutActorTemplateOwner.Resolve(records, records.GetEffective(actor.Base), 32, actor.Templates);
         if (!owner.ReadSubrecords().Where(field => field.Signature == "PKID").Any(field => field.Data.Length == 4 &&
             owner.Plugin.AdjustFormId(BinaryPrimitives.ReadUInt32LittleEndian(field.Data.Span)) == Package))
             throw new InvalidDataException("Stopped Sandbox is absent from the actor's winning package list.");
         if (Blink is not null && Blink.Settings != FalloutFaceBlinkSettings.Read(records))
             throw new InvalidDataException("Saved Sandbox blink settings differ from their source.");
+    }
+
+    // This is historical evidence, never a resumed AI procedure or the
+    // corpse's current pose. Only a matching live package/failure may hand
+    // off the already captured pre-combat receipt after authoritative death.
+    internal static bool RetainInterrupted(FalloutPluginStack records, FalloutReferenceInstance actor,
+        FalloutActorSandboxAdmissionFailure? prior, FalloutFormKey? failedPackage, string? error,
+        FalloutPackageEvents? events, bool corpsePoseReady)
+    {
+        if (prior is null || !ReferenceEquals(actor.SandboxAdmissionFailure, prior) || actor.Injury?.Dead != true ||
+            actor.InterruptedSandboxAdmission is not null || !corpsePoseReady || failedPackage != prior.Package || error != prior.Error ||
+            actor.ProcedureCaptureBlocker != FalloutSandboxPackage.CaptureBlockerPrefix + prior.Error ||
+            events is not { Active: { } active, Done: false, Error: null } || active.Form != prior.Package ||
+            events.Revision != prior.EventRevision || events.LastEvent != prior.LastEvent || events.LastPackage != prior.LastPackage)
+            return false;
+        prior.Validate(records, actor);
+        actor.InterruptedSandboxAdmission = prior.Copy();
+        actor.SandboxAdmissionFailure = null;
+        return true;
     }
 
     internal void RestoreEvents(FalloutPluginStack records, FalloutReferenceInstance actor, FalloutPackageEvents events)

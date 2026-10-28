@@ -57,6 +57,7 @@ internal static class IdleTransitionContracts
             FalloutCreatureAnimationSounds.SelectionKind.Selected && draws == 2, "Certain nonnull sound bypassed its shared draw.");
         Require(new FalloutCreatureAnimationSounds.Declaration(creature, 14, sound, 0).Select(Draw).Kind ==
             FalloutCreatureAnimationSounds.SelectionKind.ChanceMiss && draws == 3, "Zero-chance nonnull sound bypassed its shared draw.");
+        CreatureSoundInheritanceContracts.Run();
         Console.WriteLine("OPENNV_IDLE_TRANSITION_CONTRACT_PASS origin=true heldCursor=true cold=true groupMarkers=true sharedSoundGate=true native=false");
     }
 

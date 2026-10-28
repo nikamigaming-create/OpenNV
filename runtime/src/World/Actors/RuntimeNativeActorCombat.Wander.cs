@@ -8,6 +8,7 @@ namespace OpenNV.Runtime.World.Actors;
 internal sealed partial class RuntimeNativeActorCombat
 {
     private long _ambientAttempts, _ambientStarted;
+    private FalloutGameTimeBindings? _sandboxTimeBindings;
     internal object SandboxObservation => new { attempts = _ambientAttempts, started = _ambientStarted };
 
     internal FalloutWanderProgress? AdvanceSandboxWander(FalloutPluginRecord package, FalloutSandboxPackage source,
@@ -17,13 +18,14 @@ internal sealed partial class RuntimeNativeActorCombat
         var context = _context ?? throw new NotSupportedException("Sandbox has no gameplay context.");
         var busy = context.DialogueBusy ?? throw new NotSupportedException("Sandbox has no dialogue participant owner.");
         if (busy(_state.Reference)) { StopPackageMotion(); return progress; }
-        var hour = context.Globals.Get(FalloutGameTimeBindings.Read(_records).Hour);
+        var hour = context.Globals.Get((_sandboxTimeBindings ??= FalloutGameTimeBindings.Read(_records)).Hour);
         var activity = _state.PackageMotion?.Package == package.FormKey ? _state.PackageMotion.Sandbox : null;
         var randomBeforeSelection = _state.SoundRandom.State;
         var selectedActivity = activity is null || activity.Expired(hour);
         if (selectedActivity)
         {
-            activity = SelectSandboxActivity(source, activity, hour, delta, context);
+            using (OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Measure(OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Owner.SandboxActivitySelection))
+                activity = SelectSandboxActivity(source, activity, hour, delta, context);
             progress = null;
             if (_state.PackageMotion is { } previousMotion && previousMotion.Package == package.FormKey &&
                 _state.DeferredPackageContinuation?.RetainedAssignment is null)
@@ -32,21 +34,28 @@ internal sealed partial class RuntimeNativeActorCombat
         if (activity is null) throw new InvalidOperationException("Sandbox has no selected activity.");
         if (activity.Activity == FalloutSandboxActivity.Eat)
         {
+            using var scope = OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Measure(OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Owner.SandboxEat);
             AdvanceSandboxEat(package, source, activity, delta, context); return null;
         }
         if (activity.Activity == FalloutSandboxActivity.Dialogue)
         {
+            using var scope = OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Measure(OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Owner.SandboxDialogue);
             // A refused opening retains this selection. A successful attempt
             // reserves both participants and immediately selects the following
             // activity; speech owns their pose until the exchange settles.
-            HoldSandboxActivity(package, source, activity, delta);
+            using (OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Measure(OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Owner.SandboxDialogueHold))
+                HoldSandboxActivity(package, source, activity, delta);
             var target = activity.Target ?? throw new InvalidDataException("Sandbox dialogue has no listener.");
             ++_ambientAttempts;
-            if ((context.TryAmbientConversation ?? throw new NotSupportedException("Sandbox has no ambient speech owner."))
-                (_state.Reference, target))
+            bool started;
+            using (OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Measure(OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Owner.SandboxDialogueAttempt))
+                started = (context.TryAmbientConversation ?? throw new NotSupportedException("Sandbox has no ambient speech owner."))
+                    (_state.Reference, target);
+            if (started)
             {
                 ++_ambientStarted;
-                activity = SelectSandboxActivity(source, activity, hour, delta, context);
+                using (OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Measure(OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Owner.SandboxActivitySelection))
+                    activity = SelectSandboxActivity(source, activity, hour, delta, context);
                 _state.PackageMotion = _state.PackageMotion! with { Sandbox = activity, Wander = null };
                 StopPackageMotion();
             }
@@ -55,6 +64,7 @@ internal sealed partial class RuntimeNativeActorCombat
         var selectedDestination = progress is null || progress.Arrived;
         if (selectedDestination)
         {
+            using var scope = OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Measure(OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Owner.SandboxDestination);
             var location = source.Location(_records, _world, _state.Reference);
             if (_world.TravelRegion(location.Cell) != _world.TravelRegion(_world.Placement(_state.Reference).Cell))
                 throw new NotSupportedException("Sandbox location needs an other-region approach owner.");
@@ -64,7 +74,11 @@ internal sealed partial class RuntimeNativeActorCombat
         }
         if (progress is null) throw new InvalidOperationException("Sandbox has no accepted wander request.");
         var randomBeforeMotion = _state.SoundRandom.State;
-        try { progress = AdvancePackageWander(package, progress, source.Running, source.WeaponDrawn, delta); }
+        try
+        {
+            using var scope = OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Measure(OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Owner.SandboxMovement);
+            progress = AdvancePackageWander(package, progress, source.Running, source.WeaponDrawn, delta);
+        }
         catch (Exception error) when (FalloutSandboxMotionException.CanRetain(error) &&
             randomBeforeMotion == _state.SoundRandom.State)
         {
@@ -105,7 +119,8 @@ internal sealed partial class RuntimeNativeActorCombat
             admitted.Add(candidate);
         }
         var preferences = previous is null ? new FalloutSandboxPreferences() : new FalloutSandboxPreferences(previous.Preferences);
-        var categories = preferences.ActivityWeights(null, false, false, _state.ConversationSuppressionSeconds is > 0);
+        var foodAvailable = admitted.Any(candidate => candidate.Activity == FalloutSandboxActivity.Eat);
+        var categories = preferences.ActivityWeights(null, foodAvailable, false, _state.ConversationSuppressionSeconds is > 0);
         var weights = admitted.Select(candidate => FalloutSandboxPreferences.CandidateWeight(1, categories[(int)candidate.Activity])).ToArray();
         var total = weights.Aggregate(0, (sum, weight) => checked(sum + weight));
         if (total == 0) throw new NotSupportedException("Sandbox has no admitted activity; its retry owner is unbound.");
@@ -132,7 +147,8 @@ internal sealed partial class RuntimeNativeActorCombat
         // Keep the accepted request while another owner controls the body.
         // In particular, combat must never consume another wander draw.
         if (OwnsPose || !PackageMovementReady) return progress;
-        _world.ValidatePackageWander(_state.Reference, progress);
+        using (OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Measure(OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Owner.SandboxValidation))
+            _world.ValidatePackageWander(_state.Reference, progress);
         var point = progress.Destination;
         var destination = _actor.GetParent<Node3D>().ToGlobal(
             new Vector3(point[0], point[2], -point[1]) * _skeleton.UnitsToMetres);

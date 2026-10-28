@@ -256,7 +256,9 @@ internal sealed partial class RuntimeNativeActorCombat
         var offset = target - _actor.GlobalPosition;
         var moving = (requireArrivalHeight ? offset.Length() : new Vector2(offset.X, offset.Z).Length()) > distance;
         var movementRequested = moving;
-        var destination = moving ? PursuitTarget(target, delta, distance) : null;
+        Vector3? destination;
+        using (OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Measure(OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Owner.PackagePursuit))
+            destination = moving ? PursuitTarget(target, delta, distance) : null;
         moving &= destination.HasValue;
         // A pending route or observed arrival needs only an idle. Missing
         // locomotion must not prevent that real observation, nor leave an
@@ -277,14 +279,16 @@ internal sealed partial class RuntimeNativeActorCombat
         Activity.SetMovement(running && moving, sneaking);
         MoveActor(moving ? clip.RootDisplacement(seconds, next) : Vector3.Zero, delta, destination);
         foreach (var key in clip.Events.Crossed(seconds, next, includeStart)) _packageSounds!.Dispatch(key);
-        if (DisplayServer.GetName() != "headless")
-        {
-            _skeleton.Node.ResetBonePoses();
-            var root = _skeleton.BoneIndex(clip.Animation.Sequence.TargetName);
-            if (root >= 0) _skeleton.Node.SetBonePose(root, Transform3D.Identity);
-            clip.Animation.ApplySourceTime(clip.Time(next));
-            if (weaponDrawn) { _packageAim?.Animation.ApplySourceTime(_packageAim.Time(next)); _packageGrip?.Animation.ApplySourceTime(_packageGrip.Time(next)); }
-        }
+        using (OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Measure(OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Owner.PackagePose))
+            if (!_headless)
+            {
+                _skeleton.Node.ResetBonePoses();
+                var root = _skeleton.BoneIndex(clip.Animation.Sequence.TargetName);
+                if (root >= 0) _skeleton.Node.SetBonePose(root, Transform3D.Identity);
+                clip.Animation.ApplySourceTime(clip.Time(next));
+                if (weaponDrawn) { _packageAim?.Animation.ApplySourceTime(_packageAim.Time(next)); _packageGrip?.Animation.ApplySourceTime(_packageGrip.Time(next)); }
+            }
+        using var snapshotWork = OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Measure(OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Owner.PackageSnapshot);
         var position = _actor.GlobalPosition; var rotation = _actor.GlobalBasis.Orthonormalized().GetRotationQuaternion();
         // A committed Accompany portal receipt ends at this first actual
         // destination-body observation, without repeating its source event.
@@ -311,7 +315,6 @@ internal sealed partial class RuntimeNativeActorCombat
 
     private NativeActorCombatAnimation SelectPackageMotionClip(bool moving, bool running, bool sneaking)
     {
-        var directory = _skeletonPath[.._skeletonPath.LastIndexOf('/')];
         if (sneaking)
         {
             if (!moving) return _packageSneakIdle ??= Load("sneakmtidle");
@@ -319,11 +322,15 @@ internal sealed partial class RuntimeNativeActorCombat
             return _packageSneakWalk ??= Load("sneakmtforward");
         }
         if (!moving) return _packageIdle ??= Load("mtidle", "locomotion/mtidle");
-        var gender = _actor is RuntimeNativeNpc npc && npc.Appearance.Female ? "female" : "male";
-        if (running) return _packageRun ??= Load("mtfastforward", $"locomotion/{gender}/mtfastforward", "locomotion/mtfastforward");
-        return _packageWalk ??= Load("mtforward", $"locomotion/{gender}/mtforward", "locomotion/mtforward");
+        if (running) return _packageRun ??= LoadMovement("mtfastforward");
+        return _packageWalk ??= LoadMovement("mtforward");
 
+        NativeActorCombatAnimation LoadMovement(string group)
+        {
+            var gender = _actor is RuntimeNativeNpc npc && npc.Appearance.Female ? "female" : "male";
+            return Load(group, $"locomotion/{gender}/{group}", $"locomotion/{group}");
+        }
         NativeActorCombatAnimation Load(params string[] groups) =>
-            new(SelectPath(directory, groups), _content, _skeleton, null, true);
+            new(SelectPath(_skeletonPath[.._skeletonPath.LastIndexOf('/')], groups), _content, _skeleton, null, true);
     }
 }

@@ -9,5 +9,6 @@
   <ItemGroup>
     <Compile Include="../../runtime/src/Content/FalloutMovieCommand.cs" Link="FalloutMovieCommand.cs" />
     <Compile Include="../../runtime/src/Content/OwnedMovieDecoder.cs" Link="OwnedMovieDecoder.cs" />
+    <Compile Include="../../runtime/src/Gameplay/State/RuntimeMoviePause.cs" Link="RuntimeMoviePause.cs" />
   </ItemGroup>
 </Project>

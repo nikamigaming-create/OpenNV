@@ -14,6 +14,7 @@ internal sealed partial class RuntimeLiveHarness : Node
     private Func<ulong, ParityTelemetryFrame> _captureState = null!;
     private Func<object> _captureGameplay = null!;
     private Func<object> _captureSummary = null!;
+    private Func<object?>? _capturePerformanceContext;
     private Func<(string StateKey, ulong EventOrdinal)> _captureIdentity = null!;
     private double _lastStateWriteMilliseconds;
     private double _lastSnapshotMilliseconds, _lastSerializeMilliseconds, _lastFileMilliseconds;
@@ -51,7 +52,7 @@ internal sealed partial class RuntimeLiveHarness : Node
         Func<System.Numerics.Vector3, System.Numerics.Vector3, float, BotNavigationRoute> route, float sensitivity, Key forward, Key activate,
         Func<OpenNV.Runtime.Gameplay.Bots.SteeringIntent, bool, bool>? inputOverride = null, Action? pumpInput = null,
         Func<System.Numerics.Vector3, System.Numerics.Vector3, System.Numerics.Vector3, float, float, BotNavigationRoute?>? approachRoute = null,
-        Action? cancelRoute = null)
+        Action? cancelRoute = null, Func<BotPlanningProgress?>? planningProgress = null)
     {
         if (!float.IsFinite(sensitivity) || sensitivity <= 0) throw new ArgumentException("Invalid mouse sensitivity.");
         _botSensitivity = sensitivity; _botForward = forward; _botActivate = activate;
@@ -74,7 +75,7 @@ internal sealed partial class RuntimeLiveHarness : Node
                 DeliverLook(-intent.YawRadians / _botSensitivity, -intent.PitchRadians / _botSensitivity);
             SetKey(_botActivate, activation, 50);
             DeliverBotCombatInput(intent);
-        }, approachRoute, cancelRoute, _botSkills, PersistBotSkillLibrary);
+        }, approachRoute, cancelRoute, _botSkills, PersistBotSkillLibrary, planningProgress);
     }
 
     public override void _EnterTree()
@@ -101,7 +102,7 @@ internal sealed partial class RuntimeLiveHarness : Node
 
     internal void Configure(string directory, Func<ulong, ParityTelemetryFrame> captureState, Func<object> captureGameplay,
         Func<FalloutPluginStack?>? stack = null, Func<object>? captureSummary = null,
-        Func<(string StateKey, ulong EventOrdinal)>? captureIdentity = null)
+        Func<(string StateKey, ulong EventOrdinal)>? captureIdentity = null, Func<object?>? capturePerformanceContext = null)
     {
         if (!Path.IsPathFullyQualified(directory))
             throw new ArgumentException("--live-harness requires an absolute private command directory.");
@@ -116,6 +117,7 @@ internal sealed partial class RuntimeLiveHarness : Node
         _inputSource = stack;
         _captureGameplay = captureGameplay;
         _captureSummary = captureSummary ?? captureGameplay;
+        _capturePerformanceContext = capturePerformanceContext;
         _captureIdentity = captureIdentity ?? (() => { var frame = captureState(0); return (frame.StateKey, frame.EventOrdinal); });
         _trace = new RuntimeRenderTrace(this, directory, stack ?? (() => null), captureGameplay);
         var channel = System.Environment.GetEnvironmentVariable("OPENNV_LIVE_HARNESS_CHANNEL");
@@ -550,6 +552,7 @@ internal sealed partial class RuntimeLiveHarness : Node
             },
             performance = new
             {
+                gameplayContext = _publicationSelection.Scope == "performance" ? _capturePerformanceContext?.Invoke() : null,
                 jitOptimizationDisabled = JitOptimizationDisabled,
                 renderThreadModel = ProjectSettings.GetSetting("rendering/driver/threads/thread_model").AsInt32(),
                 renderThreadId = renderTiming?.RenderThreadId,

@@ -20,14 +20,29 @@ internal sealed class FalloutPlayerIngestibles(FalloutPluginStack records, Fallo
     internal FalloutIngestiblesSnapshot Capture() => new(_active.ToArray());
     private FalloutIngestible Definition(FalloutFormKey form)
     {
-        if (!_definitions.TryGetValue(form, out var value)) _definitions.Add(form, value = FalloutIngestible.Read(records, form));
+        if (!_definitions.TryGetValue(form, out var value))
+            _definitions.Add(form, value = records.GetEffective(form).Signature switch
+            {
+                "ALCH" or "INGR" => FalloutIngestible.Read(records, form),
+                "SPEL" => FalloutIngestible.ReadActorEffect(records, form),
+                _ => throw new InvalidDataException("Active effect source is neither ingestible, ingredient nor SPEL.")
+            });
         return value;
     }
 
-    internal FalloutIngestibleUse Prepare(FalloutFormKey form)
+    internal FalloutIngestibleUse Prepare(FalloutFormKey form) => Prepare(form, consume: true);
+
+    // Callers must establish the source and delivery of the actor effect;
+    // this owns its selected value changes and their cold continuation only.
+    internal FalloutIngestibleUse PrepareActorEffect(FalloutFormKey form) => Prepare(form, consume: false);
+
+    private FalloutIngestibleUse Prepare(FalloutFormKey form, bool consume)
     {
-        if (inventory.Item(form) is not { Count: > 0 }) throw new InvalidOperationException("Consumed item is absent from inventory.");
-        if (vitals.State.HitPoints == 0) throw new InvalidOperationException("A dead player cannot consume Aid.");
+        if (consume && inventory.Item(form) is not { Count: > 0 }) throw new InvalidOperationException("Consumed item is absent from inventory.");
+        if (vitals.State.HitPoints == 0) throw new InvalidOperationException("A dead player cannot receive an effect.");
+        var signature = records.GetEffective(form).Signature;
+        if (consume ? signature is not ("ALCH" or "INGR") : signature != "SPEL")
+            throw new InvalidDataException("Effect delivery differs from its source record type.");
         var source = Definition(form);
         if ((source.Flags & ~7) != 0 || source.Script is not null || source.AddictionChance != 0)
             throw new NotSupportedException($"Ingestible {form} requires its flags, script or addiction owner.");
@@ -59,11 +74,12 @@ internal sealed class FalloutPlayerIngestibles(FalloutPluginStack records, Fallo
         var used = false;
         return new(source.Sound, () =>
         {
-            if (used || inventory.Revision != revision || !ReferenceEquals(vitals.State, before) ||
+            if (used || consume && inventory.Revision != revision || !ReferenceEquals(vitals.State, before) ||
+                !_active.SequenceEqual(activeBefore) ||
                 beforePools is not null && !pools!.Capture().Values.OrderBy(row => row.Key).SequenceEqual(beforePools.Values.OrderBy(row => row.Key)))
                 throw new InvalidOperationException("Prepared Aid use is stale or already committed.");
             used = true;
-            inventory.ConsumeOne(form, new(() =>
+            var transaction = new FalloutInventoryChangeLease(() =>
             {
                 foreach (var (value, amount) in modifiers) pools!.AddModifier(value, FalloutActorValuePool.Temporary, amount);
                 vitals.Publish(after);
@@ -73,8 +89,13 @@ internal sealed class FalloutPlayerIngestibles(FalloutPluginStack records, Fallo
                 if (beforePools is not null) pools!.Restore(beforePools);
                 vitals.Publish(before);
                 _active.Clear(); _active.AddRange(activeBefore);
-            }));
-            return new(form, true, before.ExactHitPoints, after.ExactHitPoints);
+            });
+            if (consume) inventory.ConsumeOne(form, transaction);
+            else
+            {
+                using (transaction) { transaction.Commit(); transaction.Complete(); }
+            }
+            return new(form, consume, before.ExactHitPoints, after.ExactHitPoints);
         });
     }
 

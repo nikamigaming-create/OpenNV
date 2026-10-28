@@ -123,6 +123,25 @@ internal static partial class ReferenceAccessContracts
                 Reject(() => Run(invalid));
                 Require(world.Get(Key(0x93)).OwnershipOverride == before, "Rejected owner changed the live reference.");
             }
+            using (var rejectedPickup = new FalloutReferenceWorld(records))
+            {
+                var inventory = new FalloutPlayerInventory();
+                inventory.PrepareChange = (_, _) => new FalloutInventoryChangeLease(
+                    () => throw new InvalidOperationException("Injected inventory owner rejection."), () => { });
+                Reject(() => rejectedPickup.Take(Key(0x93), inventory, 1, null));
+                Require(!rejectedPickup.Get(Key(0x93)).Taken && inventory.Item(Key(3)) is null,
+                    "Failed inventory publication partially took a placed item.");
+            }
+            using (var changedPickup = new FalloutReferenceWorld(records))
+            {
+                var inventory = new FalloutPlayerInventory();
+                inventory.PrepareChange = (_, _) => new FalloutInventoryChangeLease(
+                    () => changedPickup.SetOwnership(Key(0x93), Key(8)), () => { });
+                Reject(() => changedPickup.Take(Key(0x93), inventory, 1, null));
+                Require(!changedPickup.Get(Key(0x93)).Taken && inventory.Item(Key(3)) is null &&
+                    changedPickup.Ownership(Key(0x93)).Owner == Key(8),
+                    "Stale pickup published an old ownership variant or reverted an independent owner change.");
+            }
             var player = new FalloutPlayerInventory(); world.Take(Key(0x93), player, 1, null);
             var acquired = player.Item(Key(3))!.Variants!.Single();
             Require(acquired.Owner == Key(8) && acquired.FactionRank == 3 && acquired.Global == Key(0x40) &&

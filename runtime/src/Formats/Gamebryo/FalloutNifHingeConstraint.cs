@@ -7,7 +7,7 @@ internal sealed partial class FalloutNifFile
         var declaration = ReadObject(blockIndex);
         if (declaration is FalloutNifHingeConstraint hinge) return hinge;
         if (declaration is not FalloutNifRagdollConstraint limited || limited.Block.TypeName != "bhkLimitedHingeConstraint")
-            throw new NotSupportedException("This model joint requires its own constraint owner.");
+            throw new NotSupportedException($"NIF model constraint {blockIndex} ({declaration.Block.TypeName}) requires its own joint owner.");
         RequireNativeMotor(limited);
         ValidateHingeAxes(limited.TwistA, limited.PlaneA, limited.MotorA);
         ValidateHingeAxes(limited.TwistB, limited.PlaneB, limited.MotorB);

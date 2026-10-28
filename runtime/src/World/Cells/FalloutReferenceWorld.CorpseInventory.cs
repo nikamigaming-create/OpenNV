@@ -20,10 +20,10 @@ internal sealed partial class FalloutReferenceWorld
         // State-only source inventory contracts have no presented equipment.
         // This does not admit a missing native pose or a complete checkpoint.
         if (instance.CorpseEquipment is null && instance.Ragdoll is null && instance.Engagement?.WeaponHandling is null &&
-            instance.CaptureCorpseEquipment is null && instance.CanCaptureCorpseEquipment is null &&
+            instance.CaptureCorpseEquipment is null && instance.CaptureCorpseEquipmentForFiniteWait is null && instance.CanCaptureCorpseEquipment is null &&
             instance.CorpseEquipmentCaptureBlocker is null) return null;
         if (IsResident(instance.Reference) || instance.CaptureCorpseEquipment is not null ||
-            instance.CanCaptureCorpseEquipment is not null || instance.StoppedRetirement is not null)
+            instance.CaptureCorpseEquipmentForFiniteWait is not null || instance.CanCaptureCorpseEquipment is not null || instance.StoppedRetirement is not null)
             throw new NotSupportedException("Corpse transfer requires its settled current equipment owner, not a pending native or audio-retirement binding.");
         if (instance.Ragdoll is not { Bodies.Count: > 0 } ragdoll || ragdoll.Bodies.Any(body => !body.Sleeping) ||
             HitEvents.SnapshotPending(instance.Reference).Count != 0)

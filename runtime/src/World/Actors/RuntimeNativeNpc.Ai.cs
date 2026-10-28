@@ -456,7 +456,7 @@ internal partial class RuntimeNativeNpc
                 ClearDialoguePackage();
                 _patrol = null; _patrolProgress = null;
                 _guardPackage = null; _guardProgress = null;
-                _sandboxPackage = null; _sandboxWander = null;
+                _sandboxPackage = null; _sandboxWander = null; _pendingCurrentLocationSandbox = null;
                 if (_aiReferenceState?.ProcedureCaptureBlocker?.StartsWith(FalloutSandboxPackage.CaptureBlockerPrefix, StringComparison.Ordinal) == true)
                     _aiReferenceState.ProcedureCaptureBlocker = null;
                 if ((_escortPackage is not null || _editorTravel is not null) && _aiWorld is { } escortWorld)

@@ -45,11 +45,24 @@ internal static class GamebryoReferenceEnableRuntime
         try
         {
             // Snapshot the live owners before cancellation can retire children.
-            collisions = NodeTraversal.SelfAndDescendants<CollisionObject3D>(reference).ToArray();
             if (!enabled)
-                foreach (var owner in NodeTraversal.SelfAndDescendants<Node>(reference)
-                    .OfType<IGamebryoReferenceEnableLifecycle>().ToArray())
+            {
+                // Both sets must be captured before a lifecycle callback can
+                // retire children. Traverse the same live tree once rather
+                // than asking Godot for every node's children twice during
+                // a residency transition.
+                var collisionSnapshot = new List<CollisionObject3D>();
+                var lifecycleSnapshot = new List<IGamebryoReferenceEnableLifecycle>();
+                foreach (var node in NodeTraversal.SelfAndDescendants<Node>(reference))
+                {
+                    if (node is CollisionObject3D collision) collisionSnapshot.Add(collision);
+                    if (node is IGamebryoReferenceEnableLifecycle lifecycle) lifecycleSnapshot.Add(lifecycle);
+                }
+                collisions = collisionSnapshot.ToArray();
+                foreach (var owner in lifecycleSnapshot)
                     Attempt(owner.BeforeReferenceDisabled);
+            }
+            else collisions = NodeTraversal.SelfAndDescendants<CollisionObject3D>(reference).ToArray();
         }
         catch (Exception error) { failure ??= ExceptionDispatchInfo.Capture(error); }
         finally
@@ -71,8 +84,16 @@ internal static class GamebryoReferenceEnableRuntime
                             collision.SetMeta(CollisionLayerMeta, collision.CollisionLayer);
                         if (!collision.HasMeta(CollisionMaskMeta))
                             collision.SetMeta(CollisionMaskMeta, collision.CollisionMask);
-                        SetCollisionFilter(collision, collision.GetMeta(CollisionLayerMeta).AsUInt32(),
-                            collision.GetMeta(CollisionMaskMeta).AsUInt32());
+                        // The disabled root is already an ancestor of every
+                        // captured collision body. Its live filters must be
+                        // zero regardless of any other enable ancestor; the
+                        // independent fail-safe writes below enforce that.
+                        // Keep the recorded intended filters for a later
+                        // enable, without republishing them and walking the
+                        // full ancestor chain for every retiring body.
+                        var layer = collision.GetMeta(CollisionLayerMeta).AsUInt32();
+                        var mask = collision.GetMeta(CollisionMaskMeta).AsUInt32();
+                        if (enabled) SetCollisionFilter(collision, layer, mask);
                     });
                     if (!enabled)
                     {

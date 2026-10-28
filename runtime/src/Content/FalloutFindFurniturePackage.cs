@@ -4,38 +4,34 @@ using OpenNV.Runtime.World.Cells;
 namespace OpenNV.Runtime.Content;
 
 internal sealed record FalloutFindFurniturePackage(FalloutFormKey Form, uint Flags, FalloutFormKey Location,
-    int Radius, int TargetType, FalloutFormKey? Target)
+    int Radius, int TargetType, FalloutFormKey? Target, FalloutFindPackage Declaration)
 {
     internal bool Running => (Flags & 0x2000) != 0;
 
     internal static FalloutFindFurniturePackage Read(FalloutPluginRecord record)
     {
-        var source = FalloutScriptPackage.Read(record);
+        var declaration = FalloutFindPackage.Read(record);
+        var source = declaration.Source;
         if (source.Procedure != 0 || source.LocationType != 0 || source.LocationReference is null)
             throw new NotSupportedException("Find Furniture requires its near-reference search location owner.");
         var fields = record.ReadSubrecords().ToArray();
-        var data = FalloutPackageData.Read(record);
+        var data = declaration.Data;
         var flags = data.Flags;
         const uint supported = 2 | 4 | 0x400 | 0x1000 | 0x2000;
         if ((flags & ~supported) != 0 ||
             (flags & 0x1000) == 0 && data.BehaviorFlags != 0 || data.SpecificFlags is not (null or 0) ||
             fields.Any(field => field.Signature is "PLD2" or "PTD2"))
             throw new NotSupportedException("Find Furniture has additional unowned behavior or search inputs.");
-        var targets = fields.Where(field => field.Signature == "PTDT").ToArray();
-        if (targets.Length != 1 || targets[0].Data.Length != 16)
-            throw new InvalidDataException("Find Furniture requires one complete target declaration.");
-        var target = targets[0].Data.Span;
-        var type = BinaryPrimitives.ReadInt32LittleEndian(target);
-        var id = BinaryPrimitives.ReadUInt32LittleEndian(target[4..]);
-        if (BinaryPrimitives.ReadInt32LittleEndian(target[8..]) != 0)
+        var target = declaration.Target;
+        if (target.CountOrDistance != 0)
             throw new NotSupportedException("Find Furniture target count/distance needs its duration owner.");
-        FalloutFormKey? key = type switch
+        FalloutFormKey? key = target.Type switch
         {
-            0 or 1 => record.Plugin.AdjustOptionalFormId(id) ?? throw new InvalidDataException("Find Furniture target is absent."),
-            2 when id == 11 => null,
+            0 or 1 => target.Form ?? throw new InvalidDataException("Find Furniture target is absent."),
+            2 when target.RawTarget == 11 => null,
             _ => throw new NotSupportedException("Find target requires its non-furniture interaction owner."),
         };
-        return new(record.FormKey, flags, source.LocationReference.Value, source.LocationRadius, type, key);
+        return new(record.FormKey, flags, source.LocationReference.Value, source.LocationRadius, target.Type, key, declaration);
     }
 
     internal IReadOnlyList<FalloutPlacedReference> Candidates(FalloutPluginStack records, FalloutReferenceWorld world,
@@ -44,7 +40,7 @@ internal sealed record FalloutFindFurniturePackage(FalloutFormKey Form, uint Fla
         var actorState = world.Get(actor);
         if (records.GetEffective(actorState.Base).Signature is not ("NPC_" or "CREA"))
             throw new InvalidDataException("Find Furniture caller is not an actor.");
-        var location = world.Placement(Location);
+        var location = Declaration.Location(records, world, actor);
         if (location.Cell != cell.Cell.FormKey)
             throw new NotSupportedException("Find Furniture search location requires its other-cell route owner.");
         return cell.References.Where(reference => Eligible(reference)).ToArray();

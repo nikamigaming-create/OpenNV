@@ -16,14 +16,44 @@ internal sealed record FalloutIngestible(FalloutFormKey Form, string Hash, byte 
     internal static FalloutIngestible Read(FalloutPluginStack records, FalloutFormKey form)
     {
         var record = records.GetEffective(form);
-        if (record.Signature != "ALCH") throw new InvalidDataException("Consumed item is not ALCH.");
+        if (record.Signature is not ("ALCH" or "INGR")) throw new InvalidDataException("Consumed item is not an ingestible or ingredient.");
         var fields = record.ReadSubrecords().ToArray();
         var header = fields.Single(field => field.Signature == "ENIT").Data.Span;
-        if (header.Length != 20) throw new NotSupportedException("Ingestible ENIT requires its 20-byte declaration.");
-        var chance = BinaryPrimitives.ReadSingleLittleEndian(header[12..]);
+        if (header.Length != (record.Signature == "INGR" ? 8 : 20))
+            throw new NotSupportedException("Ingestible ENIT has an unsupported declaration extent.");
+        if (record.Signature == "INGR" && (header[4] & ~3) != 0)
+            throw new NotSupportedException("Ingredient flags require their additional source behavior owner.");
+        var chance = record.Signature == "INGR" ? 0 : BinaryPrimitives.ReadSingleLittleEndian(header[12..]);
         if (!float.IsFinite(chance) || chance < 0) throw new InvalidDataException("Ingestible addiction chance is invalid.");
         var script = fields.SingleOrDefault(field => field.Signature == "SCRI").Data;
         if (script.Length is not (0 or 4)) throw new InvalidDataException("Ingestible script link is invalid.");
+        return new(form, HashOf(record), header[4], script.IsEmpty ? null :
+            record.Plugin.AdjustOptionalFormId(BinaryPrimitives.ReadUInt32LittleEndian(script.Span)),
+            record.Signature == "INGR" ? null : record.Plugin.AdjustOptionalFormId(BinaryPrimitives.ReadUInt32LittleEndian(header[8..])), chance,
+            record.Signature == "INGR" ? null : record.Plugin.AdjustOptionalFormId(BinaryPrimitives.ReadUInt32LittleEndian(header[16..])), ReadEffects(records, record, fields));
+    }
+
+    // Actor effects and consumables share EFID/EFIT/MGEF declarations, but
+    // actor effects do not carry ALCH skill scaling or consume an inventory item.
+    internal static FalloutIngestible ReadActorEffect(FalloutPluginStack records, FalloutFormKey form)
+    {
+        var record = records.GetEffective(form);
+        if (record.Signature != "SPEL") throw new InvalidDataException("Actor effect is not SPEL.");
+        var fields = record.ReadSubrecords().ToArray();
+        var declarations = fields.Where(field => field.Signature == "SPIT").ToArray();
+        if (declarations.Length != 1 || declarations[0].Data.Length != 16)
+            throw new InvalidDataException("Actor effect needs one 16-byte SPIT declaration.");
+        var header = declarations[0].Data.Span;
+        if (BinaryPrimitives.ReadUInt32LittleEndian(header) != 0 || header[12] != 0)
+            throw new NotSupportedException("Actor effect type or flags require their spell lifecycle owner.");
+        var effects = ReadEffects(records, record, fields);
+        if (effects.Count == 0) throw new InvalidDataException("Actor effect has no source effects.");
+        return new(form, HashOf(record), 0, null, null, 0, null, effects);
+    }
+
+    private static IReadOnlyList<FalloutIngestibleEffect> ReadEffects(FalloutPluginStack records,
+        FalloutPluginRecord record, FalloutPluginSubrecord[] fields)
+    {
         var effects = new List<FalloutIngestibleEffect>();
         for (var index = 0; index < fields.Length; index++)
         {
@@ -55,10 +85,7 @@ internal sealed record FalloutIngestible(FalloutFormKey Form, string Hash, byte 
                 BinaryPrimitives.ReadInt32LittleEndian(definition[16..])));
             index = end - 1;
         }
-        return new(form, HashOf(record), header[4], script.IsEmpty ? null :
-            record.Plugin.AdjustOptionalFormId(BinaryPrimitives.ReadUInt32LittleEndian(script.Span)),
-            record.Plugin.AdjustOptionalFormId(BinaryPrimitives.ReadUInt32LittleEndian(header[8..])), chance,
-            record.Plugin.AdjustOptionalFormId(BinaryPrimitives.ReadUInt32LittleEndian(header[16..])), effects);
+        return effects;
     }
 
     private static string HashOf(FalloutPluginRecord record) => Convert.ToHexString(SHA256.HashData(record.ReadData()));

@@ -166,16 +166,16 @@ internal sealed partial class NativeOwnedLoveTesterMenu : Control
             native.X.X, native.Y.X, native.Z.X, native.X.Y, native.Y.Y, native.Z.Y,
             native.X.Z, native.Y.Z, native.Z.Z], 1, "LoveTester menu model");
         var width = 480 * Size.X / Size.Y;
-        var depth = width > _declaration.LogicalWidthBoundary ? _declaration.WideDepth : _declaration.NarrowDepth;
+        var depth = _declaration.DepthForLogicalWidth(width);
         var transform = new Transform3D(basis, GamebryoCoordinate.ConvertVector(new(0, _declaration.VerticalOffset, depth)));
         _animated.Transform = transform; _cabinet.Transform = transform;
         var radius = FalloutNifBounds.ReadStatic(_source).Radius * _declaration.LightRadiusMultiple;
         var light = new NativeNifPointLight(_camera.GlobalTransform.AffineInverse() * Vector3.Zero,
             Vector3.One * _declaration.LightIntensity, radius);
-        foreach (var mesh in _animated.FindChildren("*", "", true, false).Concat(_cabinet.FindChildren("*", "", true, false)).OfType<MeshInstance3D>())
-            for (var surface = 0; surface < mesh.Mesh.GetSurfaceCount(); surface++)
-                if (mesh.GetActiveMaterial(surface) is ShaderMaterial material && material.ResourceName == NativeNifLightingMaterial.ResourceIdentity)
-                    NativeNifPointLighting.Bind(material, [light], 1, storeEncoded: true);
+        NativeOwnedRenderedDevice.BindMenuEnvironment(_animated, 1);
+        NativeOwnedRenderedDevice.BindMenuEnvironment(_cabinet, 1);
+        NativeOwnedRenderedDevice.BindMenuMaterials(_animated, [light], 1);
+        NativeOwnedRenderedDevice.BindMenuMaterials(_cabinet, [light], 1);
         SetMeta("opennv_love_tester_projection", new Vector2(horizontal, verticalSlope));
         SynchronizeChoiceTargets();
     }

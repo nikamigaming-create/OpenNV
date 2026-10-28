@@ -127,7 +127,7 @@ internal partial class NativeOwnedDialogueMenu : Control
             var button = new NativeBitmapMenuButton(font.Font, font.Atlas, _tiles.Color)
             { Text = choice.Text, DrawText = false, FocusMode = FocusModeEnum.All };
             button.SetMeta("opennv_source_choice_kind", "dialogue");
-            button.SetMeta("opennv_source_choice_id", choice.Topic.ToString());
+            button.SetMeta("opennv_source_choice_id", $"{choice.Topic}:{choice.Info}");
             button.SetMeta("opennv_source_choice_menu", _sourceMenuIdentity);
             button.SetMeta("opennv_source_choice_goodbye",
                 (_isGoodbye ?? throw new InvalidOperationException("Dialogue topic identity owner is absent."))(choice.Topic));

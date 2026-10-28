@@ -28,6 +28,24 @@ internal partial class RuntimeNativePlayer
             throw new InvalidOperationException("Overencumbered player cannot fast travel.");
     }
 
+    // Use the same source, posture, equipment and injury owners as movement.
+    // Unlike fast travel, ordinary movement may have an overencumbered speed.
+    internal float PredictMovementSpeedMeters(bool running)
+    {
+        var speed = ResolveMovementSpeed(running).Speed * UnitsToMeters;
+        return float.IsFinite(speed) && speed >= 0 ? speed :
+            throw new InvalidDataException("Player movement speed is not finite and nonnegative.");
+    }
+
+    internal object MovementSpeedObservation
+    {
+        get
+        {
+            try { return new { runMetersPerSecond = PredictMovementSpeedMeters(true), walkMetersPerSecond = PredictMovementSpeedMeters(false), error = (string?)null }; }
+            catch (Exception error) { return new { runMetersPerSecond = (float?)null, walkMetersPerSecond = (float?)null, error = error.Message }; }
+        }
+    }
+
     private float MovementSpeed(bool running)
     {
         try

@@ -4,6 +4,24 @@ namespace OpenNV.Runtime.World.Cells;
 
 internal sealed partial class FalloutReferenceWorld
 {
+    internal void StartCombat(FalloutFormKey reference, FalloutFormKey target)
+    {
+        if (records.RuntimeFormId(reference) == 0x14)
+            throw new NotSupportedException("Scripted player combat has no player engagement owner.");
+        var actor = Actor(reference);
+        if (target == reference) throw new InvalidDataException("An actor cannot start combat against itself.");
+        if (records.RuntimeFormId(target) != 0x14) _ = Actor(target);
+        if (!IsEnabled(reference) || actor.Injury?.Dead == true || actor.Unconscious)
+            throw new NotSupportedException("Scripted combat for a disabled, dead or unconscious actor is unbound.");
+        if (actor.Engagement is { } current)
+        {
+            if (current.Target == target) return;
+            throw new NotSupportedException("Scripted combat target replacement is unbound.");
+        }
+        actor.AggroWarning = null;
+        actor.Engagement = new(target);
+    }
+
     internal void StopCombatAlarmOnActor(FalloutFormKey target)
     {
         if (records.RuntimeFormId(target) != 0x14) _ = Actor(target);

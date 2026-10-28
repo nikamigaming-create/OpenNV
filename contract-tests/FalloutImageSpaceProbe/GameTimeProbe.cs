@@ -71,6 +71,28 @@ internal static class GameTimeProbe
         Require(new FalloutPackageSchedule(-1, 4, 0, 22, 49).IsActive(clock), "A multi-day window lost its original starting day.");
         SetTime(8, 26, 6, 23);
         Require(!new FalloutPackageSchedule(-1, 4, 0, 22, 49).IsActive(clock), "A multi-day window missed its exclusive end.");
+        for (var month = 0; month < days.Length; month++)
+        {
+            SetTime(month, 1, 3, 23.5f);
+            for (var before = 0; before < 40; before++)
+            {
+                var ordinal = (days.Take(month).Sum(value => value) - before + 365) % 365;
+                var expectedMonth = 0;
+                while (ordinal >= days[expectedMonth]) ordinal -= days[expectedMonth++];
+                var actual = clock.ScheduleTime(before);
+                Require(actual.Month == expectedMonth && actual.Date == ordinal + 1 && actual.Hour == 23.5f,
+                    "Package scheduling changed across a month or year boundary.");
+            }
+        }
+        days[0] = 30;
+        Require(clock.CalendarDays == 364, "The schedule cached a mutable calendar declaration.");
+        days[0] = 0;
+        Reject<NotSupportedException>(() => clock.ScheduleTime());
+        days[0] = 31;
+        for (var index = 0; index < 100; index++) _ = clock.ScheduleTime();
+        var allocated = GC.GetAllocatedBytesForCurrentThread();
+        for (var index = 0; index < 1000; index++) _ = clock.ScheduleTime();
+        Require(GC.GetAllocatedBytesForCurrentThread() == allocated, "Warmed actor scheduling allocated per query.");
         CalendarTravel(calendar, sources, bindings);
         Console.WriteLine("OPENNV_PACKAGE_SCHEDULE_CONTRACT_PASS hourBoundaries=true overnight=true weekdays=true sourceCalendar=true multiDay=true missingClockRejected=true");
         Console.WriteLine("OPENNV_GAME_TIME_CONTRACT_PASS sourceGlobals=true float32=true sourceCalendar=true coldRestore=true simulationClockOnly=true");

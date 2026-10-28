@@ -47,8 +47,101 @@ execution ownership are reported independently. Numeric values and loop counts
 are unbounded, so this is authored alternative coverage, not an exhaustive
 simulation of every possible game state. See [the audit contract](../../docs/quest-graph-audit.md).
 
+`script-capability-map` reads a completed private quest-graph audit and joins
+its statement operations to literal dispatch guards in the current repository
+source. It verifies the statement totals, includes source hashes and reports
+whether the audit runtime build matches the current tool runtime. Output goes to
+stdout. A listed guard is only a candidate: caller context, arguments, effects,
+continuations, dynamic dispatch and retail behavior remain unverified. A stale
+build must be re-audited before treating inspection results as current.
+
+`caravan-source` reads every winning card and deck with the runtime source
+reader and reports decode failures, raw field distributions and the source and
+compiled lanes of referenced card scripts. Parsing a script is not execution;
+the audit does not check card rules or whether a game can be played. Both command
+outputs can contain owned-derived identifiers and belong in private storage.
+
+`creature-sound-graph <installation>` inventories every winning CREA's CSCR,
+TPLT, template flags and local sound-type declarations, including deleted
+records, with hashes of their decoded record payloads and linked winners. It
+reports invalid links and layouts without treating source links as
+proof of inheritance precedence, execution or retail sound behavior. Output is
+owned-derived and must stay private.
+
+`find-target-graph <installation>` accounts for winning PACK records, decoding
+Find source targets, locations, flags and payload hashes. It reports malformed
+or unsupported source declarations and exits nonzero on failure. It does not
+establish candidate eligibility, acquisition, combat, execution or retail
+behavior. Its owned-derived output stays private.
+
+`sandbox-capability-graph <installation>` reconciles winning PACK records and
+reports Sandbox declarations, location inputs and the actual Sandbox reader's
+acceptance or refusal for each decoded record. Declaration failures are
+separate from reader refusals and cause a nonzero exit. Admission does not
+prove actor reachability, execution, save continuity or retail behavior; output
+derived from owned data stays private.
+
+`actor-package-graph <installation> [source options]` maps winning actor bases
+to their invariant package template owners and ordered PKID declarations, and
+winning actor references to their base and parent cell. Unresolved template
+choices and invalid links are reported per record; any failure yields a
+nonzero exit. The graph does not evaluate conditions, choose leveled templates,
+prove runtime reachability, or establish package behavior. Its output stays
+private.
+
+`light-graph <installation>` inventories every winning LIGH declaration,
+including deleted winners, through the runtime reader. It preserves source
+identities and payload hashes, light fields, model paths and flag distributions;
+it reports per-record decoding failures and exits nonzero on failure. It does
+not inspect placed references, model resolution, animation, runtime ownership
+or retail lighting. Output stays private.
+
+`settings <installation> <name-fragment> [...]` reports each matching
+executable-name or winning GMST candidate and its resolved value or failure.
+It continues after an individual refusal and exits nonzero if any candidate
+fails. The name inventory also contains section-qualified executable strings;
+a failed numeric lookup for such a string does not by itself establish that a
+game setting is missing or that an INI setting is unsupported.
+
+`dialogue-voice-topic <installation> <topic-runtime-hex> <actor-base-runtime-hex>`
+lists every decoded response in the selected winning topic and attempts the
+runtime's exact voice lookup for that actor base. It preserves source identities,
+flags, condition counts, text hashes, resolved paths and refusal reasons. It
+does not evaluate conditions, actor eligibility, templates, or retail playback;
+lookup failures in this broad cross-product are not counts of broken dialogue.
+The output is private owned-derived data and the command exits nonzero on any
+lookup refusal.
+
+`item-events` inventories winning inventory-item definitions, resolves attached
+scripts through the runtime source owner, and counts parsed event declarations
+by distinct script and item identity. It checks its denominators and reports
+attachment and source failures. It separately summarizes `OnAdd` filters,
+direct statement names and scripts with local declarations; these groups can
+overlap, and expression calls are not included. The counts do not establish event delivery,
+inventory-instance semantics, compiled execution, or retail behavior.
+
+`menu-audit` tokenizes, parses and expands every winning menu XML resource and
+reports the source path and phase of each failure. Tokenization keeps source
+order without requiring balanced tags; it is not the live tile loader. The audit
+exits nonzero for any failure. It does not exercise tile evaluation, menu input,
+or retail behavior.
+
+`menu-graph` independently inventories literal prefab includes from every
+winning menu resource, reports unread resources, unrecognized include syntax,
+missing targets and cycles, and writes its source-keyed graph to stdout. It does
+not interpret tile nesting, expansion order, evaluation or retail behavior.
+
+`menu-source-events <source> <logical-path>` assembles a candidate ordered token
+sequence with source entry/exit boundaries for self-closing includes. It rejects
+cycles and unsupported syntax. The command reports source and token counts; it
+does not establish retail include timing or build a live tile hierarchy.
+
 ```powershell
 dotnet run --project tools/OpenNV.DevelopmentLab -c Release -- quest-graph $owned tmp/lab-quests-01
+dotnet run --project tools/OpenNV.DevelopmentLab -c Release -- script-capability-map tmp/lab-quests-01 .
+dotnet run --project tools/OpenNV.DevelopmentLab -c Release -- caravan-source $owned
+dotnet run --project tools/OpenNV.DevelopmentLab -c Release -- item-events $owned
+dotnet run --project tools/OpenNV.DevelopmentLab -c Release -- menu-audit $owned
 dotnet run --project tools/OpenNV.DevelopmentLab -c Release -- quest-graph $owned tmp/lab-ttw-quests-01 --mod ttw D:\OwnedMods\TTW D:\OwnedMods\xNVSE D:\OwnedMods\JIP
 dotnet run --project tools/OpenNV.DevelopmentLab -c Release -- corpus $owned tmp/lab-selected-corpus-01 --mod-stack tmp/launcher-mods.private.json
 dotnet run --project tools/OpenNV.DevelopmentLab -c Release -- corpus $owned tmp/lab-subsets-01 --selection-variants --mod-stack tmp/launcher-mods.private.json

@@ -11,6 +11,27 @@ internal sealed record FalloutActorPackageMotion(FalloutFormKey Package, string 
     FalloutTravelProgress? Guard = null, FalloutAccompanyPortalArrival? AccompanyPortal = null,
     FalloutWanderProgress? Wander = null, FalloutSandboxActivityProgress? Sandbox = null, FalloutActorEatProgress? Eat = null)
 {
+    // Captures and restores must not share mutable route, pose or activity
+    // buffers with the live owner or a caller retaining the snapshot.
+    internal FalloutActorPackageMotion Copy() => this with
+    {
+        Position = (float[])Position.Clone(),
+        Rotation = (float[])Rotation.Clone(),
+        EditorTravel = EditorTravel is { } editor ? editor with { Location = (float[])editor.Location.Clone() } : null,
+        Travel = Travel is { } travel ? CopyTravel(travel) : null,
+        Guard = Guard is { } guard ? CopyTravel(guard) : null,
+        Wander = Wander is { } wander ? wander with { Destination = (float[])wander.Destination.Clone() } : null,
+        Sandbox = Sandbox is { } sandbox ? sandbox with { Preferences = (byte[])sandbox.Preferences.Clone() } : null,
+        Eat = Eat is { } eat ? eat with { Objects = eat.Objects?.ToArray() } : null
+    };
+
+    private static FalloutTravelProgress CopyTravel(FalloutTravelProgress travel) => travel with
+    {
+        Location = (float[])travel.Location.Clone(),
+        RouteTarget = travel.RouteTarget is null ? null : (float[])travel.RouteTarget.Clone(),
+        RouteWaypoints = travel.RouteWaypoints?.Select(point => (float[])point.Clone()).ToArray()
+    };
+
     internal void Validate()
     {
         Patrol?.Validate();

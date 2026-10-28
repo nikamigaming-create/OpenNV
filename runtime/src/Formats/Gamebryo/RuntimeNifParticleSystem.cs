@@ -149,11 +149,23 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
         internal long Identity, ParentIdentity;
         internal ushort Generation;
         internal Color InitialColor;
+        internal NativeParticleAngleCache DrawAngle;
     }
 
-    private void ConfigureSource(FalloutNifFile file, FalloutNifParticleSystem source,
+    internal static Action<string, double>? ConfigureObserver { get; set; }
+
+    private ShaderMaterial ConfigureSource(FalloutNifFile file, FalloutNifParticleSystem source,
         IReadOnlyDictionary<int, Node3D> nodes, Material material, float units)
     {
+        var observer = ConfigureObserver;
+        var started = observer is null ? 0 : System.Diagnostics.Stopwatch.GetTimestamp();
+        void Mark(string stage)
+        {
+            if (observer is null) return;
+            var now = System.Diagnostics.Stopwatch.GetTimestamp();
+            observer(stage, System.Diagnostics.Stopwatch.GetElapsedTime(started, now).TotalMilliseconds);
+            started = now;
+        }
         _source = source; _nodes = nodes; _units = units;
         _data = file.ReadObject(source.Geometry.Data) as FalloutNifParticleData ??
             throw new InvalidDataException("Particle system has no particle data.");
@@ -163,6 +175,7 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
             throw new NotSupportedException($"Particle data {_data.Block.Index} has unsupported runtime fields.");
         _modifiers = source.Modifiers.Select(index => file.ReadObject(index) as FalloutNifParticleModifier ??
             throw new InvalidDataException("Particle modifier reference is not a modifier.")).OrderBy(value => value.Order).ToArray();
+        Mark("source-and-modifier-read");
         _parentVelocity = _modifiers.OfType<FalloutNifParticleParentVelocity>().SingleOrDefault();
         if (_parentVelocity?.Damping < 0) throw new InvalidDataException("Parent velocity damping is negative.");
         foreach (var modifier in _modifiers)
@@ -228,6 +241,7 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
             }
         }
         ConfigureSpawning(file);
+        Mark("modifier-and-spawn-binding");
         if (!_modifiers.OfType<FalloutNifParticleAgeDeath>().Any() ||
             !_modifiers.Any(value => value.Block.TypeName == "NiPSysPositionModifier") ||
             !_modifiers.OfType<FalloutNifParticleBounds>().Any())
@@ -240,10 +254,8 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
         _drawBuffer = new float[checked(_data.Maximum * NativeParticleDrawBuffer.Stride)];
         if (material is not ShaderMaterial shader || shader.ResourceName != NativeNifEffectMaterial.ResourceIdentity)
             throw new NotSupportedException("Particle material has no admitted source shader.");
-        shader.SetShaderParameter("source_particle_atlas", _data.HasTextureIndices);
-        ConfigureParticleDraw(shader);
-        SetMeta("opennv_particle_source_capacity", _data.Maximum);
-        SetMeta("opennv_particle_owner", "direct-nif-instance-simulation");
+        Mark("simulation-buffer-allocation");
+        return shader;
     }
 
     private void ValidateEmitter(FalloutNifParticleEmitter emitter)
@@ -388,12 +400,24 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
                 var transform = TransformOf(gravity.Object);
                 var axis = Convert(gravity.Axis);
                 if (!gravity.WorldAligned) axis = transform.Basis * axis;
+                var axisDirection = gravity.ForceType == 1 ? default : axis.Normalized();
+                var strength = _gravityStrengths[gravity.Name];
+                if (gravity.ForceType != 1 && gravity.Decay == 0 && gravity.Turbulence == 0)
+                {
+                    // The source transform and force stay fixed for this
+                    // modifier pass. Preserve the original operation order
+                    // while sharing the identical acceleration across particles.
+                    var acceleration = axisDirection * strength;
+                    var change = acceleration * (_units * delta);
+                    for (var i = 0; i < ActiveCount; i++) _particles[i].Velocity += change;
+                    continue;
+                }
                 for (var i = 0; i < ActiveCount; i++)
                 {
-                    var offset = transform.Origin - _particles[i].Position;
-                    var direction = gravity.ForceType == 1 ? offset.Normalized() : axis.Normalized();
+                    var offset = gravity.ForceType == 1 || gravity.Decay != 0
+                        ? transform.Origin - _particles[i].Position : default;
+                    var direction = gravity.ForceType == 1 ? offset.Normalized() : axisDirection;
                     var decay = gravity.Decay == 0 ? 1 : MathF.Exp(-gravity.Decay * offset.Length() / _units);
-                    var strength = _gravityStrengths[gravity.Name];
                     var acceleration = direction * strength;
                     if (gravity.Turbulence > 0)
                     {
@@ -602,7 +626,8 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
                 else if (modifier is FalloutNifParticleColorKeys keys)
                     color = ToColor(_keyColors[keys.Block.Index].Sample(particle.Age / particle.Life));
             }
-            var transform = NativeParticleDrawBuffer.Billboard(basis, particle.Angle, radius, particle.Position);
+            var (sin, cos) = particle.DrawAngle.Get(particle.Angle);
+            var transform = NativeParticleDrawBuffer.Billboard(basis, sin, cos, radius, particle.Position);
             var extent = transform.Basis.X.Abs() + transform.Basis.Y.Abs();
             minimum = minimum.Min(particle.Position - extent); maximum = maximum.Max(particle.Position + extent);
             var uv = _data.Subtextures.Length == 0 ? new FalloutNifVector4(0, 1, 0, 1) : _data.Subtextures[particle.Texture];

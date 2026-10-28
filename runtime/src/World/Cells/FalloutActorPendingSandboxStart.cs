@@ -12,7 +12,7 @@ internal sealed record FalloutActorPendingSandboxStart(FalloutFormKey Reference,
     long QuestRevision, long ActivityRevision, FalloutActorActivitySnapshot Activity,
     long EventRevision, string LastEvent, FalloutFormKey LastPackage,
     IReadOnlyList<FalloutIdleReplayCooldown> ReplayCooldowns, FalloutFaceBlinkSnapshot? Blink = null,
-    FalloutReferencePlacement? SourcePlacement = null)
+    FalloutReferencePlacement? SourcePlacement = null, long? SelectionAttempts = null)
 {
     internal const string CaptureBlocker = "Sandbox continuation: awaiting first native movement observation.";
 
@@ -24,7 +24,7 @@ internal sealed record FalloutActorPendingSandboxStart(FalloutFormKey Reference,
             !double.IsFinite(PollRemaining) || PollRemaining < 0 || QuestRevision < -1 || QuestRevision == long.MaxValue ||
             ActivityRevision < -1 || ActivityRevision == long.MaxValue || Activity is null ||
             EventRevision <= 0 || EventRevision == long.MaxValue || LastEvent != "POBA" || LastPackage != Package ||
-            ReplayCooldowns is null ||
+            ReplayCooldowns is null || SelectionAttempts is <= 0 or long.MaxValue ||
             ScheduleTime is { } time && (time.Month is < 0 or > 11 || time.Date is < 1 or > 31 || time.Weekday is < 0 or > 6 ||
                 !float.IsFinite(time.Hour) || time.Hour is < 0 or >= 24))
             throw new InvalidDataException("Saved pending Sandbox start is invalid.");
@@ -52,7 +52,7 @@ internal sealed record FalloutActorPendingSandboxStart(FalloutFormKey Reference,
             actor.PackageMotion is not null || actor.PackageIdle is not null || actor.DeferredPackageContinuation is not null ||
             actor.PackageBindingFailure is not null || actor.PendingPackageSelection is not null || actor.SelectionFailure is not null ||
             actor.FurnitureContinuation is not null || actor.DialogueContinuation is not null ||
-            actor.SandboxAdmissionFailure is not null || actor.SandboxMotionFailure is not null || actor.CreatureScriptIdle is not null)
+            actor.SandboxAdmissionFailure is not null || actor.InterruptedSandboxAdmission is not null || actor.SandboxMotionFailure is not null || actor.CreatureScriptIdle is not null)
             throw new InvalidDataException("Pending Sandbox has a missing clock or conflicting source/procedure owner.");
         FalloutActorAnimationState.Validate(actor.Animation);
         FalloutActorStoppedPose.Validate(actor);
@@ -62,13 +62,17 @@ internal sealed record FalloutActorPendingSandboxStart(FalloutFormKey Reference,
     {
         Validate();
         var assignment = actor.CapturePackageAssignment is { } capture ? capture() : actor.PackageAssignment;
-        if (actor.Reference != Reference || records.GetEffective(actor.Base).Signature != "NPC_" || !MatchesAssignment(assignment) ||
+        var signature = records.GetEffective(actor.Base).Signature;
+        if (actor.Reference != Reference || signature is not ("NPC_" or "CREA") ||
+            signature == "NPC_" && SelectionAttempts is not null ||
+            signature == "CREA" && (SelectionAttempts is null || Blink is not null || ReplayCooldowns.Count != 0 ||
+                RandomState != actor.SoundRandom.State || ActivityRevision != Activity.Revision) || !MatchesAssignment(assignment) ||
             actor.Animation.Resource.Length == 0 || !MatchesPlacement(actor.Placement) || actor.ScriptError is not null ||
             actor.ScriptStoppedFrame is not null || actor.PackageMotion is not null || actor.PackageIdle is not null ||
             actor.DeferredPackageContinuation is not null || actor.PackageBindingFailure is not null ||
             actor.PendingPackageSelection is not null || actor.SelectionFailure is not null || actor.StoppedRetirement is not null ||
             actor.FurnitureContinuation is not null || actor.DialogueContinuation is not null ||
-            actor.SandboxAdmissionFailure is not null || actor.SandboxMotionFailure is not null || actor.CreatureScriptIdle is not null)
+            actor.SandboxAdmissionFailure is not null || actor.InterruptedSandboxAdmission is not null || actor.SandboxMotionFailure is not null || actor.CreatureScriptIdle is not null)
             throw new InvalidDataException("Pending Sandbox differs from its actual selected assignment or procedure boundary.");
         var owner = FalloutActorTemplateOwner.Resolve(records, records.GetEffective(actor.Base), 32, actor.Templates);
         if (owner.FormKey != PriorityOwner || FalloutActorFurnitureContinuation.RecordHash(owner) != PrioritySha256 ||
@@ -79,7 +83,7 @@ internal sealed record FalloutActorPendingSandboxStart(FalloutFormKey Reference,
         if (package.Signature != "PACK" || !FalloutActorFurnitureContinuation.RecordHash(package)
             .Equals(PackageSha256, StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException("Pending Sandbox package differs from its winning source.");
-        _ = FalloutSandboxPackage.Read(package);
+        FalloutSandboxPackage.Read(package).RequireRetainedStart(records, actor);
         foreach (var replay in ReplayCooldowns)
         {
             var idle = records.GetEffective(replay.Idle);

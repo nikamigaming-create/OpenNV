@@ -27,7 +27,9 @@ internal sealed class ReactiveCampaignBot
 {
     internal const float ProgressLimitSeconds = 90;
     private readonly Dictionary<string, long> _attemptedGoals = new(StringComparer.Ordinal);
+    private readonly Dictionary<(string Quest, uint Objective, string Target), long> _failedActivations = [];
     private readonly HashSet<string> _choices = new(StringComparer.Ordinal);
+    private readonly HashSet<(long Progress, string Topic)> _dialogueChoices = [];
     private BotSkillBinding? _binding;
     private BotCampaignGoal? _goal;
     private string? _pendingChoice, _choiceBefore;
@@ -69,7 +71,7 @@ internal sealed class ReactiveCampaignBot
     internal void Start()
     {
         if (Active) throw new InvalidOperationException("Campaign input already has an owner.");
-        _attemptedGoals.Clear(); _choices.Clear();
+        _attemptedGoals.Clear(); _failedActivations.Clear(); _choices.Clear(); _dialogueChoices.Clear();
         _binding = null; _goal = null; _pendingChoice = _choiceBefore = _scene = _savedScene = _saveScene = null;
         _sample = _progress = _savedProgress = _saveProgress = -1;
         _saving = false; _saveBefore = 0; _idle = _stale = 0;
@@ -103,6 +105,8 @@ internal sealed class ReactiveCampaignBot
         if (observation.Loading) { Phase = "loading"; return new(BotCampaignCommandKind.None); }
         if (observation.Binding is not { } binding)
         {
+            if (_pendingChoice is not null && MenuIdentity(observation) != _choiceBefore)
+                _pendingChoice = _choiceBefore = null;
             if (_pendingChoice is null && observation.Choices.FirstOrDefault(choice => choice.Kind == "startup") is { } startup)
             {
                 _pendingChoice = startup.Identity; _choiceBefore = MenuIdentity(observation);
@@ -134,23 +138,45 @@ internal sealed class ReactiveCampaignBot
             _progress = observation.Progress; _idle = 0;
         }
         if (_goal is not null && skill.Error is { } skillError)
-            return Fail(skill.FailureKind ?? "bot-policy", skillError, !observation.Paused);
+        {
+            // A quest may name several places for the same objective. A
+            // delivered activation with no response is not completion, but
+            // another untried source target can still contain the encounter.
+            var failed = _goal;
+            var noResponse = skill.FailureKind == "bot-policy" && skillError == "Activation had no observed gameplay response.";
+            if (noResponse) _failedActivations[(failed.Quest, failed.Objective, failed.Target)] = observation.Progress;
+            var alternative = noResponse &&
+                observation.Goals.Any(candidate => candidate.Quest == failed.Quest && candidate.Objective == failed.Objective &&
+                    candidate.Target != failed.Target && candidate.Error is null && !ActivationFailed(candidate, observation.Progress) &&
+                    (!_attemptedGoals.TryGetValue(candidate.Identity, out var tried) || tried != observation.Progress));
+            if (!alternative) return Fail(skill.FailureKind ?? "bot-policy", skillError, !observation.Paused);
+            _goal = null;
+        }
         if (_goal is null && skill.Active)
             return Fail("input-owner", "An active reference skill belongs to a different campaign attempt.", !observation.Paused);
         if (skill.Active && _pendingChoice is null && observation.Choices.Count == 0 && !observation.ModalInput)
         {
-            var highestGoal = observation.Goals.OrderByDescending(value => value.Priority).FirstOrDefault();
+            // A target can disappear from the live goals as soon as the shot
+            // kills it. Let its already-fired impact settle before replacing
+            // the skill, so another source goal cannot erase the receipt.
+            if (skill.Phase == "combat-awaiting-shot")
+            { Phase = "executing-skill"; return new(BotCampaignCommandKind.None); }
+            var highestGoal = observation.Goals.Where(value => !ActivationFailed(value, observation.Progress))
+                .OrderByDescending(value => value.Priority).FirstOrDefault();
+            var currentAction = _goal is null ? null : observation.Goals.FirstOrDefault(value =>
+                value.Quest == _goal.Quest && value.Objective == _goal.Objective && value.Target == _goal.Target &&
+                value.Reference == _goal.Reference && value.Mode == _goal.Mode && value.Error is null);
+            var highestIsCurrent = highestGoal is not null && currentAction is not null &&
+                highestGoal.Quest == currentAction.Quest && highestGoal.Objective == currentAction.Objective &&
+                highestGoal.Target == currentAction.Target && highestGoal.Reference == currentAction.Reference && highestGoal.Mode == currentAction.Mode;
             if (_goal is not null && highestGoal is not null &&
-                (highestGoal.Priority > _goal.Priority ||
-                 (highestGoal.Identity != _goal.Identity &&
-                  (!observation.Goals.Any(g => g.Identity == _goal.Identity) ||
-                   !_attemptedGoals.TryGetValue(highestGoal.Identity, out var previous) || previous != observation.Progress))))
+                !highestIsCurrent && (currentAction is null || highestGoal.Priority > currentAction.Priority))
             {
                 if (string.IsNullOrWhiteSpace(highestGoal.Reference) || highestGoal.Mode is not ("interact" or "travel" or "approach" or "shoot" or "follow" or "combat"))
                     return Fail("observation-loss", "Source campaign goal has no supported ordinary reference action.");
                 _goal = highestGoal; _attemptedGoals[highestGoal.Identity] = observation.Progress; ++_goalAttempts;
                 Phase = "starting-source-goal";
-                var preemptDistance = highestGoal.Mode == "travel" ? .5f : highestGoal.Mode is "shoot" or "combat" ? 6f : highestGoal.Mode == "follow" ? 3.5f : 1.5f;
+                var preemptDistance = GoalDistance(highestGoal.Mode);
                 return new(BotCampaignCommandKind.Reference, highestGoal.Reference, highestGoal.Mode, Distance: preemptDistance);
             }
             Phase = "executing-skill"; return new(BotCampaignCommandKind.None);
@@ -164,15 +190,35 @@ internal sealed class ReactiveCampaignBot
         if (_saving)
         {
             if (observation.Save is not { } saved || saved.Generation <= _saveBefore)
-            { Phase = "awaiting-save-input"; return new(BotCampaignCommandKind.None); }
-            if (saved.Disposition == "pending")
-            { Phase = "awaiting-complete-checkpoint"; return new(BotCampaignCommandKind.None); }
-            if (saved.Disposition != "completed" || string.IsNullOrWhiteSpace(saved.Slot) || saved.Error is not null)
-                return Fail("engine-owner", "Complete checkpoint was not written: " + (saved.Error ?? saved.Disposition));
-            _savedProgress = _saveProgress; _savedScene = _saveScene;
-            ++_writtenCheckpoints; _saving = false; _idle = 0;
+            {
+                // An offered source menu can open between admission and the
+                // input pulse, consuming it without starting a save. Let that
+                // menu proceed; no receipt means no checkpoint is credited.
+                if (observation.Choices.Count == 0)
+                { Phase = "awaiting-save-input"; return new(BotCampaignCommandKind.None); }
+                _saving = false;
+            }
+            else
+            {
+                if (saved.Disposition == "pending")
+                { Phase = "awaiting-complete-checkpoint"; return new(BotCampaignCommandKind.None); }
+                if (saved.Disposition == "failed" && saved.Error is "speech" or "actor-procedure-initialization")
+                {
+                    // No checkpoint was committed: wait for fresh admission.
+                    // A package can begin between the previous observation
+                    // and the save input, just as speech can begin there.
+                    _saving = false; Phase = "awaiting-save-admission";
+                    return new(BotCampaignCommandKind.None);
+                }
+                if (saved.Disposition != "completed" || string.IsNullOrWhiteSpace(saved.Slot) || saved.Error is not null)
+                    return Fail("engine-owner", "Complete checkpoint was not written: " + (saved.Error ?? saved.Disposition));
+                _savedProgress = _saveProgress; _savedScene = _saveScene;
+                ++_writtenCheckpoints; _saving = false; _idle = 0;
+            }
         }
         var menu = MenuIdentity(observation);
+        if (!observation.ModalInput && !observation.Choices.Any(choice => choice.Kind == "dialogue"))
+            _dialogueChoices.Clear();
         if (_pendingChoice is not null)
         {
             if (menu == _choiceBefore) { Phase = "awaiting-menu-result"; return new(BotCampaignCommandKind.None); }
@@ -180,12 +226,14 @@ internal sealed class ReactiveCampaignBot
         }
         if (observation.Choices.Count != 0)
         {
-            var choice = observation.Choices.Where(value =>
-                    !_choices.Contains(menu + "\n" + value.Identity))
-                .OrderBy(value => value.Goodbye).FirstOrDefault();
+            var choice = observation.Choices.Where(value => value.Kind == "dialogue"
+                    ? !_dialogueChoices.Contains((observation.Progress, value.Identity))
+                    : !_choices.Contains(menu + "\n" + value.Identity))
+                .OrderBy(value => value.Goodbye || EndsTutorial(value.Text)).FirstOrDefault();
             if (choice is null)
                 return Fail("bot-policy", "All currently offered source menu choices were attempted without new observable state.");
-            _choices.Add(menu + "\n" + choice.Identity);
+            if (choice.Kind == "dialogue") _dialogueChoices.Add((observation.Progress, choice.Identity));
+            else _choices.Add(menu + "\n" + choice.Identity);
             _pendingChoice = choice.Identity; _choiceBefore = menu; ++_choiceAttempts;
             Phase = "choosing-" + choice.Kind;
             return new(BotCampaignCommandKind.Choice, Path: choice.Path);
@@ -201,7 +249,8 @@ internal sealed class ReactiveCampaignBot
             return new(BotCampaignCommandKind.Save);
         }
         var goal = observation.Goals.OrderByDescending(value => value.Priority).FirstOrDefault(value =>
-            !_attemptedGoals.TryGetValue(value.Identity, out var previous) || previous != observation.Progress);
+            !ActivationFailed(value, observation.Progress) &&
+            (!_attemptedGoals.TryGetValue(value.Identity, out var previous) || previous != observation.Progress));
         if (goal is null)
         {
             Phase = observation.Goals.Count == 0 ? "awaiting-source-objective" : "awaiting-source-progress";
@@ -212,9 +261,40 @@ internal sealed class ReactiveCampaignBot
             return Fail("observation-loss", "Source campaign goal has no supported ordinary reference action.");
         _goal = goal; _attemptedGoals[goal.Identity] = observation.Progress; ++_goalAttempts;
         Phase = "starting-source-goal";
-        var distance = goal.Mode == "travel" ? .5f : goal.Mode is "shoot" or "combat" ? 6f : goal.Mode == "follow" ? 3.5f : 1.5f;
+        var distance = GoalDistance(goal.Mode);
         return new(BotCampaignCommandKind.Reference, goal.Reference, goal.Mode, Distance: distance);
     }
+
+    private static float GoalDistance(string mode) => mode == "travel" ? .5f : mode is "shoot" or "combat" ? 6f : 1.5f;
+
+    internal static IEnumerable<BotCampaignControl> ActiveMenuControls(IReadOnlyList<BotCampaignControl> controls) =>
+        controls.Any(control => control.Kind == "barter-back")
+            ? controls.Where(control => control.Kind == "barter-back") : controls;
+
+    // This is a diagnostic input policy using the player's displayed objective,
+    // not a quest transition. Unknown wording keeps the existing behavior.
+    internal static bool RequestsConversation(string objective) =>
+        objective.TrimStart().StartsWith("Talk to ", StringComparison.OrdinalIgnoreCase);
+
+    internal static bool RequestsDefeat(string objective) =>
+        objective.TrimStart().StartsWith("Kill ", StringComparison.OrdinalIgnoreCase);
+
+    internal static bool RequestsFollow(string objective) =>
+        objective.TrimStart().StartsWith("Follow ", StringComparison.OrdinalIgnoreCase);
+
+    // A quest marker naming an actor is not permission to attack it. Combat
+    // goals require both displayed defeat intent and observed hostility.
+    internal static string SourceTargetMode(bool staticMarker, bool actor, bool defeat, bool hostile) =>
+        staticMarker ? "travel" : actor && defeat && hostile ? "shoot" : "interact";
+
+    internal static bool EndsTutorial(string text) =>
+        text.TrimStart().StartsWith("[END TUTORIAL]", StringComparison.OrdinalIgnoreCase);
+
+    internal static int NearbyUnselectedQuestBonus(float distanceMeters) =>
+        float.IsFinite(distanceMeters) && distanceMeters >= 0 ? Math.Max(0, 1000 - (int)Math.Min(1000, distanceMeters)) : 0;
+
+    private bool ActivationFailed(BotCampaignGoal goal, long progress) =>
+        _failedActivations.TryGetValue((goal.Quest, goal.Objective, goal.Target), out var failed) && failed == progress;
 
     private static string MenuIdentity(BotCampaignObservation state) =>
         state.Scene + "\n" + state.Progress + "\n" +

@@ -1,7 +1,34 @@
 using OpenNV.Runtime.Content;
+using OpenNV.Runtime.Formats.Gamebryo;
+using OpenNV.Runtime.World.Cells;
 
 internal static class AnimationResourceContracts
 {
+    internal static void RunOwnedIdleStaticObject(string dataRoot)
+    {
+        RuntimeLiveContentSource.Configure(dataRoot, RuntimeLiveContentSource.FalloutNewVegasGame);
+        using var content = RuntimeLiveContentSource.Current!;
+        using var records = FalloutPluginStack.Load(content.PluginSources);
+        var form = new FalloutFormKey("FalloutNV.esm", 0x0c3a17);
+        var anio = records.GetEffective(form);
+        var idle = records.GetEffective(FalloutDialogueTopic.RequiredForm(anio, "DATA"));
+        var declaration = FalloutActorIdleSource.Resolve(records, idle);
+        var attachment = declaration.Objects.Single(value => value.Form == form);
+        if (!content.TryRead(attachment.ModelPath, null, out var bytes, out _)) throw new FileNotFoundException(attachment.ModelPath);
+        var nif = FalloutNifFile.Read(bytes);
+        var binding = new FalloutActorIdleObjectBinding(form, FalloutActorFurnitureContinuation.RecordHash(anio), attachment.ModelPath, nif.Sha256);
+        binding.ValidateModel(nif);
+        var controller = nif.Blocks.Single(block => block.TypeName == "NiTransformController");
+        var changed = bytes.ToArray();
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(changed.AsSpan(controller.Offset + 4), 0x48);
+        if (FalloutActorIdleObjectBinding.IsStatic(FalloutNifFile.Read(changed)))
+            throw new InvalidDataException("An unowned controller clock was accepted as static.");
+        const string glass = "meshes/AnimObjects/aoDrinkingGlass.NIF";
+        if (!content.TryRead(glass, null, out var physical, out _) || FalloutActorIdleObjectBinding.IsStatic(FalloutNifFile.Read(physical)))
+            throw new InvalidDataException("An independently physical animation object was accepted as static.");
+        Console.WriteLine($"OPENNV_OWNED_IDLE_STATIC_OBJECT_PASS anio={form} idle={idle.FormKey} nifHash={nif.Sha256} zeroTime=true changedClockRefused=true physicsRefused=true gameplay=unverified");
+    }
+
     internal static void RunOwnedCreatureWeapon(string dataRoot)
     {
         RuntimeLiveContentSource.Configure(dataRoot, RuntimeLiveContentSource.FalloutNewVegasGame,
@@ -17,13 +44,26 @@ internal static class AnimationResourceContracts
         Require(variants.Count == 3 && variants.All(path => path.Contains("/specialanims/", StringComparison.OrdinalIgnoreCase)) &&
             variants.Select(content.ActorAnimations.SelectedGroup).SequenceEqual(new[] { "AttackRight", "AttackRight_2", "AttackRight_3" }),
             "Reached model-owner declarations did not bind the three source base attack sequences separately from up/down.");
+        var movement = content.ActorAnimations.Find("meshes/creatures/deathclaw", "locomotion/mtforward");
+        Require(movement is not null && movement.EndsWith("/locomotion/mtfoward.kf", StringComparison.OrdinalIgnoreCase) &&
+            content.ActorAnimations.SelectedGroup(movement) == "Forward",
+            "Owned creature movement did not resolve its uniquely exported forward group.");
         Console.WriteLine("OPENNV_OWNED_CREATURE_WEAPON_BINDING_PASS defaultPistolGroup=true declaredAlternatives=3 directionalGroupsSeparate=true sourceReadonly=true gameplay=false");
     }
 
     internal static void Run()
     {
+        var zeroClock = new FalloutNifTimeController(-1, 0x4c, 1, 0, 0, 0, 7, 0);
+        Require(FalloutActorIdleObjectBinding.StaticTransformClock(zeroClock) &&
+            !FalloutActorIdleObjectBinding.StaticTransformClock(zeroClock with { StopTime = 1 }) &&
+            !FalloutActorIdleObjectBinding.StaticTransformClock(zeroClock with { Flags = 0x48 }) &&
+            !FalloutActorIdleObjectBinding.StaticTransformClock(zeroClock with { NextController = 2 }) &&
+            !FalloutActorIdleObjectBinding.StaticTransformClock(zeroClock with { Phase = 1 }),
+            "Idle attachment accepted an independently timed or chained source controller.");
         const string first = "meshes/actors/first";
         const string third = "meshes/actors/third";
+        const string movement = "meshes/creatures/example";
+        const string ambiguousMovement = "meshes/creatures/ambiguous";
         var files = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
         {
             [first + "/2hrhandgrip2_variant.kf"] = ["HandGrip2_Variant"],
@@ -51,6 +91,11 @@ internal static class AnimationResourceContracts
             [first + "/specialanims/1hpattackrightup.kf"] = ["AttackRightUp"],
             [first + "/specialanims/1hpattackrightdown.kf"] = ["AttackRightDown"],
             [first + "/specialanims/h2hattackright_broken.kf"] = ["Idle"],
+            [movement + "/locomotion/mtfoward.kf"] = ["Forward"],
+            [movement + "/locomotion/mtfastforward.kf"] = ["FastForward"],
+            [movement + "/locomotion/nested/other.kf"] = ["Forward"],
+            [ambiguousMovement + "/locomotion/one.kf"] = ["Forward"],
+            [ambiguousMovement + "/locomotion/two.kf"] = ["Forward"],
         };
         var enumerations = 0; var reads = 0;
         var owner = new FalloutActorAnimationResources(files.ContainsKey, folder =>
@@ -59,6 +104,11 @@ internal static class AnimationResourceContracts
             return files.Keys.Where(path => path.StartsWith(folder + "/", StringComparison.OrdinalIgnoreCase))
                 .Select(path => path.Replace('/', '\\').ToUpperInvariant()).ToArray();
         }, path => { reads++; return files[path]; });
+        var movementPath = owner.Find(movement, "locomotion/mtforward");
+        Require(movementPath == movement + "/locomotion/mtfoward.kf" && owner.SelectedGroup(movementPath) == "Forward",
+            "A unique exported movement group did not resolve a differently named source file.");
+        Reject(() => owner.Find(ambiguousMovement, "locomotion/mtforward"));
+        reads = 0; enumerations = 0;
         Require(owner.Require(first.ToUpperInvariant(), "2hrHandGrip2").Equals(first + "/2hrhandgrip2_variant.kf", StringComparison.OrdinalIgnoreCase),
             "Authored variant lost its group/resource suffix or case-insensitive namespace.");
         Require(reads == 1 && enumerations == 1, "Variant selection scanned or read unrelated groups.");

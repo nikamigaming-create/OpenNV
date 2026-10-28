@@ -10,123 +10,18 @@ namespace OpenNV.Runtime.Formats.Gamebryo;
 internal static class NativeNifLightingMaterial
 {
     internal const string ResourceIdentity = "Owned NIF SLS lighting";
-    private static readonly Dictionary<string, Shader> Shaders = new(StringComparer.Ordinal);
+    private readonly record struct ShaderKey(string Modes, bool Repeat, FalloutNifBlendMode Blend,
+        bool TestEnabled, byte TestFunction, byte Threshold);
+    private static readonly Dictionary<ShaderKey, Shader> Shaders = [];
+    internal static Action<bool, double>? BuildObserver { get; set; }
 
     internal static ShaderMaterial Build(StandardMaterial3D textures, FalloutNifShaderProperty source,
         FalloutNifMaterialProperty? material, FalloutNifAlphaProperty? alpha, FalloutNifVertexColorState vertexColors,
         Texture2D? height = null)
     {
-        var state = FalloutNifAlphaState.ForLighting(source, alpha);
-        var modes = new List<string> { "ambient_light_disabled", "specular_disabled",
-            textures.CullMode == BaseMaterial3D.CullModeEnum.Disabled ? "cull_disabled" :
-                textures.CullMode == BaseMaterial3D.CullModeEnum.Front ? "cull_front" : "cull_back",
-            (source.ShaderFlags2 & 1) != 0 ? "depth_draw_always" : "depth_draw_never" };
-        if ((source.ShaderFlags & (1u << 31)) == 0) modes.Add("depth_test_disabled");
-        modes.Add(state.Blend switch
-        {
-            FalloutNifBlendMode.Add or FalloutNifBlendMode.AddOne => "blend_add",
-            FalloutNifBlendMode.Multiply => "blend_mul",
-            FalloutNifBlendMode.Premultiplied => "blend_premul_alpha",
-            _ => "blend_mix",
-        });
-        var repeat = textures.TextureRepeat ? "repeat_enable" : "repeat_disable";
-        var code = new StringBuilder($$"""
-            shader_type spatial;
-            render_mode {{string.Join(", ", modes)}};
-            uniform sampler2D base_map : filter_linear_mipmap_anisotropic, {{repeat}};
-            uniform sampler2D normal_map : filter_linear_mipmap_anisotropic, {{repeat}};
-            uniform sampler2D emissive_map : filter_linear_mipmap_anisotropic, {{repeat}};
-            uniform sampler2D height_map : filter_linear_mipmap_anisotropic, {{repeat}};
-            uniform bool use_parallax;
-            uniform bool use_base_map;
-            uniform bool use_normal_map;
-            uniform bool use_emissive_map;
-            uniform bool use_vertex_alpha;
-            uniform bool use_vertex_color;
-            uniform bool use_hair;
-            uniform vec3 hair_tint;
-            uniform vec4 base_factor;
-            uniform vec3 emissive_color;
-            uniform float emissive_multiple;
-            uniform vec3 source_specular;
-            uniform float source_glossiness;
-            uniform samplerCube environment_cube;
-            uniform sampler2D environment_2d;
-            uniform bool use_environment_2d;
-            uniform sampler2D environment_mask : filter_linear_mipmap_anisotropic, {{repeat}};
-            uniform bool use_environment;
-            uniform bool use_environment_mask;
-            uniform bool environment_light_fade;
-            uniform float environment_scale;
-            {{NativeNifMaterialEnvironment.ShaderSource}}
-            varying float source_fog_factor;
-            varying float source_specular_mask;
-            varying vec3 source_tangent_eye;
-            {{FalloutNifSurfaceInputs.ParallaxShaderSource}}
-            {{NativeNifPointLighting.ShaderSource}}
-            {{FalloutNifHairShading.ShaderSource}}
-            {{RetailVertexFog.ShaderSource}}
-            {{NativeNifEmittanceMaterial.ShaderSource}}
-            {{NativeExteriorDetailBlend.NearDeclarations}}
-            void vertex() {
-                {{NativeExteriorDetailBlend.NearVertex}}
-                if (use_parallax) {
-                    vec3 local_eye = normalize(inverse(MODELVIEW_MATRIX)[3].xyz - VERTEX);
-                    source_tangent_eye = normalize(vec3(dot(TANGENT, local_eye), dot(BINORMAL, local_eye), dot(NORMAL, local_eye)));
-                }
-                source_fog_factor = owned_vertex_fog(MODELVIEW_MATRIX * vec4(VERTEX, 1.0),
-                    PROJECTION_MATRIX, owned_environment_fog_range(), owned_environment_fog_units());
-            }
-            void fragment() {
-                {{NativeExteriorDetailBlend.NearFragment}}
-                vec4 base = use_base_map ? texture(base_map, UV) : vec4(1.0);
-                vec2 material_uv = UV;
-                if (use_parallax) {
-                    material_uv = owned_parallax_uv(UV, texture(height_map, UV).r, source_tangent_eye);
-                    base.rgb = texture(base_map, material_uv).rgb;
-                }
-                if (use_hair) {
-                    vec4 layer = use_emissive_map ? texture(emissive_map, UV) : vec4(0.0);
-                    base.rgb = owned_hair_base(base.rgb, layer, hair_tint, use_vertex_color ? COLOR.g : 1.0);
-                } else if (use_vertex_color) {
-                    base.rgb *= COLOR.rgb;
-                }
-                base *= base_factor;
-                if (use_vertex_alpha) base.a *= COLOR.a;
-                {{(state.TestEnabled ? $"if (!({TestExpression(state.TestFunction, state.Threshold)})) discard;" : "")}}
-                source_specular_mask = 1.0;
-                if (use_normal_map) {
-                    vec4 normal_sample = texture(normal_map, material_uv);
-                    vec3 tangent_normal = normalize(normal_sample.rgb * 2.0 - 1.0);
-                    NORMAL = normalize(TANGENT * tangent_normal.x + BINORMAL * tangent_normal.y + NORMAL * tangent_normal.z);
-                    source_specular_mask = normal_sample.a;
-                }
-                vec3 reflection = vec3(0.0);
-                if (use_environment) {
-                    vec3 reflected_view = reflect(-normalize(VIEW), NORMAL);
-                    vec3 reflected_world = normalize((INV_VIEW_MATRIX * vec4(reflected_view, 0.0)).xyz);
-                    float mask = use_environment_mask ? texture(environment_mask, UV).r : source_specular_mask;
-                    vec3 sample_color = use_environment_2d ? texture(environment_2d, reflected_world.xy).rgb
-                        : texture(environment_cube, reflected_world).rgb;
-                    reflection = sample_color * mask * environment_scale;
-                }
-                vec3 lit = base.rgb + (environment_light_fade ? reflection : vec3(0.0));
-                ALBEDO = lit;
-                vec3 glow = use_emissive_map ? texture(emissive_map, UV).rgb : vec3(1.0);
-                EMISSION = lit * (owned_environment_ambient() + owned_point_irradiance(VERTEX, NORMAL, VIEW, false));
-                if (!use_hair) EMISSION += glow * owned_emissive_color(emissive_color * emissive_multiple, emissive_multiple);
-                if (!environment_light_fade) EMISSION += reflection;
-                EMISSION = owned_output_color(EMISSION);
-                FOG = vec4(owned_environment_fog_color(), source_fog_factor);
-                {{(state.Blend == FalloutNifBlendMode.Opaque ? "" : state.Blend is FalloutNifBlendMode.AddOne or FalloutNifBlendMode.Replace ? "ALPHA = 1.0;" : "ALPHA *= base.a;")}}
-            }
-            """);
-        RetailLighting.AppendDiffuseLightFunction(code);
-        // Specular remains a separate source lane. This is the NIF gloss core;
-        // native variant/constant and per-light selection still require matching.
-        code.Replace("    DIFFUSE_LIGHT +=", "    SPECULAR_LIGHT += source_specular * source_specular_mask * (LIGHT_COLOR / PI) * retail_attenuation * pow(max(dot(NORMAL, normalize(LIGHT + VIEW)), 0.0), source_glossiness);\n    DIFFUSE_LIGHT +=");
-        var shaderCode = code.ToString();
-        if (!Shaders.TryGetValue(shaderCode, out var compiled)) Shaders.Add(shaderCode, compiled = new Shader { Code = shaderCode });
+        var observer = BuildObserver;
+        var started = observer is null ? 0 : System.Diagnostics.Stopwatch.GetTimestamp();
+        var compiled = GetShader(source, alpha, textures.CullMode, textures.TextureRepeat, out var created);
         var result = new ShaderMaterial { Shader = compiled, ResourceName = ResourceIdentity };
         if (textures.NextPass is ShaderMaterial environment && environment.HasMeta("opennv_environment_light_fade"))
         {
@@ -180,7 +75,138 @@ internal static class NativeNifLightingMaterial
             result.SetMeta("opennv_hair_unbound", "native-variant-selection,anisotropic-specular,partial-precision");
         }
         result.SetMeta("opennv_source_lighting_parity", "unverified-light-selection-shadows-specular");
+        observer?.Invoke(created, System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds);
         return result;
+    }
+
+    // Must run on the scene thread: Shader owns a Godot rendering resource.
+    // This only populates the same source-keyed cache used by Build.
+    internal static void WarmShader(FalloutNifShaderProperty source, FalloutNifAlphaProperty? alpha,
+        BaseMaterial3D.CullModeEnum cullMode, bool textureRepeat) =>
+        _ = GetShader(source, alpha, cullMode, textureRepeat, out _);
+
+    private static Shader GetShader(FalloutNifShaderProperty source, FalloutNifAlphaProperty? alpha,
+        BaseMaterial3D.CullModeEnum cullMode, bool textureRepeat, out bool created)
+    {
+        var state = FalloutNifAlphaState.ForLighting(source, alpha);
+        var modes = new List<string> { "ambient_light_disabled", "specular_disabled",
+            cullMode == BaseMaterial3D.CullModeEnum.Disabled ? "cull_disabled" :
+                cullMode == BaseMaterial3D.CullModeEnum.Front ? "cull_front" : "cull_back",
+            (source.ShaderFlags2 & 1) != 0 ? "depth_draw_always" : "depth_draw_never" };
+        if ((source.ShaderFlags & (1u << 31)) == 0) modes.Add("depth_test_disabled");
+        modes.Add(state.Blend switch
+        {
+            FalloutNifBlendMode.Add or FalloutNifBlendMode.AddOne => "blend_add",
+            FalloutNifBlendMode.Multiply => "blend_mul",
+            FalloutNifBlendMode.Premultiplied => "blend_premul_alpha",
+            _ => "blend_mix",
+        });
+        var repeat = textureRepeat ? "repeat_enable" : "repeat_disable";
+        var modeText = string.Join(", ", modes);
+        var key = new ShaderKey(modeText, textureRepeat, state.Blend, state.TestEnabled,
+            state.TestEnabled ? state.TestFunction : (byte)0, state.TestEnabled ? state.Threshold : (byte)0);
+        created = !Shaders.TryGetValue(key, out var compiled);
+        if (created)
+        {
+            var code = new StringBuilder($$"""
+                shader_type spatial;
+                render_mode {{modeText}};
+                uniform sampler2D base_map : filter_linear_mipmap_anisotropic, {{repeat}};
+                uniform sampler2D normal_map : filter_linear_mipmap_anisotropic, {{repeat}};
+                uniform sampler2D emissive_map : filter_linear_mipmap_anisotropic, {{repeat}};
+                uniform sampler2D height_map : filter_linear_mipmap_anisotropic, {{repeat}};
+                uniform bool use_parallax;
+                uniform bool use_base_map;
+                uniform bool use_normal_map;
+                uniform bool use_emissive_map;
+                uniform bool use_vertex_alpha;
+                uniform bool use_vertex_color;
+                uniform bool use_hair;
+                uniform vec3 hair_tint;
+                uniform vec4 base_factor;
+                uniform vec3 emissive_color;
+                uniform float emissive_multiple;
+                uniform vec3 source_specular;
+                uniform float source_glossiness;
+                uniform samplerCube environment_cube;
+                uniform sampler2D environment_2d;
+                uniform bool use_environment_2d;
+                uniform sampler2D environment_mask : filter_linear_mipmap_anisotropic, {{repeat}};
+                uniform bool use_environment;
+                uniform bool use_environment_mask;
+                uniform bool environment_light_fade;
+                uniform float environment_scale;
+                {{NativeNifMaterialEnvironment.ShaderSource}}
+                varying float source_fog_factor;
+                varying float source_specular_mask;
+                varying vec3 source_tangent_eye;
+                {{FalloutNifSurfaceInputs.ParallaxShaderSource}}
+                {{NativeNifPointLighting.ShaderSource}}
+                {{FalloutNifHairShading.ShaderSource}}
+                {{RetailVertexFog.ShaderSource}}
+                {{NativeNifEmittanceMaterial.ShaderSource}}
+                {{NativeExteriorDetailBlend.NearDeclarations}}
+                void vertex() {
+                    {{NativeExteriorDetailBlend.NearVertex}}
+                    if (use_parallax) {
+                        vec3 local_eye = normalize(inverse(MODELVIEW_MATRIX)[3].xyz - VERTEX);
+                        source_tangent_eye = normalize(vec3(dot(TANGENT, local_eye), dot(BINORMAL, local_eye), dot(NORMAL, local_eye)));
+                    }
+                    source_fog_factor = owned_vertex_fog(MODELVIEW_MATRIX * vec4(VERTEX, 1.0),
+                        PROJECTION_MATRIX, owned_environment_fog_range(), owned_environment_fog_units());
+                }
+                void fragment() {
+                    {{NativeExteriorDetailBlend.NearFragment}}
+                    vec4 base = use_base_map ? texture(base_map, UV) : vec4(1.0);
+                    vec2 material_uv = UV;
+                    if (use_parallax) {
+                        material_uv = owned_parallax_uv(UV, texture(height_map, UV).r, source_tangent_eye);
+                        base.rgb = texture(base_map, material_uv).rgb;
+                    }
+                    if (use_hair) {
+                        vec4 layer = use_emissive_map ? texture(emissive_map, UV) : vec4(0.0);
+                        base.rgb = owned_hair_base(base.rgb, layer, hair_tint, use_vertex_color ? COLOR.g : 1.0);
+                    } else if (use_vertex_color) {
+                        base.rgb *= COLOR.rgb;
+                    }
+                    base *= base_factor;
+                    if (use_vertex_alpha) base.a *= COLOR.a;
+                    {{(state.TestEnabled ? $"if (!({TestExpression(state.TestFunction, state.Threshold)})) discard;" : "")}}
+                    source_specular_mask = 1.0;
+                    if (use_normal_map) {
+                        vec4 normal_sample = texture(normal_map, material_uv);
+                        vec3 tangent_normal = normalize(normal_sample.rgb * 2.0 - 1.0);
+                        NORMAL = normalize(TANGENT * tangent_normal.x + BINORMAL * tangent_normal.y + NORMAL * tangent_normal.z);
+                        source_specular_mask = normal_sample.a;
+                    }
+                    vec3 reflection = vec3(0.0);
+                    if (use_environment) {
+                        vec3 reflected_view = reflect(-normalize(VIEW), NORMAL);
+                        vec3 reflected_world = normalize((INV_VIEW_MATRIX * vec4(reflected_view, 0.0)).xyz);
+                        float mask = use_environment_mask ? texture(environment_mask, UV).r : source_specular_mask;
+                        vec3 sample_color = use_environment_2d ? texture(environment_2d, reflected_world.xy).rgb
+                            : texture(environment_cube, reflected_world).rgb;
+                        reflection = sample_color * mask * environment_scale;
+                    }
+                    vec3 lit = base.rgb + (environment_light_fade ? reflection : vec3(0.0));
+                    ALBEDO = lit;
+                    vec3 glow = use_emissive_map ? texture(emissive_map, UV).rgb : vec3(1.0);
+                    EMISSION = lit * (owned_environment_ambient() + owned_point_irradiance(VERTEX, NORMAL, VIEW, false));
+                    if (!use_hair) EMISSION += glow * owned_emissive_color(emissive_color * emissive_multiple, emissive_multiple);
+                    if (!environment_light_fade) EMISSION += reflection;
+                    EMISSION = owned_output_color(EMISSION);
+                    FOG = vec4(owned_environment_fog_color(), source_fog_factor);
+                    {{(state.Blend == FalloutNifBlendMode.Opaque ? "" : state.Blend is FalloutNifBlendMode.AddOne or FalloutNifBlendMode.Replace ? "ALPHA = 1.0;" : "ALPHA *= base.a;")}}
+                }
+                """);
+            RetailLighting.AppendDiffuseLightFunction(code);
+            // Specular remains a separate source lane. This is the NIF gloss core;
+            // native variant/constant and per-light selection still require matching.
+            code.Replace("    DIFFUSE_LIGHT +=", "    SPECULAR_LIGHT += source_specular * source_specular_mask * (LIGHT_COLOR / PI) * retail_attenuation * pow(max(dot(NORMAL, normalize(LIGHT + VIEW)), 0.0), source_glossiness);\n    DIFFUSE_LIGHT +=");
+            compiled = new Shader { Code = code.ToString() };
+            Shaders.Add(key, compiled);
+        }
+        return compiled!;
     }
 
     internal static void SetTexture(ShaderMaterial material, string slot, Texture2D? texture)

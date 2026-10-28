@@ -4,9 +4,8 @@ namespace OpenNV.Runtime.World.Cells;
 
 internal static partial class NativeCharacterStep
 {
-    // One planner cursor owns these mutable native query objects. Ordinary
-    // mover calls still create their own objects, and every support query
-    // resolves the body's live world through QuerySupport as before.
+    // One planner cursor or mover owns these mutable native query objects.
+    // Every support query resolves the body's live world as before.
     internal sealed class QueryResources(CharacterBody3D body) : IDisposable
     {
         private readonly ulong _owner = body.GetInstanceId();

@@ -11,6 +11,7 @@ internal sealed partial class RuntimeNativeActorCombat
     private FalloutWeaponShot? _enemyShot;
     private FalloutWeaponSpread? _enemyWeaponSpread;
     private RuntimeNativeShotEffects? _enemyShotEffects;
+    private NativeOwnedAnimationSoundPlayer? _enemyShotSounds;
     private NativeActorMuzzle? _enemyMuzzle;
     private Godot.Collections.Array<Rid>? _enemyRayExclusions;
     private string? _muzzlePresentationError;
@@ -42,7 +43,17 @@ internal sealed partial class RuntimeNativeActorCombat
                 GD.PushError($"OPENNV_MUZZLE_PRESENTATION_UNBOUND reference={_state.Reference} {error.Message}");
             }
         }
-        _enemyShotEffects ??= new(_records, _content, _skeleton.UnitsToMetres, _mover, _mask);
+        if (_enemyShotEffects is null)
+        {
+            // Impact and explosion audio has an independent source random
+            // stream, but shares this actor's retained event ledger and
+            // finite-voice registry so streaming can observe actual completion.
+            _enemyShotSounds = new(_records, _content, _actor, _skeleton.UnitsToMetres,
+                new FalloutSoundRandomState(BitConverter.ToUInt64(System.Security.Cryptography.RandomNumberGenerator.GetBytes(sizeof(ulong)))),
+                _state.AnimationSoundEvents);
+            _actor.AddChild(_enemyShotSounds);
+            _enemyShotEffects = new(_records, _content, _skeleton.UnitsToMetres, _mover, _mask, _enemyShotSounds);
+        }
         if (!_enemyShotEffects.IsInsideTree()) _actor.AddChild(_enemyShotEffects);
         try { _enemyShotEffects.PrepareShell(weapon); _casingPresentationError = null; }
         catch (Exception error)

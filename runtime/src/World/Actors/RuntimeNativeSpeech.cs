@@ -228,6 +228,9 @@ internal partial class RuntimeNativeSpeech : Node
         Func<FalloutFormKey, FalloutFormKey, bool>? referenceInZone = null, Func<FalloutFormKey, int>? sitting = null,
         Func<FalloutFormKey, int>? deadCount = null, Func<FalloutFormKey, bool>? isDead = null)
     {
+        // Source declarations belong to the configured plugin stack, even if
+        // a speech node is explicitly configured again for another session.
+        _npcDialogueTopics = new(stack);
         _stack = stack;
         _lipConfiguration = lipConfiguration;
         _questStage = questStage;

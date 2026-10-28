@@ -30,12 +30,10 @@ internal static class NodeTraversal
 
     private static void PushChildren(Node parent, Stack<Node> pending)
     {
-        var children = parent.GetChildren();
-        // The pending managed references own the traversal snapshot. Release
-        // the temporary native array before yielding, including partial walks.
-        using var owner = (Godot.Collections.Array)children;
-        for (var index = children.Count - 1; index >= 0; index--)
-            pending.Push(children[index]);
+        // Snapshot the same non-internal children in reverse order before
+        // yielding, without allocating a native Array for every tree node.
+        for (var index = parent.GetChildCount() - 1; index >= 0; index--)
+            pending.Push(parent.GetChild(index));
     }
 
     internal static IEnumerable<T> SelfAndDescendants<T>(Node root)

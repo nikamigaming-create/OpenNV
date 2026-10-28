@@ -25,7 +25,7 @@ internal sealed record FalloutNpcPreparedGeometry(FalloutNpcAppearance Appearanc
             if (part.ModelPath is null) throw new InvalidDataException($"NPC model {part.Source}/{part.Role} has no NIF path.");
             try
             {
-                var model = FalloutNifFile.Read(ReadBytes(part.ModelPath));
+                var model = NativeOwnedNifCache.Read(source, part.ModelPath, out _);
                 var selected = FalloutNpcAppearanceHairShape.Select(appearance, part);
                 var morphSource = FalloutNpcAppearanceMorph.Resolve(source, part, selected);
                 var morph = morphSource is null ? null : new FalloutNpcFaceGeometry(appearance, part, morphSource.Geometry, selected);

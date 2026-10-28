@@ -12,7 +12,10 @@ internal sealed record NativeNavigationWorkSnapshot(long Search, string State, l
 internal sealed class NativeNavigationWorkSchedule
 {
     internal const double BudgetMilliseconds = 2;
-    internal const int MaximumIteratorSteps = 16;
+    // The same time budget still limits native queries. Permit a lease to
+    // advance through more cheap iterator boundaries before rotating, so a
+    // busy exterior does not strand a long search on bookkeeping yields.
+    internal const int MaximumIteratorSteps = 64;
     private readonly int _thread = Environment.CurrentManagedThreadId;
     private readonly LinkedList<Registration> _queue = new();
     private long _generation;

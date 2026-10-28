@@ -15,31 +15,89 @@ internal sealed class RuntimeNativeNifSkeleton
     private NativeNifAnimationBlend? _animationBlend;
     internal NativeNifAnimationBlend AnimationBlend => _animationBlend ??= new(Node.GetBoneCount());
 
-    internal RuntimeNativeNifSkeleton(FalloutNifFile source, float unitsToMetres)
+    internal RuntimeNativeNifSkeleton(FalloutNifFile source, float unitsToMetres, bool deferred = false)
     {
         Source = source;
         UnitsToMetres = unitsToMetres;
         Node = new Skeleton3D { Name = "NativeSkeleton" };
         Node.TreeEntered += PublishRetainedPoses;
+        if (deferred) return;
         try
         {
             var visited = new HashSet<int>();
             foreach (var root in source.Roots)
                 AddBone(root, -1, visited);
-            Node.ResetBonePoses();
-            BuildAttachments();
-            Node.SetMeta("opennv_nif_source_bones", _boneIndices.Count);
-            Node.SetMeta("opennv_nif_controller_owner", "external-gameplay-animation");
-            Node.SetMeta("opennv_nif_fixed_strings", source.Strings.ToArray());
-            Node.SetMeta("opennv_nif_source_sha256", source.Sha256);
-            Node.SetMeta("opennv_nif_source_root_blocks", source.Roots.ToArray());
-            Node.SetMeta("opennv_nif_geometry_attachments",
-                _geometryAttachments.Select(value => value.Geometry.Block.Index).ToArray());
+            FinishConstruction();
         }
         catch
         {
             Node.Free();
             throw;
+        }
+    }
+
+    private void FinishConstruction()
+    {
+        Node.ResetBonePoses();
+        BuildAttachments();
+        Node.SetMeta("opennv_nif_source_bones", _boneIndices.Count);
+        Node.SetMeta("opennv_nif_controller_owner", "external-gameplay-animation");
+        Node.SetMeta("opennv_nif_fixed_strings", Source.Strings.ToArray());
+        Node.SetMeta("opennv_nif_source_sha256", Source.Sha256);
+        Node.SetMeta("opennv_nif_source_root_blocks", Source.Roots.ToArray());
+        Node.SetMeta("opennv_nif_geometry_attachments",
+            _geometryAttachments.Select(value => value.Geometry.Block.Index).ToArray());
+    }
+
+    // Builds the same detached source tree in bounded batches. No source pose,
+    // controller or gameplay owner is published until Take succeeds.
+    internal sealed class Assembly : IDisposable
+    {
+        private const int BonesPerStep = 8;
+        private readonly Stack<(int Block, int Parent)> _pending = [];
+        private readonly HashSet<int> _visited = [];
+        private RuntimeNativeNifSkeleton? _skeleton;
+        private bool _complete;
+
+        internal Assembly(FalloutNifFile source, float unitsToMetres)
+        {
+            ArgumentNullException.ThrowIfNull(source);
+            if (!float.IsFinite(unitsToMetres) || unitsToMetres <= 0)
+                throw new ArgumentOutOfRangeException(nameof(unitsToMetres));
+            _skeleton = new(source, unitsToMetres, deferred: true);
+            foreach (var root in source.Roots.Reverse()) _pending.Push((root, -1));
+        }
+
+        internal string NextStage => _pending.Count > 0 ? "skeleton-bones" : "skeleton-finalize";
+
+        internal bool Advance()
+        {
+            ObjectDisposedException.ThrowIf(_skeleton is null, this);
+            if (_complete) return true;
+            if (_pending.Count > 0)
+            {
+                for (var i = 0; i < BonesPerStep && _pending.TryPop(out var next); i++)
+                    _skeleton.AddBone(next.Block, next.Parent, _visited,
+                        (child, parent) => _pending.Push((child, parent)));
+                return false;
+            }
+            _skeleton.FinishConstruction();
+            return _complete = true;
+        }
+
+        internal RuntimeNativeNifSkeleton Take()
+        {
+            if (!_complete || _skeleton is null) throw new InvalidOperationException("Skeleton assembly is incomplete.");
+            var result = _skeleton;
+            _skeleton = null;
+            return result;
+        }
+
+        public void Dispose()
+        {
+            _pending.Clear();
+            _skeleton?.Node.Free();
+            _skeleton = null;
         }
     }
 
@@ -182,7 +240,7 @@ internal sealed class RuntimeNativeNifSkeleton
         GamebryoCoordinate.ConvertVector(new Vector3(source.Translation.X,
             source.Translation.Y, source.Translation.Z)) * UnitsToMetres);
 
-    private void AddBone(int blockIndex, int parentIndex, HashSet<int> visited)
+    private void AddBone(int blockIndex, int parentIndex, HashSet<int> visited, Action<int, int>? deferChild = null)
     {
         if (!visited.Add(blockIndex))
             throw new InvalidDataException("NIF skeleton contains a cycle or multiply owned bone.");
@@ -213,7 +271,10 @@ internal sealed class RuntimeNativeNifSkeleton
         foreach (var extra in source.ExtraData.Where(reference => reference >= 0)
             .Select(Source.ReadObject).OfType<FalloutNifFloatExtraData>())
             FloatExtraData.Add(source.Name, extra.Name, extra.Value);
-        foreach (var child in source.Children.Where(child => child >= 0))
-            AddBone(child, index, visited);
+        var children = source.Children.Where(child => child >= 0);
+        if (deferChild is null)
+            foreach (var child in children) AddBone(child, index, visited);
+        else
+            foreach (var child in children.Reverse()) deferChild(child, index);
     }
 }

@@ -53,6 +53,35 @@ public partial class RuntimeCoordinator
     private readonly Dictionary<string, string> _nativeActorDivergences = new(StringComparer.Ordinal);
     private readonly Dictionary<string, string> _nativeReferenceDivergences = new(StringComparer.Ordinal);
 
+    // Keep performance samples cheap while retaining enough source state to
+    // distinguish movement and exterior streaming from a stationary window.
+    private object? CaptureNativePerformanceContext()
+    {
+        if (!IsInsideTree()) return null;
+        var player = _nativePlayer;
+        var live = player is not null && GodotObject.IsInstanceValid(player) && player.IsInsideTree();
+        var position = live ? player!.GlobalPosition : (Vector3?)null;
+        var velocity = live ? player!.Velocity : (Vector3?)null;
+        return new
+        {
+            cell = _nativeActiveCell?.Cell.FormKey.ToString(),
+            position = position is { } p ? new[] { p.X, p.Y, p.Z } : null,
+            velocity = velocity is { } v ? new[] { v.X, v.Y, v.Z } : null,
+            collisionResident = live ? player!.CollisionResident : (bool?)null,
+            doorLoading = _nativeDoorLoading,
+            sessionTransitioning = _nativeSessionTransitioning,
+            gridReading = _nativeGridRead is not null,
+            gridUploadsRemaining = _nativeGridUploads?.Count ?? 0,
+            gridTarget = _nativeGridTarget is { } target ? new[] { target.X, target.Y } : null,
+            gridMaximumUploadStepMilliseconds = _nativeGridUploadTiming.MaximumStepMilliseconds,
+            gridMaximumUploadStepSource = _nativeGridUploadTiming.MaximumStepSource,
+            gridMaximumUploadBatchMilliseconds = _nativeGridUploadTiming.MaximumBatchMilliseconds,
+            gridLastCommitMilliseconds = _nativeGridCommitMilliseconds,
+            gridLastCommitPhasesMilliseconds = _nativeGridCommitPhases,
+            gridError = _nativeGridError
+        };
+    }
+
     private object CaptureNativeDriveState(bool detailed = true)
     {
         static float[] Vector(Vector3 value) => [value.X, value.Y, value.Z];
@@ -132,6 +161,7 @@ public partial class RuntimeCoordinator
                 stepCount = _nativePlayer.StepCount,
                 stepBlocked = _nativePlayer.StepBlocked,
                 maximumWalkableSlopeDegrees = Mathf.RadToDeg(_nativePlayer.FloorMaxAngle),
+                movementSpeed = detailed ? _nativePlayer.MovementSpeedObservation : null,
                 blockingShape = _nativePlayer.BlockingShape,
                 collisionResident = _nativePlayer.CollisionResident,
                 collisionContacts = _nativePlayer.CollisionContacts,
@@ -554,6 +584,8 @@ public partial class RuntimeCoordinator
     private async Task LoadNativeInitialCell()
     {
         _pendingSaveActivation?.RequireSelected(Path.GetFullPath(RequireOption(_options, "save-path")));
+        var existingMovies = SceneGraph.NodeTraversal.SelfAndDescendants<NativeGamebryoMovie>(this)
+            .Select(movie => movie.GetInstanceId()).ToHashSet();
         var wasPaused = GetTree().Paused;
         GetTree().Paused = true;
         try
@@ -565,8 +597,17 @@ public partial class RuntimeCoordinator
         }
         finally
         {
-            GetTree().Paused = wasPaused || _nativeSessionTransitioning || _retiringNativeSession;
+            var resumePaused = wasPaused || _nativeSessionTransitioning || _retiringNativeSession;
+            var activeMoviePause = false;
+            foreach (var movie in SceneGraph.NodeTraversal.SelfAndDescendants<NativeGamebryoMovie>(this))
+                activeMoviePause |= existingMovies.Contains(movie.GetInstanceId())
+                    ? movie.OwnsWorldPause : movie.RebaseLoadingPause(resumePaused);
+            GetTree().Paused = resumePaused || activeMoviePause;
         }
+        // Restored opening menus acquire their pause only after the temporary
+        // loading pause has ended, and after their driver enters the tree.
+        _nativeOpeningStageDriver!.ActivatePresentation();
+        _nativeQuestScripts?.ActivateWorld(_nativeContinueOpening);
         if (_pauseAfterCheckpointLoad)
         {
             _pauseAfterCheckpointLoad = false;
@@ -613,6 +654,7 @@ public partial class RuntimeCoordinator
             _nativeReferences.RestoreFactionRelations(restore.State.FactionRelations);
             _nativeReferences.RestoreReputations(restore.State.Reputations);
             _nativeReferences.PlayerNotes.Restore(restore.State.PlayerNotes);
+            _nativeReferences.PlayerCaravanCards.Restore(restore.State.PlayerCaravanCards);
         }
         else if (_nativeBootstrap is null)
         {
@@ -722,7 +764,6 @@ public partial class RuntimeCoordinator
             MeasureNativeLoadStep("player-and-state", () => AddNativePlayer(cell, startupPlacement));
             MeasureNativeLoadStep("activate-cell", () => SetNativeActiveCell(root, activeScene));
             _nativeBootstrap?.AttachPlayerPackages(_nativeOpeningStageDriver!.AttachBootstrapPlayerPackage);
-            if (_nativeQuestScripts is not null) _nativeQuestScripts.ActivateWorld(restore is not null);
             if (startupPlacement is not null)
                 _nativeReferences.PlayerMoves.Complete(_nativeReferences.PlayerMoves.Next ??
                     throw new InvalidOperationException("Initial player placement lost its queued source request."));
@@ -808,6 +849,7 @@ public partial class RuntimeCoordinator
         double maximumReferenceMilliseconds = 0;
         double maximumStepMilliseconds = 0;
         FalloutFormKey? maximumReference = null;
+        FalloutFormKey? maximumStepReference = null;
         try
         {
             var preparedModels = await PrepareStaticModels(cell, RuntimeLiveContentSource.Current!,
@@ -826,9 +868,10 @@ public partial class RuntimeCoordinator
                     continue;
                 }
                 referenceWatch.Restart();
-                maximumStepMilliseconds = Math.Max(maximumStepMilliseconds,
-                    await PlaceNativeCellReferenceResponsive(root, cell, reference,
-                        cell.BaseObjects[reference.Base].ModelPath is { } path ? preparedModels.GetValueOrDefault(path) : null));
+                var stepMilliseconds = await PlaceNativeCellReferenceResponsive(root, cell, reference,
+                    cell.BaseObjects[reference.Base].ModelPath is { } path ? preparedModels.GetValueOrDefault(path) : null);
+                if (stepMilliseconds > maximumStepMilliseconds)
+                { maximumStepMilliseconds = stepMilliseconds; maximumStepReference = reference.FormKey; }
                 referenceWatch.Stop();
                 if (referenceWatch.Elapsed.TotalMilliseconds > maximumReferenceMilliseconds)
                 {
@@ -850,7 +893,7 @@ public partial class RuntimeCoordinator
             GD.Print($"OPENNV_NATIVE_CELL_BUILD cell={cell.Cell.FormKey} references={cell.References.Count} " +
                 $"elapsedMs={total.Elapsed.TotalMilliseconds:F1} frameYields={yields} " +
                 $"maxReferenceMs={maximumReferenceMilliseconds:F1} maxReference={maximumReference} " +
-                $"referenceTiming=wall-including-yields maxMainThreadStepMs={maximumStepMilliseconds:F1}");
+                $"referenceTiming=wall-including-yields maxMainThreadStepMs={maximumStepMilliseconds:F1} maxStepReference={maximumStepReference}");
             return root;
         }
         catch
@@ -872,10 +915,10 @@ public partial class RuntimeCoordinator
     }
 
     private void PlaceNativeCellReference(Node3D root, FalloutCellScene cell, FalloutPlacedReference reference,
-        FalloutNifFile? preparedModel = null)
+        FalloutNifFile? preparedModel = null, Node3D? preparedStaticRoot = null)
     {
         var previousChildren = root.GetChildCount();
-        try { PlaceNativeReference(root, cell, reference, preparedModel: preparedModel); }
+        try { PlaceNativeReference(root, cell, reference, preparedModel: preparedModel, preparedStaticRoot: preparedStaticRoot); }
         catch (Exception error) when (error is IOException or InvalidDataException or NotSupportedException or InvalidOperationException)
         {
             // Reject the whole failed reference. Other source references
@@ -911,24 +954,22 @@ public partial class RuntimeCoordinator
     }
 
     private void PlaceNativeReference(Node3D root, FalloutCellScene cell, FalloutPlacedReference reference,
-        bool materializeDisabled = false, bool observe = true, FalloutNifFile? preparedModel = null, RuntimeNativeNpc? preparedNpc = null)
+        bool materializeDisabled = false, bool observe = true, FalloutNifFile? preparedModel = null, RuntimeNativeNpc? preparedNpc = null,
+        Node3D? preparedStaticRoot = null, RuntimeNativeCreature.PreparedGeometry? preparedCreature = null)
     {
         var source = RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("Owned source is absent.");
         const string parityScope = "world/active-cell";
-        string ParityIdentity(FalloutPlacedReference value) => $"{cell.Cell.FormKey}/{value.FormKey}";
-        void Observe(string scope, string identity, byte[] state)
-        {
-            if (observe) _parityObservations.Observe(scope, identity, state);
-        }
         if (!cell.BaseObjects.TryGetValue(reference.Base, out var baseObject))
             throw new InvalidDataException(
                 $"Live CELL reference {reference.FormKey} has no decoded base object.");
+        void Observe(string disposition)
+        {
+            if (observe) _parityObservations.Observe(parityScope, $"{cell.Cell.FormKey}/{reference.FormKey}",
+                NativeReferenceState(reference, baseObject, disposition));
+        }
         if (!materializeDisabled && !_nativeReferences!.IsEnabled(reference.FormKey))
         {
-            Observe(
-                parityScope,
-                ParityIdentity(reference),
-                NativeReferenceState(reference, baseObject, "disabled"));
+            Observe("disabled");
             return;
         }
         if (FalloutNewVegasBuiltinForms.IsInternalStatic(baseObject.Signature,
@@ -945,17 +986,13 @@ public partial class RuntimeCoordinator
             marker.SetMeta("opennv_reference_form_key", reference.FormKey.ToString());
             marker.SetMeta("opennv_internal_static", true);
             root.AddChild(marker);
-            Observe(parityScope, ParityIdentity(reference),
-                NativeReferenceState(reference, baseObject, "internal-static"));
+            Observe("internal-static");
             return;
         }
         if (baseObject.Light is not null)
         {
             AddNativePlacedLight(root, reference, baseObject);
-            Observe(
-                parityScope,
-                ParityIdentity(reference),
-                NativeReferenceState(reference, baseObject, "light"));
+            Observe("light");
             return;
         }
         if (baseObject.Signature == "NPC_")
@@ -963,18 +1000,14 @@ public partial class RuntimeCoordinator
             RuntimeNativeNpc? actor = preparedNpc;
             var previousActor = _nativeReferencePresentation?.Nodes.GetValueOrDefault(reference.FormKey);
             var launchState = _nativeReferences!.Get(reference.FormKey);
-            var newLaunchProcess = previousActor is null && launchState.ProjectileLaunch is null &&
-                launchState.Animation.Resource.Length == 0 && launchState.PackageAssignment is null &&
-                launchState.PackageMotion is null && launchState.Engagement is null && launchState.AggroWarning is null &&
-                launchState.SandboxAdmissionFailure is null && launchState.SandboxMotionFailure is null &&
-                launchState.PendingSandboxStart is null;
+            var newLaunchProcess = launchState.MayInitializeLaunchProcess(previousActor is not null);
             try
             {
                 var selection = _nativeReferences!.InitializeActorTemplates(reference.FormKey,
                     _nativeOpeningStageDriver?.PlayerLevel ?? _nativeOpeningRestore?.State.Vitals?.Level ?? 1, _nativeGlobals);
                 if (selection.Absent)
                 {
-                    Observe(parityScope, ParityIdentity(reference), NativeReferenceState(reference, baseObject, "source-leveled-none"));
+                    Observe("source-leveled-none");
                     return;
                 }
                 var equippedArmor = _nativeReferences!.EquippedArmor(reference.FormKey,
@@ -1020,8 +1053,7 @@ public partial class RuntimeCoordinator
                 AddNativeReferenceEmittance(actor, reference);
                 _nativeActorDivergences[reference.FormKey.ToString()] =
                     "animation-selection-blending, face-pose, gameplay, material-lighting-output parity unbound";
-                Observe(parityScope, ParityIdentity(reference),
-                    NativeReferenceState(reference, baseObject, "skinned-npc-presentation"));
+                Observe("skinned-npc-presentation");
                 GD.Print($"OPENNV_NATIVE_NPC_READY reference={reference.FormKey} npc={reference.Base} " +
                     $"bones={actor.Skeleton.Node.GetBoneCount()} parts={actor.Parts.Count} " +
                     "animation=unresolved gameplay=unresolved parity=unmeasured");
@@ -1040,22 +1072,32 @@ public partial class RuntimeCoordinator
             RuntimeNativeCreature? actor = null;
             var previousActor = _nativeReferencePresentation?.Nodes.GetValueOrDefault(reference.FormKey);
             var launchState = _nativeReferences!.Get(reference.FormKey);
-            var newLaunchProcess = previousActor is null && launchState.ProjectileLaunch is null &&
-                launchState.Animation.Resource.Length == 0 && launchState.PackageAssignment is null &&
-                launchState.PackageMotion is null && launchState.Engagement is null && launchState.AggroWarning is null &&
-                launchState.SandboxAdmissionFailure is null && launchState.SandboxMotionFailure is null &&
-                launchState.PendingSandboxStart is null;
+            var newLaunchProcess = launchState.MayInitializeLaunchProcess(previousActor is not null);
+            var tracePublication = _options.ContainsKey("live-harness");
+            var publicationStarted = tracePublication ? System.Diagnostics.Stopwatch.GetTimestamp() : 0;
+            var publicationLast = publicationStarted;
+            var publicationPhases = tracePublication ? new List<string>() : null;
+            void MarkPublication(string phase)
+            {
+                if (publicationPhases is null) return;
+                var now = System.Diagnostics.Stopwatch.GetTimestamp();
+                publicationPhases.Add($"{phase}={System.Diagnostics.Stopwatch.GetElapsedTime(publicationLast, now).TotalMilliseconds:F3}");
+                publicationLast = now;
+            }
             try
             {
                 var selection = _nativeReferences!.InitializeActorTemplates(reference.FormKey,
                     _nativeOpeningStageDriver?.PlayerLevel ?? _nativeOpeningRestore?.State.Vitals?.Level ?? 1, _nativeGlobals);
                 if (selection.Absent)
                 {
-                    Observe(parityScope, ParityIdentity(reference), NativeReferenceState(reference, baseObject, "source-leveled-none"));
+                    Observe("source-leveled-none");
                     return;
                 }
+                MarkPublication("template");
                 actor = RuntimeNativeCreature.Create(_nativePluginStack!, source, reference,
-                    _nativeReferences!.Get(reference.FormKey), _configuration.World.GameUnitsToMeters);
+                    _nativeReferences!.Get(reference.FormKey), _configuration.World.GameUnitsToMeters,
+                    tracePreparation: _options.ContainsKey("live-harness"), preparedGeometry: preparedCreature);
+                MarkPublication("create");
                 actor.Transform = ReferenceTransform(reference);
                 try { RuntimeNativeActorContacts.Configure(actor, actor.Skeleton, _configuration.Player.CollisionLayer); }
                 catch (Exception error) when (error is InvalidDataException or NotSupportedException)
@@ -1063,12 +1105,16 @@ public partial class RuntimeCoordinator
                     actor.SetMeta("opennv_contact_divergence", error.Message);
                     GD.PushError($"OPENNV_NATIVE_CREATURE_CONTACT_DIVERGENCE reference={reference.FormKey}: {error.Message}");
                 }
+                MarkPublication("contacts");
                 root.AddChild(actor);
+                MarkPublication("attach");
                 actor.Combat = RuntimeNativeActorCombat.Attach(actor, actor.Skeleton, actor.Appearance.SkeletonPath,
                     _nativeReferences!, _nativeReferences.Get(reference.FormKey), _nativePluginStack!, source,
                     _configuration.Player.CollisionLayer, _configuration.Player.CollisionMask | _configuration.Player.CollisionLayer, NativeCombatContext, newLaunchProcess);
+                MarkPublication("combat");
                 actor.ConfigureAi(_nativePluginStack!, _nativeQuestState!, _nativeReferences, _nativeGameTime, _nativeGlobals,
                     NativeActorItemCount);
+                MarkPublication("ai");
                 actor.ResolvePackageTarget = target => _nativeReferencePresentation?.Nodes.GetValueOrDefault(target);
                 actor.ExecutePackageEvent = (program, caller) => (_nativeOpeningStageDriver ??
                     throw new InvalidOperationException("Creature package results have no gameplay owner."))
@@ -1076,11 +1122,20 @@ public partial class RuntimeCoordinator
                 actor.BeginPackageDialogue = (package, completed) => (_nativeOpeningStageDriver ??
                     throw new InvalidOperationException("Creature dialogue has no gameplay owner."))
                     .RequestPackageDialogue(reference.FormKey, package, completed);
+                if (root.IsInsideTree()) RequireNativeActorPublication(actor);
+                MarkPublication("source-publication");
                 AddNativeReferenceEmittance(actor, reference);
+                MarkPublication("emittance");
                 _nativeActorDivergences[reference.FormKey.ToString()] = string.Join("; ", actor.Unbound);
-                Observe(parityScope, ParityIdentity(reference), NativeReferenceState(reference, baseObject, "skinned-creature-presentation"));
+                MarkPublication("divergence");
+                Observe("skinned-creature-presentation");
+                MarkPublication("observation");
                 GD.Print($"OPENNV_NATIVE_CREATURE_READY reference={reference.FormKey} creature={reference.Base} " +
                     $"bones={actor.Skeleton.Node.GetBoneCount()} parts={actor.Parts.Count} idle=source-KF gameplay=unresolved parity=unmeasured");
+                MarkPublication("ready-log");
+                if (publicationPhases is not null)
+                    GD.Print($"OPENNV_CREATURE_PUBLICATION_TIMING reference={reference.FormKey} prepared={preparedCreature is not null} " +
+                        $"totalMs={System.Diagnostics.Stopwatch.GetElapsedTime(publicationStarted).TotalMilliseconds:F3} " + string.Join(" ", publicationPhases));
                 actor = null;
             }
             catch (Exception error) when (error is InvalidDataException or NotSupportedException or FileNotFoundException)
@@ -1093,7 +1148,7 @@ public partial class RuntimeCoordinator
         }
         if (baseObject.ModelPath is null)
             return;
-        if (!_nativeNifPrototypes.TryGetValue(baseObject.ModelPath, out var prototype))
+        if (preparedStaticRoot is null && !_nativeNifPrototypes.TryGetValue(baseObject.ModelPath, out _))
         {
             if (baseObject.ModelPath.EndsWith(".spt", StringComparison.OrdinalIgnoreCase))
             {
@@ -1107,7 +1162,7 @@ public partial class RuntimeCoordinator
             GD.Print(
                 $"OPENNV_NATIVE_NIF_LOADING model={baseObject.ModelPath} source={nifSource} " +
                 $"base={baseObject.FormKey}");
-            prototype = preparedModel is null ? new RuntimeNativeNifPrototype(nif, _configuration.World.GameUnitsToMeters) :
+            var prototype = preparedModel is null ? new RuntimeNativeNifPrototype(nif, _configuration.World.GameUnitsToMeters) :
                 new RuntimeNativeNifPrototype(preparedModel, _configuration.World.GameUnitsToMeters);
             var built = prototype.Scene;
             prototype.Scene.Root.Name = $"Prototype_{baseObject.FormKey}";
@@ -1118,7 +1173,10 @@ public partial class RuntimeCoordinator
                 $"collisionBodies={built.CollisionBodies} collisionShapes={built.CollisionShapes} " +
                 $"collisionTriangles={built.CollisionTriangles}");
         }
-        var instance = prototype.InstantiatePlaced(ReferenceTransform(reference));
+        var instance = preparedStaticRoot is not null
+            ? RuntimeNativeNifPrototype.PlaceOwnedRoot(preparedStaticRoot, preparedModel ??
+                throw new InvalidDataException("Prepared static root has no source model."), ReferenceTransform(reference))
+            : _nativeNifPrototypes[baseObject.ModelPath].InstantiatePlaced(ReferenceTransform(reference));
         instance.Name = $"Reference_{reference.FormKey}";
         instance.SetMeta("opennv_reference_form_key", reference.FormKey.ToString());
         instance.SetMeta("opennv_source_model", baseObject.ModelPath);
@@ -1143,10 +1201,7 @@ public partial class RuntimeCoordinator
         if (controllers.Length != 0)
             GD.Print($"OPENNV_NATIVE_REFERENCE_CONTROLLERS source={reference.FormKey} " +
                 $"sequences={string.Join(',', controllers.SelectMany(controller => controller.SequenceNames))} binding=per-instance");
-        Observe(
-            parityScope,
-            ParityIdentity(reference),
-            NativeReferenceState(reference, baseObject, "model"));
+        Observe("model");
         if (baseObject.Signature == "DOOR" && reference.Teleport is not null)
             AddNativeDoorPortal(instance, reference);
         else if (baseObject.Signature == "DOOR" || RuntimeNativeDoorMotion.HasOpenClose(controllers))

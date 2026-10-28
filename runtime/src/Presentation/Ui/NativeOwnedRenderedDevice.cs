@@ -77,9 +77,8 @@ internal sealed partial class NativeOwnedRenderedDevice : Control
         _image.Size = Size;
         if (_pipBoy) { LayoutPipBoy(); return; }
         var projection = FalloutRenderedMenuProjection.Read(_settings, Size.X / Size.Y, characterCreation: true);
-        var verticalSlope = projection.HorizontalSlope / Math.Min(Size.X / Size.Y, 4f / 3f);
         Camera.KeepAspect = Camera3D.KeepAspectEnum.Height;
-        Camera.Fov = 2 * MathF.Atan(verticalSlope) * 180 / MathF.PI;
+        Camera.Fov = 2 * MathF.Atan(projection.VerticalSlope) * 180 / MathF.PI;
         Camera.Near = projection.Near; Camera.Far = projection.Far;
         // The native menu protocol uses two 1.57-radian axis rotations. Keep
         // this engine convention separate from the model's own source transform.
@@ -87,6 +86,7 @@ internal sealed partial class NativeOwnedRenderedDevice : Control
         var rotation = new[] { c * c, s, -c * s, -s * c, c, s * s, s, 0f, c };
         _model.Transform = new Transform3D(GamebryoCoordinate.ConvertBasis(rotation, projection.ModelScale, "rendered menu"),
             GamebryoCoordinate.ConvertVector(new(projection.Depth, projection.VerticalOffset, projection.HorizontalOffset)));
+        BindMenuEnvironment(_model, 1);
         BindAuthoredLights(_source, _model, Camera);
         SetMeta("opennv_device_projection", new Vector2(projection.HorizontalSlope, projection.VerticalSlope));
     }
@@ -134,10 +134,6 @@ internal sealed partial class NativeOwnedRenderedDevice : Control
         Camera.LookAt(center, up);
         BindAuthoredLights(_source, _model, Camera);
         SetMeta("opennv_device_projection", "source-screen-UV-frame; retail-arm-animation-and-projection-unbound");
-        foreach (var mesh in _model.FindChildren("*", "", true, false).OfType<MeshInstance3D>().Where(mesh => mesh.Mesh is not null))
-            for (var surface = 0; surface < mesh.Mesh.GetSurfaceCount(); surface++)
-                if (mesh.GetActiveMaterial(surface) is ShaderMaterial { ResourceName: NativeNifEffectMaterial.ResourceIdentity } material)
-                    material.SetShaderParameter("source_store_encoded", true);
     }
 
     internal void PosePipBoy(double seconds, float raised = 1, double? buttonSeconds = null)
@@ -172,10 +168,33 @@ internal sealed partial class NativeOwnedRenderedDevice : Control
                     radius);
             }).ToArray();
         model.SetMeta("opennv_menu_light_radius", radius);
-        foreach (var mesh in nodes.OfType<MeshInstance3D>().Where(mesh => mesh.Mesh is not null))
+        BindMenuMaterials(model, lights, 1);
+    }
+
+    internal static void BindMenuMaterials(Node3D model, IReadOnlyList<NativeNifPointLight> lights, float units)
+    {
+        // These freshly built menu materials compose display-encoded source
+        // pixels through a linear Godot target. Both NIF shader owners must
+        // undo its output transfer; the world materials keep their own policy.
+        foreach (var mesh in OpenNV.Runtime.SceneGraph.NodeTraversal.SelfAndDescendants<MeshInstance3D>(model)
+            .Where(mesh => mesh.Mesh is not null))
+        {
             for (var surface = 0; surface < mesh.Mesh.GetSurfaceCount(); surface++)
-                if (mesh.GetActiveMaterial(surface) is ShaderMaterial material &&
-                    material.ResourceName == NativeNifLightingMaterial.ResourceIdentity)
-                    NativeNifPointLighting.Bind(material, lights, 1, storeEncoded: true);
+                if (mesh.GetActiveMaterial(surface) is ShaderMaterial material)
+                {
+                    if (material.ResourceName == NativeNifLightingMaterial.ResourceIdentity)
+                        NativeNifPointLighting.Bind(material, lights, units, storeEncoded: true);
+                    else if (material.ResourceName == NativeNifEffectMaterial.ResourceIdentity)
+                        material.SetShaderParameter("source_store_encoded", true);
+                }
+        }
+    }
+
+    internal static void BindMenuEnvironment(Node3D model, float units)
+    {
+        // Character-creation devices and portraits have their own menu world.
+        // Pip-Boy has a separate ambient owner; light updates preserve it.
+        foreach (var mesh in OpenNV.Runtime.SceneGraph.NodeTraversal.SelfAndDescendants<MeshInstance3D>(model))
+            NativeNifMaterialEnvironment.Bind(mesh, Vector3.Zero, Vector3.Zero, Vector3.Zero, units);
     }
 }

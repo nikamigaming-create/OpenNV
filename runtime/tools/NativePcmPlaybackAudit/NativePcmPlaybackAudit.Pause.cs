@@ -30,6 +30,12 @@ public partial class NativePcmPlaybackAudit
             var events = new FalloutAnimationSoundEvents(new("PcmPause.esm", 2));
             var owner = new NativeOwnedAnimationSoundPlayer(records, null!, actor, .01f, new(7), events);
             actor.AddChild(owner);
+            // Construct with an empty fixture ledger; media validation belongs
+            // to the real content source, which this synthetic mixer probe lacks.
+            var handoffActor = new Node3D { Name = "PcmHandoff", ProcessMode = ProcessModeEnum.Pausable };
+            handoffActor.SetMeta("opennv_reference_form_key", "PcmPause.esm:000002");
+            actor.AddChild(handoffActor);
+            var handoff = new NativeOwnedAnimationSoundPlayer(records, null!, handoffActor, .01f, new(7), events);
             var sound = FalloutSoundRecordReader.Read(records, new("PcmPause.esm", 1));
             var loop = FalloutSoundLoop.Read(sound);
             using var wav = PauseWav(samples.Data, samples.MixRate, samples.Stereo, sound.LogicalPath);
@@ -101,6 +107,19 @@ public partial class NativePcmPlaybackAudit
             var finite = FalloutSoundRecordReader.Read(records, new("PcmPause.esm", 3));
             using var finiteWav = PauseWav(Enumerable.Range(0, 128).SelectMany(_ => samples.Data).ToArray(),
                 samples.MixRate, samples.Stereo, finite.LogicalPath);
+            var liveGeneration = PauseSoundGeneration(records, events, finite, finiteWav);
+            var livePlayer = new AudioStreamPlayer { Stream = finiteWav, ProcessMode = ProcessModeEnum.Pausable };
+            PauseTrack(owner, livePlayer, actor, new(FalloutSoundLoopMode.None, 0, 0), finite.FormKey, liveGeneration, null);
+            PausePlay(owner, livePlayer);
+            await ToSignal(GetTree().CreateTimer(.05), SceneTreeTimer.SignalName.Timeout);
+            handoffActor.AddChild(handoff); handoff.RequirePcmRestored();
+            if (handoff.ActiveNativeVoices.Count != 0 || !livePlayer.Playing || !player.Playing ||
+                events.Events.Single(entry => entry.Generation == liveGeneration).End != FalloutAnimationSoundEnd.Active)
+                throw new InvalidDataException("Live audio handoff duplicated or stopped a source voice.");
+            handoffActor.Free();
+            livePlayer.Stop();
+            typeof(NativeOwnedAnimationSoundPlayer).GetMethod("FinishVoice", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .Invoke(owner, [livePlayer, FalloutAnimationSoundEnd.SourceStopped]);
             using var finitePcm = new NativeOwnedPcmStream(finiteWav, new(FalloutSoundLoopMode.None, 0, 0));
             var finiteGeneration = PauseSoundGeneration(records, events, finite, finiteWav);
             var finitePlayer = new AudioStreamPlayer { Stream = finitePcm.Stream, ProcessMode = ProcessModeEnum.Pausable };
@@ -167,7 +186,7 @@ public partial class NativePcmPlaybackAudit
         return generation;
     }
     private static void PauseTrack(NativeOwnedAnimationSoundPlayer owner, AudioStreamPlayer node, Node3D actor,
-        FalloutSoundLoop loop, FalloutFormKey sound, long generation, NativeOwnedPcmStream pcm) =>
+        FalloutSoundLoop loop, FalloutFormKey sound, long generation, NativeOwnedPcmStream? pcm) =>
         typeof(NativeOwnedAnimationSoundPlayer).GetMethod("TrackVoice", BindingFlags.Instance | BindingFlags.NonPublic)!
             .Invoke(owner, [node, actor, loop, sound, null, generation, true, pcm]);
     private static void PausePlay(NativeOwnedAnimationSoundPlayer owner, AudioStreamPlayer node) =>

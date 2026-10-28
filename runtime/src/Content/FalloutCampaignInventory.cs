@@ -57,6 +57,7 @@ internal static class FalloutOpeningInventoryGrantResolver
         "CHIP",
         "CMNY",
         "IMOD",
+        "INGR",
         "KEYM",
         "LIGH",
         "MISC",
@@ -272,9 +273,9 @@ internal static class FalloutCampaignInventoryResolver
         FalloutPluginRecord record,
         IReadOnlyList<FalloutPluginSubrecord> subrecords)
     {
-        if (record.Signature == "ALCH")
+        if (record.Signature is "ALCH" or "INGR")
         {
-            var effect = RequiredSingle(record, subrecords, "ENIT", 20).Span;
+            var effect = RequiredSingle(record, subrecords, "ENIT", record.Signature == "INGR" ? 8 : 20).Span;
             var ingestibleValue = BinaryPrimitives.ReadInt32LittleEndian(effect);
             var ingestibleWeight = BinaryPrimitives.ReadSingleLittleEndian(RequiredSingle(record, subrecords, "DATA", 4).Span);
             if (ingestibleValue < 0 || !float.IsFinite(ingestibleWeight) || ingestibleWeight < 0)

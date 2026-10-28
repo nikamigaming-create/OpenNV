@@ -10,6 +10,31 @@ using OpenNV.Runtime.Formats.Gamebryo;
 
 internal static class TravelContracts
 {
+    internal static void RunOwnedEditorPortal(string dataRoot)
+    {
+        RuntimeLiveContentSource.Configure(dataRoot, RuntimeLiveContentSource.FalloutNewVegasGame,
+            activePlugins: RuntimeLiveContentSource.ResolveVanillaPlugins(dataRoot), includeImplicitPlugins: false);
+        using var content = RuntimeLiveContentSource.Current!;
+        using var records = FalloutPluginStack.Load(content.PluginSources);
+        using var world = new FalloutReferenceWorld(records);
+        var actor = new FalloutFormKey("FalloutNV.esm", 0x104e85);
+        var package = records.GetEffective(new("FalloutNV.esm", 0x0200d5));
+        var source = FalloutTravelPackage.Read(package, ownsIdleCollection: true);
+        var editor = FalloutEditorTravelPackage.Read(package);
+        var destination = source.Start(records, world, actor);
+        var outdoorCell = new FalloutFormKey("FalloutNV.esm", 0x0e19cd);
+        Require(source.LocationType == 3 && editor.Flags == 0 && !world.SameTravelRegion(outdoorCell, destination.Cell),
+            "Owned editor Travel no longer matches the observed cross-region package.");
+        world.SetPlacement(actor, new(outdoorCell, [-63484, -19808, 6370], [0, 0, 0]));
+        var door = world.TravelPortal(actor, destination.Cell) ??
+            throw new NotSupportedException("Owned editor Travel has no admitted directed portal.");
+        world.ValidateTravelPortalLeg(actor, door, destination.Cell);
+        var arrival = world.TravelPortalArrival(door, out var destinationDoor);
+        Require(world.SameTravelRegion(arrival.Cell, destination.Cell),
+            "Owned editor Travel portal does not enter the destination region.");
+        Console.WriteLine($"OPENNV_OWNED_EDITOR_TRAVEL_PORTAL_PASS actor={actor} package={source.Form} sourceCell={outdoorCell} destinationCell={destination.Cell} door={door} destinationDoor={destinationDoor} sourceTopology=true nativeMovement=uninspected");
+    }
+
     internal static void RunOwnedDialogueEditorRegion(string dataRoot)
     {
         RuntimeLiveContentSource.Configure(dataRoot, RuntimeLiveContentSource.FalloutNewVegasGame,
@@ -130,6 +155,7 @@ internal static class TravelContracts
                 Package(0x40c, 0, 0x0c803004, radius: 0),
                 Package(0x40e, 0, 0x0c021204, radius: 0), Package(0x40f, 0, 0x1200, radius: 0),
                 Package(0x410, 0, 0x2004, target: 0x907),
+                Package(0x411, 3, 0),
                 AccompanyPackage(),
                 GuardPackage(0x404, 0, 0x14001000, 180, 240), GuardPackage(0x405, 3, 0x10001000, 0, 0),
                 Record("IDLE", 0x500, Field("MODL", Text("actor/event.kf")), Field("DATA", [0x54, 0, 0, 0, 0, 0]))));
@@ -247,6 +273,10 @@ internal static class TravelContracts
                     restoredTravel.RouteWaypoints is { } restoredWaypoints && restoredWaypoints.Length == npcStart.RouteWaypoints!.Length &&
                     restoredWaypoints.Zip(npcStart.RouteWaypoints).All(pair => pair.First.SequenceEqual(pair.Second)),
                     "Cold marker Travel lost its native route cursor, winning NAVM identity or package KF clock.");
+                var livePosition = npcCold.SpatialPlacement(npcActor, null, 1).Position;
+                Require(livePosition.SequenceEqual([11f, -13f, 12f]) &&
+                    !livePosition.SequenceEqual(npcCold.Placement(npcActor).Position),
+                    "A cold moving actor's authoritative motion position was replaced by its old placement.");
             }
             var failedRoute = npcStart with
             {
@@ -352,6 +382,7 @@ internal static class TravelContracts
             Console.WriteLine("OPENNV_TRAVEL_CONTRACT_PASS winningMarker=true movedMarker=true editorPoseDistinct=true oncePerDay24Hours=true selectionPriority=true coldArrivalAndIdle=true invalidSourceRejected=true atomicRestore=true");
             Console.WriteLine("OPENNV_GUARD_APPROACH_CONTRACT_PASS independentRadii=true sourceFlags=true markerAndEditor=true coldMotion=true noInventedWander=true invalidAtomic=true");
             CheckPortalTravel(records, record, npcMotion);
+            CheckEditorPortalTravel(records, npcMotion);
             CheckAccompanyPortal(records, npcMotion);
             CheckCreatureTravelPortal(records, record, npcMotion);
         }
@@ -637,6 +668,59 @@ internal static class TravelContracts
         Console.WriteLine("OPENNV_TRAVEL_PORTAL_CONTRACT_PASS directed=true lockedAndDisabledRefused=true coldApproach=true coldCommittedArrival=true committedPackageHandoff=true finalMarkerPending=true noReverseInference=true malformedAtomic=true");
     }
 
+    private static void CheckEditorPortalTravel(FalloutPluginStack records, FalloutActorPackageMotion template)
+    {
+        FalloutFormKey Key(uint id) => new("Base.esm", id);
+        using var world = new FalloutReferenceWorld(records);
+        world.LoadCell(FalloutCellSceneReader.Read(records, Key(0x800)));
+        var actor = Key(0x908); var door = Key(0x903);
+        var package = records.GetEffective(Key(0x411));
+        var source = FalloutTravelPackage.Read(package, ownsIdleCollection: true);
+        Require(source.LocationType == 3, "Editor portal fixture lost its source location type.");
+        world.SetPlacement(actor, new(Key(0x800), [4, 5, 6], [0, 0, 0]));
+        world.UnlockReference(door);
+        var progress = source.Start(records, world, actor) with
+        {
+            RouteCell = Key(0x800), PortalDoor = door,
+            NavigationSha256 = world.TravelNavigation(Key(0x800)).SourceSha256,
+            RouteTarget = [4, 5, 6], RouteWaypoints = [[4, 5, 6]], RouteCursor = 0
+        };
+        Require(progress.Cell == Key(0x801) && world.TravelPortal(actor, progress.Cell) == door,
+            "Editor location did not retain its authored region and directed portal.");
+        source.Validate(records, world, actor, progress);
+        var state = world.Get(actor);
+        var motion = template with { Package = package.FormKey, PackageSha256 = Hash(package.ReadData()), Travel = progress };
+        state.PackageAssignment = new(package.FormKey, Hash(package.ReadData()), false);
+        state.PackageMotion = motion;
+        var approach = JsonSerializer.Deserialize<FalloutReferenceSnapshot[]>(JsonSerializer.Serialize(world.Capture()))!;
+        using (var cold = new FalloutReferenceWorld(records))
+        {
+            cold.Restore(approach);
+            Require(cold.Get(actor).PackageMotion?.Travel?.PortalDoor == door && cold.Placement(actor).Cell == Key(0x800),
+                "Cold editor Travel lost its unfinished portal approach.");
+        }
+        var arrival = world.TravelPortalArrival(door, out var destination);
+        world.SetPlacement(actor, arrival);
+        var receipt = source.Start(records, world, actor) with { PortalArrival = new(door, destination) };
+        state.PackageMotion = motion with { Travel = receipt };
+        source.Validate(records, world, actor, receipt);
+        var saved = JsonSerializer.Deserialize<FalloutReferenceSnapshot[]>(JsonSerializer.Serialize(world.Capture()))!;
+        using (var cold = new FalloutReferenceWorld(records))
+        {
+            cold.Restore(saved);
+            Require(cold.Get(actor).PackageMotion?.Travel?.PortalArrival == receipt.PortalArrival &&
+                cold.Get(actor).PackageAssignment?.Done == false && cold.Placement(actor).Cell == Key(0x801),
+                "Cold editor Travel lost its committed portal or completed its destination early.");
+        }
+        using (var refused = new FalloutReferenceWorld(records))
+        {
+            Reject(() => refused.Restore(saved.Select(value => value.Reference == actor ? value with
+            { PackageMotion = motion with { Travel = receipt with { PortalArrival = new(door, door) } } } : value).ToArray()));
+            Require(refused.Capture().Count == 0, "Invalid editor portal receipt partially restored the world.");
+        }
+        Console.WriteLine("OPENNV_EDITOR_TRAVEL_PORTAL_CONTRACT_PASS sourceEditorLocation=true coldApproach=true committedPortal=true coldArrival=true invalidAtomic=true");
+    }
+
     private static void CheckCurrentLocationTravel(FalloutPluginStack records, FalloutActorPackageMotion template)
     {
         FalloutFormKey Key(uint id) => new("Base.esm", id);
@@ -650,6 +734,13 @@ internal static class TravelContracts
         var progress = source.Start(records, world, actor, point);
         point[0] = 99;
         Require(progress.Location.SequenceEqual([20f, 30f, 0f]), "Current-location anchor retained mutable input or used editor placement.");
+        Require(world.ActorPackageStartLocation(actor) is null, "Preparing Travel published an uncommitted start location.");
+        world.SetActorPackageStartLocation(actor, new(progress.Cell, progress.Location));
+        var sharedStart = world.ActorPackageStartLocation(actor)!;
+        Require(sharedStart.Cell == Key(0x800) && sharedStart.Position.SequenceEqual([20f, 30f, 0f]),
+            "Current-location Travel did not publish its actor-owned source location.");
+        sharedStart.Position[0] = 999;
+        Require(world.ActorPackageStartLocation(actor)!.Position[0] == 20, "Package start lookup exposed mutable actor authority.");
         progress = progress with
         {
             Complete = true,
@@ -665,12 +756,34 @@ internal static class TravelContracts
         var state = world.Get(actor);
         state.PackageAssignment = new(package.FormKey, Hash(package.ReadData()), true);
         state.PackageMotion = template with { Package = package.FormKey, PackageSha256 = Hash(package.ReadData()), Travel = progress };
-        var saved = JsonSerializer.Deserialize<FalloutReferenceSnapshot[]>(JsonSerializer.Serialize(world.Capture()))!;
+        var captured = world.Capture();
+        var capturedMotion = captured.Single(value => value.Reference == actor).PackageMotion!;
+        state.PackageMotion.Travel!.Location[0] = 123;
+        Require(capturedMotion.Travel!.Location[0] == 20, "Captured Travel anchor aliases live package state.");
+        state.PackageMotion.Travel.Location[0] = 20;
+        var saved = JsonSerializer.Deserialize<FalloutReferenceSnapshot[]>(JsonSerializer.Serialize(captured))!;
         using var cold = new FalloutReferenceWorld(records);
         cold.Restore(saved);
+        saved.Single(value => value.Reference == actor).PackageMotion!.Travel!.Location[0] = 321;
+        saved.Single(value => value.Reference == actor).PackageStartLocation!.Position[0] = 123;
         Require(cold.Get(actor).PackageMotion!.Travel!.Location.SequenceEqual([20f, 30f, 0f]) &&
+            cold.ActorPackageStartLocation(actor)!.Position.SequenceEqual([20f, 30f, 0f]) &&
             cold.Get(actor).PackageAssignment?.Done == true && cold.Placement(actor).Position.SequenceEqual([70f, 80f, 0f]),
-            "Cold current-location Travel recaptured its anchor or restarted its completed lifecycle.");
+            "Cold current-location Travel aliased the input, recaptured its anchor or restarted its completed lifecycle.");
+        saved.Single(value => value.Reference == actor).PackageMotion!.Travel!.Location[0] = 20;
+        saved.Single(value => value.Reference == actor).PackageStartLocation!.Position[0] = 20;
+        using (var legacy = new FalloutReferenceWorld(records))
+        {
+            legacy.Restore(saved.Select(value => value.Reference == actor ? value with { PackageStartLocation = null } : value).ToArray());
+            Require(legacy.ActorPackageStartLocation(actor)!.Position.SequenceEqual([20f, 30f, 0f]),
+                "Prior current-location Travel lost its retained source anchor on cold recovery.");
+        }
+        using (var invalid = new FalloutReferenceWorld(records))
+        {
+            Reject(() => invalid.Restore(saved.Select(value => value.Reference == actor ? value with
+            { PackageStartLocation = new(Key(0x800), [float.NaN, 0, 0]) } : value).ToArray()));
+            Require(invalid.InstanceCount == 0, "Invalid actor package-start location partially restored the world.");
+        }
         Reject(() => source.Start(records, world, Key(0x900), [1, 2, 3]));
         Reject(() => source.Validate(records, world, actor, progress with { NavigationSha256 = new string('0', 64) }));
         var invalidRoute = saved.Select(value => value.Reference == actor ? value with
@@ -811,8 +924,10 @@ internal static class TravelContracts
     }
     private static byte[] PortalDestination()
     {
-        var body = Record("REFR", 0x904, Field("NAME", BitConverter.GetBytes(0x703u)),
-            Field("DATA", new float[] { 1, 2, 3, 0, 0, 0 }.SelectMany(BitConverter.GetBytes).ToArray()));
+        var body = Join(Record("REFR", 0x904, Field("NAME", BitConverter.GetBytes(0x703u)),
+            Field("DATA", new float[] { 1, 2, 3, 0, 0, 0 }.SelectMany(BitConverter.GetBytes).ToArray())),
+            Record("ACHR", 0x908, Field("NAME", BitConverter.GetBytes(0x702u)),
+            Field("DATA", new float[] { 8, 9, 10, 0, 0, 0 }.SelectMany(BitConverter.GetBytes).ToArray())));
         var group = new byte[24 + body.Length]; Encoding.ASCII.GetBytes("GRUP").CopyTo(group, 0);
         BinaryPrimitives.WriteUInt32LittleEndian(group.AsSpan(4), (uint)group.Length);
         BinaryPrimitives.WriteUInt32LittleEndian(group.AsSpan(8), 0x801); BinaryPrimitives.WriteInt32LittleEndian(group.AsSpan(12), 6);

@@ -7,7 +7,7 @@ namespace OpenNV.Runtime.World.Actors;
 internal sealed partial class RuntimeNativeCreature
 {
     internal bool PackageAllowsUnprovokedCombat(FalloutFormKey? attackedTarget) =>
-        _followPackage?.AllowsUnprovokedCombat(attackedTarget) != false;
+        _sandboxPackage?.DefensiveCombat != true && _followPackage?.AllowsUnprovokedCombat(attackedTarget) != false;
 
     private void AdvanceAccompany(FalloutFollowPackage package, Node3D target, bool running, double delta)
     {

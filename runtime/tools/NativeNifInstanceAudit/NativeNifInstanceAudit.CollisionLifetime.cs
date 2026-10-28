@@ -121,13 +121,17 @@ public partial class NativeNifInstanceAudit
         var resources = Performance.GetMonitor(Performance.Monitor.ObjectResourceCount);
         foreach (var (source, error) in refused) RequireCollisionBuildRefusal(source, error);
         await SettleCollisionLifetimeResources();
-        if (Performance.GetMonitor(Performance.Monitor.ObjectResourceCount) != resources)
-            throw new InvalidDataException("Rejected mesh collision construction retained native resources after collection.");
+        var rejectedResources = Performance.GetMonitor(Performance.Monitor.ObjectResourceCount);
+        if (rejectedResources != resources)
+            throw new InvalidDataException($"Rejected mesh collision construction changed native resources after collection: " +
+                $"baseline={resources} after={rejectedResources} delta={rejectedResources - resources}.");
         foreach (var dynamic in new[] { false, true })
             await ExerciseIndependentCollisionLifetime(GeometryCollisionLifetimeFixture(dynamic), geometry: true);
         await SettleCollisionLifetimeResources();
-        if (Performance.GetMonitor(Performance.Monitor.ObjectResourceCount) != resources)
-            throw new InvalidDataException("Released mesh collision instances retained native resources after collection.");
+        var releasedResources = Performance.GetMonitor(Performance.Monitor.ObjectResourceCount);
+        if (releasedResources != resources)
+            throw new InvalidDataException($"Released mesh collision instances changed native resources after collection: " +
+                $"baseline={resources} after={releasedResources} delta={releasedResources - resources}.");
         GD.Print($"OPENNV_NIF_GEOMETRY_COLLISION_LIFETIME_PASS nativeResourceCount={resources} " +
             "actualMesh=true unsupportedCollision=true malformedSecondChild=true partialSiblingCleanup=true " +
             "static=true dynamic=true independentMeshBodies=true orphanNodes=unchanged nativeResourceGrowth=0");

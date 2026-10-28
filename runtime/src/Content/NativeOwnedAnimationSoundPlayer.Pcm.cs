@@ -40,7 +40,25 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer
     {
         foreach (var entry in _events?.Events.Where(entry => entry.End == FalloutAnimationSoundEnd.Active) ?? [])
         {
-            if (entry.Playback is not { } saved) throw new InvalidDataException("Cold active sound has no PCM continuation.");
+            // A still-live PCM owner already supplies the exact sample clock;
+            // do not create a second voice from its earlier saved snapshot.
+            if (_events!.HasLivePlayback(entry.Generation)) continue;
+            if (entry.Playback is not { } saved)
+            {
+                // A finite voice may outlive its streamed-out emitter in the
+                // source-graph audio host. A new presentation owner must not
+                // restart that same generation as a cold PCM continuation.
+                // Admit it only with the live native/source/media receipt;
+                // an absent or ambiguous receipt still fails closed.
+                var live = _records.SoundVoices.PendingFiniteSourceVoices(_events!.Reference);
+                if (live is not null && live.Count(proof => proof.Generation == entry.Generation &&
+                    proof.Reference == _events.Reference && proof.Sound == entry.Sound &&
+                    proof.SoundSha256 == entry.SoundSha256 && proof.Path == entry.Path &&
+                    proof.MediaSha256 == entry.MediaSha256) == 1)
+                    continue;
+                throw new InvalidDataException($"Active sound has no stored PCM continuation: reference={_events!.Reference} " +
+                    $"sound={entry.Sound} generation={entry.Generation} liveCaptureBound={_events.HasPlaybackBinding(entry.Generation)}.");
+            }
             var source = FalloutSoundRecordReader.Read(_records, entry.Sound) with { LogicalPath = entry.LogicalPath };
             var selected = FalloutAnimationSound.Select(source, entry.Variants, new(entry.RandomBefore), true, entry.StereoOutput);
             Node3D emitter;

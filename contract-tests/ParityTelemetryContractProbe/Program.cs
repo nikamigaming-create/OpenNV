@@ -5,6 +5,7 @@ using System.Security.Cryptography;
 NativeReferenceObservationProbe.Run();
 RecordedInputProbe.Run();
 PendingPublicationProbe.Run();
+PrototypeRetirementProbe.Run();
 
 var phaseCounter = new RuntimeFramePhaseCounter(7);
 phaseCounter.EndAt(1, 7);
@@ -176,7 +177,8 @@ try
     if (cadence.Capture() is not { Samples: 512, MedianMilliseconds: 12, P99Milliseconds: 12, MaximumMilliseconds: 12, OverBudgetIntervals: 512 })
         throw new InvalidOperationException("Frame cadence did not retire its bounded previous window.");
     for (var index = 0; index < 512; index++) cadence.Record(timestamp += 5);
-    if (cadence.Capture() is not { Samples: 512, MedianMilliseconds: 5, OverBudgetIntervals: 0, OverBudgetFraction: 0 })
+    if (cadence.Capture() is not { Samples: 512, MedianMilliseconds: 5, OverBudgetIntervals: 0, OverBudgetFraction: 0,
+        TotalSamples: 1124, TotalMaximumMilliseconds: 100, TotalOverFlatBudgetIntervals: 1, TotalOver144BudgetIntervals: 612 })
         throw new InvalidOperationException("Frame cadence retained retired over-budget intervals.");
     var thresholdCadence = new FrameIntervalWindow();
     thresholdCadence.Record(0);
@@ -194,6 +196,11 @@ try
     thresholdCadence.Record(100_005);
     if (thresholdCadence.Capture() is not { Samples: 1, MedianMilliseconds: 5, MaximumMilliseconds: 5, OverBudgetIntervals: 0 })
         throw new InvalidOperationException("A new measurement did not resume on its own draw timestamps.");
+    var flatThreshold = new FrameIntervalWindow();
+    flatThreshold.Record(0); flatThreshold.Record(FrameIntervalWindow.FlatFrameBudgetMilliseconds);
+    flatThreshold.Record(FrameIntervalWindow.FlatFrameBudgetMilliseconds * 2 + .001);
+    if (flatThreshold.Capture() is not { TotalSamples: 2, TotalOverFlatBudgetIntervals: 1, TotalOver144BudgetIntervals: 2 })
+        throw new InvalidOperationException("Frame cadence did not retain the strict 60 Hz budget boundary.");
     Console.WriteLine($"OPENNV_LIVE_DIAGNOSTIC_CONTRACT_OK replacementWithReader=64 oldSnapshotIntact=true commandReadRetry=true transientSharingRetry={OperatingSystem.IsWindows()} persistentSharingRefused={OperatingSystem.IsWindows()} boundedCadence=512 hitchVisible=true strict144HzBudget=true lateIntervalsRetired=true measurementReset=true");
     var store = new RenderTraceBlobStore(traceDirectory);
     byte[] payload = [0, 0, 0, 0x80, 7, 3, 255];

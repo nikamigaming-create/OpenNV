@@ -14,6 +14,16 @@ internal sealed partial class FalloutReferenceWorld
 {
     private readonly Dictionary<FalloutFormKey, uint> _furnitureMarkerFlags = [];
     private readonly Dictionary<FalloutFormKey, string> _baseSignatures = [];
+    private readonly HashSet<FalloutFormKey> _sandboxPrimitiveReferences = [];
+    private readonly Dictionary<FalloutFormKey, bool> _actorFoodSources = [];
+
+    internal bool IsActorFood(FalloutFormKey form)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (!_actorFoodSources.TryGetValue(form, out var food))
+            _actorFoodSources.Add(form, food = FalloutActorFood.IsFood(records, form));
+        return food;
+    }
 
     private string BaseSignature(FalloutFormKey baseForm)
     {
@@ -33,16 +43,34 @@ internal sealed partial class FalloutReferenceWorld
         var result = new List<FalloutSandboxCandidateSource>();
         // Snapshot residency: Get/Inventory may materialize additional state,
         // but that must not change this enumeration underneath the search.
-        foreach (var instance in ResidentInstances.ToArray())
+        foreach (var instance in ResidentSnapshot())
         {
             if (instance.Reference == actor || instance.Reference == records.RuntimeFormKey(0x14) ||
                 instance.Deleted || instance.DeletePending || instance.Taken || !IsEnabled(instance.Reference)) continue;
-            var signature = BaseSignature(instance.Base);
+            if (_sandboxPrimitiveReferences.Contains(instance.Reference)) continue;
+            string signature;
+            try { signature = BaseSignature(instance.Base); }
+            catch (KeyNotFoundException error)
+            {
+                // CreateInstance admits an engine primitive with no ESM base
+                // when its placed reference owns XPRM. Such a trigger is not
+                // an actor, food, idle marker or furniture candidate.
+                if (records.GetEffective(instance.Reference).ReadSubrecords().Any(field => field.Signature == "XPRM"))
+                {
+                    _sandboxPrimitiveReferences.Add(instance.Reference);
+                    continue;
+                }
+                // Missing winning content must remain a visible package
+                // divergence, rather than escaping the actor's failure owner
+                // on every physics frame without identifying the reference.
+                throw new InvalidDataException($"Sandbox candidate {instance.Reference} has no winning base {instance.Base}.", error);
+            }
             var activity = signature switch
             {
                 "NPC_" or "CREA" => FalloutSandboxActivity.Dialogue,
                 "IDLM" => FalloutSandboxActivity.IdleMarker,
-                "INGR" or "ALCH" when FalloutActorFood.IsFood(records, instance.Base) => FalloutSandboxActivity.Eat,
+                "INGR" or "ALCH" when package.Activities.Allows(FalloutSandboxActivity.Eat) && IsActorFood(instance.Base)
+                    => FalloutSandboxActivity.Eat,
                 "FURN" => FurnitureActivity(instance.Base, package.Activities),
                 _ => (FalloutSandboxActivity?)null
             };
@@ -60,7 +88,7 @@ internal sealed partial class FalloutReferenceWorld
         if (package.Activities.Allows(FalloutSandboxActivity.Eat))
         {
             if (Inventory(actor, level, globals).Contents.Items.Any(item =>
-                item.Count > 0 && FalloutActorFood.IsFood(records, item.FormKey)))
+                item.Count > 0 && IsActorFood(item.FormKey)))
                 result.Add(new(FalloutSandboxActivity.Eat, null, null, true));
         }
         if (package.Activities.Allows(FalloutSandboxActivity.Wander))

@@ -1,4 +1,5 @@
 using OpenNV.Runtime.Content;
+using OpenNV.Runtime.Diagnostics;
 
 namespace OpenNV.Runtime.World.Actors;
 
@@ -11,6 +12,7 @@ internal partial class RuntimeNativeSpeech
     }
 
     private readonly Dictionary<FalloutFormKey, NpcDialogueExchange> _npcDialogueParticipants = [];
+    private FalloutDialogueTopicCache _npcDialogueTopics = null!;
     internal bool IsNpcDialogueActive(FalloutFormKey actor) => _npcDialogueParticipants.ContainsKey(actor);
     internal bool IsDialogueBusy(FalloutFormKey actor) => IsTalking(actor) || IsNpcDialogueActive(actor) ||
         _playerDialogueSpeaker == actor || _deferredRequests.ContainsKey(actor);
@@ -27,7 +29,7 @@ internal partial class RuntimeNativeSpeech
     {
         foreach (var candidate in FalloutNpcDialogueLinks.OpeningTopics(_stack, topic))
         {
-            var info = SelectSpeechInfo(FalloutDialogueTopic.Read(_stack, candidate), speaker, target, npcConversation: true);
+            var info = SelectSpeechInfo(_npcDialogueTopics.Read(candidate), speaker, target, npcConversation: true);
             if (info is not null) return (candidate, info);
         }
         return null;
@@ -44,20 +46,28 @@ internal partial class RuntimeNativeSpeech
         if (speaker == target || target == _stack.RuntimeFormKey(0x14)) return false;
         var references = _references ?? throw new NotSupportedException("Ambient conversation has no reference owner.");
         var source = references.Get(speaker);
-        if (references.BlocksAmbientConversation(speaker) || references.BlocksAmbientConversationTarget(target) ||
-            IsDialogueBusy(speaker) || IsDialogueBusy(target)) return false;
-        if (references.BlocksAmbientConversationRelationship(speaker, target)) return false;
+        using (RuntimeFrameWork.Measure(RuntimeFrameWork.Owner.AmbientAdmission))
+            if (references.BlocksAmbientConversation(speaker) || references.BlocksAmbientConversationTarget(target) ||
+                IsDialogueBusy(speaker) || IsDialogueBusy(target)) return false;
+        using (RuntimeFrameWork.Measure(RuntimeFrameWork.Owner.AmbientRelationship))
+            if (references.BlocksAmbientConversationRelationship(speaker, target)) return false;
         source.ConversationSuppressionSeconds = FalloutConversationSuppression.Sample(_stack.NumericSettings, source.SoundRandom.NextUnitFloat);
         references.RememberConversationAttempt(speaker, target);
-        if (!FalloutDialogueSpeaker.HasConversationVoice(_stack, source.Base, source.Templates)) return false;
-        var listener = references.Get(target);
-        if (!FalloutDialogueSpeaker.HasConversationVoice(_stack, listener.Base, listener.Templates)) return false;
-        _ = ResidentSpeaker(_stack.GetEffective(speaker));
-        _ = ResidentSpeaker(_stack.GetEffective(target));
-        var opening = SelectNpcConversationOpening(speaker, target, topic);
+        using (RuntimeFrameWork.Measure(RuntimeFrameWork.Owner.AmbientVoice))
+        {
+            if (!FalloutDialogueSpeaker.HasConversationVoice(_stack, source.Base, source.Templates)) return false;
+            var listener = references.Get(target);
+            if (!FalloutDialogueSpeaker.HasConversationVoice(_stack, listener.Base, listener.Templates)) return false;
+            _ = ResidentSpeaker(_stack.GetEffective(speaker));
+            _ = ResidentSpeaker(_stack.GetEffective(target));
+        }
+        (FalloutFormKey Topic, FalloutDialogueInfo Info)? opening;
+        using (RuntimeFrameWork.Measure(RuntimeFrameWork.Owner.AmbientTopicSelection))
+            opening = SelectNpcConversationOpening(speaker, target, topic);
         if (opening is not { } selected) return false;
         try
         {
+            using var scope = RuntimeFrameWork.Measure(RuntimeFrameWork.Owner.AmbientStart);
             StartCore(new(speaker.ToString(), target.ToString(), selected.Topic.ToString()), _stack.GetEffective(speaker),
                 selected.Topic, target, selectedInfo: selected.Info, forceNpcConversation: true, ambientConversation: true);
         }
@@ -108,7 +118,7 @@ internal partial class RuntimeNativeSpeech
             voice.Reference, voice.Listener ?? throw new InvalidDataException("NPC dialogue lost its physical listener."), goodbye);
         foreach (var turn in turns.OrderByDescending(turn => FalloutDialogueTopic.Priority(_stack, turn.Topic)))
         {
-            var topic = FalloutDialogueTopic.Read(_stack, turn.Topic);
+            var topic = _npcDialogueTopics.Read(turn.Topic);
             var info = SelectSpeechInfo(topic, turn.Speaker, turn.Listener, npcConversation: true);
             if (info is null) continue;
             StartCore(new(turn.Speaker.ToString(), turn.Listener.ToString(), turn.Topic.ToString(), exchange.Command.ForceSubtitles),

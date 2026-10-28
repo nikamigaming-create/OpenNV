@@ -1,5 +1,6 @@
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Gameplay.State;
+using OpenNV.Runtime.Diagnostics;
 using Godot;
 
 namespace OpenNV.Runtime.World.Cells;
@@ -32,8 +33,11 @@ internal sealed partial class FalloutReferenceWorld
         if (records.GetEffective(instance.Base).Signature is not ("NPC_" or "CREA"))
             throw new InvalidDataException("Package wandering requires an actor reference.");
         var placement = SpatialPlacement(actor, null, unitsToMetres);
-        var graph = TravelNavigation(ReferenceSpatialCell(instance));
+        CellNavigationGraph graph;
+        using (RuntimeFrameWork.Measure(RuntimeFrameWork.Owner.SandboxNavigationSource))
+            graph = TravelNavigation(ReferenceSpatialCell(instance));
         var position = new Vector3(placement.Position[0], placement.Position[1], placement.Position[2]);
+        using var search = RuntimeFrameWork.Measure(RuntimeFrameWork.Owner.SandboxNavigationSearch);
         return graph.FindPackageWanderDestination(position, center, radius, settings,
             instance.SoundRandom.NextUnitFloat, instance.SoundRandom.NextBounded, triangle =>
             {

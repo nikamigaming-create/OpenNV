@@ -398,6 +398,8 @@ internal partial class RuntimeNativePlayer
                     pending.Damage is not null ? "damage-unbound" : "impact-resolved",
                 hitEventMarked = pending.Trace.HitEventMarked,
                 healthDamage = hit?.HealthDamage,
+                healthBefore = hit?.HealthBefore,
+                healthAfter = hit?.HealthAfter,
                 part = hit?.Part,
                 died = hit?.Died,
                 error = _damageError

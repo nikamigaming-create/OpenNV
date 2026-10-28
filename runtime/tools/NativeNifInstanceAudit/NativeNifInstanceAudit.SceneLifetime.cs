@@ -11,18 +11,18 @@ public partial class NativeNifInstanceAudit
         {
             (SceneLifetimeSharedSkin(), "shared by multiple skin instances"),
             (SceneLifetimeHinges(missingEndpoint: true), "no independent pair of model bodies"),
-            (SceneLifetimeSkin(explicitWeights: false), "does not carry explicit vertex weights"),
+            (SceneLifetimeSkin(explicitWeights: false, invalidPartitionWeights: true), "non-normalized weights"),
         };
         foreach (var type in new[] { "BSRangeNode", "BSBlastNode", "BSDamageStage" })
             refused.Add((SceneLifetimeRange(type, inverted: true), "damage range is inverted"));
         foreach (var (bytes, error) in refused) RequireSceneLifetimeRefusal(bytes, error);
-        RequireIndependentSceneLifetimeSkins();
+        foreach (var explicitWeights in new[] { true, false }) RequireIndependentSceneLifetimeSkins(explicitWeights);
         await ExerciseIndependentSceneLifetimeHinges();
         await SettleCollisionLifetimeResources();
         var before = Performance.GetMonitor(Performance.Monitor.ObjectOrphanNodeCount);
         var resources = Performance.GetMonitor(Performance.Monitor.ObjectResourceCount);
         await ExerciseSceneLifetimeRefusalsWithLiveSibling(refused);
-        RequireIndependentSceneLifetimeSkins();
+        foreach (var explicitWeights in new[] { true, false }) RequireIndependentSceneLifetimeSkins(explicitWeights);
         foreach (var type in new[] { "BSRangeNode", "BSBlastNode", "BSDamageStage" })
             await ExerciseIndependentCollisionLifetime(SceneLifetimeRange(type, inverted: false));
         await ExerciseIndependentSceneLifetimeHinges();
@@ -31,7 +31,7 @@ public partial class NativeNifInstanceAudit
             Performance.GetMonitor(Performance.Monitor.ObjectResourceCount) != resources)
             throw new InvalidDataException("Released scene construction proofs retained native nodes or resources.");
         GD.Print("OPENNV_NIF_SCENE_CONSTRUCTION_LIFETIME_PASS discoveryRefusal=true invertedRange=true " +
-            "rangeKinds=3 lateMissingHingeEndpoint=true configuredHinge=true independentSkin=true independentJoint=true " +
+            "rangeKinds=3 lateMissingHingeEndpoint=true configuredHinge=true independentSkin=true hardwareWeights=true malformedWeightsRefused=true independentJoint=true " +
             "liveSibling=unchanged sourceBytes=unchanged orphanNodes=unchanged nativeResourceGrowth=0 " +
             "configureException=untriggered");
     }
@@ -84,20 +84,21 @@ public partial class NativeNifInstanceAudit
             throw new InvalidDataException("Scene construction changed its original source bytes.");
     }
 
-    private static void RequireIndependentSceneLifetimeSkins()
+    private static void RequireIndependentSceneLifetimeSkins(bool explicitWeights)
     {
-        var bytes = SceneLifetimeSkin();
+        var bytes = SceneLifetimeSkin(explicitWeights);
         var hash = Convert.ToHexString(SHA256.HashData(bytes));
         var source = FalloutNifFile.Read(bytes);
         var geometry = source.ReadMeshData(source.ReadGeometry(2).Data);
         var instance = (FalloutNifSkinInstance)source.ReadObject(4);
         var data = (FalloutNifSkinData)source.ReadObject(instance.Data);
         var partition = (FalloutNifSkinPartition)source.ReadObject(instance.SkinPartition);
-        var binding = FalloutNifOneBoneSkin.Validate(instance, data, partition, geometry.Vertices.Length);
-        if (geometry.Vertices.Length != 3 || !data.HasVertexWeights ||
-            !data.Bones.Single().VertexWeights.SequenceEqual(new FalloutNifSkinWeight[] { new(0, 1), new(1, 1), new(2, 1) }) ||
+        var binding = FalloutNifHardwareSkin.Read(instance, data, partition, geometry.Vertices.Length, geometry.Triangles).Single();
+        if (geometry.Vertices.Length != 3 || data.HasVertexWeights != explicitWeights ||
+            !data.Bones.Single().VertexWeights.SequenceEqual(explicitWeights
+                ? new FalloutNifSkinWeight[] { new(0, 1), new(1, 1), new(2, 1) } : []) ||
             !instance.BodyPartitions.SequenceEqual(new FalloutNifBodyPartition[] { new(0x101, 1) }))
-            throw new InvalidDataException("Positive skin lifetime fixture did not decode its authored complete vertex weights and body partition.");
+            throw new InvalidDataException("Positive skin lifetime fixture did not decode its authored weight ownership and body partition.");
         RuntimeNativeNifScene? first = null, second = null;
         try
         {
@@ -171,10 +172,19 @@ public partial class NativeNifInstanceAudit
         return CollisionLifetimeFile(blocks, source.Strings);
     }
 
-    private static byte[] SceneLifetimeSkin(bool explicitWeights = true)
+    private static byte[] SceneLifetimeSkin(bool explicitWeights = true, bool invalidPartitionWeights = false)
     {
-        var bytes = ActorSkinFixture("LifetimeSkin", true); var source = FalloutNifFile.Read(bytes);
+        var bytes = ActorSkinFixture("LifetimeSkin", true);
+        var skinRanges = new List<FalloutNifReadRange>();
+        var source = FalloutNifFile.Read(bytes, skinRanges.Add);
+        _ = source.ReadObject(6);
         var blocks = source.Blocks.Select(block => (Type: block.TypeName, Bytes: bytes.AsSpan(block.Offset, block.Size).ToArray())).ToList();
+        if (invalidPartitionWeights)
+        {
+            var weight = skinRanges.Single(range => range.Owner == "NIF block 6 (NiSkinPartition)" &&
+                range.Field == "skin partition 0 vertex 0 weight 0");
+            BinaryPrimitives.WriteSingleLittleEndian(blocks[6].Bytes.AsSpan(weight.Offset - source.Blocks[6].Offset), .5f);
+        }
         var visualBytes = SurfaceFixture(0x80000100); var ranges = new List<FalloutNifReadRange>();
         var visual = FalloutNifFile.Read(visualBytes, ranges.Add); _ = visual.ReadGeometry(1); _ = visual.ReadObject(3);
         var geometry = visual.Blocks[1]; var shader = visual.Blocks[3];

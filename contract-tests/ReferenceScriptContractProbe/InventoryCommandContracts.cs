@@ -17,6 +17,14 @@ internal static class InventoryCommandContracts
             var questItem = Item("MISC", 4, "QuestItem", 8); BinaryPrimitives.WriteUInt32LittleEndian(questItem.AsSpan(8), 0x400);
             File.WriteAllBytes(Path.Combine(directory.FullName, "Items.esm"), Join(
                 Record("TES4", 0, Field("HEDR", header)), Item("WEAP", 1, "Gun", 15), Item("MISC", 2, "Loot", 8),
+                Record("SCPT", 0x200, Field("SCTX", Text("scn PickupScript\nbegin OnAdd player\nreturn\nend")), Field("SCRO", BitConverter.GetBytes(0x14u))),
+                Record("SCPT", 0x201, Field("SCTX", Text("scn ActivateScript\nbegin OnActivate\nreturn\nend"))),
+                Record("SCPT", 0x202, Field("SCTX", Text("scn OtherRecipient\nbegin OnAdd Actor\nreturn\nend")), Field("SCRO", BitConverter.GetBytes(0x900u))),
+                Record("MISC", 9, Field("EDID", Text("ScriptedPickup")), Field("DATA", new byte[8]), Field("SCRI", BitConverter.GetBytes(0x200u))),
+                Record("MISC", 10, Field("EDID", Text("ActivateOnly")), Field("DATA", new byte[8]), Field("SCRI", BitConverter.GetBytes(0x201u))),
+                Record("MISC", 11, Field("EDID", Text("OtherRecipientItem")), Field("DATA", new byte[8]), Field("SCRI", BitConverter.GetBytes(0x202u))),
+                Record("LVLI", 12, Field("EDID", Text("MixedList")), Field("LVLF", [4]), Field("LVLD", [0]),
+                    Field("LVLO", LeveledEntry(2)), Field("LVLO", LeveledEntry(9))),
                 Armor(3, "Protected", 6, true), questItem, Armor(5, "Suit", 2), Armor(6, "OtherSuit", 2),
                 Record("NPC_", 7, Field("CNTO", Join(BitConverter.GetBytes(2u), BitConverter.GetBytes(3)))),
                 Item("WEAP", 8, "OtherGun", 15), Record("NPC_", 0x100, Field("ACBS", new byte[24]),
@@ -39,6 +47,80 @@ internal static class InventoryCommandContracts
                 "Engine player inventory lost its source base or created a reference record.");
             inventory.Remove(Key(2), 3, true);
             var commands = new FalloutInventoryCommands(records, world, inventory, () => 1);
+            var tradePlayer = new FalloutPlayerInventory(100);
+            var tradeMerchant = new FalloutPlayerInventory(101);
+            tradePlayer.Add(records, Key(1), 1, 1, true, extra: new(1, .4f, Key(0x100)));
+            tradePlayer.Equip(records, Key(1), true);
+            tradeMerchant.Add(records, Key(1), 1, 1, true, extra: new(1, .8f, Key(0x100)));
+            tradePlayer.Exchange(tradeMerchant, [new(Key(1), 1, false)]);
+            Require(tradePlayer.Item(Key(1)) is { Count: 2, UnequipLocked: true, Variants: { } tradeVariants } &&
+                tradeVariants.Any(value => value.Condition == .4f) && tradeVariants.Any(value => value.Condition == .8f) &&
+                tradePlayer.IsEquipped(records, Key(1)) && !tradePlayer.Unequip(records, Key(1)),
+                "Trade replaced the destination's equipped lock or item variants.");
+            var tradeSnapshot = tradePlayer.Capture();
+            var tradeCold = new FalloutPlayerInventory();
+            tradeCold.Restore(tradeSnapshot.Inventory, tradeSnapshot.EquippedRuntimeFormIds.ToArray(), tradeSnapshot.InventoryRandomState);
+            Require(tradeCold.Item(Key(1))?.UnequipLocked == true && !tradeCold.Unequip(records, Key(1)),
+                "Cold trade inventory lost the existing equipment lock.");
+            var equippedBefore = JsonSerializer.Serialize(tradePlayer.Capture());
+            Reject(() => tradePlayer.RemoveVariant(Key(1), 0, 1, true, tradePlayer.Revision));
+            Require(JsonSerializer.Serialize(tradePlayer.Capture()) == equippedBefore,
+                "Partial selected removal lost an unbound worn instance.");
+            var atomic = new FalloutPlayerInventory(1234);
+            var atomicBefore = JsonSerializer.Serialize(atomic.Capture()); var external = 0;
+            Reject(() => atomic.AddWithPreparedOwner(records, Key(2), 2, 1, false,
+                new(() => { external = 1; throw new InvalidDataException("Prepared owner refused commit."); }, () => external = 0)));
+            Require(external == 0 && JsonSerializer.Serialize(atomic.Capture()) == atomicBefore &&
+                atomic.Notifications.Capture().LastOrdinal == 0, "Failed addition did not restore inventory, owner and HUD.");
+            Reject(() => atomic.AddWithPreparedOwner(records, Key(2), 2, 1, false,
+                new(() => atomic.Add(records, Key(2), 1, 1, true), () => { })));
+            Require(JsonSerializer.Serialize(atomic.Capture()) == atomicBefore && atomic.Notifications.Capture().LastOrdinal == 0,
+                "Nested addition interleaved a prepared inventory transaction.");
+            atomic.AddWithPreparedOwner(records, Key(2), 2, 1, false, new(() => external = 1, () => external = 0));
+            Require(atomic.Item(Key(2))?.Count == 2 && external == 1 && atomic.Notifications.Capture().LastOrdinal == 1,
+                "Prepared addition did not commit inventory, owner and one source notice.");
+            var selected = new FalloutPlayerInventory(333);
+            selected.Add(records, Key(2), 2, 1, true, extra: new(2, .3f, Key(0x100)));
+            var staleSelection = selected.Revision;
+            selected.Add(records, Key(2), 1, 1, true, extra: new(1, .8f, Key(0x101)));
+            var selectedBefore = JsonSerializer.Serialize(selected.Capture());
+            Reject(() => selected.RemoveVariant(Key(2), 0, 1, false, staleSelection));
+            Reject(() => selected.RemoveVariant(Key(2), 1, 2, false, selected.Revision));
+            Require(JsonSerializer.Serialize(selected.Capture()) == selectedBefore && selected.Notifications.Capture().LastOrdinal == 0,
+                "Rejected selected removal changed inventory or HUD.");
+            selected.RemoveVariant(Key(2), 1, 1, false, selected.Revision);
+            Require(selected.Item(Key(2)) is { Count: 2, Variants: { Count: 1 } surviving } &&
+                surviving[0] is { Count: 2, Condition: .3f } && surviving[0].Owner == Key(0x100) &&
+                selected.Notifications.Capture().LastOrdinal == 1,
+                "Selected removal changed the wrong condition or ownership variant.");
+            var selectedCold = new FalloutPlayerInventory(); var selectedSave = selected.Capture();
+            selectedCold.Restore(selectedSave.Inventory, selectedSave.EquippedRuntimeFormIds.ToArray(), selectedSave.InventoryRandomState);
+            Require(JsonSerializer.Serialize(selectedCold.Capture()) == JsonSerializer.Serialize(selectedSave),
+                "Selected variant removal did not survive cold inventory restore.");
+            var beforeScriptedPickup = JsonSerializer.Serialize(inventory.Capture());
+            Reject(() => commands.Execute(new(FalloutInventoryCommandKind.Add, Key(0x14), Item: Key(9), Silent: false)));
+            Require(beforeScriptedPickup == JsonSerializer.Serialize(inventory.Capture()) && inventory.Notifications.Capture().LastOrdinal == 0,
+                "Unowned item OnAdd changed inventory or published a notice.");
+            commands.Execute(new(FalloutInventoryCommandKind.Add, Key(0x14), Item: Key(10)));
+            Require(inventory.Item(Key(10))?.Count == 1, "An activation-only item was refused as an OnAdd event.");
+            inventory.Remove(Key(10), 1, true);
+            commands.Execute(new(FalloutInventoryCommandKind.Add, Key(0x14), Item: Key(11)));
+            Require(inventory.Item(Key(11))?.Count == 1, "A nonmatching actor filter blocked player acquisition.");
+            inventory.Remove(Key(11), 1, true);
+            Reject(() => FalloutReferenceWorld.RequirePlayerItemAcquisition(records, records.GetEffective(Key(11)), Key(0x900)));
+            Reject(() => FalloutReferenceWorld.RequirePlayerItemAcquisition(records, records.GetEffective(Key(11))));
+            var beforeLeveled = JsonSerializer.Serialize(inventory.Capture());
+            Reject(() => commands.Execute(new(FalloutInventoryCommandKind.Add, Key(0x14), Item: Key(12))));
+            Require(beforeLeveled == JsonSerializer.Serialize(inventory.Capture()),
+                "Refused selected item from a leveled list changed inventory or random state.");
+            inventory.Add(records, Key(2), 1, 1, true);
+            var craft = new FalloutRecipe(records.GetEffective(Key(0x600)), "Synthetic", "Synthetic", -1, 0, null, null, [],
+                [new(Key(2), 1)], [new(Key(12), 1)]);
+            var beforeCraft = JsonSerializer.Serialize(inventory.Capture());
+            Reject(() => inventory.Craft(records, craft, 1, null));
+            Require(beforeCraft == JsonSerializer.Serialize(inventory.Capture()) && inventory.Notifications.Capture().LastOrdinal == 0,
+                "Refused scripted recipe output consumed ingredients, advanced random state or published a notice.");
+            inventory.Remove(Key(2), 1, true);
             var executor = new FalloutReferenceScripts(records, world, new(records), new((_, _) => false,
                 _ => throw new InvalidDataException("Inventory command escaped its shared owner."), Inventory: commands));
             var quest = records.GetEffective(Key(0x600));
@@ -120,6 +202,15 @@ internal static class InventoryCommandContracts
             Reject(() => inventory.RemoveAll(records, true, overflow, false, false));
             Require(before == JsonSerializer.Serialize(inventory.Capture()) && targetBefore == JsonSerializer.Serialize(overflow.Capture()),
                 "Failed whole-container transfer published a partial transaction.");
+            var hudOverflow = new FalloutPlayerInventory(789);
+            hudOverflow.Notifications.Restore(new(long.MaxValue, null, 0, []));
+            var pickupBefore = JsonSerializer.Serialize(hudOverflow.Capture());
+            Reject(() => hudOverflow.Add(records, Key(2), 1, 1, false));
+            Require(pickupBefore == JsonSerializer.Serialize(hudOverflow.Capture()) &&
+                hudOverflow.Notifications.Capture().LastOrdinal == long.MaxValue,
+                "Refused pickup notification changed inventory or its random continuation.");
+            hudOverflow.Add(records, Key(2), 1, 1, true);
+            Require(hudOverflow.Item(Key(2))?.Count == 1, "Silent addition incorrectly required a HUD ordinal.");
             Console.WriteLine("OPENNV_INVENTORY_COMMAND_CONTRACT_PASS source-dispatch protected-items transfer-variants lock cold-lock explicit-unequip source-flags cold-unequip reset-identity cold-reset typed-form lazy-branch atomic-failure actor-creature-container-counts worn-removal weapon-retirement cold-counts");
         }
         finally { directory.Delete(true); }
@@ -200,6 +291,12 @@ internal static class InventoryCommandContracts
         throw new InvalidDataException("Invalid inventory operation was accepted.");
     }
     private static byte[] Item(string type, uint id, string name, int length) => Record(type, id, Field("EDID", Text(name)), Field("DATA", new byte[length]));
+    private static byte[] LeveledEntry(uint id)
+    {
+        var entry = new byte[12]; BinaryPrimitives.WriteUInt16LittleEndian(entry, 1);
+        BinaryPrimitives.WriteUInt32LittleEndian(entry.AsSpan(4), id); BinaryPrimitives.WriteUInt16LittleEndian(entry.AsSpan(8), 1);
+        return entry;
+    }
     private static byte[] Armor(uint id, string name, int slot, bool hidden = false)
     {
         var biped = new byte[8]; BinaryPrimitives.WriteUInt32LittleEndian(biped, 1u << slot); biped[4] = hidden ? (byte)0x40 : (byte)0;

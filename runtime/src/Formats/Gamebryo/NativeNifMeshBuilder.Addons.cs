@@ -17,8 +17,8 @@ internal static partial class RuntimeNativeNifMeshBuilder
             if (!AddonAncestors.Add(value.Value)) throw new InvalidDataException("ADDN model graph contains a cycle.");
             try
             {
-                if (!content.TryRead(addon.Model, null, out var bytes, out var identity)) throw new FileNotFoundException(addon.Model);
-                var scene = RuntimeNativeNifMeshBuilder.Build(FalloutNifFile.Read(bytes), _unitsToMetres, contentSource: content, addonAncestors: AddonAncestors);
+                var model = NativeOwnedNifCache.Read(content, addon.Model, out var identity);
+                var scene = RuntimeNativeNifMeshBuilder.Build(model, _unitsToMetres, contentSource: content, addonAncestors: AddonAncestors);
                 node.AddChild(scene.Root);
                 node.SetMeta("opennv_addon_form", addon.Form.ToString());
                 node.SetMeta("opennv_addon_index", value.Value);

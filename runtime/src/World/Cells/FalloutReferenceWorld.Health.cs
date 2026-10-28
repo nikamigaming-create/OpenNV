@@ -55,7 +55,7 @@ internal sealed partial class FalloutReferenceWorld
         {
             reference = actor.Reference.ToString(),
             blocker = actor.CorpseEquipmentCaptureBlocker,
-            nativeEquipmentOwner = actor.CaptureCorpseEquipment is not null,
+            nativeEquipmentOwner = actor.CaptureCorpseEquipment is not null || actor.CaptureCorpseEquipmentForFiniteWait is not null,
             nativeBodyOwner = actor.CaptureRagdoll is not null,
             retainedBody = actor.Ragdoll is not null
         }).ToArray();

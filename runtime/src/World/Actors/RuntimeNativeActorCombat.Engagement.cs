@@ -44,8 +44,12 @@ internal sealed partial class RuntimeNativeActorCombat
     internal bool Restrained => _state.Restrained;
     internal int? ScriptCombatProcedure => _state.Engagement is null ? null : _state.Engagement.Action == "flee" ? 16 : 13;
     internal int? ScriptCombatPackage => _state.Engagement is null ? null : _state.Engagement.Action == "flee" ? 10 : 5;
-    private bool PackageAllowsUnprovokedCombat(FalloutFormKey? attackedTarget = null) =>
-        _actor is not RuntimeNativeCreature creature || creature.PackageAllowsUnprovokedCombat(attackedTarget);
+    private bool PackageAllowsUnprovokedCombat(FalloutFormKey? attackedTarget = null) => _actor switch
+    {
+        RuntimeNativeCreature creature => creature.PackageAllowsUnprovokedCombat(attackedTarget),
+        RuntimeNativeNpc npc => npc.PackageAllowsUnprovokedCombat,
+        _ => true
+    };
     private object EngagementObservation => new
     {
         state = _state.Engagement,
@@ -351,7 +355,9 @@ internal sealed partial class RuntimeNativeActorCombat
             if (_state.CaptureEngagement == CaptureEngagement) _state.CaptureEngagement = null;
             if (_state.CanCaptureCorpseEquipment == CorpseEquipmentCaptureReady) _state.CanCaptureCorpseEquipment = null;
             if (_state.CaptureCorpseEquipment == CaptureCorpseEquipment) _state.CaptureCorpseEquipment = null;
+            if (_state.CaptureCorpseEquipmentForFiniteWait == CaptureCorpseEquipmentForFiniteWait) _state.CaptureCorpseEquipmentForFiniteWait = null;
             DisposeRouteSearch();
+            _stepQueries?.Dispose(); _stepQueries = null;
             _eatObjects?.Dispose(); _eatObjects = null;
         }
     }
@@ -365,6 +371,7 @@ internal sealed partial class RuntimeNativeActorCombat
         _state.CaptureEngagement ??= CaptureEngagement;
         _state.CanCaptureCorpseEquipment ??= CorpseEquipmentCaptureReady;
         _state.CaptureCorpseEquipment ??= CaptureCorpseEquipment;
+        _state.CaptureCorpseEquipmentForFiniteWait ??= CaptureCorpseEquipmentForFiniteWait;
         _state.PrepareNativeInventoryRemoval ??= PrepareNativeInventoryRemoval;
     }
 }

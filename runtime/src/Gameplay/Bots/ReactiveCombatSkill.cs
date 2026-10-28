@@ -8,7 +8,7 @@ internal sealed class ReactiveCombatSkill
 {
     internal const string SkillId = "source-reference-single-ray-combat/v1";
     internal const int MaximumShots = 12, MaximumMisses = 2;
-    internal const float MaximumRangeMeters = 18, ExecutionLimitSeconds = 60, ReceiptLimitSeconds = 4;
+    internal const float ExecutionLimitSeconds = 60, ReceiptLimitSeconds = 4;
     private readonly ReactiveSteering _steering = new();
     private readonly List<BotCombatReceipt> _receipts = [];
     private readonly VerifiedBotSkillLibrary _skills;
@@ -43,7 +43,7 @@ internal sealed class ReactiveCombatSkill
         staleSeconds = _stale,
         obstructionSeconds = _obstructed,
         maximumShots = MaximumShots,
-        maximumRangeMeters = MaximumRangeMeters,
+        rangeOwner = "equipped-source-weapon",
         shots = _receipts.Count,
         verifiedContacts = _receipts.Count(receipt => receipt.VerifiedContact),
         aimRecoveries = _recoveries,
@@ -57,18 +57,23 @@ internal sealed class ReactiveCombatSkill
 
     internal ReactiveCombatSkill(VerifiedBotSkillLibrary skills) => _skills = skills;
 
-    internal static BotCombatTarget? SelectThreat(BotCombatObservation state, string? reference = null) =>
-        state.Targets.Where(target => target.Resident && target.Enabled && target.TargetsPlayer && !target.Dead &&
+    internal static BotCombatTarget? SelectThreat(BotCombatObservation state, string? reference = null,
+        bool requireClearSight = false) =>
+        state.Targets.Where(target => target.Resident && target.Enabled && target.EligibleThreat && !target.Dead &&
                 (reference is null || target.Reference == reference) && Finite(target.Position) &&
-                Vector3.Distance(state.Camera, target.Position) <= MaximumRangeMeters)
-            .OrderBy(target => Vector3.DistanceSquared(state.Camera, target.Position))
+                (!requireClearSight || target.BodyRayReference == target.Reference && target.MuzzleRayReference == target.Reference) &&
+                (target.BodyPoint is not { } body || !Finite(body) || state.Weapon is not { } weapon ||
+                    !float.IsFinite(weapon.RangeMeters) || weapon.RangeMeters <= 0 ||
+                    Vector3.Distance(state.Camera, body) <= weapon.RangeMeters))
+            .OrderByDescending(target => target.TargetsPlayer)
+            .ThenBy(target => Vector3.DistanceSquared(state.Camera, target.Position))
             .ThenBy(target => target.Reference, StringComparer.Ordinal).FirstOrDefault();
 
     internal void Start(BotCombatObservation state, BotCombatTarget target)
     {
         if (Active) throw new InvalidOperationException("A combat skill already owns ordinary input.");
         if (SelectThreat(state, target.Reference) is null)
-            throw new InvalidOperationException("Combat requires an actual resident source threat targeting the player.");
+            throw new InvalidOperationException("Combat requires an actual resident source threat targeting the player or a protected actor.");
         _attempt = Guid.NewGuid(); _binding = state.Binding; _scene = state.Scene;
         _reference = target.Reference; _sourceFault = target.SourceFault;
         _weapon = state.Weapon?.Reference ?? ""; _ammunition = state.Weapon?.Ammunition ?? "";
@@ -106,6 +111,8 @@ internal sealed class ReactiveCombatSkill
             return ("engine-owner", weapon?.Error ?? "No equipped source weapon owner is available.");
         if (!weapon.Supported)
             return ("skill-limit", weapon.Limit ?? "This skill requires a magazine-fed single instant-ray weapon.");
+        if (!float.IsFinite(weapon.RangeMeters) || weapon.RangeMeters <= 0)
+            return ("engine-owner", "Equipped source weapon range is invalid.");
         if (weapon.Reference != _weapon || weapon.Ammunition != _ammunition || weapon.Projectile != _projectile)
             return ("observation-loss", "Equipped weapon/ammunition/projectile changed during combat.");
         if (weapon.Loaded < 0 || weapon.Reserve < 0)
@@ -155,11 +162,11 @@ internal sealed class ReactiveCombatSkill
             if (_phase == "awaiting-shot") return ObserveShot(state, target, weapon, seconds);
             if (target.Dead || health == 0)
                 return Refuse("receipt-refusal", "Target death has no new attributable player shot/contact/death receipt.");
-            if (!target.TargetsPlayer) return Refuse("safety-stop", "The source target is no longer engaged against the player.");
+            if (!target.EligibleThreat) return Refuse("safety-stop", "The source target is no longer an eligible combat threat.");
             if (target.BodyPoint is not { } body || !Finite(body) ||
                 target.BodyOwner != "source-BPNT-current-skeleton-pose")
                 return Refuse("engine-owner", "Target has no actual source BPNT posed body point.");
-            if (Vector3.Distance(state.Camera, body) > Math.Min(MaximumRangeMeters, weapon.RangeMeters))
+            if (Vector3.Distance(state.Camera, body) > weapon.RangeMeters)
                 return Refuse("safety-stop", "Target left this bounded skill's source-supported range; ordinary navigation is required.");
             if (_phase == "awaiting-reload")
             {
@@ -235,7 +242,7 @@ internal sealed class ReactiveCombatSkill
             return Refuse("receipt-refusal", "Shot counters regressed or another discharge crossed the isolated ordinary fire receipt.");
         if (state.Firing.Shots == before.Firing.Shots)
         {
-            if (target.Dead) return Refuse("receipt-refusal", "Target died without the requested player discharge.");
+            if (target.Dead) return Refuse("safety-stop", "Target died without the requested player discharge; no player kill is attributed.");
             if (_waiting > ReceiptLimitSeconds) return Refuse("receipt-refusal", "Fire input produced no actual shot/ammunition receipt.");
             return HoldingAim();
         }
@@ -260,19 +267,28 @@ internal sealed class ReactiveCombatSkill
             impact.Reference == _reference && impact.Weapon == _weapon && impact.Projectile == _projectile && impact.HitEventMarked;
         var receipt = new BotCombatReceipt(before.Sample, state.Sample, before.Firing.Shots, state.Firing.Shots,
             _reference!, _weapon!, _ammunition!, _projectile!, before.Weapon!.Loaded, weapon.Loaded,
-            before.Weapon.Reserve, weapon.Reserve, _beforeTarget!.Health!.Value, target.Health!.Value,
+            before.Weapon.Reserve, weapon.Reserve, impact?.HealthBefore ?? _beforeTarget!.Health!.Value,
+            impact?.HealthAfter ?? target.Health!.Value,
             contact ? impact!.HealthDamage : 0, contact, contact && impact!.Died, target.Dead, shot.Collider,
-            impact?.Error, new(before.Sample, _beforeTarget.BodyOwner!, BotCombatObservation.Coordinates(_beforeTarget.BodyPoint!.Value),
+            impact?.Error, new(before.Sample, _beforeTarget!.BodyOwner!, BotCombatObservation.Coordinates(_beforeTarget.BodyPoint!.Value),
                 BotCombatObservation.Coordinates(before.Camera), BotCombatObservation.Coordinates(before.Forward),
                 BotCombatObservation.Coordinates(before.Muzzle), BotCombatObservation.Coordinates(before.MuzzleForward),
-                _beforeTarget.BodyRayReference!, _beforeTarget.MuzzleRayReference!, before.AimedReference!));
+                _beforeTarget.BodyRayReference!, _beforeTarget.MuzzleRayReference!, before.AimedReference!),
+            _beforeTarget.Health!.Value, target.Health!.Value);
         _receipts.Add(receipt); _beforeShot = null; _beforeTarget = null;
         if (!receipt.VerifiedShot) return Refuse("receipt-refusal", "A delivered fire edge is not verified ammunition/shot progress.");
-        if (contact && !receipt.VerifiedContact)
+        if (contact && (impact!.HealthBefore is null || impact.HealthAfter is null || !receipt.VerifiedContact))
             return Refuse("receipt-refusal", "Observed target health does not agree with this actual source damage receipt.");
         if (target.Dead || impact?.Died == true)
         {
-            if (!receipt.VerifiedDeath) return Refuse("receipt-refusal", "Actor death lacks the matching actual source contact/damage/death receipt.");
+            var hitAlreadyDead = shot.Reference == _reference && impact is
+            { Error: null, HealthBefore: <= 0, HealthAfter: <= 0, HealthDamage: 0, Died: false } &&
+                impact.Reference == _reference && impact.Weapon == _weapon && impact.Projectile == _projectile;
+            if (target.Dead && impact?.Died != true &&
+                (receipt.VerifiedContact || shot.Reference != _reference || hitAlreadyDead))
+                return Refuse("safety-stop", "Target died without an attributable player killing shot.");
+            if (!receipt.VerifiedDeath || MathF.Abs(target.Health!.Value - receipt.HealthAfter) > Math.Max(.001f, MathF.Abs(receipt.HealthAfter) * .00001f))
+                return Refuse("receipt-refusal", "Actor death lacks the matching actual source contact/damage/death receipt.");
             Finish(true, "death-observed", null, null);
             return new(default, true);
         }
@@ -297,6 +313,13 @@ internal sealed class ReactiveCombatSkill
 
     internal void Cancel(string reason) { if (Active) Finish(false, "cancelled", "cancelled", reason); }
     internal void Abort(string kind, string error) { if (Active) Finish(false, "blocked", kind, error); }
+
+    // A new scene needs a fresh goal and target observation. Never abandon a
+    // shot or reload whose ordinary input still needs its receipt.
+    internal bool CanSuspendForSceneChange(BotCombatObservation state) => Active && state.Binding == _binding &&
+        state.Scene != _scene && state.Sample > _lastSample && _beforeShot is null &&
+        state.Firing.PendingImpacts == 0 && state.Firing.Error is null && state.ExecutionFault is null &&
+        !state.Paused && !state.Loading && !state.Defeated && !state.ModalInput && state.CollisionResident;
 
     private BotSkillStep Refuse(string kind, string error)
     {

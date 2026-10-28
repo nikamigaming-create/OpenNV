@@ -2,7 +2,7 @@ using System.Buffers.Binary;
 
 namespace OpenNV.Runtime.Content;
 
-// Local single-candidate declarations and their process-owned percentage gate.
+// Source-resolved single-candidate declarations and their process-owned percentage gate.
 // Audio resource/variant selection and playback remain with the sound owner.
 internal static class FalloutCreatureAnimationSounds
 {
@@ -42,10 +42,23 @@ internal static class FalloutCreatureAnimationSounds
             _ => throw new NotSupportedException($"Creature animation enum {enumName} has no single-candidate sound owner.")
         };
         var record = records.GetEffective(creature);
-        if (record.Signature != "CREA" || (record.Flags & FalloutPluginRecord.DeletedFlag) != 0)
-            throw new InvalidDataException($"Creature enum sound requires a live winning CREA, found {creature}/{record.Signature}.");
-        var fields = record.ReadSubrecords().ToArray();
-        RequireLocal("CSCR"); RequireLocal("TPLT");
+        var visited = new HashSet<FalloutFormKey>();
+        FalloutPluginSubrecord[] fields;
+        while (true)
+        {
+            if (record.Signature != "CREA" || (record.Flags & FalloutPluginRecord.DeletedFlag) != 0 || !visited.Add(record.FormKey))
+                throw new InvalidDataException($"Creature enum sound has a deleted, non-CREA or cyclic source at {record.FormKey}.");
+            fields = record.ReadSubrecords().ToArray();
+            var links = fields.Where(field => field.Signature == "CSCR").ToArray();
+            if (links.Length > 1 || links.Length == 1 && links[0].Data.Length != sizeof(uint))
+                throw new InvalidDataException($"CREA {record.FormKey} has an invalid CSCR sound-inheritance declaration.");
+            var next = links.Length == 0 ? null : record.Plugin.AdjustOptionalFormId(
+                BinaryPrimitives.ReadUInt32LittleEndian(links[0].Data.Span));
+            if (next is null) break;
+            if (fields.Any(field => field.Signature == "CSDT"))
+                throw new NotSupportedException($"CREA {record.FormKey} combines local and inherited sound declarations.");
+            record = records.GetEffective(next.Value);
+        }
         var start = -1; var end = fields.Length;
         for (var index = 0; index < fields.Length; ++index)
         {
@@ -82,14 +95,5 @@ internal static class FalloutCreatureAnimationSounds
             throw new InvalidDataException($"CREA {creature} sound type {type} does not bind a live winning SOUN {sound}.");
         return new(creature, type, sound, chance);
 
-        void RequireLocal(string signature)
-        {
-            var links = fields.Where(field => field.Signature == signature).ToArray();
-            if (links.Length == 0) return;
-            if (links.Length != 1 || links[0].Data.Length != sizeof(uint))
-                throw new InvalidDataException($"CREA {creature} has an invalid {signature} sound-inheritance declaration.");
-            if (record.Plugin.AdjustOptionalFormId(BinaryPrimitives.ReadUInt32LittleEndian(links[0].Data.Span)) is not null)
-                throw new NotSupportedException($"CREA {creature} {signature} requires its unqualified inherited sound owner.");
-        }
     }
 }

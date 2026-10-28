@@ -1,9 +1,91 @@
 using System.Text;
 using Godot;
 using OpenNV.Runtime.Formats.Gamebryo;
+using OpenNV.Runtime.Presentation.Ui;
 
 public partial class NativeNifInstanceAudit
 {
+    private static void ExerciseRenderedMenuMaterialOutput()
+    {
+        var menu = new Node3D();
+        var world = new Node3D();
+        string[] environmentNames = ["opennv_exterior_ambient", "opennv_exterior_fog_color", "opennv_exterior_fog_range"];
+        var priorEnvironment = environmentNames.Select(name => RenderingServer.GlobalShaderParameterGet(name)).ToArray();
+        try
+        {
+            var menuMaterials = new List<ShaderMaterial>();
+            var worldMaterials = new List<ShaderMaterial>();
+            foreach (var bytes in new[] { SurfaceFixture(0x80000100), NoLightingTextureFixture(3) })
+            {
+                foreach (var (owner, materials) in new[] { (menu, menuMaterials), (world, worldMaterials) })
+                {
+                    var built = RuntimeNativeNifMeshBuilder.Build(FalloutNifFile.Read(bytes), 1);
+                    owner.AddChild(built.Root);
+                    var mesh = built.Root.FindChildren("*", "", true, false).OfType<MeshInstance3D>().Single();
+                    materials.Add((ShaderMaterial)mesh.GetActiveMaterial(0));
+                }
+            }
+            var litColor = menuMaterials[0].GetShaderParameter("base_factor").AsVector4();
+            var effectColor = menuMaterials[1].GetShaderParameter("source_color_multiplier").AsVector4();
+            NativeNifMaterialEnvironment.PublishExterior(new(.4f, .3f, .2f), new(.8f, .7f, .6f), new(10, 100, 1), .0142875f);
+            NativeOwnedRenderedDevice.BindMenuEnvironment(menu, 1);
+            NativeOwnedRenderedDevice.BindMenuMaterials(menu, [new(Vector3.One, Vector3.One, 100)], 1);
+            foreach (var owner in new[] { menu, world })
+                foreach (var mesh in owner.FindChildren("*", "", true, false).OfType<MeshInstance3D>())
+                {
+                    var shared = mesh.GetInstanceShaderParameter("source_exterior_environment");
+                    var usesWorld = shared.VariantType == Variant.Type.Nil || shared.AsBool();
+                    if (usesWorld != (owner == world) ||
+                        (owner == menu && (mesh.GetInstanceShaderParameter("source_ambient").AsVector3() != Vector3.Zero ||
+                            mesh.GetInstanceShaderParameter("source_fog_range").AsVector3() != Vector3.Zero ||
+                            mesh.GetInstanceShaderParameter("source_fog_game_units_per_meter").AsSingle() != 1)))
+                        throw new InvalidDataException("Rendered menu inherited world ambient/fog or changed independent world environment ownership.");
+                }
+            var configuredAmbient = new Vector3(.2f, .1f, .05f);
+            var configuredMesh = menu.FindChildren("*", "", true, false).OfType<MeshInstance3D>().First();
+            NativeNifMaterialEnvironment.Bind(configuredMesh, configuredAmbient, Vector3.Zero, Vector3.Zero, 1);
+            NativeOwnedRenderedDevice.BindMenuMaterials(menu, [], 1);
+            if (configuredMesh.GetInstanceShaderParameter("source_ambient").AsVector3() != configuredAmbient)
+                throw new InvalidDataException("Repeated menu light binding overwrote its separately configured ambient environment.");
+            if (!menuMaterials[0].GetShaderParameter("owned_store_encoded").AsBool() ||
+                !menuMaterials[1].GetShaderParameter("source_store_encoded").AsBool() ||
+                worldMaterials[0].GetShaderParameter("owned_store_encoded").AsBool() ||
+                worldMaterials[1].GetShaderParameter("source_store_encoded").AsBool() ||
+                menuMaterials[0].GetShaderParameter("base_factor").AsVector4() != litColor ||
+                menuMaterials[1].GetShaderParameter("source_color_multiplier").AsVector4() != effectColor ||
+                menuMaterials.Zip(worldMaterials).Any(pair => pair.First.GetInstanceId() == pair.Second.GetInstanceId()))
+                throw new InvalidDataException("Rendered menu output lost a NIF shader owner, source color or independent world material.");
+            GD.Print("OPENNV_RENDERED_MENU_MATERIAL_PASS lit=true effect=true localNoFog=true sourceColorsRetained=true worldMaterialsIndependent=true retailPixels=unverified");
+        }
+        finally
+        {
+            for (var index = 0; index < environmentNames.Length; index++)
+                RenderingServer.GlobalShaderParameterSet(environmentNames[index], priorEnvironment[index]);
+            menu.Free(); world.Free();
+        }
+    }
+
+    private static void ExerciseLightingShaderCache()
+    {
+        var scenes = new List<RuntimeNativeNifScene>();
+        try
+        {
+            Shader Read(byte threshold)
+            {
+                var scene = RuntimeNativeNifMeshBuilder.Build(FalloutNifFile.Read(SurfaceFixture(0x84000100, alphaThreshold: threshold)), .02f);
+                scenes.Add(scene);
+                var mesh = scene.Root.FindChildren("*", "", true, false).OfType<MeshInstance3D>().Single();
+                return (mesh.Mesh.SurfaceGetMaterial(0) as ShaderMaterial)?.Shader ??
+                    throw new InvalidDataException("Lighting fixture has no shader material.");
+            }
+            var first = Read(128); var repeat = Read(128); var different = Read(64);
+            if (!ReferenceEquals(first, repeat) || first.Code == different.Code)
+                throw new InvalidDataException("Lighting shader cache lost reuse or aliased distinct source alpha thresholds.");
+            GD.Print("OPENNV_LIGHTING_SHADER_CACHE_PASS sameStateReuse=true alphaThresholdDistinct=true pixels=unverified");
+        }
+        finally { foreach (var scene in scenes) scene.Root.Free(); }
+    }
+
     private static void ExerciseAuthoredDecalSurfaces()
     {
         foreach (var decal in new[] { 1U << 26, 1U << 27, (1U << 26) | (1U << 27) })
@@ -131,7 +213,7 @@ public partial class NativeNifInstanceAudit
     }
 
     private static byte[] SurfaceFixture(uint flags, string environmentMask = "", uint flags2 = 1, string environmentTexture = "",
-        ushort? refractionFlags = null, int refractionTarget = 3)
+        ushort? refractionFlags = null, int refractionTarget = 3, byte alphaThreshold = 128)
     {
         void Net(BinaryWriter w, int controller = -1) { w.Write(0); w.Write(0); w.Write(controller); }
         void Av(BinaryWriter w, params int[] properties)
@@ -170,7 +252,7 @@ public partial class NativeNifInstanceAudit
                     w.Write(bytes.Length); w.Write(bytes);
                 }
             })),
-            ("NiAlphaProperty", Bytes(w => { Net(w); w.Write((ushort)4845); w.Write((byte)128); })),
+            ("NiAlphaProperty", Bytes(w => { Net(w); w.Write((ushort)4845); w.Write(alphaThreshold); })),
         ];
         if (refractionFlags is { } clockFlags)
             blocks = blocks.Concat(new (string Type, byte[] Data)[]

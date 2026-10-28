@@ -45,9 +45,18 @@ internal static partial class NativeCapsuleNavigation
     // Round-robin leases reserve progress for late Process callers even when
     // earlier PhysicsProcess callbacks overrun an indivisible collision query.
     internal static bool Advance(IEnumerator<IReadOnlyList<Vector3>?> search, out IReadOnlyList<Vector3>? result)
+        => AdvanceScheduled(search, out result);
+
+    internal static bool AdvanceAirborne(IEnumerator<NativeAirContact?> search, out NativeAirContact? result)
+        => AdvanceScheduled(search, out result);
+
+    internal static bool AdvanceDeparture(IEnumerator<NativeGroundDeparture?> search, out NativeGroundDeparture? result)
+        => AdvanceScheduled(search, out result);
+
+    private static bool AdvanceScheduled<T>(IEnumerator<T?> search, out T? result) where T : class
     {
         var schedule = WorkSchedule;
-        if (search is not NativeNavigationScheduledSearch<IReadOnlyList<Vector3>?> owned)
+        if (search is not NativeNavigationScheduledSearch<T?> owned)
             throw new InvalidOperationException("Capsule search lacks its native work registration.");
         result = null;
         if (!owned.TryBegin(Engine.GetPhysicsFrames(), Engine.GetProcessFrames())) return false;
@@ -122,7 +131,8 @@ internal static partial class NativeCapsuleNavigation
 
     internal static IEnumerable<IReadOnlyList<Vector3>?> Search(CharacterBody3D body, Vector3 start, Vector3 target,
         float stepHeight, float spacing, Func<Vector3, bool> resident, int maximumNodes = 1200,
-        NativeNavigationProbe? probe = null, float targetRadius = 0, IReadOnlyList<Vector3>? corridor = null, Func<Vector3, bool>? arrival = null)
+        NativeNavigationProbe? probe = null, float targetRadius = 0, IReadOnlyList<Vector3>? corridor = null, Func<Vector3, bool>? arrival = null,
+        Action? partialResult = null, float minimumSearchRadius = 0, Func<Vector3, bool>? partialCandidate = null)
     {
         var schedule = WorkSchedule;
         if (!GodotObject.IsInstanceValid(body) || !body.IsInsideTree() || body.IsQueuedForDeletion())
@@ -137,17 +147,18 @@ internal static partial class NativeCapsuleNavigation
         }
         return new NativeNavigationScheduledEnumerable<IReadOnlyList<Vector3>?>(schedule,
             work => SearchCore(body, start, target, stepHeight, spacing, resident, maximumNodes, probe,
-                targetRadius, corridor, arrival, work).GetEnumerator(), OwnerValid, result => result is not null, BindRetirement);
+                targetRadius, corridor, arrival, partialResult, minimumSearchRadius, partialCandidate, work).GetEnumerator(), OwnerValid, result => result is not null, BindRetirement);
     }
 
     private static IEnumerable<IReadOnlyList<Vector3>?> SearchCore(CharacterBody3D body, Vector3 start, Vector3 target,
         float stepHeight, float spacing, Func<Vector3, bool> resident, int maximumNodes,
-        NativeNavigationProbe? probe, float targetRadius, IReadOnlyList<Vector3>? corridor, Func<Vector3, bool>? arrival,
+        NativeNavigationProbe? probe, float targetRadius, IReadOnlyList<Vector3>? corridor, Func<Vector3, bool>? arrival, Action? partialResult,
+        float minimumSearchRadius, Func<Vector3, bool>? partialCandidate,
         NativeNavigationWorkSchedule.Registration work)
     {
         if (!start.IsFinite() || !target.IsFinite() || !float.IsFinite(stepHeight) || !float.IsFinite(spacing) ||
             stepHeight <= 0 || spacing <= 0 || maximumNodes <= 0 ||
-            !float.IsFinite(targetRadius) || targetRadius < 0)
+            !float.IsFinite(targetRadius) || targetRadius < 0 || !float.IsFinite(minimumSearchRadius) || minimumSearchRadius < 0)
             throw new ArgumentOutOfRangeException(nameof(stepHeight));
         if (arrival is not null && targetRadius != 0)
             throw new InvalidDataException("Native route has competing source and reference arrival regions.");
@@ -209,11 +220,20 @@ internal static partial class NativeCapsuleNavigation
                     // the rounded capsule's curb contact. Sweep the full body
                     // along its observed floor tangent; maximum step lift is
                     // not a prerequisite for that supported motion.
-                    var normals = Enumerable.Range(0, hit.GetCollisionCount()).Select(hit.GetCollisionNormal)
-                        .Where(normal => normal.Dot(Vector3.Up) >= floorCosine && normal.Dot(motion) < -.000001f)
-                        .OrderBy(normal => normal.Dot(motion)).ToArray();
-                    if (normals.Length == 0) return Reject("walkable-contact-without-forward-tangent", FirstContact(hit, from, desired));
-                    var rise = -normals[0].Dot(motion) / normals[0].Y + body.SafeMargin * 4;
+                    var bestDot = float.PositiveInfinity;
+                    var bestNormal = Vector3.Zero;
+                    var found = false;
+                    var count = hit.GetCollisionCount();
+                    for (var index = 0; index < count; index++)
+                    {
+                        var normal = hit.GetCollisionNormal(index);
+                        if (!(normal.Dot(Vector3.Up) >= floorCosine)) continue;
+                        var dot = normal.Dot(motion);
+                        if (!(dot < -.000001f) || !(dot < bestDot)) continue;
+                        found = true; bestDot = dot; bestNormal = normal;
+                    }
+                    if (!found) return Reject("walkable-contact-without-forward-tangent", FirstContact(hit, from, desired));
+                    var rise = -bestDot / bestNormal.Y + body.SafeMargin * 4;
                     if (rise > stepHeight + body.SafeMargin * 8) return Reject("slope-height");
                     var tangent = motion + Vector3.Up * rise;
                     if (Sweep(from, tangent)) return Reject("slope-clearance",
@@ -224,13 +244,16 @@ internal static partial class NativeCapsuleNavigation
             }
             var downward = Vector3.Down * drop;
             var collided = Sweep(supportedFrom, downward);
-            probe?.ObserveDownward(CaptureSweep(hit, supportedFrom, supportedFrom + downward, collided));
+            probe?.ObserveDownward(hit, supportedFrom, supportedFrom + downward, collided);
             if (!collided) return Reject("landing-sweep-no-floor");
             if (hit.GetCollisionCount() == 0) return Reject("landing-sweep-no-contact");
             landing = supportedFrom + hit.GetTravel();
             NativeNavigationContact? reconciledFloor = null;
-            if (!Enumerable.Range(0, hit.GetCollisionCount())
-                .Any(index => hit.GetCollisionNormal(index).Dot(Vector3.Up) >= floorCosine) &&
+            var walkable = false;
+            var collisionCount = hit.GetCollisionCount();
+            for (var index = 0; index < collisionCount; index++)
+                if (hit.GetCollisionNormal(index).Dot(Vector3.Up) >= floorCosine) { walkable = true; break; }
+            if (!walkable &&
                 !NativeCharacterStep.TrySupport(body, landing, stepHeight, out reconciledFloor, stepQueries)) return Reject("landing-slope",
                     FirstContact(hit, supportedFrom, supportedFrom + downward));
             // The rounded bottom can stop on a steep stair edge although the
@@ -328,8 +351,10 @@ internal static partial class NativeCapsuleNavigation
         var open = new PriorityQueue<(int X, int Z, int Y), float>();
         var closed = new HashSet<(int X, int Z, int Y)>();
         var first = Key(start); positions.Add(first, start); costs.Add(first, 0); open.Enqueue(first, Flat(start, target));
-        var bound = Math.Max(8, Flat(start, target) + 8);
+        var bound = Math.Max(minimumSearchRadius, Math.Max(8, Flat(start, target) + 8));
         var nearest = float.PositiveInfinity;
+        var partialNearest = float.PositiveInfinity;
+        var partialBest = first;
         Vector3[] Approach((int X, int Z, int Y) node)
         {
             var path = new List<Vector3> { positions[node] };
@@ -346,8 +371,12 @@ internal static partial class NativeCapsuleNavigation
             if (!closed.Add(current)) continue;
             var from = positions[current];
             rejected = null;
-            nearest = Math.Min(nearest, from.DistanceTo(target));
-            work.ObserveNode(from.DistanceTo(target));
+            var targetDistance = from.DistanceTo(target);
+            nearest = Math.Min(nearest, targetDistance);
+            if (partialResult is not null && current != first && (partialCandidate?.Invoke(from) ?? true) &&
+                targetDistance < partialNearest)
+            { partialNearest = targetDistance; partialBest = current; }
+            work.ObserveNode(targetDistance);
             // A source approach radius describes a reachable region. Every
             // discovered point already passed the complete capsule sweep and
             // support query; it need not enter the target's collision body.
@@ -397,6 +426,20 @@ internal static partial class NativeCapsuleNavigation
                     open.Enqueue(key, cost + Flat(next, target) + Math.Abs(next.Y - target.Y));
                 }
             yield return null;
+        }
+        // Only explicitly requested diagnostic routes may use a supported
+        // frontier as an intermediate waypoint. It must make material progress
+        // and is never reported as arrival at the requested source region.
+        if (partialResult is not null && partialBest != first && start.DistanceTo(target) - partialNearest >= 1 &&
+            start.DistanceTo(positions[partialBest]) >= 1)
+        {
+            foreach (var result in SmoothRoute(Approach(partialBest), start, spacing, body.SafeMargin * 8, FlatEdge))
+            {
+                if (result is null) work.SmoothingSteps++;
+                else partialResult();
+                yield return result;
+            }
+            yield break;
         }
         throw new InvalidOperationException($"No supported capsule route within {closed.Count}/{maximumNodes} native collision nodes; " +
             $"nearest target distance={nearest:F3}m; search={(open.Count > 0 ? "node-bound" : "frontier-exhausted")}. {probe?.DescribeFailure()}");

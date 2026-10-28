@@ -19,10 +19,24 @@ public partial class RuntimeCoordinator
             {
                 if (!content.TryRead(path, null, out var bytes, out _)) return (Path: path, Nif: (FalloutNifFile?)null);
                 var nif = FalloutNifFile.Read(bytes);
-                RuntimeNativeNifMeshBuilder.PrepareStaticGeometry(nif, units, cancellation);
-                foreach (var block in nif.Blocks.Where(block => block.TypeName == "BSShaderTextureSet"))
-                    foreach (var texture in ((FalloutNifShaderTextureSet)nif.ReadObject(block.Index)).Textures.Where(texture => texture.Length != 0))
-                        _ = content.TryRead(FalloutNifSurfaceInputs.TexturePath(texture), null, out _, out _);
+                var visitedAddons = new HashSet<uint>();
+                void Prepare(FalloutNifFile model)
+                {
+                    cancellation.ThrowIfCancellationRequested();
+                    RuntimeNativeNifMeshBuilder.PrepareStaticGeometry(model, units, cancellation);
+                    foreach (var block in model.Blocks)
+                    {
+                        cancellation.ThrowIfCancellationRequested();
+                        if (block.TypeName == "BSShaderTextureSet")
+                            foreach (var texture in ((FalloutNifShaderTextureSet)model.ReadObject(block.Index)).Textures.Where(texture => texture.Length != 0))
+                                _ = content.TryRead(FalloutNifSurfaceInputs.TexturePath(texture), null, out _, out _);
+                        if (block.TypeName != "BSValueNode" || model.ReadNode(block.Index).Value is not { } value ||
+                            !visitedAddons.Add(value.Value)) continue;
+                        var addon = FalloutAddonNodes.For(content).Get(value.Value);
+                        Prepare(NativeOwnedNifCache.Read(content, addon.Model, out _));
+                    }
+                }
+                Prepare(nif);
                 return (Path: path, Nif: (FalloutNifFile?)nif);
             }
             // Preparation never substitutes or admits a failed source. Its

@@ -72,6 +72,7 @@ internal static class NvseNumericProbe
             !FalloutGameModeProgram.WasRejectedByParser("if charge == 2\nendif", 1) &&
             !FalloutGameModeProgram.WasRejectedByParser("charge = 1", 2), "Migration admitted an unrelated missing owner.");
         ReusedSourceContracts();
+        OperandValueContracts();
         Console.WriteLine("OPENNV_NVSE_NUMERIC_PASS assignments=true eval=true numericLogic=true integers=64-bit literals=32-bit inactiveEffects=false vanillaPreserved=true");
     }
 
@@ -161,6 +162,89 @@ internal static class NvseNumericProbe
     }
 
     private static void Require(bool condition, string message) { if (!condition) throw new InvalidOperationException(message); }
+
+    private static void OperandValueContracts()
+    {
+        var events = new List<string>();
+        double current = 3;
+        var context = new FalloutScriptValueContext(name => { events.Add("read:" + name); return current; },
+            (name, value) => { events.Add("write:" + name); current = value.Number; });
+        FalloutScriptFunction? Function(string name)
+        {
+            events.Add("resolve:" + name);
+            return name == "Effect" ? new([FalloutScriptArgumentKind.Number], arguments =>
+            { events.Add("invoke:Effect"); return arguments[0].Number * 10; }) : null;
+        }
+        var deferred = FalloutNvseNumericExpression.ReadOperand(["(", "value", "+", "2", ")", "Effect"], context, Function);
+        Require(deferred.Count == 5 && events.SequenceEqual(["resolve:value"]),
+            "Reading an operand evaluated live state or resolved a trailing argument.");
+        current = 5;
+        Require(deferred.Value().Number == 7, "A deferred operand retained its parse-time variable value.");
+        current = 8;
+        Require(deferred.Value().Number == 10 && events.SequenceEqual(["resolve:value", "read:value", "read:value"]),
+            "Repeated deferred reads lost their current value owner or read twice.");
+        var literalTokens = new[] { "\"source text\"" };
+        var constant = FalloutNvseNumericExpression.ReadOperand(literalTokens, context, Function);
+        literalTokens[0] = "\"changed caller token\"";
+        Require(constant.Value() is { Kind: FalloutScriptValueKind.String, Text: "source text" } &&
+            FalloutNvseNumericExpression.EvaluateValue(["0xFFFFFFFF"], context).Number == uint.MaxValue &&
+            FalloutNvseNumericExpression.EvaluateValue([".125"], context).Number == .125,
+            "Literal operands lost their validated typed value, source snapshot or numeric precision.");
+
+        events.Clear();
+        FalloutNvseNumericExpression.Inspect(["0", "&&", "Effect", "value"], context, Function, null,
+            name => events.Add("inspect:" + name));
+        Require(events.SequenceEqual(["resolve:Effect", "resolve:value", "inspect:value"]),
+            "Inspection omitted inactive syntax or invoked a live value/function owner.");
+        events.Clear();
+        Require(FalloutNvseNumericExpression.EvaluateValue(["0", "&&", "Effect", "value"], context, Function).Number == 0 &&
+            events.SequenceEqual(["resolve:Effect", "resolve:value"]),
+            "Literal short-circuiting changed signature resolution order or invoked inactive state.");
+        foreach (var malformed in new[] { "1 || (Effect value +)", "1 || (2 := Effect 1)", "1 || 1e309", "0 && 0b102" })
+        {
+            events.Clear();
+            Reject(() => FalloutNvseNumericExpression.EvaluateValue(FalloutGameModeProgram.Tokens(malformed), context, Function));
+            Require(events.All(value => value.StartsWith("resolve:", StringComparison.Ordinal)),
+                "An invalid inactive expression read, wrote or invoked a live owner before syntax validation.");
+        }
+        events.Clear();
+        Require(FalloutNvseNumericExpression.EvaluateValue(["value", "+=", "Effect", "2"], context, Function).Number == 28 &&
+            current == 28 && events.SequenceEqual(["resolve:value", "resolve:Effect", "read:value", "invoke:Effect", "write:value"]),
+            "Value operands changed compound-assignment resolution, target read, RHS invocation or write order.");
+
+        double receiver = 11;
+        var receiverContext = new FalloutScriptValueContext(_ => FalloutScriptValue.Form(receiver), (_, _) => { },
+            ReferenceFunction: name => FalloutScriptFunction.Reference(new([], arguments => 0), (caller, arguments) => caller.Number));
+        var postfix = FalloutNvseNumericExpression.ReadOperand(["(", "receiver", ")", ".", "Id"], receiverContext);
+        receiver = 19;
+        Require(postfix.Count == 5 && postfix.Value().Number == 19, "Deferred postfix receiver was captured as a parse-time form.");
+        receiver = 0;
+        Reject(() => postfix.Value());
+
+        var allocationContext = new FalloutScriptValueContext(_ => 1, (_, _) => { });
+        long Allocated(string[] tokens, double expected)
+        {
+            double sum = 0;
+            for (var index = 0; index < 256; index++) sum += FalloutNvseNumericExpression.EvaluateValue(tokens, allocationContext).Number;
+            var before = GC.GetAllocatedBytesForCurrentThread();
+            for (var index = 0; index < 512; index++) sum += FalloutNvseNumericExpression.EvaluateValue(tokens, allocationContext).Number;
+            var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+            Require(sum == 768 * expected, "Allocation fixture changed numeric expression results.");
+            return allocated;
+        }
+        var literalBytes = Allocated(["1"], 1);
+        var groupedLiteralBytes = Allocated(FalloutGameModeProgram.Tokens("((((((((1))))))))"), 1);
+        var variableBytes = Allocated(["value"], 1);
+        var groupedVariableBytes = Allocated(FalloutGameModeProgram.Tokens("((((((((value))))))))"), 1);
+        var literalArithmeticBytes = Allocated(FalloutGameModeProgram.Tokens(string.Join(" + ", Enumerable.Repeat("1", 16))), 16);
+        var variableArithmeticBytes = Allocated(FalloutGameModeProgram.Tokens(string.Join(" + ", Enumerable.Repeat("value", 16))), 16);
+        Require(groupedLiteralBytes == literalBytes && groupedVariableBytes == variableBytes && literalArithmeticBytes < variableArithmeticBytes,
+            $"Grouping/literals still allocate per-read nodes: literal={literalBytes}/{groupedLiteralBytes}, variable={variableBytes}/{groupedVariableBytes}, " +
+            $"arithmetic={literalArithmeticBytes}/{variableArithmeticBytes} bytes per 512 warmed evaluations.");
+        Console.WriteLine($"OPENNV_NVSE_OPERAND_VALUE_PASS deferredReadsFresh=true typedConstants=true parseBeforeEffects=true inactiveInspection=true " +
+            $"assignmentOrder=true receiverFresh=true warmedEvaluations=512 literalBytes={literalBytes} groupedLiteralBytes={groupedLiteralBytes} " +
+            $"variableBytes={variableBytes} groupedVariableBytes={groupedVariableBytes} literalArithmeticBytes={literalArithmeticBytes} variableArithmeticBytes={variableArithmeticBytes}");
+    }
     private static void Reject(Action action)
     {
         try { action(); }

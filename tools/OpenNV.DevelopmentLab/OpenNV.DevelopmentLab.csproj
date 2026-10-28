@@ -9,5 +9,7 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../../runtime/OpenNV.csproj" />
+    <Reference Include="Microsoft.CodeAnalysis" HintPath="$(MSBuildToolsPath)/Roslyn/bincore/Microsoft.CodeAnalysis.dll" Private="true" />
+    <Reference Include="Microsoft.CodeAnalysis.CSharp" HintPath="$(MSBuildToolsPath)/Roslyn/bincore/Microsoft.CodeAnalysis.CSharp.dll" Private="true" />
   </ItemGroup>
 </Project>

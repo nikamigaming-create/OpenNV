@@ -12,6 +12,18 @@ public partial class NativeNifInstanceAudit : Node
     {
         try
         {
+            if (OS.GetCmdlineUserArgs() is ["--owned-archive-index", var archiveGame, .. var archivePaths])
+            {
+                ExerciseOwnedArchiveIndex(archiveGame, archivePaths); GetTree().Quit(); return;
+            }
+            if (OS.GetCmdlineUserArgs() is ["--owned-static-assembly", var staticGame, var staticModel])
+            {
+                ExerciseOwnedStaticAssembly(staticGame, staticModel); GetTree().Quit(); return;
+            }
+            if (OS.GetCmdlineUserArgs() is ["--reference-disable-lifecycle"])
+            {
+                ExerciseReferenceDisableLifecycle(); GetTree().Quit(); return;
+            }
             if (OS.GetCmdlineUserArgs() is ["--particle-publication"])
             {
                 ExerciseParticleBuffer(); ExerciseParticleTransformCache(); GetTree().Quit(); return;
@@ -19,6 +31,14 @@ public partial class NativeNifInstanceAudit : Node
             if (OS.GetCmdlineUserArgs() is ["--shader-no-fade"])
             {
                 ExerciseShaderNoFade(); GetTree().Quit(); return;
+            }
+            if (OS.GetCmdlineUserArgs() is ["--lighting-cache"])
+            {
+                ExerciseRenderedMenuMaterialOutput();
+                ExerciseAuthoredDecalSurfaces(); ExerciseDormantEnvironmentMask();
+                ExerciseDormantBillboardEnvironmentFlag(); ExerciseLocalMapHideSecret();
+                ExerciseLightingShaderCache();
+                GetTree().Quit(); return;
             }
             if (OS.GetCmdlineUserArgs() is ["--material-channel-interleaving"])
             {
@@ -78,6 +98,10 @@ public partial class NativeNifInstanceAudit : Node
             if (OS.GetCmdlineUserArgs() is ["--lod-alpha-gpu"])
             {
                 await ExerciseLodAlphaPixels(); GetTree().Quit(); return;
+            }
+            if (OS.GetCmdlineUserArgs() is ["--detail-grid-binding"])
+            {
+                ExerciseDetailGridBinding(); GetTree().Quit(); return;
             }
             if (OS.GetCmdlineUserArgs() is ["--exterior-detail-gpu"])
             {
@@ -207,6 +231,7 @@ public partial class NativeNifInstanceAudit : Node
                 return;
             }
             await ExerciseCollisionLifetime();
+            ExerciseRenderedMenuMaterialOutput();
             ExerciseReferenceAngles();
             ExerciseActorSkinRoot();
             await ExerciseActorSoundEmitters();

@@ -6,11 +6,11 @@ internal sealed record FalloutConversationChoice(FalloutFormKey Topic, FalloutFo
 // Audio and menus report completion/input; they never choose the next INFO.
 internal sealed class FalloutConversation(FalloutPluginStack records, FalloutQuestState quests,
     Func<FalloutCondition, float> evaluate, Action<FalloutDialogueInfo, bool> results, HashSet<FalloutFormKey>? saidInfos = null,
-    Func<uint, uint>? random = null)
+    Func<uint, uint>? random = null, HashSet<FalloutFormKey>? addedTopics = null)
 {
     private readonly Dictionary<FalloutFormKey, FalloutDialogueTopic> _topics = [];
     private readonly FalloutDialogueQuestSelection _selection = new(records, quests);
-    private readonly HashSet<FalloutFormKey> _said = saidInfos ?? [], _added = [];
+    private readonly HashSet<FalloutFormKey> _said = saidInfos ?? [], _added = addedTopics ?? [];
     private FalloutFormKey _speaker;
     private bool _mutating, _ending;
     internal FalloutDialogueInfo? Info { get; private set; }

@@ -43,10 +43,27 @@ internal sealed partial class FalloutReferenceWorld
         notifications.PublishNote(notice);
     }
 
-    internal static void RequirePlayerItemAcquisition(FalloutPluginRecord item)
+    internal static void RequirePlayerItemAcquisition(FalloutPluginStack records, FalloutPluginRecord item,
+        FalloutFormKey? receiver = null)
     {
         if (item.Signature == "NOTE")
             throw new NotSupportedException("Collected-note world/container handoff requires its ownership and retirement owners.");
+        var script = FalloutScriptLocals.AttachedScript(records, item);
+        if (script is null) return;
+        var source = script.ReadSubrecords().Where(field => field.Signature == "SCTX").ToArray();
+        if (source.Length != 1)
+            throw new NotSupportedException($"Item {item.FormKey} script {script.FormKey} has no unambiguous source event program.");
+        var events = FalloutGameModeProgram.ReadEvents(FalloutDialogueTopic.ScriptText(source[0].Data.Span));
+        FalloutScriptBindings? bindings = null;
+        foreach (var block in events.Where(block => block.Event.Equals("OnAdd", StringComparison.OrdinalIgnoreCase)))
+        {
+            if (receiver is { } target && block.Filter is { } filter)
+            {
+                bindings ??= new(records, item, script, script.ReadSubrecords());
+                if (bindings.Reference(filter) != target) continue;
+            }
+            throw new NotSupportedException($"Item {item.FormKey} script {script.FormKey} has an unowned OnAdd inventory event.");
+        }
     }
 
     internal bool RemovePlayerNote(FalloutFormKey note, Action<FalloutFormKey>? invalidateSelection = null)

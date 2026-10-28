@@ -101,7 +101,8 @@ internal static class PackageDataContracts
                 };
                 packages.Add(Record("ALCH", 0xb10u + index, new[] { Field("ENIT", header) }.Concat(effects).ToArray()));
             }
-            packages.Add(Record("INGR", 0xb20, Field("ENIT", [0, 0, 0, 0, 2, 0, 0, 0])));
+            packages.Add(Record("INGR", 0xb20, Field("EDID", "FindFoodIngredient\0"u8.ToArray()),
+                Field("DATA", BitConverter.GetBytes(1.5f)), Field("ENIT", [7, 0, 0, 0, 2, 0, 0, 0])));
             packages.Add(Record("INGR", 0xb21, Field("ENIT", new byte[8])));
             packages.Add(Record("ALCH", 0xb22, Field("ENIT", new byte[8])));
             var sandboxSettings = new (string Name, float Value)[]
@@ -141,6 +142,15 @@ internal static class PackageDataContracts
             packages.Add(Record("PACK", 0x484, Field("EDID", "NoSchedule\0"u8.ToArray()), Field("PKDT", Data(8, 6)), Location(3)));
             packages.Add(Package(0x485, 12, 12, 0, Location(3), specific: 4));
             packages.Add(Package(0x486, 12, 12, 0, Location(3)));
+            packages.Add(Package(0x487, 12, 0, 0, Location(2),
+                Field("PTDT", Join(BitConverter.GetBytes(2), BitConverter.GetBytes(18u), BitConverter.GetBytes(2), BitConverter.GetBytes(0x12345678u)))));
+            packages.Add(Package(0x488, 12, 0, 0, Location(2), Target(2, 18, 2), Target(2, 18, 2)));
+            packages.Add(Package(0x489, 12, 12, 0, Location(1, 0x800)));
+            packages.Add(Package(0x48a, 12, 12, 0, Location(4, 0x700)));
+            packages.Add(Package(0x48b, 12, 12, 0, Location(2, 0x87654321)));
+            packages.Add(Package(0x48c, 12, 12, 0, Location(1, 0x800), Location(1, 0x800)));
+            packages.Add(Package(0x48d, 12, 12, 0, Field("PLDT", new byte[11])));
+            packages.Add(Package(0x48e, 12, 0, 0x00080000, Location(2, radius: 10), Target(2, 18, 2), specific: 0x0200));
             for (byte kind = 18; kind <= 38; kind++)
                 packages.Add(Package(0xa00u + kind, 12, kind, 0));
             File.WriteAllBytes(Path.Combine(directory, "Base.esm"), Join(
@@ -152,6 +162,7 @@ internal static class PackageDataContracts
                 Record("CREA", 0x712, Field("ACBS", new byte[24]), Field("VTCK", BitConverter.GetBytes(0x715u))),
                 Record("CREA", 0x713, Field("ACBS", new byte[24]), Field("VTCK", BitConverter.GetBytes(0x700u))),
                 Record("CREA", 0x714, Field("ACBS", new byte[24]), Field("VTCK", new byte[3])),
+                Record("CONT", 0x716, Field("CNTO", Join(BitConverter.GetBytes(0xb20u), BitConverter.GetBytes(2)))),
                 Record("VTYP", 0x715),
                 Record("STAT", 0x3b), Record("CELL", 0x800, Field("DATA", [1])), References(), Join(packages.ToArray())));
             using var records = FalloutPluginStack.Load(directory, ["Base.esm"]);
@@ -160,6 +171,14 @@ internal static class PackageDataContracts
                 FalloutSandboxActivity.Wander, 10.25f, new FalloutSandboxPreferences(), () => .5f);
             var coldActivity = System.Text.Json.JsonSerializer.Deserialize<FalloutSandboxActivityProgress>(
                 System.Text.Json.JsonSerializer.Serialize(activity))!;
+            var sandboxMotion = new FalloutActorPackageMotion(new("Base.esm", 0x486), new string('a', 64),
+                "idle", new string('b', 64), 0, false, [0, 0, 0], [0, 0, 0, 1],
+                Wander: new(new("Base.esm", 0x800), new string('c', 64), [1, 2, 3], false), Sandbox: activity);
+            var copiedMotion = sandboxMotion.Copy();
+            sandboxMotion.Position[0] = 9; sandboxMotion.Wander!.Destination[0] = 9; activity.Preferences[0] = 9;
+            Require(copiedMotion.Position[0] == 0 && copiedMotion.Wander!.Destination[0] == 1 &&
+                copiedMotion.Sandbox!.Preferences[0] == 129, "Sandbox motion copy aliases live pose, destination or preferences.");
+            activity.Preferences[0] = 129;
             Require(activity.Duration == 30 && !coldActivity.Expired(10.75f) && coldActivity.Expired(10.8f) &&
                 coldActivity.Preferences[3] == 1 && coldActivity.Preferences[5] == 129 &&
                 FalloutSandboxActivityProgress.Elapsed(10.75f, 11.25f) == 31 &&
@@ -200,6 +219,67 @@ internal static class PackageDataContracts
             Reject(() => FalloutDialogueSpeaker.HasConversationVoice(records, Key(0x714)));
             var hashes = records.EffectiveRecords("PACK").ToDictionary(record => record.FormKey,
                 record => Convert.ToHexString(SHA256.HashData(record.ReadData())));
+            var foodTarget = FalloutPackageTarget.Read(records.GetEffective(Key(0x487)));
+            Require(foodTarget is { Type: 2, RawTarget: 18, Form: null, CountOrDistance: 2, AuxiliaryBits: 0x12345678 },
+                "Generic package target lost object category, count or auxiliary source bytes.");
+            Reject(() => FalloutPackageTarget.Read(records.GetEffective(Key(0x488))));
+            Reject(() => FalloutFindFurniturePackage.Read(records.GetEffective(Key(0x487))));
+            var find = FalloutFindPackage.Read(records.GetEffective(Key(0x48e)));
+            Require(find.AllowFalls && find.AllowKilling && find.Target is { Type: 2, RawTarget: 18, CountOrDistance: 2 },
+                "Find declaration lost its independent flags or source target.");
+            Reject(() => FalloutFindPackage.Read(records.GetEffective(Key(0x488))));
+            Reject(() => FalloutFindPackage.Read(records.GetEffective(Key(0x481))));
+            using (var findWorld = new FalloutReferenceWorld(records))
+            {
+                Reject(() => find.Location(records, findWorld, Key(0x900)));
+                findWorld.SetActorPackageStartLocation(Key(0x900), new(Key(0x800), [10, 20, 30]));
+                var point = find.Location(records, findWorld, Key(0x900));
+                point.Position[0] = 999;
+                Require(find.Location(records, findWorld, Key(0x900)).Position.SequenceEqual([10f, 20f, 30f]),
+                    "Find location exposed or recaptured its authoritative actor start point.");
+                using var coldFind = new FalloutReferenceWorld(records);
+                coldFind.Restore(findWorld.Capture());
+                Require(find.Location(records, coldFind, Key(0x900)).Position.SequenceEqual([10f, 20f, 30f]),
+                    "Find current location did not survive cold restoration.");
+            }
+            using (var sourceWorld = new FalloutReferenceWorld(records))
+            {
+                sourceWorld.LoadCell(FalloutCellSceneReader.Read(records, Key(0x800)));
+                sourceWorld.SetActorPackageStartLocation(Key(0x900), new(Key(0x800), [1, 2, 3]));
+                var before = sourceWorld.FindFoodSources(Key(0x900), find, 1);
+                Require(!before.PlayerInspected && !before.NonresidentSourcesInspected &&
+                    before.Sources.Count == 1 && before.Sources[0] is { Inventory: false, Count: 3 } &&
+                    before.Sources[0].Reference == Key(0x903) && before.UninitializedInventories.Contains(Key(0x901)) &&
+                    before.UninitializedInventories.Contains(Key(0x904)) && sourceWorld.Get(Key(0x904)).Inventory is null,
+                    "Find source collection lost a placed stack or silently rolled an uninitialized inventory.");
+                var container = sourceWorld.Inventory(Key(0x904), 1).Contents;
+                Require(container.Item(Key(0xb20)) is { Count: 2, Value: 7, Weight: 1.5f },
+                    "Ingredient inventory lost its source count, value or weight.");
+                var revision = container.Revision;
+                var after = sourceWorld.FindFoodSources(Key(0x900), find, 1);
+                Require(after.Sources.Any(value => value.Reference == Key(0x904) && value.Inventory &&
+                    value.Item == Key(0xb20) && value.Count == 2 && value.InventoryRevision == revision) &&
+                    !after.UninitializedInventories.Contains(Key(0x904)) && container.Revision == revision,
+                    "Find source collection changed inventory or lost an actual retained food stack.");
+                var playerInventory = new FalloutPlayerInventory(7);
+                sourceWorld.Take(Key(0x903), playerInventory, 1, null);
+                Require(sourceWorld.Get(Key(0x903)).Taken && playerInventory.Item(Key(0xb20)) is { Count: 3, Value: 7, Weight: 1.5f } &&
+                    FalloutInventoryItemCounts.Count(records, playerInventory, Key(0xb20)) == 3,
+                    "Placed ingredient pickup or script item count lost its inventory stack.");
+                Require(sourceWorld.FindFoodSources(Key(0x900), find, 1).Sources.All(value => value.Reference != Key(0x903)),
+                    "Find source collection retained a taken placed stack.");
+            }
+            var cellLocation = FalloutScriptPackage.Read(records.GetEffective(Key(0x489)));
+            var objectLocation = FalloutScriptPackage.Read(records.GetEffective(Key(0x48a)));
+            var currentLocation = FalloutScriptPackage.Read(records.GetEffective(Key(0x48b)));
+            Require(cellLocation.LocationDeclaration is { Type: 1, RawLocation: 0x800, Radius: 0 } &&
+                cellLocation.LocationDeclaration.Form == Key(0x800) && cellLocation.LocationReference is null &&
+                objectLocation.LocationDeclaration?.Form == Key(0x700) && objectLocation.LocationReference is null &&
+                currentLocation.LocationDeclaration is { Type: 2, RawLocation: 0x87654321, Form: null },
+                "Package location lost its type-specific form, raw value or reference-only legacy behavior.");
+            Reject(() => FalloutScriptPackage.Read(records.GetEffective(Key(0x48c))));
+            Reject(() => FalloutScriptPackage.Read(records.GetEffective(Key(0x48d))));
+            Console.WriteLine("OPENNV_PACKAGE_LOCATION_CONTRACT_PASS cell=true object=true rawCurrent=true duplicatesRejected=true malformedRejected=true execution=unverified");
             foreach (var extent in new[] { 8, 12 })
             {
                 var first = extent == 8 ? 0x400u : 0x420u;
@@ -230,6 +310,23 @@ internal static class PackageDataContracts
                 "Package data admission substituted schedule validation for its source extent.");
             Reject(() => FalloutPackageSchedule.Read(records.GetEffective(Key(0x484))));
             using var world = new FalloutReferenceWorld(records);
+            var currentSandbox = FalloutSandboxPackage.Read(records.GetEffective(Key(0x48b)));
+            Reject(() => currentSandbox.Location(records, world, Key(0x901)));
+            Reject(() => world.CaptureActorPackageStartLocation(Key(0x901), 1));
+            world.Get(Key(0x901)).QuerySpatialPlacement = () => new(Key(0x800), [10, 20, 30], [0, 0, 0]);
+            world.CaptureActorPackageStartLocation(Key(0x901), 1);
+            world.Get(Key(0x901)).QuerySpatialPlacement = null;
+            var sandboxCenter = currentSandbox.Location(records, world, Key(0x901));
+            sandboxCenter.Location[0] = 999;
+            world.SetPlacement(Key(0x901), new(Key(0x800), [40, 50, 60], [0, 0, 0]));
+            Require(currentSandbox.Location(records, world, Key(0x901)).Location.SequenceEqual([10f, 20f, 30f]),
+                "Current-location Sandbox recentered after movement or exposed its retained start.");
+            using (var coldSandboxLocation = new FalloutReferenceWorld(records))
+            {
+                coldSandboxLocation.Restore(world.Capture());
+                Require(currentSandbox.Location(records, coldSandboxLocation, Key(0x901)).Location.SequenceEqual([10f, 20f, 30f]),
+                    "Current-location Sandbox lost its actor start on cold restore.");
+            }
             foreach (var reference in new[] { Key(0x900), Key(0x901) })
             {
                 var participant = world.Get(reference);
@@ -352,10 +449,11 @@ internal static class PackageDataContracts
         byte[]? target = null, byte[]? extra = null, ushort behavior = 0, ushort specific = 0) => Record("PACK", id,
         Field("EDID", Encoding.ASCII.GetBytes("SyntheticPackage" + id + '\0')), Field("PKDT", Data(extent, procedure, flags, behavior, specific)),
         Field("PSDT", [255, 255, 0, 255, 0, 0, 0, 0]), location ?? [], target ?? [], extra ?? []);
-    private static byte[] Location(int type)
+    private static byte[] Location(int type, uint raw = 0, int radius = 0)
     {
         var data = new byte[12]; BinaryPrimitives.WriteInt32LittleEndian(data, type);
-        if (type == 0) BinaryPrimitives.WriteUInt32LittleEndian(data.AsSpan(4), 0x902); return Field("PLDT", data);
+        BinaryPrimitives.WriteUInt32LittleEndian(data.AsSpan(4), type == 0 && raw == 0 ? 0x902 : raw);
+        BinaryPrimitives.WriteInt32LittleEndian(data.AsSpan(8), radius); return Field("PLDT", data);
     }
     private static byte[] Target(int type, uint form, int distance = 0)
     {
@@ -374,7 +472,9 @@ internal static class PackageDataContracts
         var pose = new float[] { 1, 2, 3, 0, 0, 0 }.SelectMany(BitConverter.GetBytes).ToArray();
         var references = Join(Record("ACHR", 0x900, Field("NAME", BitConverter.GetBytes(0x700u)), Field("DATA", pose)),
             Record("ACRE", 0x901, Field("NAME", BitConverter.GetBytes(0x710u)), Field("DATA", pose)),
-            Record("REFR", 0x902, Field("NAME", BitConverter.GetBytes(0x3bu)), Field("DATA", pose)));
+            Record("REFR", 0x902, Field("NAME", BitConverter.GetBytes(0x3bu)), Field("DATA", pose)),
+            Record("REFR", 0x903, Field("NAME", BitConverter.GetBytes(0xb20u)), Field("DATA", pose), Field("XCNT", BitConverter.GetBytes(3))),
+            Record("REFR", 0x904, Field("NAME", BitConverter.GetBytes(0x716u)), Field("DATA", pose)));
         var group = new byte[24 + references.Length]; Encoding.ASCII.GetBytes("GRUP").CopyTo(group, 0);
         BinaryPrimitives.WriteUInt32LittleEndian(group.AsSpan(4), (uint)group.Length);
         BinaryPrimitives.WriteUInt32LittleEndian(group.AsSpan(8), 0x800); BinaryPrimitives.WriteInt32LittleEndian(group.AsSpan(12), 6);

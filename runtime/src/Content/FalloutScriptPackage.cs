@@ -15,6 +15,7 @@ internal sealed record FalloutScriptPackage(FalloutFormKey Form, string EditorId
     internal bool DoOnce => (IdleFlags & 4) != 0;
     internal byte Procedure { get; init; }
     internal int? LocationType { get; init; }
+    internal FalloutPackageLocation? LocationDeclaration { get; init; }
     internal FalloutFormKey? LocationReference { get; init; }
     internal int LocationRadius { get; init; }
     internal bool ContainsReferenceLocation(FalloutFormKey cell, IReadOnlyList<float> position,
@@ -48,19 +49,7 @@ internal sealed record FalloutScriptPackage(FalloutFormKey Form, string EditorId
         var procedure = data.Procedure;
         // Follow and Dialogue may have no start location. Its absence means
         // use the target procedure immediately, not a missing source field.
-        int? locationType = fields.Any(field => field.Signature == "PLDT")
-            ? BinaryPrimitives.ReadInt32LittleEndian(Required("PLDT", 12).Span) : null;
-        FalloutFormKey? locationReference = null;
-        var locationRadius = 0;
-        if (locationType is not null)
-        {
-            var location = Required("PLDT", 12).Span;
-            locationRadius = BinaryPrimitives.ReadInt32LittleEndian(location[8..]);
-            if (locationRadius < 0) throw new InvalidDataException("Package location radius is negative.");
-            if (locationType == 0)
-                locationReference = record.Plugin.AdjustOptionalFormId(BinaryPrimitives.ReadUInt32LittleEndian(location[4..])) ??
-                    throw new InvalidDataException("Near-reference package location has no reference.");
-        }
+        var location = FalloutPackageLocation.Read(record);
         var idleFlags = fields.Any(field => field.Signature == "IDLF") ? Required("IDLF", 1).Span[0] : (byte)0;
         if ((idleFlags & ~5) != 0) throw new NotSupportedException($"PACK {record.FormKey} has unbound idle flags {idleFlags:x2}.");
         var counts = fields.Where(field => field.Signature == "IDLC").ToArray();
@@ -116,9 +105,10 @@ internal sealed record FalloutScriptPackage(FalloutFormKey Form, string EditorId
         {
             Flags = data.Flags,
             Procedure = procedure,
-            LocationType = locationType,
-            LocationReference = locationReference,
-            LocationRadius = locationRadius,
+            LocationDeclaration = location,
+            LocationType = location?.Type,
+            LocationReference = location?.Type == 0 ? location.Form : null,
+            LocationRadius = location?.Radius ?? 0,
             EventPrograms = programs
         };
     }

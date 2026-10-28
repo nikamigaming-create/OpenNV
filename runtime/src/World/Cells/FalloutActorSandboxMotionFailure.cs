@@ -117,7 +117,7 @@ internal sealed record FalloutActorSandboxMotionFailure(FalloutFormKey Reference
         RequireHash(Base, BaseSha256); RequireHash(ModelOwner, ModelOwnerSha256); RequireHash(Package, PackageSha256);
         var package = records.GetEffective(Package);
         if (package.Signature != "PACK") throw new InvalidDataException("Stopped Sandbox source is not PACK.");
-        _ = FalloutSandboxPackage.Read(package);
+        FalloutSandboxPackage.Read(package).RequireRetainedStart(records, actor);
         var model = FalloutActorTemplateOwner.Resolve(records, records.GetEffective(Base), 64, actor.Templates);
         if (model.FormKey != ModelOwner) throw new InvalidDataException("Stopped Sandbox model owner changed.");
         if (Error == FalloutActorZeroTurnException.SourceError)
@@ -180,12 +180,6 @@ internal sealed record FalloutActorSandboxMotionFailure(FalloutFormKey Reference
         Basis = (float[])Basis.Clone(),
         Velocity = (float[])Velocity.Clone(),
         Pose = Pose.Copy(),
-        PriorMotion = PriorMotion is not { } motion ? null : motion with
-        {
-            Position = (float[])motion.Position.Clone(),
-            Rotation = (float[])motion.Rotation.Clone(),
-            Wander = motion.Wander is not { } wander ? null : wander with { Destination = (float[])wander.Destination.Clone() },
-            Sandbox = motion.Sandbox is not { } sandbox ? null : sandbox with { Preferences = (byte[])sandbox.Preferences.Clone() }
-        }
+        PriorMotion = PriorMotion?.Copy()
     };
 }

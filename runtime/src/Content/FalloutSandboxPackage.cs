@@ -9,6 +9,7 @@ internal sealed record FalloutSandboxPackage(FalloutFormKey Form, uint Flags, in
     internal const string CaptureBlockerPrefix = "Sandbox continuation: ";
     internal bool Running => (Flags & 0x2000) != 0;
     internal bool WeaponDrawn => (Flags & 0x800000) != 0;
+    internal bool DefensiveCombat => (Flags & 0x400000) != 0;
     internal bool ContinueIfPlayerNear => (Flags & 0x200) != 0;
     internal bool RetainsSelection(bool playerInSameCell, bool forced) =>
         !forced && ContinueIfPlayerNear && playerInSameCell;
@@ -17,10 +18,10 @@ internal sealed record FalloutSandboxPackage(FalloutFormKey Form, uint Flags, in
     {
         var source = FalloutScriptPackage.Read(record);
         var activities = FalloutSandboxActivities.Read(record);
-        if (source.LocationType is not (0 or 3))
-            throw new NotSupportedException("Sandbox needs its non-reference/non-editor location owner.");
+        if (source.LocationType is not (0 or 2 or 3))
+            throw new NotSupportedException("Sandbox needs its non-reference/non-current/non-editor location owner.");
         var data = FalloutPackageData.Read(record);
-        const uint supported = 0x200 | 0x1000 | 0x2000 | 0x800000 | FalloutScriptPackage.HeadTrackingOffFlag |
+        const uint supported = 0x200 | 0x1000 | 0x2000 | 0x400000 | 0x800000 | FalloutScriptPackage.HeadTrackingOffFlag |
             FalloutScriptPackage.WeaponsUnequippedFlag;
         if ((data.Flags & ~supported) != 0)
             throw new NotSupportedException($"Sandbox package flags 0x{data.Flags & ~supported:x8} have no execution owner.");
@@ -33,6 +34,22 @@ internal sealed record FalloutSandboxPackage(FalloutFormKey Form, uint Flags, in
         return new(record.FormKey, data.Flags, source.LocationType.Value, source.LocationReference, source.LocationRadius, activities);
     }
 
-    internal FalloutTravelProgress Location(FalloutPluginStack records, FalloutReferenceWorld world, FalloutFormKey actor) =>
-        new FalloutTravelPackage(Form, Flags, LocationType, Reference, Radius).Start(records, world, actor);
+    internal FalloutTravelProgress Location(FalloutPluginStack records, FalloutReferenceWorld world, FalloutFormKey actor)
+    {
+        if (LocationType != 2) return new FalloutTravelPackage(Form, Flags, LocationType, Reference, Radius).Start(records, world, actor);
+        var start = world.ActorPackageStartLocation(actor) ??
+            throw new NotSupportedException("Current-location Sandbox has no retained actor package-start location.");
+        start.Validate();
+        return new(start.Cell, start.Position, false);
+    }
+
+    internal void RequireRetainedStart(FalloutPluginStack records, FalloutReferenceInstance actor)
+    {
+        if (LocationType != 2) return;
+        var start = actor.PackageStartLocation ??
+            throw new InvalidDataException("Current-location Sandbox has no retained actor start location.");
+        start.Validate();
+        if (records.GetEffective(start.Cell).Signature != "CELL")
+            throw new InvalidDataException("Current-location Sandbox has no source CELL.");
+    }
 }

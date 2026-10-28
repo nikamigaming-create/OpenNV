@@ -83,7 +83,7 @@ public partial class NativePcmPlaybackAudit : Node
             waiting.Stream.Dispose(); waitingCold.Stream.Dispose();
             await CheckSounPcmPause(wav);
             await CheckSounMixerFailure(wav);
-            GD.Print("OPENNV_NATIVE_PCM_PLAYBACK_PASS fractionalCold=true envelope=true mixer=true pause=true sourceMixerFaultRetained=true unboundConstructionRetired=true sourceSoundPause=true finiteDrainOverride=true");
+            GD.Print("OPENNV_NATIVE_PCM_PLAYBACK_PASS fractionalCold=true envelope=true mixer=true pause=true sourceMixerFaultRetained=true unboundConstructionRetired=true sourceSoundPause=true finiteDrainOverride=true liveHandoff=true");
             GetTree().Quit();
         }
         catch (Exception error) { GD.PushError(error.ToString()); GetTree().Quit(1); }

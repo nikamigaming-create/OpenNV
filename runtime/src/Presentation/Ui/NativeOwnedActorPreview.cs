@@ -86,10 +86,12 @@ internal sealed partial class NativeOwnedActorPreview : Node
                 var rgb = light.Light.Diffuse;
                 return new NativeNifPointLight(cameraInverse * node.GlobalPosition, new Vector3(rgb.R, rgb.G, rgb.B) * light.Light.Dimmer, radius);
             }).ToArray();
+        NativeOwnedRenderedDevice.BindMenuEnvironment(Actor, 1);
+        NativeOwnedRenderedDevice.BindMenuMaterials(Actor, lights, 1);
         foreach (var mesh in Actor.FindChildren("*", "", true, false).OfType<MeshInstance3D>().Where(mesh => mesh.Mesh is not null))
             for (var surface = 0; surface < mesh.Mesh.GetSurfaceCount(); surface++)
                 if (mesh.GetActiveMaterial(surface) is ShaderMaterial material &&
-                    material.ResourceName is NativeNifLightingMaterial.ResourceIdentity or "Owned NIF FaceGen skin")
+                    material.ResourceName == NativeFaceGenMaterial.ResourceIdentity)
                     NativeNifPointLighting.Bind(material, lights, 1, storeEncoded: true);
         SetMeta("opennv_preview_actor_height", Actor.SourceHeight);
         SetMeta("opennv_preview_light_radius", radius);

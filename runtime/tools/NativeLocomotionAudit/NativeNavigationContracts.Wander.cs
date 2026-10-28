@@ -48,6 +48,27 @@ internal static partial class NativeNavigationContracts
         }
         var right = Select(0, 5);
         var left = Select(2, 5);
+        if (graph.HasPackageWanderClearance(right.Triangle) != graph.HasWanderBoundaryClearance(right.Triangle.Center, 35) ||
+            graph.HasPackageWanderClearance(left.Triangle) != graph.HasWanderBoundaryClearance(left.Triangle.Center, 35) ||
+            graph.HasPackageWanderClearance(right.Triangle) != graph.HasWanderBoundaryClearance(right.Triangle.Center, 35))
+            throw new InvalidOperationException("Cached package clearance changed a source triangle's full boundary result.");
+        var concurrentGraph = CellNavigationGraph.Load(data.RootElement, new HashSet<string> { "cell" });
+        Vector3[] expectedCenters =
+        [
+            (Vector3.Zero + new Vector3(-10, 10, 0) + new Vector3(10, 10, 0)) / 3,
+            (Vector3.Zero + new Vector3(10, 10, 0) + new Vector3(10, -10, 0)) / 3,
+            (Vector3.Zero + new Vector3(10, -10, 0) + new Vector3(-10, -10, 0)) / 3,
+            (Vector3.Zero + new Vector3(-10, -10, 0) + new Vector3(-10, 10, 0)) / 3,
+            (Vector3.Zero + new Vector3(20, 0, 0) + new Vector3(30, 0, 0) + new Vector3(20, 10, 0)) / 3
+        ];
+        Parallel.For(0, 256, index =>
+        {
+            var triangle = index % 2 == 0 ? right.Triangle : left.Triangle;
+            if (!concurrentGraph.CandidatePoints.SequenceEqual(expectedCenters))
+                throw new InvalidOperationException("Concurrent source centroid calculation changed the exact triangle centers.");
+            if (concurrentGraph.HasPackageWanderClearance(triangle) != graph.HasWanderBoundaryClearance(triangle.Center, 35))
+                throw new InvalidOperationException("Concurrent cached clearance changed the source boundary result.");
+        });
         if (!right.ReachedDistance || right.Triangle.Triangle != 1 || right.Point != new Vector3(5, 0, 0) ||
             right.Path.Count != 2 || left.Triangle.Triangle != 3 || left.Point != new Vector3(-5, 0, 0))
             throw new InvalidOperationException("Wander lost source edge order, equal-priority order or triangle sampling.");

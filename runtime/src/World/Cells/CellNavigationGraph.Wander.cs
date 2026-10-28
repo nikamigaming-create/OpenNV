@@ -9,6 +9,8 @@ internal sealed record FalloutWanderDestination(Vector3 Point, FalloutWanderTria
 
 internal sealed partial class CellNavigationGraph
 {
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<(string Mesh, int Triangle), bool> _wanderDestinationClearance = [];
+    private const float PackageWanderClearanceRadius = 35;
     // Ambient package wandering creates a fresh close-point request. Its
     // clearance radius is the request default, not the actor's collision body;
     // it has no avoidance regions. Other navigation requests may differ.
@@ -17,16 +19,29 @@ internal sealed partial class CellNavigationGraph
         Func<uint, uint> randomBounded, Func<FalloutWanderTriangle, float?> doorTransitionCost,
         CancellationToken cancellation = default)
     {
-        const float clearanceRadius = 35;
         var largeActorRadius = settings.Float("fPathingLargeActorRadius");
         if (!float.IsFinite(largeActorRadius) || largeActorRadius < 0)
             throw new InvalidDataException("Wander large-actor radius setting is invalid.");
         return FindWanderDestination(start, center, Math.Min(32, .75f * radius), radius,
             randomUnit, randomBounded, triangle =>
             {
-                if (clearanceRadius > largeActorRadius && (triangle.Flags & 0x10) != 0) return null;
+                if (PackageWanderClearanceRadius > largeActorRadius && (triangle.Flags & 0x10) != 0) return null;
                 return (triangle.Flags & 0x1000) != 0 ? doorTransitionCost(triangle) : 0;
-            }, _ => 0, triangle => HasWanderBoundaryClearance(triangle.Center, clearanceRadius), cancellation);
+            }, _ => 0, HasPackageWanderClearance, cancellation);
+    }
+
+    internal bool HasPackageWanderClearance(FalloutWanderTriangle triangle)
+    {
+        // The graph and source triangle centers do not change during its
+        // lifetime. Cache only the fixed default-radius package query; other
+        // clearance requests continue to evaluate their own point and radius.
+        var key = (triangle.Mesh, triangle.Triangle);
+        if (!_wanderDestinationClearance.TryGetValue(key, out var clear))
+        {
+            clear = HasWanderBoundaryClearance(triangle.Center, PackageWanderClearanceRadius);
+            _wanderDestinationClearance.TryAdd(key, clear);
+        }
+        return clear;
     }
 
     // Inputs and output use source coordinates (Z up). Admission, clearance and

@@ -75,8 +75,7 @@ internal sealed partial class RuntimeNativeActorCombat
                 if (coarse.Length == 0) throw new InvalidOperationException("No source navigation corridor.");
                 var intent = _routeIntent = NativeCapsuleNavigation.Intent(_actor.GlobalPosition, coarse, target, stoppingDistance,
                     projection: source?.Projection);
-                _routeArrival = intent.Projection is not null ? source?.Arrival :
-                    !intent.ReferenceApproach && intent.Resume < coarse.Length ? source?.PrefixArrival?.Invoke(intent.Target, intent.Resume) : null;
+                _routeArrival = SourceArrival(intent, coarse, source);
                 _routeEnd = intent.Target;
                 _routeArrivalRadius = intent.ArrivalRadius;
                 _routeSpacing = Math.Max(.3f, _radius * 2);
@@ -113,6 +112,11 @@ internal sealed partial class RuntimeNativeActorCombat
         }
         return _pursuitCursor < _pursuitPath.Length ? _pursuitPath[_pursuitCursor] : null;
     }
+
+    internal static Func<Vector3, bool>? SourceArrival(NativeNavigationIntent intent, IReadOnlyList<Vector3> path,
+        NativeActorNavigationRoute? source) => intent.Projection is not null ? source?.Arrival :
+        !intent.ReferenceApproach && NativeCapsuleNavigation.CanUsePrefixRegion(intent.Target, intent.Resume, path)
+            ? source?.PrefixArrival?.Invoke(intent.Target, intent.Resume) : null;
 
     private void ConsumeReachedPursuitWaypoints()
     {

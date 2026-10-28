@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Godot;
+using OpenNV.Runtime;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.World.Actors;
 using OpenNV.Runtime.World.Cells;
@@ -33,6 +34,26 @@ internal static partial class NativeNavigationContracts
             [new(0, 0, 6), new(2, 0, 6), new(2, 4, 0)], 8);
         if (prefix.Target != new Vector3(2, 0, 6) || prefix.Resume != 2)
             throw new InvalidOperationException("Local refinement cut across a folded source corridor onto another floor.");
+        Vector3[] closePortalPath = [new(.1f, 0, 0), new(20, 0, 0), new(25, 0, 0)];
+        var interpolated = NativeCapsuleNavigation.CorridorPrefix(Vector3.Zero, closePortalPath, 8);
+        if (interpolated.Resume != 1 || NativeCapsuleNavigation.CanUsePrefixRegion(interpolated.Target, interpolated.Resume, closePortalPath) ||
+            !NativeCapsuleNavigation.CanUsePrefixRegion(closePortalPath[0], 1, closePortalPath) ||
+            !NativeCapsuleNavigation.CanUsePrefixRegion(new(1, 0, 0), 0, closePortalPath) ||
+            NativeCapsuleNavigation.CanUsePrefixRegion(closePortalPath[^1], closePortalPath.Length, closePortalPath))
+            throw new InvalidOperationException("Source prefix accepted an interpolated later segment as its preceding authored portal.");
+        var prefixCalls = 0;
+        var actorSource = new NativeActorNavigationRoute(closePortalPath, PrefixArrival: (point, resume) =>
+        {
+            prefixCalls++;
+            if (point != closePortalPath[0] || resume != 1) throw new InvalidOperationException("Actor requested a region for a non-portal point.");
+            return _ => true;
+        });
+        var interpolatedIntent = NativeCapsuleNavigation.Intent(Vector3.Zero, closePortalPath);
+        if (RuntimeNativeActorCombat.SourceArrival(interpolatedIntent, closePortalPath, actorSource) is not null || prefixCalls != 0)
+            throw new InvalidOperationException("Actor requested a source region for an interpolated later segment.");
+        var portalIntent = new NativeNavigationIntent(closePortalPath[0], 1, 0, false, [closePortalPath[0]]);
+        if (RuntimeNativeActorCombat.SourceArrival(portalIntent, closePortalPath, actorSource) is null || prefixCalls != 1)
+            throw new InvalidOperationException("Actor failed to request the valid authored portal region.");
         using var detourData = JsonDocument.Parse("""
             {"schema":"opennv-owned-cell-navigation/v1","navmeshes":[
               {"formId":"detour","cellFormId":"cell","version":11,
@@ -47,6 +68,20 @@ internal static partial class NativeNavigationContracts
         var alternate = detourGraph.FindPath(new(0, 6, 0), new(0, -6, 0), point => point.X <= 0);
         if (alternate.Count != 3 || alternate.Any(point => point.X > 0) || alternate[0].X != -5)
             throw new InvalidOperationException("A* did not choose the alternate authored corridor after a blocked portal.");
+        var preferred = detourGraph.FindPath(new(0, 6, 0), new(0, -6, 0),
+            portalPenalty: point => point.X > 0 ? 100 : 0);
+        if (preferred.Count != 3 || preferred[0].X != -5)
+            throw new InvalidOperationException("Portal cost did not select the other authored route.");
+        var expensiveButPossible = detourGraph.FindPath(new(0, 6, 0), new(0, -6, 0),
+            point => point.X >= 0, portalPenalty: _ => 100);
+        if (expensiveButPossible.Count != 3 || expensiveButPossible[0].X != 5)
+            throw new InvalidOperationException("Portal cost excluded the only authored route.");
+        try
+        {
+            _ = detourGraph.FindPath(new(0, 6, 0), new(0, -6, 0), portalPenalty: _ => float.NaN);
+            throw new InvalidOperationException("Invalid portal cost was admitted.");
+        }
+        catch (InvalidDataException) { }
         var sealedRoute = false;
         try { _ = detourGraph.FindPath(new(0, 6, 0), new(0, -6, 0), _ => false); }
         catch (InvalidOperationException) { sealedRoute = true; }
@@ -68,6 +103,30 @@ internal static partial class NativeNavigationContracts
         var route = graph.FindPath(new(1, 1, 0), new(15, 1, 0));
         if (route.Count != 3 || route[1].DistanceTo(new(10, 5, 0)) > .001f || route[^1].DistanceTo(new(15, 1, 0)) > .001f)
             throw new InvalidOperationException("An external-link table index aliasing an internal triangle changed the source corridor.");
+        var nestedCalls = 0;
+        var nested = graph.FindPath(new(1, 1, 0), new(15, 1, 0), permittedPortal: _ =>
+        {
+            nestedCalls++;
+            if (!graph.FindPath(new(1, 1, 0), new(15, 1, 0)).SequenceEqual(route))
+                throw new InvalidOperationException("Nested source search acquired another query's workspace.");
+            return true;
+        });
+        if (nestedCalls == 0 || !nested.SequenceEqual(route))
+            throw new InvalidOperationException("Nested portal observation changed the source route.");
+        try
+        {
+            _ = graph.FindPath(new(1, 1, 0), new(15, 1, 0), permittedPortal: _ => throw new InvalidDataException("source callback fixture"));
+            throw new InvalidOperationException("Source portal failure was lost.");
+        }
+        catch (InvalidDataException error) when (error.Message == "source callback fixture") { }
+        if (!graph.FindPath(new(1, 1, 0), new(15, 1, 0)).SequenceEqual(route))
+            throw new InvalidOperationException("Failed source search contaminated the next workspace.");
+        Parallel.For(0, 64, _ =>
+        {
+            if (!graph.FindPath(new(1, 1, 0), new(15, 1, 0)).SequenceEqual(route))
+                throw new InvalidOperationException("Concurrent source searches shared an active workspace.");
+        });
+        Console.WriteLine("OPENNV_NAVIGATION_WORKSPACE_PASS nested=true failureCleanup=true concurrentQueries=64");
         if (graph.FindPath(new(15, 1, 0), new(1, 1, 0)).Count != 3)
             throw new InvalidOperationException("A reciprocal source edge lost reverse traversal.");
         using var directed = JsonDocument.Parse("""
@@ -85,6 +144,18 @@ internal static partial class NativeNavigationContracts
         var directedPath = directedGraph.FindPath(new(1, 1, 0), new(9, 9, 0));
         if (directedPath.Count != 2 || directedPath[0] != new Vector3(5, 5, 0))
             throw new InvalidOperationException("A directed external link lost its authored source edge.");
+        var adjacentStart = new Vector3(1, 1, 0); var adjacentEnd = new Vector3(9, 9, 0);
+        for (var index = 0; index < 128; index++)
+            if (directedGraph.FindReachablePoint(adjacentStart, adjacentEnd) != adjacentEnd)
+                throw new InvalidOperationException("Direct source-neighbor query lost its authored external edge.");
+        var beforeNeighbors = GC.GetAllocatedBytesForCurrentThread();
+        for (var index = 0; index < 1024; index++)
+            if (directedGraph.FindReachablePoint(adjacentStart, adjacentEnd) != adjacentEnd)
+                throw new InvalidOperationException("Source-neighbor result changed while measuring traversal.");
+        var neighborBytes = GC.GetAllocatedBytesForCurrentThread() - beforeNeighbors;
+        if (neighborBytes != 0)
+            throw new InvalidOperationException($"Warmed source-neighbor traversal allocated {neighborBytes} bytes.");
+        Console.WriteLine("OPENNV_NAVIGATION_NEIGHBOR_PASS directedExternal=true warmedQueries=1024 allocatedBytes=0");
         var reverseRefused = false;
         try { _ = directedGraph.FindPath(new(9, 9, 0), new(1, 1, 0)); }
         catch (InvalidOperationException) { reverseRefused = true; }
@@ -133,6 +204,12 @@ internal static partial class NativeNavigationContracts
 
     private static void CheckRefinementIntent()
     {
+        var endpoint = new Vector3(1, 2, 3);
+        if (!RuntimeCoordinator.NativeBotPrefixArrivalContains(endpoint, endpoint, .08f, _ => false) ||
+            RuntimeCoordinator.NativeBotPrefixArrivalContains(endpoint + Vector3.Up, endpoint, .08f, _ => false) ||
+            RuntimeCoordinator.NativeBotPrefixArrivalContains(endpoint + Vector3.Right, endpoint, .08f, _ => false) ||
+            !RuntimeCoordinator.NativeBotPrefixArrivalContains(endpoint + Vector3.Right, endpoint, .08f, _ => true))
+            throw new InvalidOperationException("Prefix region lost exact endpoint acceptance or admitted an unrelated floor.");
         var folded = NativeCapsuleNavigation.Intent(Vector3.Zero,
             [new(0, 0, 6), new(2, 0, 6), new(2, 0, 0)], new(2, 0, 0), 1.5f);
         if (folded.ReferenceApproach || folded.Target != new Vector3(2, 0, 6) || folded.Resume != 2 || folded.ArrivalRadius != 0)

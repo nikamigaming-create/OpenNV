@@ -172,6 +172,11 @@ internal static partial class CorpusInventoryContracts
             using (var source = Open(game))
             using (var records = FalloutPluginStack.Load(source.PluginSources))
             {
+                source.ArchiveWarmup.GetAwaiter().GetResult();
+                const string missing = "textures\\late-loose-fixture.dds";
+                Require(!source.TryResolve(missing, null, out _) && !source.TryRead(missing, null, out _, out _),
+                    "A completed archive index invented an absent resource.");
+                Reject(() => source.TryResolve(missing, "not-selected.bsa", out _));
                 var observed = 0;
                 source.ResourceReadObserver = (logical, owner, bytes) =>
                 {

@@ -11,6 +11,9 @@ public partial class NativeActorPerformanceAudit
         // expression vector, rather than counts or a plausible-looking body.
         foreach (var part in prepared.Parts)
         {
+            var cached = NativeOwnedNifCache.Read(content, part.Part.ModelPath!, out _);
+            if (!ReferenceEquals(part.Model, cached))
+                throw new InvalidDataException("NPC preparation did not reuse its unchanged decoded source model.");
             if (!content.TryRead(part.Part.ModelPath!, null, out var bytes, out _)) throw new FileNotFoundException(part.Part.ModelPath);
             var original = FalloutNifFile.Read(bytes);
             var egm = FalloutNpcAppearanceMorph.Resolve(content, part.Part, part.SelectedShape);
@@ -52,6 +55,6 @@ public partial class NativeActorPerformanceAudit
         }
         if (Performance.GetMonitor(Performance.Monitor.ObjectNodeCount) != nodes)
             throw new InvalidOperationException("Abandoned NPC assembly leaked native nodes.");
-        GD.Print("OPENNV_NPC_PREPARATION_PASS sourceVectors=exact worker=true cancelled=true partialPublication=blocked abandonedNodes=freed");
+        GD.Print("OPENNV_NPC_PREPARATION_PASS sourceVectors=exact decodedSourceReuse=true worker=true cancelled=true partialPublication=blocked abandonedNodes=freed");
     }
 }

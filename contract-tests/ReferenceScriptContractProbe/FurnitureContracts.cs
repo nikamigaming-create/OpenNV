@@ -19,6 +19,7 @@ internal static partial class FurnitureContracts
                 Record("NPC_", 0x701, Field("ACBS", new byte[24])), Record("FACT", 0x730),
                 Record("STAT", 0x3b), Record("IDLE", 0x712), Record("FURN", 0x710, Field("MNAM", BitConverter.GetBytes(0x40000001u))),
                 Record("FURN", 0x711, Field("MNAM", BitConverter.GetBytes(0x80000001u))),
+                Record("ALCH", 0x713, Field("ENIT", new byte[3])),
                 Record("CELL", 0x800, Field("DATA", [1])), References()));
             var sittingCondition = new byte[28]; BinaryPrimitives.WriteUInt16LittleEndian(sittingCondition.AsSpan(8), 159);
             File.WriteAllBytes(Path.Combine(directory, "Find.esp"), Join(Header("Seats.esm"),
@@ -34,6 +35,11 @@ internal static partial class FurnitureContracts
             var cell = FalloutCellSceneReader.Read(records, Key(0x800)); world.LoadCell(cell);
             var source = FalloutFindFurniturePackage.Read(records.GetEffective(new("Find.esp", 0x400)));
             var actor = Key(0x900); var chair = Key(0x901); var otherActor = Key(0x90a); var player = Key(0x14);
+            var sandbox = new FalloutSandboxPackage(new("Find.esp", 0x400), 0, 0, Key(0x905), 5, new(31));
+            var wanderOnly = world.SandboxCandidateSources(actor, sandbox, 1, null, .0142875f);
+            Require(wanderOnly.Count == 1 && wanderOnly[0].Activity == FalloutSandboxActivity.Wander,
+                "Sandbox inspected excluded food or admitted an excluded activity.");
+            Reject(() => world.SandboxCandidateSources(actor, sandbox with { Activities = new(30) }, 1, null, .0142875f));
             Require(source.Location == Key(0x905) && source.Radius == 5 && !source.Running, "Find lost its declaring master or source search radius.");
             uint[] Candidates(FalloutFindFurniturePackage package) => package.Candidates(records, world, actor, cell).Select(reference => reference.FormKey.ObjectId).Order().ToArray();
             Require(Candidates(source).SequenceEqual(new uint[] { 0x901, 0x902, 0x903, 0x909 }), "Find did not apply radius, sitting type and actor/faction ownership.");
@@ -214,7 +220,7 @@ internal static partial class FurnitureContracts
         var body = Join(Ref("ACHR", 0x900, 0x700, 0, name: "SeatActor", linked: 0x90a), Ref("ACHR", 0x90a, 0x701, 0, name: "OtherActor"),
             Ref("REFR", 0x901, 0x710, 1), Ref("REFR", 0x902, 0x710, 5), Ref("REFR", 0x903, 0x710, 3, 0x700),
             Ref("REFR", 0x904, 0x710, 4, 0x701), Ref("REFR", 0x905, 0x3b, 0), Ref("REFR", 0x907, 0x710, 6),
-            Ref("REFR", 0x908, 0x711, 1), Ref("REFR", 0x909, 0x710, 2, 0x730));
+            Ref("REFR", 0x908, 0x711, 1), Ref("REFR", 0x909, 0x710, 2, 0x730), Ref("REFR", 0x90b, 0x713, 1));
         var group = new byte[24 + body.Length]; Encoding.ASCII.GetBytes("GRUP").CopyTo(group, 0);
         BinaryPrimitives.WriteUInt32LittleEndian(group.AsSpan(4), (uint)group.Length);
         BinaryPrimitives.WriteUInt32LittleEndian(group.AsSpan(8), 0x800); BinaryPrimitives.WriteInt32LittleEndian(group.AsSpan(12), 6);

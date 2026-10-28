@@ -83,7 +83,8 @@ internal static class ActorRetirementContracts
             if (retired) throw new InvalidDataException("Retired ragdoll was reread.");
             nativeReads++; return ragdoll;
         };
-        state.CaptureCorpseEquipment = () =>
+        state.CaptureCorpseEquipment = () => throw new InvalidDataException("Ordinary capture must not bypass a live sound.");
+        state.CaptureCorpseEquipmentForFiniteWait = () =>
         {
             if (retired) throw new InvalidDataException("Retired equipment was reread.");
             nativeReads++; return equipment.Copy();
@@ -92,7 +93,7 @@ internal static class ActorRetirementContracts
         var candidate = fixture.Prepare(records, selection: false);
         state.Ragdoll = ragdoll;
         state.CorpseEquipment = equipment.Copy();
-        state.CaptureRagdoll = null; state.CaptureCorpseEquipment = null; state.CanCaptureCorpseEquipment = null;
+        state.CaptureRagdoll = null; state.CaptureCorpseEquipment = null; state.CaptureCorpseEquipmentForFiniteWait = null; state.CanCaptureCorpseEquipment = null;
         retired = true; candidate.Bind();
         Require(fixture.World.PendingProcedureFiniteVoiceWait()?.Count == 1 && fixture.World.PendingProcedureCaptureCount == 1,
             "Retired corpse waived a genuine still-active finite generation.");
@@ -103,6 +104,10 @@ internal static class ActorRetirementContracts
         Require(fixture.World.PendingProcedureCaptureCount == 1,
             "A new corpse native binding was interpreted as the retired original owner.");
         state.CaptureCorpseEquipment = null;
+        state.CaptureCorpseEquipmentForFiniteWait = () => throw new InvalidDataException("Replacement finite callback must not be invoked.");
+        Require(fixture.World.PendingProcedureCaptureCount == 1,
+            "A replacement finite capture owner was ignored by retirement.");
+        state.CaptureCorpseEquipmentForFiniteWait = null;
         state.CanCaptureCorpseEquipment = _ => throw new InvalidDataException("Replacement native readiness must not be invoked.");
         Require(fixture.World.PendingProcedureCaptureCount == 1,
             "A stale corpse readiness callback was ignored by retirement.");

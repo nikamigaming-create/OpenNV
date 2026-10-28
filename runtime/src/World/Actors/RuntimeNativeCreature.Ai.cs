@@ -87,7 +87,12 @@ internal sealed partial class RuntimeNativeCreature
         _aiState.QuerySitting = _sittingQuery = () => _aiState.FurnitureContinuation is null ? 0 :
             throw new NotSupportedException("Creature furniture continuation has no physical sitting owner.");
         _packageEvents = new(DispatchPackageEvent);
-        if (_aiState.SandboxAdmissionFailure is { } stoppedAdmission)
+        if (_aiState.PendingSandboxStart is { } pendingSandbox)
+        {
+            world.UnloadedPackages?.BindNative(Appearance.Reference!.Value, _packageEvents);
+            RestorePendingSandboxStart(pendingSandbox);
+        }
+        else if (_aiState.SandboxAdmissionFailure is { } stoppedAdmission)
         {
             world.UnloadedPackages?.BindNative(Appearance.Reference!.Value, _packageEvents);
             RestoreSandboxAdmissionFailure(stoppedAdmission);
@@ -108,6 +113,7 @@ internal sealed partial class RuntimeNativeCreature
         BindScriptIdleCapture();
         BindSandboxMotionFailureCapture();
         BindSandboxAdmissionCapture();
+        BindPendingSandboxStartCapture();
         _sandboxAdmissionConfigurationComplete = true;
     }
 
@@ -139,10 +145,12 @@ internal sealed partial class RuntimeNativeCreature
     {
         if (_sourceBindingsRetired) return;
         Exception? retirementFailure = null;
-        var detachedAdmission = HasDetachedSandboxAdmission;
+        var detachedAdmission = HasDetachedSandboxAdmission || HasDetachedPendingSandboxStart;
         if (detachedAdmission) ReleaseDetachedSandboxAdmissionBindings();
         else
         {
+            try { RetirePendingSandboxStartCapture(); }
+            catch (Exception error) { retirementFailure = error; }
             try { RetireScriptIdleCapture(); }
             catch (Exception error) { retirementFailure = error; }
             try { RetireSandboxMotionFailureCapture(); }
@@ -150,6 +158,7 @@ internal sealed partial class RuntimeNativeCreature
             try { RetireSandboxAdmissionCapture(); }
             catch (Exception error) { retirementFailure ??= error; }
         }
+        if (detachedAdmission) ReleasePendingSandboxStartCapture();
         _sourceBindingsRetired = true;
         if (_aiState is { } state && ReferenceEquals(state.QueryCurrentPackage, _currentPackageQuery))
         {
@@ -178,6 +187,8 @@ internal sealed partial class RuntimeNativeCreature
         state.QuerySitting ??= _sittingQuery;
         state.CapturePackageAssignment ??= _packageAssignmentCapture;
         RebindSandboxAdmissionCapture();
+        state.CanCapturePendingSandboxStart ??= _pendingSandboxReady;
+        state.CapturePendingSandboxStart ??= _pendingSandboxCapture;
         Combat?.RestoreSourceBindings();
     }
 
@@ -253,7 +264,7 @@ internal sealed partial class RuntimeNativeCreature
         return _aiWorld!.EvaluateActorReferenceCondition(Appearance.Reference!.Value, condition, placement, Skeleton.UnitsToMetres)!.Value;
     }
 
-    private void SelectPackage()
+    private void SelectPackage(bool forced)
     {
         var previousFailure = _failedPackage;
         _failedPackage = null;
@@ -277,6 +288,12 @@ internal sealed partial class RuntimeNativeCreature
                     _aiPackage?.FormKey, _packageEvents?.Done == true));
         if (_aiError is not null && selected is not null && previousFailure == selected.FormKey)
         { _failedPackage = previousFailure; return; }
+        // A healthy active Sandbox retains its already-consumed package
+        // lifecycle while the player remains in the same cell. Explicit EVP
+        // still forces a fresh source selection, as it does for NPCs.
+        if (_aiError is null && _sandboxPackage is { ContinueIfPlayerNear: true } current &&
+            selected?.FormKey != current.Form && !forced &&
+            current.RetainsSelection(Combat!.PackagePlayerInSameCell(), forced)) return;
         _aiError = null;
         if (_aiPackage?.FormKey == selected?.FormKey)
         {
@@ -287,6 +304,7 @@ internal sealed partial class RuntimeNativeCreature
             }
             return;
         }
+        _aiState!.PendingSandboxStart = null;
         _failedPackage = selected?.FormKey;
         var source = selected is null ? null : FalloutScriptPackage.Read(selected);
         FalloutFollowPackage? follow = null;
@@ -309,8 +327,6 @@ internal sealed partial class RuntimeNativeCreature
             else if (source.Procedure == 12)
             {
                 sandbox = FalloutSandboxPackage.Read(selected!);
-                if (sandbox.ContinueIfPlayerNear)
-                    throw new NotSupportedException("Creature Sandbox requires its continuing-selection owner.");
             }
             else if (source.Procedure == 13) patrol = ReadPatrol(selected!);
             else if (source.Procedure == 15)
@@ -336,6 +352,18 @@ internal sealed partial class RuntimeNativeCreature
         else { _guardPackage = null; _guardProgress = null; }
         _sandboxPackage = sandbox;
         _sandboxWander = sandbox is not null && restoreSandbox ? retained!.Wander : null;
+        if (sandbox?.LocationType == 2)
+        {
+            var actor = Appearance.Reference!.Value;
+            if (restoreSandbox)
+                _ = _aiWorld!.ActorPackageStartLocation(actor) ??
+                    throw new InvalidDataException("Restored current-location Sandbox has no actor start location.");
+            else
+            {
+                if (!IsInsideTree()) throw new NotSupportedException("Current-location Sandbox needs its live native start pose.");
+                _aiWorld!.CaptureActorPackageStartLocation(actor, Skeleton.UnitsToMetres);
+            }
+        }
         if (_sandboxWander is not null) _aiWorld!.ValidatePackageWander(Appearance.Reference!.Value, _sandboxWander);
         if (patrol is not null) BeginPatrol(patrol, restorePatrol);
         else { _patrol = null; _patrolProgress = null; _patrolDestination = null; }
@@ -386,7 +414,7 @@ internal sealed partial class RuntimeNativeCreature
         _waitingForTarget = null;
         if (ScriptIdleActive) return;
         if (SandboxMotionError is not null) return;
-        if (SandboxAdmissionError is not null || HasDetachedSandboxAdmission) return;
+        if (SandboxAdmissionError is not null || HasDetachedSandboxAdmission || HasDetachedPendingSandboxStart) return;
         if (_aiRecords is null || Combat is null || Combat.OwnsPose ||
             !Combat.PackageMovementReady || _conversationTarget is not null) return;
         if (_aiState?.ScriptError is { } scriptError) { _aiError = scriptError; return; }
@@ -405,6 +433,7 @@ internal sealed partial class RuntimeNativeCreature
                 !patrolHolding &&
                 (_evaluateRequested || _packageClock <= 0 || scheduleTime != _aiScheduleTime || _aiQuestRevision != _aiQuests!.ProgressRevision))
             {
+                var forced = _evaluateRequested;
                 _evaluateRequested = false; _packageClock = 10;
                 _aiScheduleTime = scheduleTime;
                 _aiQuestRevision = _aiQuests!.ProgressRevision;
@@ -414,14 +443,28 @@ internal sealed partial class RuntimeNativeCreature
                 // may retry immediately; an unchanged failure waits for polling.
                 _packageSelectionAttempted = true; ++_packageSelectionAttempts;
                 selecting = true;
-                SelectPackage();
+                using (OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Measure(OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Owner.CreaturePackageSelection))
+                    SelectPackage(forced);
                 selecting = false;
             }
             if (_aiError is not null) return;
-            if (_travelPackage is not null) AdvanceTravel(delta);
+            if (_travelPackage is not null)
+            {
+                using var scope = OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Measure(OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Owner.CreatureTravel);
+                AdvanceTravel(delta);
+            }
             else if (_sandboxPackage is { } sandbox)
+            {
+                using var scope = OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Measure(OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Owner.CreatureSandbox);
                 _sandboxWander = Combat.AdvanceSandboxWander(_aiPackage!, sandbox, _sandboxWander, delta);
-            else if (_patrol is not null) AdvancePatrol(delta);
+                if (_aiState!.ProcedureCaptureBlocker != FalloutActorPendingSandboxStart.CaptureBlocker)
+                    _aiState.PendingSandboxStart = null;
+            }
+            else if (_patrol is not null)
+            {
+                using var scope = OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Measure(OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Owner.CreaturePatrol);
+                AdvancePatrol(delta);
+            }
             else if (_guardPackage is { } guard)
                 _guardProgress = Combat.AdvanceGuard(_aiPackage!, guard, _guardProgress!, delta);
             else if (_followPackage is { } follow)
@@ -468,7 +511,10 @@ internal sealed partial class RuntimeNativeCreature
             _aiError = error.Message;
             if (_guardPackage is not null) _guardProgress = Combat.PackageMotion?.Guard ?? _guardProgress;
             if (_sandboxPackage is not null)
+            {
+                _aiState!.PendingSandboxStart = null;
                 _aiState!.ProcedureCaptureBlocker = FalloutSandboxPackage.CaptureBlockerPrefix + error.Message;
+            }
             if (!selecting && _sandboxPackage is not null && error is FalloutSandboxMotionException stopped &&
                 stopped.Package == _aiPackage?.FormKey)
                 _sandboxMotionException = stopped;

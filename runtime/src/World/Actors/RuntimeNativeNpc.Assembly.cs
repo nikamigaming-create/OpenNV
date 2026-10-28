@@ -16,8 +16,11 @@ internal partial class RuntimeNativeNpc
         private readonly Func<FalloutNpcAppearance, FalloutNpcAppearancePart, FalloutNifFile, FalloutNifGeometry, Material?>? _materialOwner;
         private RuntimeNativeNpc? _actor;
         private readonly List<RuntimeNativeNifScene> _parts = [];
+        private RuntimeNativeNifMeshBuilder.ActorPartAssembly? _partAssembly;
         private int _stage = -1;
         private bool _complete;
+        internal string NextStage => _stage < 0 ? "skeleton" : _stage < _prepared.Parts.Count
+            ? $"part:{_prepared.Parts[_stage].Part.Role}:{_prepared.Parts[_stage].Part.ModelPath}:{_partAssembly?.NextStage ?? "start"}" : "finalize";
 
         internal Assembly(FalloutNpcPreparedGeometry prepared, RuntimeLiveContentSource source, float units,
             Func<FalloutNpcAppearance, FalloutNpcAppearancePart, FalloutNifFile, FalloutNifGeometry, Material?>? materialOwner)
@@ -47,12 +50,29 @@ internal partial class RuntimeNativeNpc
             }
             if (_stage < _prepared.Parts.Count)
             {
-                var prepared = _prepared.Parts[_stage++];
+                var prepared = _prepared.Parts[_stage];
                 var part = prepared.Part;
                 try
                 {
-                    var scene = BuildAppearancePart(prepared, _prepared, actor.Skeleton, _source, _materialOwner);
+                    _partAssembly ??= RuntimeNativeNifMeshBuilder.ActorPartAssembly.TryCreate(prepared.Model, actor.Skeleton,
+                        _source, (nif, geometry) => _materialOwner?.Invoke(_prepared.Appearance, part, nif, geometry),
+                        prepared.Geometry.Count == 0 ? null : (_, geometry, mesh) => prepared.Geometry.GetValueOrDefault(geometry.Block.Index, mesh),
+                        FalloutNpcFaceAttachment.UsesHeadModelSpace(part.Role)
+                            ? _prepared.HeadBinds ?? throw new NotSupportedException("Rigid FaceGen part has no source skinned head owner.") : null,
+                        prepared.SelectedShape,
+                        prepared.Morphs.Count == 0 ? null : (_, geometry, _) => prepared.Morphs[geometry.Block.Index],
+                        part.Role is "armor" or "armor-addon" ? part.BipedSlots : 0);
+                    RuntimeNativeNifScene scene;
+                    if (_partAssembly is not null)
+                    {
+                        if (!_partAssembly.Advance()) return false;
+                        scene = _partAssembly.Take();
+                        _partAssembly.Dispose(); _partAssembly = null;
+                        SetAppearancePartMetadata(scene, prepared);
+                    }
+                    else scene = BuildAppearancePart(prepared, _prepared, actor.Skeleton, _source, _materialOwner);
                     _parts.Add(scene);
+                    _stage++;
                 }
                 catch (Exception error) when (error is InvalidDataException or NotSupportedException or FileNotFoundException)
                 {
@@ -75,7 +95,7 @@ internal partial class RuntimeNativeNpc
             var actor = _actor; _actor = null; return actor;
         }
 
-        public void Dispose() { _actor?.Free(); _actor = null; }
+        public void Dispose() { _partAssembly?.Dispose(); _partAssembly = null; _actor?.Free(); _actor = null; }
     }
 
     internal void BindSourceBehavior(FalloutPluginStack stack, FalloutActorTemplateSelection? selection)
@@ -99,10 +119,16 @@ internal partial class RuntimeNativeNpc
             morphOwner: prepared.Morphs.Count == 0 ? null : (_, geometry, _) => prepared.Morphs[geometry.Block.Index],
             contentSource: source, bipedSlots: part.Role is "armor" or "armor-addon" ? part.BipedSlots : 0,
             materialChannels: materialChannels);
+        SetAppearancePartMetadata(scene, prepared);
+        return scene;
+    }
+
+    private static void SetAppearancePartMetadata(RuntimeNativeNifScene scene, FalloutNpcPreparedPart prepared)
+    {
+        var part = prepared.Part;
         scene.Root.SetMeta("opennv_source_model", part.ModelPath!);
         scene.Root.SetMeta("opennv_source_part", part.Role);
         scene.Root.SetMeta("opennv_source_form", part.Source.ToString());
         if (prepared.MorphIdentity is { } identity) scene.Root.SetMeta("opennv_source_egm", identity);
-        return scene;
     }
 }

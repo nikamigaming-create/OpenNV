@@ -27,6 +27,7 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
         Scale = Vector3.One * scale;
     }
     private float _jumpHeightMeters;
+    private NativeCharacterStep.QueryResources? _stepQueries;
     private FalloutInputControls? _inputControls;
 
     internal void ConfigureInputControls(FalloutInputControls controls, Func<int, bool> physicalKeyPressed)
@@ -327,9 +328,11 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
             GetViewport().SetInputAsHandled();
             return;
         }
-        if (inputEvent.IsActionPressed(input.Cancel.Action))
+        // A modal owns Cancel itself. Consuming it here while modal blocks
+        // later unhandled-input owners, including the source recipe menu.
+        if (!_modalInput && inputEvent.IsActionPressed(input.Cancel.Action))
         {
-            if (!_modalInput) OpenPauseMenu?.Invoke();
+            OpenPauseMenu?.Invoke();
             GetViewport().SetInputAsHandled();
             return;
         }
@@ -408,8 +411,8 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
         var velocity = direction * speed;
         velocity.Y = IsOnFloor()
             ? MathF.Min(Velocity.Y, 0.0f)
-            : Velocity.Y -
-                _configuration.Simulation.GravityMetersPerSecondSquared * (float)delta;
+            : NativeCharacterGravity.AirVelocity(Velocity.Y,
+                _configuration.Simulation.GravityMetersPerSecondSquared, (float)delta);
         if (alive && _movementEnabled && !_modalInput && IsOnFloor() && _jumpHeightMeters > 0 &&
             (_xr?.ConsumeJump() ?? Input.IsActionJustPressed(input.Jump.Action)))
         {
@@ -426,7 +429,8 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
         }
         Velocity = velocity;
         var positionBeforeMotion = GlobalPosition;
-        var stepped = NativeCharacterStep.TryStep(this, horizontalMotion, _configuration.Player.StepHeightMeters, out var stepBlocked);
+        var stepped = NativeCharacterStep.TryStep(this, horizontalMotion, _configuration.Player.StepHeightMeters, out var stepBlocked,
+            _stepQueries ??= new(this));
         StepBlocked = stepBlocked;
         if (stepped)
         {

@@ -61,7 +61,7 @@ internal sealed record FalloutNativeCampaignState(
     FalloutReputationsSnapshot? Reputations = null,
     FalloutPlayerNotesSnapshot? PlayerNotes = null,
     FalloutPlayerAdvancementSnapshot? PlayerAdvancement = null,
-    bool PlayerSneaking = false);
+    bool PlayerSneaking = false, FalloutPlayerCaravanCardsSnapshot? PlayerCaravanCards = null);
 
 internal sealed record FalloutNativeCampaignRestore(
     FalloutNativeCampaignState State,
@@ -70,7 +70,11 @@ internal sealed record FalloutNativeCampaignRestore(
 
 internal static class FalloutNativeCampaignSave
 {
-    internal const string ExpectedSchema = "opennv-native-fnv-campaign-save/v61";
+    internal const string ExpectedSchema = "opennv-native-fnv-campaign-save/v65";
+    internal const string BeforeCreaturePendingSandboxSchema = "opennv-native-fnv-campaign-save/v64";
+    internal const string BeforePackageStartLocationSchema = "opennv-native-fnv-campaign-save/v63";
+    internal const string BeforeExecutableNoticeSchema = "opennv-native-fnv-campaign-save/v62";
+    internal const string BeforeCaravanCardsSchema = "opennv-native-fnv-campaign-save/v61";
     internal const string BeforeProjectileLaunchSchema = "opennv-native-fnv-campaign-save/v60";
     internal const string BeforePendingSandboxStartSchema = "opennv-native-fnv-campaign-save/v59";
     internal const string BeforePlayerNotesSchema = "opennv-native-fnv-campaign-save/v58";
@@ -387,6 +391,7 @@ internal static class FalloutNativeCampaignSave
             references.RestoreFactionRelations(state.FactionRelations);
             references.RestoreReputations(state.Reputations);
             references.PlayerNotes.Restore(state.PlayerNotes);
+            references.PlayerCaravanCards.Restore(state.PlayerCaravanCards);
         }
         validatedValues?.Arrays.ValidateRestoredRoots();
         foreach (var form in validatedValues?.Arrays.Forms ?? [])
@@ -539,8 +544,33 @@ internal static class FalloutNativeCampaignSave
         }
     }
 
+    private static void ValidatePlayerCaravanSchema(FalloutNativeCampaignState state)
+    {
+        if (state.Schema != ExpectedSchema && state.PlayerCaravanCards is not null)
+            throw new InvalidDataException("Earlier campaign schemas cannot own Caravan card membership.");
+        if (state.PlayerCaravanCards is not { } cards) return;
+        if (state.References is null || cards.First is null || cards.Second is null ||
+            !cards.Known && (cards.First.Count != 0 || cards.Second.Count != 0) ||
+            cards.First.Concat(cards.Second).Any(card => string.IsNullOrWhiteSpace(card.OwnerPlugin) ||
+                card.ObjectId is 0 or > FalloutFormKey.ObjectIdMask))
+            throw new InvalidDataException("Saved Caravan membership has no valid reference world or identity.");
+    }
+
     internal static FalloutNativeCampaignState AdmitPreviousOwnerSchema(FalloutNativeCampaignState state)
     {
+        if (state.Schema != ExpectedSchema && state.References?.Any(reference => reference.PendingSandboxStart?.SelectionAttempts is not null) == true)
+            throw new InvalidDataException("Earlier campaign schemas cannot own a creature pending Sandbox start.");
+        if (state.Schema == BeforeCreaturePendingSandboxSchema) state = state with { Schema = ExpectedSchema };
+        if (state.Schema != ExpectedSchema && state.References?.Any(reference => reference.PackageStartLocation is not null) == true)
+            throw new InvalidDataException("Earlier campaign schemas cannot own an actor package-start location.");
+        if (state.Schema == BeforePackageStartLocationSchema) state = state with { Schema = ExpectedSchema };
+        if (state.Schema != ExpectedSchema &&
+            (state.Scripts?.Notifications?.Pending?.Any(value => value.Event.Kind == FalloutHudEventKind.ExecutableNotice) == true ||
+             state.Scripts?.Notifications?.Current?.Event.Kind == FalloutHudEventKind.ExecutableNotice))
+            throw new InvalidDataException("Earlier campaign schemas cannot own executable HUD notices.");
+        if (state.Schema == BeforeExecutableNoticeSchema) state = state with { Schema = ExpectedSchema };
+        ValidatePlayerCaravanSchema(state);
+        if (state.Schema == BeforeCaravanCardsSchema) state = state with { Schema = ExpectedSchema };
         if (state.Schema != ExpectedSchema && state.References?.Any(reference => reference.ProjectileLaunch is not null ||
             reference.CorpseEquipment?.LaunchRefusal is not null) == true)
             throw new InvalidDataException("Earlier campaign schemas cannot own projectile launch process state.");
@@ -582,6 +612,7 @@ internal static class FalloutNativeCampaignSave
         FalloutPlayerAbilitySaveAdmission? originalAbilityAdmission)
     {
         ValidatePlayerNotesSchema(state);
+        ValidatePlayerCaravanSchema(state);
         ValidateReputationSchema(state);
         ValidateTerminalHackStateSchema(state);
         if (state.Schema != ExpectedSchema && state.References?.Any(reference => reference.SandboxAdmissionFailure is not null) == true)
