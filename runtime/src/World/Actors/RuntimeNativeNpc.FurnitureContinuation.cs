@@ -45,7 +45,7 @@ internal partial class RuntimeNativeNpc
             _furnitureSandboxActivity, _sandboxFurniturePackageExit,
             _furnitureApproaching ? WriteFurniturePose(_furnitureApproach) : null,
             _furnitureApproaching && _furnitureApproachFloor is { } floor ? [floor.X, floor.Y, floor.Z] : null,
-            _furniturePendingSelection is not null, _furniturePendingSelection?.Forced == true);
+            _furniturePendingSelection is not null, _furniturePendingSelection?.Forced == true, _sleepPackage is not null);
         state.Validate();
         return state;
     }
@@ -85,6 +85,13 @@ internal partial class RuntimeNativeNpc
             _furnitureInitialPlacement = saved.InitialPlacement;
         }
         _aiPackage = package; _packageIdleSource = source;
+        if (source.Procedure == 4)
+        {
+            _sleepPackage = FalloutSleepPackage.Read(package);
+            _sleepProgress = new(_aiWorld!.Placement(saved.Furniture!.Value).Cell, saved.Furniture.Value, true);
+            _sleepBeds = _sleepPackage.Source(_aiStack!, _aiWorld, Appearance.Reference!.Value);
+            _sleepPackage.Validate(_aiStack!, _aiWorld, Appearance.Reference!.Value, _sleepProgress);
+        }
         _findFurniture = source.Procedure == 0 ? FalloutFindFurniturePackage.Read(package) : null;
         _furnitureSandboxActivity = saved.SandboxActivity;
         _sandboxFurniturePackageExit = saved.SandboxPackageExit;

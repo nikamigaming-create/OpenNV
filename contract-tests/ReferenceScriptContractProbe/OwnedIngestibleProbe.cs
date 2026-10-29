@@ -6,13 +6,13 @@ using OpenNV.Runtime.World.Cells;
 
 internal static class OwnedIngestibleProbe
 {
-    internal static void RunActorInventory(string root)
+    internal static void RunActorInventory(string root, uint actorId = 0x15a796, bool validateTraversal = false)
     {
         RuntimeLiveContentSource.Configure(root, RuntimeLiveContentSource.FalloutNewVegasGame);
         using var content = RuntimeLiveContentSource.Current!;
         using var records = FalloutPluginStack.Load(content.PluginSources);
         using var world = new FalloutReferenceWorld(records);
-        var actor = new FalloutFormKey("FalloutNV.esm", 0x15a796);
+        var actor = new FalloutFormKey("FalloutNV.esm", actorId);
         var globals = FalloutGlobalState.Read(records);
         var inventory = world.Inventory(actor, 1, globals);
         var instance = world.Get(actor);
@@ -47,9 +47,28 @@ internal static class OwnedIngestibleProbe
                 withdrawal = value.Withdrawal?.ToString(), value.AddictionChance,
                 poisonOnly = value.Effects.Count > 0 && value.Effects.All(effect => (effect.Flags & 5) == 5)
             }).ToArray();
+        if (validateTraversal)
+        {
+            var traversal = inventory.Contents.CaptureTraversal() ?? throw new InvalidDataException("Fresh owned inventory has no materialization provenance.");
+            traversal.Validate(records, inventory.Contents.Items);
+            var ordered = inventory.Contents.TraversalItems!;
+            var wine = new FalloutFormKey("FalloutNV.esm", 0x03404a);
+            if (!world.IsActorFood(wine) || FalloutIngestible.Read(records, wine).AddictionChance <= 0)
+                throw new InvalidDataException("Owned addictive food was excluded from ordinary food eligibility.");
+            if (!ordered.Select(item => item.FormKey).ToHashSet().SetEquals(inventory.Contents.Items.Select(item => item.FormKey)))
+                throw new InvalidDataException("Owned native inventory traversal lost materialized forms.");
+            var captured = world.Capture();
+            using var cold = new FalloutReferenceWorld(records); cold.Restore(captured);
+            var retained = cold.Inventory(actor, 1, globals).Capture();
+            if (JsonSerializer.Serialize(inventory.Capture()) != JsonSerializer.Serialize(retained))
+                throw new InvalidDataException("Owned cold inventory rerolled or reordered materialization provenance.");
+            Console.WriteLine($"OPENNV_OWNED_INVENTORY_TRAVERSAL_PASS actor={actor} sourceOwner={traversal.SourceOwner} " +
+                $"items={ordered.Count} foods={ordered.Count(item => world.IsActorFood(item.FormKey))} sourceBound=true cold=true " +
+                "addictiveFoodEligible=true nativeMealChoiceAndParity=separate");
+        }
         Console.WriteLine(JsonSerializer.Serialize(new { kind = "owned-actor-food-source", actor = actor.ToString(),
             sourceOwner = owner.FormKey.ToString(), source, resolvedFoods = foods, candidateFoods,
-            random = "fresh-source-resolution", retailOrdering = "unverified", gameplay = "separate" }));
+            random = "fresh-source-resolution", traversal = inventory.Contents.CaptureTraversal(), gameplay = "separate" }));
     }
 
     internal static void Run(string root)

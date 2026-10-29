@@ -42,6 +42,7 @@ internal static class SandboxAdmissionFailureContracts
                     Field("POBA", []));
             }
             var currentLocation = (byte[])location.Clone(); currentLocation[0] = 2;
+            var foodData = new byte[8]; foodData[4] = 2;
             File.WriteAllBytes(path, Join(Record("TES4", 0, Field("HEDR", new byte[12])),
                 Record("BPTD", 0x1d, Field("BPNN", Encoding.ASCII.GetBytes("Root\0")),
                     Field("BPNT", Encoding.ASCII.GetBytes("Root\0")), Field("BPND", bodyPart)),
@@ -53,6 +54,8 @@ internal static class SandboxAdmissionFailureContracts
                 Record("CREA", 0x11, Field("ACBS", creatureStats), Field("TNAM", BitConverter.GetBytes(0f)), Field("PKID", BitConverter.GetBytes(0x20u)),
                     Field("PKID", BitConverter.GetBytes(0x24u))),
                 Record("CREA", 0x12, Field("ACBS", creatureStats), Field("TNAM", BitConverter.GetBytes(180f)), Field("PKID", BitConverter.GetBytes(0x20u))),
+                Record("INGR", 0x40, Field("EDID", Encoding.ASCII.GetBytes("FirstFood\0")), Field("ENIT", foodData)),
+                Record("INGR", 0x41, Field("EDID", Encoding.ASCII.GetBytes("SecondFood\0")), Field("ENIT", foodData)),
                 Record("CELL", 0x800, Field("DATA", [1, 0])), group,
                 Record("CELL", 0x801, Field("DATA", [1, 0])), NavigationFloor(0x802, 0x801)));
             using var records = FalloutPluginStack.Load(directory, ["Admission.esm"]);
@@ -136,6 +139,80 @@ internal static class SandboxAdmissionFailureContracts
                 new(false, true, false, false, false, false, 2), live.Revision, live.LastEvent!,
                 live.LastPackage!.Value, Hash(0x20));
             saved.Validate(records, actor);
+            using (var mealWorld = new FalloutReferenceWorld(records))
+            {
+                var hungry = mealWorld.Get(Key(0x900));
+                hungry.Animation.Restore(new("meshes/fixture/idle.kf", new('a', 64), 12.5, false));
+                hungry.PackageAssignment = new(saved.Package, saved.PackageSha256, false);
+                hungry.Inventory = new(55);
+                hungry.Inventory.Contents.AddGrant(new(new([
+                    new(Key(0x40), records.RuntimeFormId(Key(0x40)), "FirstFood", "INGR", 1, null, null),
+                    new(Key(0x41), records.RuntimeFormId(Key(0x41)), "SecondFood", "INGR", 1, null, null)], null), []));
+                var randomBefore = hungry.SoundRandom.State;
+                _ = hungry.SoundRandom.NextUInt32(); _ = hungry.SoundRandom.NextUnitFloat();
+                var afterSelection = hungry.SoundRandom.State;
+                var mealPrefix = new FalloutSandboxUnchosenMeal(new(FalloutSandboxActivity.Eat, 9.25f, 1.75f,
+                    new FalloutSandboxPreferences().Capture(), DailyFoodAvailable: true),
+                    [new(Key(0x40), Hash(0x40), 1), new(Key(0x41), Hash(0x41), 1)], true,
+                    randomBefore, afterSelection, afterSelection);
+                var stoppedMeal = saved with { Error = mealPrefix.Error, UnchosenMeal = mealPrefix };
+                stoppedMeal.Validate(records, hungry);
+                hungry.SandboxAdmissionFailure = stoppedMeal;
+                hungry.ProcedureCaptureBlocker = FalloutSandboxPackage.CaptureBlockerPrefix + stoppedMeal.Error;
+                var inventoryBefore = JsonSerializer.Serialize(hungry.Inventory.Capture());
+                var bytes = JsonSerializer.Serialize(mealWorld.Capture());
+                using var coldMealWorld = new FalloutReferenceWorld(records);
+                coldMealWorld.Restore(JsonSerializer.Deserialize<FalloutReferenceSnapshot[]>(bytes)!);
+                var coldHungry = coldMealWorld.Get(hungry.Reference);
+                var coldMeal = coldHungry.SandboxAdmissionFailure!;
+                var mealEvents = new FalloutPackageEvents(Dispatch);
+                coldMeal.RestoreEvents(records, coldHungry, mealEvents);
+                Require(JsonSerializer.Serialize(coldMealWorld.Capture()) == bytes && effects == 1 &&
+                    mealEvents.Revision == live.Revision && mealEvents.LastEvent == "POBA" && !mealEvents.Done &&
+                    coldHungry.PackageMotion is null && coldHungry.Animation.ElapsedSeconds == 12.5 &&
+                    coldHungry.SoundRandom.State == afterSelection && coldMeal.UnchosenMeal!.Activity.Duration == 1.75f &&
+                    JsonSerializer.Serialize(coldHungry.Inventory!.Capture()) == inventoryBefore,
+                    "Unchosen meal restoration lost its failure prefix or selected/consumed food, replayed POBA or changed clock/RNG.");
+                var mealCopy = stoppedMeal.Copy(); mealCopy.UnchosenMeal!.Activity.Preferences[0]++;
+                Require(mealCopy.UnchosenMeal.Activity.Preferences[0] != stoppedMeal.UnchosenMeal!.Activity.Preferences[0],
+                    "Unchosen meal receipt aliases selected preferences.");
+                Reject(() => (stoppedMeal with { UnchosenMeal = null }).Validate());
+                Reject(() => (stoppedMeal with { UnchosenMeal = mealPrefix with { SelectedActivity = false } }).Validate());
+                Reject(() => (stoppedMeal with { UnchosenMeal = mealPrefix with { RandomAfterFailure = afterSelection + 1 } }).Validate());
+                Reject(() => (stoppedMeal with { UnchosenMeal = mealPrefix with
+                { RandomBeforeMeal = afterSelection + 1, RandomAfterFailure = afterSelection + 1 } }).Validate(records, hungry));
+                Reject(() => (stoppedMeal with { UnchosenMeal = mealPrefix with
+                { Inputs = [mealPrefix.Inputs[0] with { Sha256 = new('0', 64) }, mealPrefix.Inputs[1]] } }).Validate(records, hungry));
+                Reject(() => (stoppedMeal with { UnchosenMeal = mealPrefix with
+                { Activity = mealPrefix.Activity with { Target = Key(0x900) } } }).Validate());
+                hungry.ActorValues["health"] = new FalloutActorValue(10, Damage: -10);
+                hungry.Injury = new(true, null, new Dictionary<byte, float>());
+                hungry.Ragdoll = new(new('c', 64), [new(7, [1,0,0,0,1,0,0,0,1,9,8,7], [0,0,0], [0,0,0], true)]);
+                _ = hungry.SoundRandom.NextUInt32();
+                hungry.Inventory = new(55);
+                hungry.Inventory.Contents.AddGrant(new(new([
+                    new(Key(0x41), records.RuntimeFormId(Key(0x41)), "SecondFood", "INGR", 1, null, null)], null), []));
+                Reject(() => stoppedMeal.Validate(records, hungry));
+                Require(FalloutActorSandboxAdmissionFailure.RetainInterrupted(records, hungry, stoppedMeal,
+                    stoppedMeal.Package, stoppedMeal.Error, live, true) && hungry.SandboxAdmissionFailure is null &&
+                    hungry.InterruptedSandboxAdmission is { UnchosenMeal.Inputs.Count: 2 },
+                    "A matching captured meal prefix depended on the corpse's later inventory/random state.");
+                var historicalBytes = JsonSerializer.Serialize(mealWorld.Capture());
+                using var historicalCold = new FalloutReferenceWorld(records);
+                historicalCold.Restore(JsonSerializer.Deserialize<FalloutReferenceSnapshot[]>(historicalBytes)!);
+                var historicalActor = historicalCold.Get(hungry.Reference);
+                var history = historicalActor.InterruptedSandboxAdmission!;
+                Require(JsonSerializer.Serialize(historicalCold.Capture()) == historicalBytes && effects == 1 &&
+                    historicalActor.SandboxAdmissionFailure is null && historicalActor.PackageMotion is null &&
+                    historicalActor.Inventory!.Contents.Items.Count == 1 && historicalActor.SoundRandom.State != afterSelection &&
+                    history.UnchosenMeal!.Inputs.Count == 2 && history.UnchosenMeal!.RandomAfterFailure == afterSelection,
+                    "Cold corpse history changed its original unchosen prefix, current loot/randomness or replayed ingestion/events.");
+                Reject(() => history.RestoreEvents(records, historicalActor, new FalloutPackageEvents(Dispatch)));
+                Reject(() => (history with { UnchosenMeal = history.UnchosenMeal! with
+                { Inputs = [mealPrefix.Inputs[0] with { Sha256 = new('0', 64) }, mealPrefix.Inputs[1]] } })
+                    .ValidateInterrupted(records, historicalActor));
+                Console.WriteLine("OPENNV_SANDBOX_UNCHOSEN_MEAL_PASS consumedActivity=true exactFoodInputs=true failureVisible=true cold=true noChoiceOrIngestion=true noStartReplay=true clockAndRandomRetained=true corpseHistoryIndependentOfCurrentInputs=true historicalResumeRefused=true");
+            }
             var currentAdmission = saved with { Package = Key(0x24), PackageSha256 = Hash(0x24),
                 LastPackage = Key(0x24), LastPackageSha256 = Hash(0x24) };
             Reject(() => currentAdmission.Validate(records, actor));

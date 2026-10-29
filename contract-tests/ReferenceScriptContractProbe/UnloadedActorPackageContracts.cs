@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.Text;
 using System.Text.Json;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.World.Cells;
@@ -27,6 +28,7 @@ internal static class UnloadedActorPackageContracts
             "Deferred source Start lost its owned boundary or invented native progress.");
         CheckDeferredCold(records, quests, actor, deferred);
         CheckRetainedNative(records, actor);
+        CheckRetainedMarker();
         quests.EnterStage(Key(0x871), 1);
         Check(world.CurrentPackage(actor) == Key(0x8f6), "Unloaded package query retained stale quest eligibility.");
         var secondReceipt = world.PackageEvents.SnapshotPending(actor);
@@ -216,6 +218,85 @@ internal static class UnloadedActorPackageContracts
             repeated.Get(actor).PackageMotion?.Seconds == 12.5 && repeated.PendingProcedureCaptureCount == 1,
             "A-to-B-to-A handoff resumed its old physical clock or collapsed the new lifecycle.");
         Console.WriteLine("OPENNV_UNLOADED_RETAINED_NATIVE_PASS unchangedPose=true unchangedClock=true noRandomDraw=true cold=true noEventReplay=true nativePublicationRequired=true sourceDriftRefused=true fixture=no-native-body");
+    }
+
+    private static void CheckRetainedMarker()
+    {
+        var directory = Directory.CreateTempSubdirectory("opennv-unloaded-marker-history-").FullName;
+        try
+        {
+            byte[] Join(params byte[][] values) => values.SelectMany(value => value).ToArray();
+            byte[] Field(string name, byte[] data)
+            {
+                var bytes = new byte[6 + data.Length]; Encoding.ASCII.GetBytes(name).CopyTo(bytes, 0);
+                BinaryPrimitives.WriteUInt16LittleEndian(bytes.AsSpan(4), checked((ushort)data.Length));
+                data.CopyTo(bytes, 6); return bytes;
+            }
+            byte[] Record(string name, uint id, params byte[][] fields)
+            {
+                var data = Join(fields); var bytes = new byte[24 + data.Length];
+                Encoding.ASCII.GetBytes(name).CopyTo(bytes, 0);
+                BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(4), (uint)data.Length);
+                BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(12), id); data.CopyTo(bytes, 24); return bytes;
+            }
+            var references = Join(Record("ACHR", 0x900, Field("NAME", BitConverter.GetBytes(0x700u)), Field("DATA", new byte[24])),
+                Record("REFR", 0x901, Field("NAME", BitConverter.GetBytes(0x710u)), Field("DATA", new byte[24])));
+            var group = new byte[24 + references.Length]; Encoding.ASCII.GetBytes("GRUP").CopyTo(group, 0);
+            BinaryPrimitives.WriteUInt32LittleEndian(group.AsSpan(4), (uint)group.Length);
+            BinaryPrimitives.WriteUInt32LittleEndian(group.AsSpan(8), 0x800);
+            BinaryPrimitives.WriteInt32LittleEndian(group.AsSpan(12), 6); references.CopyTo(group, 24);
+            var packageData = new byte[12]; packageData[4] = 12;
+            var location = new byte[12]; location[0] = 3;
+            File.WriteAllBytes(Path.Combine(directory, "MarkerHistory.esm"), Join(
+                Record("TES4", 0, Field("HEDR", new byte[12])), Record("NPC_", 0x700),
+                Record("PACK", 0x720, Field("EDID", Encoding.ASCII.GetBytes("MarkerHistorySandbox\0")),
+                    Field("PKDT", packageData), Field("PLDT", location), Field("IDLC", [0]), Field("POBA", [])),
+                Record("IDLM", 0x710, Field("IDLF", [0]), Field("IDLC", [0]), Field("IDLT", BitConverter.GetBytes(0f))),
+                Record("CELL", 0x800, Field("DATA", [1])), group));
+            using var records = FalloutPluginStack.Load(directory, ["MarkerHistory.esm"]);
+            using var world = new FalloutReferenceWorld(records);
+            FalloutFormKey Key(uint id) => new("MarkerHistory.esm", id);
+            string Hash(uint id) => FalloutActorFurnitureContinuation.RecordHash(records.GetEffective(Key(id)));
+            var actor = Key(0x900); var marker = Key(0x901); var state = world.Get(actor);
+            var packages = new FalloutUnloadedActorPackages(records, world, new(records), null, null,
+                (_, _) => throw new InvalidDataException("Marker handoff replayed source effects."), () => 1);
+            world.UnloadedPackages = packages;
+            var events = new FalloutPackageEvents((_, _) => { });
+            events.Change(FalloutScriptPackage.Read(records.GetEffective(Key(0x720))));
+            var assignment = FalloutActorPackageAssignment.Capture(records, events)!;
+            state.PackageAssignment = assignment;
+            state.Animation.Change("meshes/fixture/idle.kf", new('a', 64)); state.Animation.Advance(.5);
+            state.PackageMotion = new(assignment.Package, assignment.Sha256, "meshes/fixture/idle.kf", new('a', 64),
+                .5, false, [0, 0, 0], [0, 0, 0, 1], Sandbox: new(FalloutSandboxActivity.IdleMarker, 9, 1,
+                    new FalloutSandboxPreferences().Capture(), marker));
+            var retained = new FalloutActorSandboxMarkerContinuation(assignment, events.Revision, events.LastEvent,
+                events.LastPackage, Hash(0x720), 123, .75, null, assignment.Package,
+                new(false, false, false, false, false, false, 0), null, marker, Key(0x710), Hash(0x710),
+                FalloutSandboxMarkerPhase.Approach, [0, 0, 0]);
+            state.SandboxMarker = retained;
+            retained.Validate(records, world, state);
+            Check(world.ReserveIdleMarker(marker, 0, actor, world.IdleMarkerOccupied), "Marker history lost its source reservation.");
+            var random = state.SoundRandom.State;
+            var before = JsonSerializer.Serialize(world.Capture());
+            for (var handoff = 0; handoff < 2; ++handoff)
+            {
+                packages.Retain(actor, events);
+                var incoming = new FalloutPackageEvents((_, _) => throw new InvalidDataException("Marker restoration replayed a source event."));
+                packages.BindNative(actor, incoming);
+                Check(incoming.Active is null && incoming.Revision == 0 && incoming.LastEvent is null && incoming.LastPackage is null,
+                    "Unloaded handoff consumed the marker owner's package history.");
+                retained.Assignment.Bind(records, incoming);
+                incoming.RestoreHistory(retained.EventRevision, retained.LastEvent, retained.LastPackage);
+                Check(incoming.Active?.Form == retained.Package && !incoming.Done && incoming.Revision == 1 &&
+                    incoming.LastEvent == "POBA" && incoming.LastPackage == retained.Package &&
+                    world.PendingPackageEventCount == 0 && state.SoundRandom.State == random &&
+                    world.OwnsIdleMarker(marker, 0, actor) && JsonSerializer.Serialize(world.Capture()) == before,
+                    "Warm marker restoration changed its consumed lifecycle, reservation, motion or randomness.");
+                events = incoming;
+            }
+            Console.WriteLine("OPENNV_UNLOADED_MARKER_HISTORY_PASS warmRebind=true repeated=true markerHistoryOwner=true noEventReplay=true unchangedContinuation=true fixture=no-native-body");
+        }
+        finally { Directory.Delete(directory, true); }
     }
 
     internal static byte[] StageCondition(uint quest)

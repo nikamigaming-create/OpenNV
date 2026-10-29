@@ -24,61 +24,55 @@ them in the integrated product. Continue until the target works.
 
 ## Current implementation boundary
 
-The merged baseline is `2559a404` (PR #328), with required local gate, selected
-owned speech audit, diff check and all five hosted checks passed. Local main
-equals origin/main; current branch `codex/native-arrival-continuation` starts there.
-Complete campaign, retail
-presentation, sustained 4K60 and physical XR acceptance remain unmet.
+The merged baseline is `c99d7f21` (PR #329), with the required local gate,
+selected owned/native audits, diff check and all five hosted checks passed.
+Local main equals origin/main. Current branch `codex/sandbox-sleep-continuation`
+contains the reviewed source Sleep/marker/query-retirement repairs and selected
+unchosen-meal failure capture; full publication validation remains pending.
 
-Actual ExportRelease d6367556 continued tutorial 20, then rifle practice, hostile
-gecko kills and corpse Take All reached tutorial 50 with Gecko Meat 1/HP 100.
-That checkpoint supported the next connected continuation; no opening or
-questionnaire replay is needed.
+Current ordinary gameplay is beyond the opening and well lesson. Receipt export
+`440e7ae0` Continued the ingredient checkpoint, reached the campfire through
+ordinary movement, crafted Healing Powder and completed F5 command 263 at
+10:19:05.997 UTC without save/cleanup error. VCG03 15d912 objectives 10/20/30 are
+complete and 40 is displayed/incomplete. Canonical SHA256 is
+`5D7BDDD425DBB0259B55DAB97A0E675B0267A41349D5229CDD0A779A17A45BA8`.
+The next needed candidate launch must Continue this cooking save toward objective
+40, Sunny/Trudy, nearby trading and Caravan. Never replay opening, ingredients or
+cooking unless actual authoritative state requires it. Newest Continue remains
+unverified until that ordinary launch.
 
-The patch closes the reached Cheyenne finite-idle return and shutdown-capture
-failure, transfers validated marker reservations during world restore, and
-enumerates actual furniture positions before testing ordinal permission bits.
-Actual Continue publishes both formerly missing marker NPCs. The shipped
-lawn-chair mismatch and synthetic cases ground the decoder fix; physical entry
-into that chair and retail surplus-bit parity remain unverified.
+Marker actor 10a72b now publishes without its prior duplicate-history failure.
+Sunny's Sleep 176ad3 selected, began native travel and handed off on schedule to
+0200d5 without a surviving error. Physical bed arrival/wake remains open. The
+unchosen-meal failure receipt passes synthetic contracts; its live fault capture
+remains unverified because the original two-food error did not recur before the
+successful save. Do not call retained failure an Eat behavior implementation.
 
-Bounded ordinary VATS selection/cancel/two-miss execution now produces actual
-shots, ammunition and AP effects. Hit/damage, full VATS and a complete Caravan
-match remain untested. Active SayTo saving lacks a structured channel continuation;
-background creature Find/Food remains unbound. Do not substitute waiting, a
-Sandbox Eat activity, or inventory-only acquisition for those missing owners.
+During objective 40 travel, actor 157c8f selected IdleMarker activity 4/target
+157cc0 and reached an unqualified script-visible procedure query. Detailed state
+284 is the bounded diagnosis fixture. The game closed normally without
+superseding the cooking save. Those bounded repairs are now reviewed/frozen;
+selected source/contract checks pass. Integrated export 92183296 Continued the
+saved Healing Powder with healthy owners. Final inherited-IDLE phase observation
+is contract-tested after that candidate. The mandatory publication gate and diff
+check pass; checked publication is the current boundary. Next play must keep the
+bot stopped until continuous manual traversal clears the elevated rock corridor,
+then continue Sunny/Trudy and ordinary trade/Caravan.
 
-PR #328 adds source-text timing for audio/LIP-absent responses,
-authored furniture endpoint approach and qualified Sandbox occupied/reselection
-exit procedure codes. ExportRelease bb459162 continued tutorial 50, completed the
-next well encounters and Sunny dialogue, marked tutorial 10a214 completed and
-entered gathering quest 15d912 stage 10. F5 command157 completed at 07:36:11.819
-UTC with save/cleanup errors null and no blocked capture owners; this forward
-save advanced the canonical profile. The minimal exit-phase extension no longer blocks actual
-floor activity reselection/re-entry and saving. The game closed normally. Both
-ingredients remained needed at that point. Ordinary Continue163 restored it
-successfully; directed travel/activation then added BrocFlower 1. F5 command171
-saved that ingredient at 08:04:32.395 UTC without error. Ordinary travel/combat and
-activation then added Xander Root; F5 command175 saved both ingredients at
-08:13:25.160 UTC, HP 99, no save/cleanup error. Objective10 is complete and
-objective20 displayed; the next interaction is Sunny at the campfire.
-The latest save explicitly retains newly streamed raven 17390a's failed source
-locomotion group binding. The next block owns that reached source failure and a
-separate measured terminal physical-arrival mismatch, under coordinator file
-allocation. The full mandatory gate, selected owned speech audit, diff check and
-all five hosted checks passed; PR #328 completed this publication boundary.
-The frozen arrival candidate 8c2a5baf passes selected native contracts and owned
-Wander source checks. Actual Continue and native receipt retirement/new goals
-were observed, then Sunny's instructions and F5 command 189 saved both ingredients
-at 08:40:14.460 UTC with HP 99/errors null. The latest checkpoint has objectives 10/20
-complete and 30 displayed. Its next Continue and actual cooking remain open; the
-full publication gate and diff check pass; coordinator review and checked
-publication remain pending for this candidate.
-Continue the actual crafting objectives/ingredients and campfire
-interaction; do not follow an unrelated bot-selected quest as crafting evidence.
-Native 3840x2160 travel median 21.2512 ms also fails the 4K60 target; shared
-movement costs are retained for the next performance block after saving works.
-No arrival, selected feature check or plausible frame establishes acceptance.
+Sustained native 4K60, physical XR144, complete campaign execution and matched
+retail pixels/audio remain unmet. Active non-radio speech saving, raven source
+locomotion, background creature Find/Food, complete Caravan and full system
+coverage remain explicit gaps. Neither a successful arrival nor selected feature
+checks establishes complete movement or parity.
+
+Final-phase export dcf66477 also Continued the saved Healing Powder successfully.
+A later actor 157c8f transition exposed bound HeadTrack/face-morph scalar snapshot
+support as the next saving owner; no F5 overwrote the cooking checkpoint. Normal
+quit disposed source owners. PR #330 also fixes native query temporary ownership
+found by hosted CI: focused allocation checks and the fresh full required gate
+pass with the strict assertion unchanged. Checked hosted publication remains the
+boundary; typed-scalar transition support belongs to the next fresh branch.
+
 ## One implementation and one build
 
 - Use the shared checkout and one active `codex/` feature branch based on current

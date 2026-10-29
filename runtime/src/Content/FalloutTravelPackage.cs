@@ -100,32 +100,7 @@ internal sealed record FalloutTravelPackage(FalloutFormKey Form, uint Flags, int
                 throw new InvalidDataException("Saved Travel location differs from its winning reference owner.");
         }
         if (records.GetEffective(world.Get(actor).Base).Signature == "NPC_")
-        {
-            if (progress.PortalArrival is not null)
-            {
-                world.ValidateTravelPortalArrival(actor, progress);
-                return;
-            }
-            if (progress.NavigationSha256 is null || !progress.Complete &&
-                progress.RouteWaypoints is not { Length: > 0 } && progress.RouteFailure is null && !progress.RoutePending)
-                throw new NotSupportedException("Saved NPC marker Travel lacks its native route cursor and source identity.");
-            var navigation = progress.RouteCell is { } routeCell
-                ? world.TravelNavigation(routeCell) : FalloutNavigationSources.Cell(records, progress.Cell);
-            if (progress.RouteCell is { } currentCell &&
-                world.TravelRegion(currentCell) != world.TravelRegion(world.Placement(actor).Cell))
-                throw new InvalidDataException("Saved Travel route is outside the actor's authoritative placement.");
-            if (progress.PortalDoor is { } door)
-            {
-                if (progress.Complete || world.TravelRegion(world.Placement(door).Cell) !=
-                    world.TravelRegion(world.Placement(actor).Cell))
-                    throw new InvalidDataException("Saved Travel portal is outside its unfinished native route leg.");
-                world.ValidateTravelPortalLeg(actor, door, progress.Cell);
-            }
-            else if (world.TravelRegion(world.Placement(actor).Cell) != world.TravelRegion(progress.Cell))
-                throw new InvalidDataException("Saved Travel lacks the portal leg to its other-region destination.");
-            if (!progress.NavigationSha256.Equals(navigation.SourceSha256, StringComparison.OrdinalIgnoreCase))
-                throw new InvalidDataException("Saved NPC Travel route differs from its winning NAVM source.");
-        }
+            ValidateNativeNpcRoute(records, world, actor, progress);
         else
         {
             if (WeaponDrawn || ContinueCombat || NoCombatAlert || ContinueIfPlayerNear || progress.RouteCell is not null ||
@@ -138,5 +113,28 @@ internal sealed record FalloutTravelPackage(FalloutFormKey Form, uint Flags, int
                 world.ValidateTravelPortalArrival(actor, progress);
             }
         }
+    }
+
+    internal static void ValidateNativeNpcRoute(FalloutPluginStack records, FalloutReferenceWorld world,
+        FalloutFormKey actor, FalloutTravelProgress progress)
+    {
+        if (progress.PortalArrival is not null) { world.ValidateTravelPortalArrival(actor, progress); return; }
+        if (progress.NavigationSha256 is null || !progress.Complete &&
+            progress.RouteWaypoints is not { Length: > 0 } && progress.RouteFailure is null && !progress.RoutePending)
+            throw new NotSupportedException("Saved NPC destination lacks its native route cursor and source identity.");
+        var navigation = progress.RouteCell is { } routeCell
+            ? world.TravelNavigation(routeCell) : FalloutNavigationSources.Cell(records, progress.Cell);
+        if (progress.RouteCell is { } currentCell && world.TravelRegion(currentCell) != world.TravelRegion(world.Placement(actor).Cell))
+            throw new InvalidDataException("Saved destination route is outside the actor's authoritative placement.");
+        if (progress.PortalDoor is { } door)
+        {
+            if (progress.Complete || world.TravelRegion(world.Placement(door).Cell) != world.TravelRegion(world.Placement(actor).Cell))
+                throw new InvalidDataException("Saved portal is outside its unfinished native route leg.");
+            world.ValidateTravelPortalLeg(actor, door, progress.Cell);
+        }
+        else if (world.TravelRegion(world.Placement(actor).Cell) != world.TravelRegion(progress.Cell))
+            throw new InvalidDataException("Saved destination lacks its other-region portal leg.");
+        if (!progress.NavigationSha256.Equals(navigation.SourceSha256, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException("Saved NPC destination route differs from its winning NAVM source.");
     }
 }

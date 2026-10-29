@@ -55,9 +55,11 @@ internal sealed partial class FalloutPlayerInventory
             else source.RemoveCore(item.FormKey, item.Count, silent: true);
         }
         Replace(source.Capture());
+        _traversal = source._traversal;
         if (destination is not null)
         {
             destination.Replace(target!.Capture());
+            destination._traversal = target!._traversal;
         }
     }
 
@@ -75,6 +77,7 @@ internal sealed partial class FalloutPlayerInventory
         var copy = new FalloutPlayerInventory();
         var snapshot = Capture();
         copy.Restore(snapshot.Inventory, snapshot.EquippedRuntimeFormIds.ToArray(), snapshot.InventoryRandomState);
+        copy._traversal = _traversal;
         return copy;
     }
 
@@ -86,6 +89,7 @@ internal sealed partial class FalloutPlayerInventory
         _items.Clear(); foreach (var pair in validated._items) _items.Add(pair.Key, pair.Value);
         _equipped.Clear(); _equipped.UnionWith(validated._equipped);
         _random = validated._random;
+        _traversal = null;
         ++Revision;
     }
 }

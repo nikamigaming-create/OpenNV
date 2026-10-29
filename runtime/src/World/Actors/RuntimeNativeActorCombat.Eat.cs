@@ -145,12 +145,17 @@ internal sealed partial class RuntimeNativeActorCombat
         if (activity.Target is { } target) item = _world.Get(target).Base;
         else
         {
-            var foods = _world.Inventory(_state.Reference, context.Level(), context.Globals).Contents.Items
+            var inventory = _world.Inventory(_state.Reference, context.Level(), context.Globals).Contents;
+            var foods = inventory.Items
                 .Where(item => item.Count > 0 && _world.IsActorFood(item.FormKey)).ToArray();
-            if (foods.Length != 1) throw new NotSupportedException(
+            var orderedFoods = inventory.TraversalItems?.Where(food => food.Count > 0 && _world.IsActorFood(food.FormKey)).ToArray();
+            if (foods.Length > 1 && orderedFoods is null) throw new FalloutSandboxMealSelectionException(foods.Select(food =>
+                new FalloutSandboxFoodInput(food.FormKey,
+                    Convert.ToHexString(SHA256.HashData(_records.GetEffective(food.FormKey).ReadData())), food.Count)).ToArray());
+            if (foods.Length == 0) throw new NotSupportedException(
                 $"Eat inventory selection requires one qualified food kind; found {foods.Length}: " +
                 string.Join(", ", foods.Select(food => $"{food.FormKey} x{food.Count}")) + ".");
-            item = foods[0].FormKey;
+            item = (orderedFoods ?? foods)[0].FormKey;
         }
         var definition = FalloutIngestible.Read(_records, item);
         return new(item, definition.Hash, activity.Target);

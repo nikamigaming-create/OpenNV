@@ -30,6 +30,9 @@ internal static partial class FurnitureContracts
             File.WriteAllBytes(Path.Combine(directory, "Find.esp"), Join(Header("Seats.esm"),
                 Package(0x01000400, 2, 11), Package(0x01000401, 0, 0x901), Package(0x01000402, 1, 0x710),
                 Package(0x01000403, 2, 12), Package(0x01000404, 2, 11, count: 1), Package(0x01000405, 2, 11, flags: 0x9006),
+                SleepFixture(0x01000406, 1, 0x800), SleepFixture(0x01000407, 0, 0x905, 5),
+                SleepFixture(0x01000408, 2, 0, 5), SleepFixture(0x01000409, 3, 0, 5),
+                SleepFixture(0x0100040a, 4, 0), SleepFixture(0x0100040b, 1, 0x800, flags: 0x40000000),
                 Record("SCPT", 0x01000500, Field("SCRO", BitConverter.GetBytes(0x900u)),
                     Field("SCRO", BitConverter.GetBytes(0x90au)),
                     Field("SCRO", BitConverter.GetBytes(0x901u)), Field("SCRO", BitConverter.GetBytes(0x14u))),
@@ -46,6 +49,7 @@ internal static partial class FurnitureContracts
                 "Furniture positions outside the lower thirty mask bits wrapped into an enabled ordinal.");
             Reject(() => FalloutFurnitureSource.ReadSeats(records, permitted, FurnitureMarkers(0)));
             var cell = FalloutCellSceneReader.Read(records, Key(0x800)); world.LoadCell(cell);
+            SleepContracts(records, cell);
             var source = FalloutFindFurniturePackage.Read(records.GetEffective(new("Find.esp", 0x400)));
             var actor = Key(0x900); var chair = Key(0x901); var otherActor = Key(0x90a); var player = Key(0x14);
             var sandbox = new FalloutSandboxPackage(new("Find.esp", 0x400), 0, 0, Key(0x905), 5, new(31));

@@ -1052,6 +1052,14 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
                 _ = validated.InventoryOwner(snapshot.Reference);
                 instance.Inventory = new();
                 instance.Inventory.Restore(inventory, records);
+                if (inventory.Traversal is { } traversal)
+                {
+                    var basis = records.GetEffective(instance.Base);
+                    var sourceOwner = basis.Signature is "NPC_" or "CREA"
+                        ? FalloutActorTemplateOwner.Resolve(records, basis, 256, instance.Templates) : basis;
+                    if (traversal.SourceOwner != sourceOwner.FormKey)
+                        throw new InvalidDataException("Saved inventory traversal belongs to another source container.");
+                }
             }
             if (snapshot.ActorValues is { Count: > 0 } values)
             {
@@ -1135,7 +1143,7 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
             if (snapshot.InterruptedSandboxAdmission is { } interrupted)
             {
                 var actor = validated.Get(snapshot.Reference);
-                interrupted.Validate(records, actor);
+                interrupted.ValidateInterrupted(records, actor);
                 actor.InterruptedSandboxAdmission = interrupted.Copy();
                 actor.ProcedureCaptureBlocker = FalloutSandboxPackage.CaptureBlockerPrefix + interrupted.Error;
             }
@@ -1188,9 +1196,21 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
             if (snapshot.PackageMotion is { } staleMotion && snapshot.PackageAssignment is { } assignment &&
                 assignment.Package != staleMotion.Package) continue;
             if (snapshot.PackageMotion?.Travel is { } travel)
-                FalloutTravelPackage.Read(records.GetEffective(snapshot.PackageMotion.Package),
-                    ownsIdleCollection: records.GetEffective(validated.Get(snapshot.Reference).Base).Signature == "NPC_")
-                    .Validate(records, validated, snapshot.Reference, travel);
+            {
+                if (records.GetEffective(validated.Get(snapshot.Reference).Base).Signature == "NPC_")
+                    FalloutPackageTravelGoal.Read(records, validated, snapshot.Reference,
+                        records.GetEffective(snapshot.PackageMotion.Package), snapshot.PackageMotion.Sleep)
+                        .Validate(records, validated, snapshot.Reference, travel);
+                else FalloutTravelPackage.Read(records.GetEffective(snapshot.PackageMotion.Package))
+                        .Validate(records, validated, snapshot.Reference, travel);
+            }
+            if (snapshot.PackageMotion?.Sleep is { } sleep)
+            {
+                FalloutSleepPackage.Read(records.GetEffective(snapshot.PackageMotion.Package)).Validate(records, validated, snapshot.Reference, sleep);
+                if (sleep.Furniture && (snapshot.FurnitureContinuation is not { SleepPackage: true } ||
+                    snapshot.FurnitureContinuation.Furniture != sleep.Bed))
+                    throw new InvalidDataException("Physical Sleep has no matching furniture continuation.");
+            }
             if (snapshot.PackageMotion?.Guard is { } guard)
                 FalloutGuardPackage.Read(records.GetEffective(snapshot.PackageMotion.Package))
                     .Validate(records, validated, snapshot.Reference, guard);

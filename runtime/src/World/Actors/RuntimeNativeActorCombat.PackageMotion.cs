@@ -74,6 +74,11 @@ internal sealed partial class RuntimeNativeActorCombat
     {
         if (_state.PackageMotion is { } motion) _state.PackageMotion = motion with { EditorTravel = progress };
     }
+    internal void SetSleepProgress(FalloutActorSleepProgress progress)
+    {
+        if (_state.PackageMotion is not { } motion) throw new NotSupportedException("Sleep has no observed package motion.");
+        _state.PackageMotion = motion with { Sleep = progress };
+    }
     internal void SetTravelProgress(FalloutTravelProgress progress)
     {
         if (_state.PackageMotion is not { } motion) throw new NotSupportedException("Travel has no observed package motion.");
@@ -99,6 +104,7 @@ internal sealed partial class RuntimeNativeActorCombat
         // An actor can begin inside its source destination. This consumed
         // point records its observed stationary pose, with no invented edge.
         _pursuitPath = [_actor.GlobalPosition]; _pursuitCursor = 1;
+        _routePackage = _state.PackageMotion?.Package;
         _routeTarget = destination; _routeClock = 0; _routeStall = 0;
         _routeError = null; _routeFailures = 0;
     }
@@ -145,6 +151,20 @@ internal sealed partial class RuntimeNativeActorCombat
         PackageMoving = false;
         _packageWeapon?.Root.Hide();
         if (!OwnsPose && _mover is not null) _mover.Velocity = Vector3.Up * _mover.Velocity.Y;
+    }
+
+    // Accepted package replacement retires disposable navigation, independently
+    // of stopping its pose. A committed door activation remains world-owned.
+    internal void RetirePackageMotionNavigation(FalloutFormKey outgoingPackage)
+    {
+        if (_routePackage != outgoingPackage || OwnsPose) return;
+        if (_routeSearch is not null) { DisposeRouteSearch(); ++_retiredPursuitSearches; }
+        InvalidatePackageRouteReceipt();
+        ResetDoorNavigation();
+        _routePackage = null; _routeIntent = null; _routeArrival = null; _routeWork = null;
+        _routeTarget = Vector3.Zero; _routeEnd = Vector3.Zero;
+        _routeClock = 0; _routeStall = 0; _waypointDistance = float.PositiveInfinity;
+        _routeError = null; _routeFailures = 0; _coarseRouteError = null; _routeRefinements = 0;
     }
 
     internal void RestorePackageMotion()
@@ -203,6 +223,7 @@ internal sealed partial class RuntimeNativeActorCombat
         }
         if (!Dead && motion.Travel is { NavigationSha256: not null } travel)
         {
+            _routePackage = motion.Package;
             _pursuitPath = travel.RouteWaypoints!.Select(point => new Vector3(point[0], point[1], point[2])).ToArray();
             _pursuitCursor = travel.RouteCursor;
             _routeTarget = new(travel.RouteTarget![0], travel.RouteTarget[1], travel.RouteTarget[2]);
@@ -313,7 +334,8 @@ internal sealed partial class RuntimeNativeActorCombat
             retained?.Package == package.FormKey ? retained.Travel : null,
             retained?.Package == package.FormKey ? retained.Guard : null,
             Wander: retained?.Package == package.FormKey ? retained.Wander : null,
-            Sandbox: retained?.Package == package.FormKey ? retained.Sandbox : null);
+            Sandbox: retained?.Package == package.FormKey ? retained.Sandbox : null,
+            Sleep: retained?.Package == package.FormKey ? retained.Sleep : null);
         if (deferred is not null)
         {
             _state.DeferredPackageContinuation = null;

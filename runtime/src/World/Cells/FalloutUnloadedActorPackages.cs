@@ -223,7 +223,7 @@ internal sealed class FalloutUnloadedActorPackages(FalloutPluginStack records, F
             events.Restore(active, done);
         // These native continuations restore their own complete lifecycle.
         // Ordinary movement has no second history owner.
-        if (previous is not null && state.FurnitureContinuation is null && state.DialogueContinuation is null &&
+        if (previous is not null && state.FurnitureContinuation is null && state.DialogueContinuation is null && state.SandboxMarker is null &&
             state.PackageBindingFailure is null && state.SelectionFailure is null && state.PendingPackageSelection is null)
             events.RestoreHistory(previous.Revision, previous.LastEvent, previous.LastPackage);
         _actors.Remove(actor);

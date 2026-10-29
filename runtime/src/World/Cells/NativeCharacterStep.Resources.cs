@@ -4,6 +4,22 @@ namespace OpenNV.Runtime.World.Cells;
 
 internal static partial class NativeCharacterStep
 {
+    private static PhysicsRayQueryParameters3D CreateSupportRay(Vector3 from, Vector3 to, uint mask, Rid excluded)
+    {
+        var exclusions = new Godot.Collections.Array<Rid>();
+        try
+        {
+            exclusions.Add(excluded);
+            return PhysicsRayQueryParameters3D.Create(from, to, mask, exclusions);
+        }
+        finally
+        {
+            // The typed wrapper is not disposable. Its explicit conversion
+            // exposes the storage allocated above, not a borrowed ray getter.
+            ((Godot.Collections.Array)exclusions).Dispose();
+        }
+    }
+
     // One planner cursor or mover owns these mutable native query objects.
     // Every support query resolves the body's live world as before.
     internal sealed class QueryResources(CharacterBody3D body) : IDisposable
@@ -39,7 +55,8 @@ internal static partial class NativeCharacterStep
         internal PhysicsRayQueryParameters3D SupportRay(CharacterBody3D current)
         {
             RequireOwner(current);
-            _ray ??= PhysicsRayQueryParameters3D.Create(Vector3.Zero, Vector3.Zero, current.CollisionMask, [_rid]);
+            if (_ray is null)
+                _ray = CreateSupportRay(Vector3.Zero, Vector3.Zero, current.CollisionMask, _rid);
             _ray.CollisionMask = current.CollisionMask;
             return _ray;
         }

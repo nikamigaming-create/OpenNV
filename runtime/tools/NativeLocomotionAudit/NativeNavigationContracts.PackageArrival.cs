@@ -1,3 +1,5 @@
+using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 using Godot;
 using OpenNV.Runtime.Content;
@@ -77,9 +79,62 @@ internal static partial class NativeNavigationContracts
             if ((final with { Request = request with { Intent = invalid } }).Arrived(identity, finalPath, endpoint, true, 1))
                 throw new InvalidOperationException("A mismatched final request or source region became package arrival.");
 
+        CheckPackageRouteRetirement(motion, request, final);
         CheckTerminalFloorIndex();
         Console.WriteLine("OPENNV_PACKAGE_ROUTE_RECEIPT_PASS terminalPrefixThenReference=true originalTargetAndRadius=true " +
             "exactSuccessfulPath=true walkedAndGrounded=true wrongFloorRefused=true staleOwnersRefused=true sourceHash=true terminalTriangle=true");
+    }
+
+    private static void CheckPackageRouteRetirement(FalloutActorPackageMotion motion,
+        NativePackageRouteRequest request, NativePackageRouteReceipt receipt)
+    {
+        var owner = new RuntimeNativeActorCombat();
+        CharacterBody3D? actor = null;
+        try
+        {
+            actor = new CharacterBody3D();
+            actor.Position = new(1, 2, 3); actor.Velocity = new(4, 5, 6);
+            var state = (FalloutReferenceInstance)RuntimeHelpers.GetUninitializedObject(typeof(FalloutReferenceInstance));
+            state.PackageMotion = motion;
+            var disposed = false;
+            IEnumerable<IReadOnlyList<Vector3>?> Search()
+            {
+                try { yield return null; }
+                finally { disposed = true; }
+            }
+            using var search = Search().GetEnumerator(); search.MoveNext();
+            void Set(string name, object? value) => typeof(RuntimeNativeActorCombat)
+                .GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(owner, value);
+            object? Read(string name) => typeof(RuntimeNativeActorCombat)
+                .GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(owner);
+            Set("_state", state); Set("_actor", actor); Set("_routePackage", motion.Package);
+            Set("_routeSearch", search); Set("_pursuitPath", receipt.Path);
+            Set("_packageRouteRequest", request); Set("_packageRouteReceipt", receipt);
+            var pose = actor.Transform; var velocity = actor.Velocity;
+            owner.RetirePackageMotionNavigation(new("fixture.esm", 999));
+            state.KnockedDown = true;
+            owner.RetirePackageMotionNavigation(motion.Package);
+            state.KnockedDown = false;
+            Set("_routePackage", null); // A combat query has no package owner.
+            owner.RetirePackageMotionNavigation(motion.Package);
+            if (disposed || !owner.PackageRoutePending || !ReferenceEquals(Read("_pursuitPath"), receipt.Path) ||
+                !ReferenceEquals(Read("_packageRouteReceipt"), receipt))
+                throw new InvalidOperationException("Package replacement retired another package or combat-owned navigation.");
+            Set("_routePackage", motion.Package);
+            owner.RetirePackageMotionNavigation(motion.Package);
+            owner.RetirePackageMotionNavigation(motion.Package);
+            if (!disposed || owner.PackageRoutePending || owner.PackageRouteRestorable ||
+                Read("_routePackage") is not null || Read("_packageRouteRequest") is not null ||
+                Read("_packageRouteReceipt") is not null || actor.Transform != pose || actor.Velocity != velocity ||
+                !ReferenceEquals(state.PackageMotion, motion) || (int)Read("_retiredPursuitSearches")! != 1)
+                throw new InvalidOperationException("Accepted package retirement retained its query/receipt or changed physical/gameplay progress.");
+            Console.WriteLine("OPENNV_PACKAGE_ROUTE_RETIREMENT_PASS exactOwner=true combatPreserved=true disposedOnce=true pathAndReceiptCleared=true poseVelocityAndProgressUnchanged=true fixture=disposable-query");
+        }
+        finally
+        {
+            try { owner.Free(); }
+            finally { actor?.Free(); }
+        }
     }
 
     private static void CheckTerminalFloorIndex()

@@ -5,7 +5,7 @@ using OpenNV.Runtime.Gameplay.State;
 namespace OpenNV.Runtime.World.Cells;
 
 internal sealed record FalloutReferenceInventorySnapshot(FalloutOpeningInventoryGrant Contents,
-    IReadOnlyList<FalloutFormKey> Unequipped, bool InitialArmorResolved = false);
+    IReadOnlyList<FalloutFormKey> Unequipped, bool InitialArmorResolved = false, FalloutInventoryTraversal? Traversal = null);
 
 internal sealed class FalloutReferenceInventory
 {
@@ -16,13 +16,15 @@ internal sealed class FalloutReferenceInventory
     // An unresolved initial weapon choice is not an authoritative empty list.
     internal HashSet<FalloutFormKey> Unequipped { get; } = [];
     internal bool InitialArmorResolved { get; set; }
-    internal FalloutReferenceInventorySnapshot Capture() => new(Contents.Capture(), Unequipped.OrderBy(key => key.ToString(), StringComparer.Ordinal).ToArray(), InitialArmorResolved);
+    internal FalloutReferenceInventorySnapshot Capture() => new(Contents.Capture(), Unequipped.OrderBy(key => key.ToString(), StringComparer.Ordinal).ToArray(),
+        InitialArmorResolved, Contents.CaptureTraversal());
     internal void Restore(FalloutReferenceInventorySnapshot state, FalloutPluginStack records)
     {
         if (state.Unequipped is null || state.Unequipped.Distinct().Count() != state.Unequipped.Count ||
             state.Unequipped.Any(key => records.GetEffective(key).Signature is not ("ARMO" or "WEAP")))
             throw new InvalidDataException("Saved actor unequipped items are invalid.");
         Contents.Restore(state.Contents.Inventory, state.Contents.EquippedRuntimeFormIds.ToArray(), state.Contents.InventoryRandomState);
+        Contents.RestoreTraversal(records, state.Traversal);
         Unequipped.UnionWith(state.Unequipped);
         InitialArmorResolved = state.InitialArmorResolved;
     }
@@ -98,6 +100,7 @@ internal sealed partial class FalloutReferenceWorld
     {
         var fields = owner.ReadSubrecords().ToArray();
         var inventory = new FalloutReferenceInventory(randomState);
+        var declarations = new List<(FalloutFormKey Form, int Count, FalloutItemVariant? Extra)>();
         for (var index = 0; index < fields.Length; index++)
         {
             if (fields[index].Signature != "CNTO") continue;
@@ -116,11 +119,37 @@ internal sealed partial class FalloutReferenceWorld
                 var condition = BinaryPrimitives.ReadSingleLittleEndian(data[8..]);
                 var type = itemOwner is { } key ? records.GetEffective(key).Signature : null;
                 if (type is not (null or "NPC_" or "FACT")) throw new NotSupportedException("Actor item owner type is unbound.");
+                if (itemOwner is null && argument != 0)
+                    throw new NotSupportedException("Initial container order has an unrepresented ownerless COED argument.");
                 extra = new(count, condition, itemOwner, type == "NPC_" ? owner.Plugin.AdjustOptionalFormId(argument) : null,
                     type == "FACT" ? unchecked((int)argument) : null);
             }
-            inventory.Contents.Add(records, item, count, inventoryLevel, true, globals, extra);
+            declarations.Add((item, count, extra));
         }
+        // The source loader prepends CNTO occurrences, including duplicates.
+        declarations.Reverse();
+        var changed = new List<FalloutFormKey>();
+        foreach (var entry in declarations)
+        {
+            var additions = inventory.Contents.Add(records, entry.Form, entry.Count, inventoryLevel, true, globals, entry.Extra,
+                nativeContainerOrder: true);
+            if (records.GetEffective(entry.Form).Signature != "LVLI") continue;
+            // Resolve retains each temporary container's actual traversal.
+            // Changed entries merge in place and new forms append.
+            foreach (var addition in additions)
+                if (!changed.Contains(addition.Form)) changed.Add(addition.Form);
+        }
+        var forms = declarations.Where(entry => records.GetEffective(entry.Form).Signature != "LVLI")
+            .Select(entry => entry.Form).Distinct().Concat(changed).Distinct().ToArray();
+        // Repeated direct food rows use per-entry base counts in the native
+        // lookup. A flattened materialized-form history does not own those
+        // counts after consumption. Inventory remains real; multi-food choice
+        // keeps its explicit unknown-order boundary for this source shape.
+        var duplicateBaseFood = declarations.GroupBy(entry => entry.Form).Any(group => group.Count() > 1 &&
+            records.GetEffective(group.Key).Signature != "LVLI" && IsActorFood(group.Key));
+        if (!duplicateBaseFood)
+            inventory.Contents.RestoreTraversal(records, new(owner.FormKey,
+                Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(owner.ReadData())), forms));
         return inventory;
     }
 
@@ -132,6 +161,7 @@ internal sealed partial class FalloutReferenceWorld
             ? SourceInventory(records.GetEffective(records.RuntimeFormKey(7)), level, globals, random)
             : SourceInventory(InventoryOwner(reference), records.GetEffective(Get(reference).Base), level, globals, random);
         inventory.Contents.Replace(replacement.Contents.Capture());
+        inventory.Contents.RestoreTraversal(records, replacement.Contents.CaptureTraversal());
         inventory.Unequipped.Clear();
         inventory.InitialArmorResolved = false;
         if (records.GetEffective(InventoryBase(reference)).Signature == "NPC_") InvalidateActorAppearance(reference);

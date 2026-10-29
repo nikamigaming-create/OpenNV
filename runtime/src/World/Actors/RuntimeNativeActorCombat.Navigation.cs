@@ -71,6 +71,7 @@ internal sealed partial class RuntimeNativeActorCombat
     private NativeNavigationWorkSnapshot? _routeWork;
     private NativePackageRouteRequest? _packageRouteRequest;
     private NativePackageRouteReceipt? _packageRouteReceipt;
+    private FalloutFormKey? _routePackage;
     private long _packageRouteArrivals;
 
     private NativePackageRouteIdentity PackageRouteIdentity(FalloutFormKey package, Vector3 target, float radius, string sourceHash)
@@ -96,11 +97,12 @@ internal sealed partial class RuntimeNativeActorCombat
     }
 
     private void BeginNativeRouteSearch(NativeNavigationIntent intent, Func<Vector3, bool>? arrival,
-        NativePackageRouteRequest? request)
+        NativePackageRouteRequest? request, FalloutFormKey? package)
     {
         _pursuitPath = []; _pursuitCursor = 0;
         _waypointDistance = float.PositiveInfinity; _routeStall = 0;
         _packageRouteRequest = request; _packageRouteReceipt = null;
+        _routePackage = package;
         _routeIntent = intent; _routeArrival = arrival;
         _routeEnd = intent.Target; _routeArrivalRadius = intent.ArrivalRadius;
         _routeSpacing = Math.Max(.3f, _radius * 2);
@@ -154,7 +156,7 @@ internal sealed partial class RuntimeNativeActorCombat
                 // supported endpoint admits a new query, never final arrival.
                 ++_routeRequests;
                 _routeWork = null;
-                BeginNativeRouteSearch(approach, null, completed.Request with { Identity = current, Intent = approach });
+                BeginNativeRouteSearch(approach, null, completed.Request with { Identity = current, Intent = approach }, owner);
             }
         }
         if (_routeSearch is null && _routeClock <= 0 && (_pursuitCursor >= _pursuitPath.Length ||
@@ -169,6 +171,7 @@ internal sealed partial class RuntimeNativeActorCombat
             _routeTarget = target;
             _routeStall = 0;
             _waypointDistance = float.PositiveInfinity;
+            _routePackage = package;
             try
             {
                 var context = _context!;
@@ -188,7 +191,7 @@ internal sealed partial class RuntimeNativeActorCombat
                     ? new(PackageRouteIdentity(requestPackage, target, stoppingDistance, expected), source, intent, coarse.Length) : null;
                 // NAVM supplies bounded intent; the complete actor capsule and
                 // ordinary support/residency queries validate every guide edge.
-                BeginNativeRouteSearch(intent, SourceArrival(intent, coarse, source), request);
+                BeginNativeRouteSearch(intent, SourceArrival(intent, coarse, source), request, package);
             }
             catch (InvalidOperationException error)
             {

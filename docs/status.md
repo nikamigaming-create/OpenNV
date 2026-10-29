@@ -7,38 +7,45 @@ FO1 remains an incomplete classic preview with selected movement, inventory,
 equipment, door and save flows. Complete campaign execution and 1:1 3D art are
 unverified. See [current-work.md](current-work.md) for the active owner.
 
-The merged baseline is PR #328, `2559a404`, with its local mandatory gate,
-selected owned speech audit, diff check and all five hosted checks passed.
-Local main equals origin/main. Fresh branch `codex/native-arrival-continuation`
-starts there. The merged patch repairs unrecorded speech timing, authored
-furniture approach and Sandbox occupied/reselection procedure ownership.
+The merged baseline is PR #329, `c99d7f21`, with its full mandatory local gate,
+selected owned/native audits, diff check and all five hosted checks passed.
+Local main equals origin/main. Fresh branch `codex/sandbox-sleep-continuation`
+owns the next reached Sleep and marker lifecycle repairs.
 
-ExportRelease `bb459162` continued tutorial 50 at native 3840x2160, completed the
-next well encounters and Sunny's dialogue, and marked quest 10a214 completed
-(stored stage 50, objectives through 60 complete). Gathering quest 15d912 reached
-stage 10 with ingredient objective 10 incomplete. F5 command157 completed at
-07:36:11.819 UTC, cell 0e19c5, HP 100, save/cleanup errors null and no blocked
-capture owners. Normal Quit/Yes disposed source owners, then ordinary Continue163
-restored that forward save successfully. The current live session then harvested
-BrocFlower 1 and XanderRoot 1 through ordinary activation and source combat.
-F5 command175 generation2 saved both at 08:13:25.160 UTC, cell 0e1ab0, HP 99,
-save/cleanup errors null. Gathering objective10 is complete and objective20 is
-displayed; actual campfire cooking remains untested. The prior ingredient save
-explicitly retained raven17390a's source locomotion fault and consumed prefix.
-This latest checkpoint's next Continue is unverified.
-The raven source owner and separate measured terminal-arrival mismatch are the
-next allocated work.
-Returning to Sunny also exposed a GetSitting query without actor10a72b's physical
-furniture owner; a bounded campfire capsule route attempt stopped near source
-rock collision. Those attempts were not saved, and actual cooking remains open.
-The game closed normally before the next candidate build.
-Arrival candidate ExportRelease 8c2a5baf then Continued both ingredients,
-completed Sunny's instructions and saved with F5 command 189 at 08:40:14.460 UTC,
-cell 0e19cd, HP 99, errors null. Objectives 10/20 are complete and 30 displayed; cooking
-remains untested. Native receipt telemetry shows four creature owners reaching
-new legitimate destinations; this does not establish full movement or 4K60.
-Its full mandatory gate, selected native/owned checks and diff check pass;
-coordinator review and checked publication remain pending.
+Current coherent branch adds source-bound Sleep using existing travel/portal/bed
+owners, exact outgoing package-query retirement, sole marker history restoration,
+observed marker procedure phases, typed unchosen-meal failure capture and
+qualified forward inventory traversal. Selected native/contracts and owned
+Sleep/source-food audits pass; all runtime scopes are reviewed/frozen and the
+full publication gate is running. Missing inventory provenance, unknown insertions
+and duplicate direct-food order remain explicit. Fault persistence does not
+establish meal behavior or permit fabricated ingestion.
+
+Actual campfire cooking consumed BrocFlower/XanderRoot and produced Healing
+Powder 1. F5 command 263 completed at 10:19:05.997 UTC, HP 99, save/cleanup errors
+null and healthy owners. The canonical checkpoint has VCG03 objectives 10/20/30
+complete and 40 displayed/incomplete. Integrated export `92183296` Continued that
+cooking save successfully, with the item retained and no capture blocker.
+Marker 10a72b publishes without its earlier error; Sunny's selected Sleep 176ad3
+began native travel and handed off on schedule without a surviving error.
+Physical bed entry/wake and actual multi-food meal playback remain unverified.
+The earlier two-food exception did not recur before saving; its live fault
+capture is unverified beyond selected synthetic contracts. Final inherited-IDLE
+phase behavior has selected contract proof and was added after the 921 run.
+
+Objective 40 follow-up toward Sunny/Trudy remains unfinished. The bot kept
+planning back toward the elevated rock corridor; manual detours traversed parts
+of the area, without establishing physical impossibility or a new game blocker.
+Normal quit disposed source owners and preserved the successful cooking save.
+Next play uses continuous manual traversal with the bot stopped until clear of
+that area, then ordinary Sunny/Trudy, trade and Caravan progression.
+Final-phase export dcf66477 also Continued the saved Healing Powder successfully.
+A later actor 157c8f transition exposed bound HeadTrack/face-morph scalar snapshot
+support as the next saving owner; no F5 overwrote the cooking checkpoint. Normal
+quit disposed source owners. PR #330 also fixes native query temporary ownership
+found by hosted CI: focused allocation checks and the fresh full required gate
+pass with the strict assertion unchanged. Checked hosted publication remains the
+boundary; typed-scalar transition support belongs to the next fresh branch.
 
 The merged patch adds explicit source-text timing for audio/LIP-absent responses,
 authored furniture endpoint approach and source-qualified Sandbox occupied/exit
