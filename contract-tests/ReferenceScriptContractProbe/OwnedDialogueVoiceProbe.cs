@@ -3,9 +3,52 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Gameplay.State;
+using OpenNV.Runtime.World.Cells;
 
 internal static class OwnedDialogueVoiceProbe
 {
+    internal static void OpeningConversation(string root, string savePath)
+    {
+        var saved = JsonSerializer.Deserialize<FalloutNativeCampaignState>(File.ReadAllBytes(savePath))!;
+        RuntimeLiveContentSource.Configure(root, RuntimeLiveContentSource.FalloutNewVegasGame,
+            activePlugins: RuntimeLiveContentSource.ResolveVanillaPlugins(root), includeImplicitPlugins: false);
+        using var content = RuntimeLiveContentSource.Current!;
+        using var records = FalloutPluginStack.Load(content.PluginSources);
+        using var world = new FalloutReferenceWorld(records);
+        var quests = new FalloutQuestState(records);
+        quests.Restore(saved.Quests ?? throw new InvalidDataException("Opening save has no quest state."));
+        var globals = FalloutGlobalState.Read(records);
+        if (saved.Globals is { } savedGlobals) globals.Restore(savedGlobals);
+        var speaker = records.RuntimeFormKey(0x104c0f);
+        var actor = records.GetEffective(speaker);
+        var identity = FalloutDialogueSpeaker.Read(records, FalloutDialogueTopic.RequiredForm(actor, "NAME"));
+        var nullFaction = FalloutCondition.Read(records.GetEffective(records.RuntimeFormKey(0x140eb4)))
+            .Single(condition => condition.Kind == Function.GetInFaction && condition.Argument1 == 0);
+        var shared = new FalloutConditionRuntime(records, quests, world) { Globals = globals };
+        var context = new FalloutDialogueConditions(records, quests, speaker, identity,
+            runtime: condition => shared.Evaluate(condition, new(speaker, records.RuntimeFormKey(0x14))),
+            sitting: subject => subject == records.RuntimeFormKey(0x14) ? 3 :
+                throw new NotSupportedException("Opening audit has no other observed sitting owner."), world: world);
+        var conversation = new FalloutConversation(records, quests, condition =>
+        {
+            try { return context.Evaluate(condition); }
+            catch (Exception error)
+            {
+                throw new InvalidDataException($"Opening condition owner={condition.Owner.FormKey} function={condition.Kind} " +
+                    $"runOn={condition.RunOn} argument1={condition.Argument1:x8} argument2={condition.Argument2:x8} reference={condition.Reference:x8}", error);
+            }
+        }, (_, _) => { });
+        if (context.Evaluate(nullFaction) != 0)
+            throw new InvalidDataException("Owned null-faction predicate admitted membership.");
+        conversation.Start(identity.Actor, FalloutDialogueTopic.Find(records, "DIAL", "GREETING").FormKey);
+        if (conversation.Phase != "speaking" || conversation.Info is not { } selected ||
+            selected.Record.FormKey != records.RuntimeFormKey(0x107223) || selected.Quest != records.RuntimeFormKey(0x104c1c) ||
+            selected.Responses.Count == 0)
+            throw new InvalidDataException("Owned opening greeting did not select the reached psychology branch.");
+        Console.WriteLine($"OPENNV_OWNED_OPENING_CONVERSATION_PASS info={selected.Record.FormKey} phase={conversation.Phase} " +
+            "nullFaction=false resultScripts=unexecuted gameplay=separate");
+    }
+
     internal static void Unrecorded(string root, string savePath)
     {
         var saveBytes = File.ReadAllBytes(savePath);

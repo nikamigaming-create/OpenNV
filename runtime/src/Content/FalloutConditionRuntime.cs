@@ -146,7 +146,10 @@ internal sealed partial class FalloutConditionRuntime(FalloutPluginStack records
                 return Female(subject) == (condition.Argument1 == 1) ? 1 : 0;
             case Function.GetInFaction or Function.GetFactionRank:
                 SecondUnused(condition);
-                var rank = ActorFactions(subject).GetValueOrDefault(Form(condition, "FACT"), (sbyte)-1);
+                // A null faction is the native absent-membership sentinel,
+                // independent of the declaring plugin's master namespace.
+                var rank = condition.IsNullFormArgument1(records) ? (sbyte)-1 :
+                    ActorFactions(subject).GetValueOrDefault(Form(condition, "FACT"), (sbyte)-1);
                 return condition.Kind == Function.GetInFaction ? rank >= 0 ? 1 : 0 : rank;
             case Function.GetIsID: SecondUnused(condition); _ = records.GetEffective(condition.FormArgument1); return Base(subject) == condition.FormArgument1 ? 1 : 0;
             case Function.GetIsReference: SecondUnused(condition); return FalloutReferenceIdentity.Matches(records, subject, condition.FormArgument1) ? 1 : 0;

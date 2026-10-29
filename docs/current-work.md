@@ -15,6 +15,23 @@ codex/experimental-playtest-release. Eighteen
 unrelated classic import EOL changes remain preserved and excluded.
 No game is active. Recording and render trace are off.
 
+The packaged proof run on commit3719d55c restored fresh stage80, then ordinary
+movement/E physically seated the player on Ruined Couch103e55. Automatic Doc
+conversation failed because owned GREETING INFO140eb4 authors a null GetInFaction
+argument and shared dispatch incorrectly looked up FormID0 as FACT. No F5 changed
+the fresh checkpoint. The game closed normally and source owners were disposed.
+The retained471.033-second3840x2124 take is video-only; it does not verify audio
+or completion of the planned route. Original MKV and MP4 are in
+local/playtest-proof-20261029.
+
+The focused correction implements qualified null faction membership0/rank-1,
+preserves bound script forms and malformed nonzero rejection, and retains the
+original exception chain in local conversation diagnostics. Shared contracts pass;
+owned selection asserts VCG01 INFO107223 and speaking phase with result scripts
+explicitly unexecuted. Next: rebuild/pin the corrected package, Continue fresh80
+and advance the recorded route. Final full gate remains required before pushing
+this new runtime delta; the merged baseline's gate is already green.
+
 ## Merged shared state systems
 
 World-owned mutable FormLists retain ordered additions over immutable winning

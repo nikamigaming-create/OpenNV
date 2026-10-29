@@ -99,6 +99,14 @@ internal static partial class SharedConditionContracts
             Require(runtime.Evaluate(Query(Function.GetIsSex, 1), scope) == 1 &&
                 runtime.Evaluate(Query(Function.GetFactionRank, 0x01000032), scope) == 2,
                 "Shared traits did not use actual winning NPC fields.");
+            Require(runtime.Evaluate(Query(Function.GetInFaction), scope) == 0 &&
+                runtime.Evaluate(Query(Function.GetFactionRank), scope) == -1 &&
+                runtime.Evaluate(new FalloutConditionQuery(Query(Function.GetInFaction), Key(0x32)), scope) == 1 &&
+                runtime.Evaluate(new FalloutConditionQuery(Query(Function.GetFactionRank), Key(0x32)), scope) == 2 &&
+                runtime.Evaluate(new FalloutConditionQuery(Query(Function.GetInFaction, 0x01000032), records.RuntimeFormKey(0)), scope) == 0,
+                "Null faction sentinel or bound script form was mistaken for a source record.");
+            Reject(() => runtime.Evaluate(Query(Function.GetInFaction, 0x01000022), scope));
+            Reject(() => runtime.Evaluate(Query(Function.GetFactionRank) with { Argument2 = 1 }, scope));
             world.BindPlayerConditions(condition => condition.Kind switch
             {
                 Function.GetIsSex or Function.GetPCIsSex when condition.Argument1 <= 1 => condition.Argument1 == 1 ? 1 : 0,

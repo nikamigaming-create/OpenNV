@@ -5,6 +5,12 @@ using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.World.Cells;
 
+if (args is ["--owned-opening-conversation", var openingConversationRoot, var openingConversationSave])
+{
+    OwnedDialogueVoiceProbe.OpeningConversation(openingConversationRoot, openingConversationSave);
+    return;
+}
+
 if (args is ["--owned-unrecorded-speech", var unrecordedSpeechRoot, var unrecordedSpeechSave])
 {
     OwnedDialogueVoiceProbe.Unrecorded(unrecordedSpeechRoot, unrecordedSpeechSave);

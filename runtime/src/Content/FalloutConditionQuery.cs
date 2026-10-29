@@ -11,4 +11,6 @@ internal readonly record struct FalloutConditionQuery(FalloutCondition Declarati
     internal uint Argument2 => Declaration.Argument2;
     internal uint RunOn => Declaration.SubjectRunOn;
     internal FalloutFormKey FormArgument1 => BoundForm ?? Declaration.FormArgument1;
+    internal bool IsNullFormArgument1(FalloutPluginStack records) =>
+        BoundForm is { } bound ? records.RuntimeFormId(bound) == 0 : Argument1 == 0;
 }

@@ -32,6 +32,12 @@ rather than a successful SetEssential command with missing lifecycle behavior.
 SCDA instruction execution and general runtime reference identity/allocation/
 lifetime/persistence remain absent; source parsing is not a VM.
 
+Packaged Continue restored the fresh stage80 checkpoint and native player couch
+entry completed. Doc's automatic greeting exposed an authored null faction query;
+shared dispatch now preserves its no-membership/rank sentinel. Focused and actual
+owned greeting selection checks pass; ordinary progression on the corrected
+candidate remains pending. The blocked video-only take is retained privately.
+
 The merged batch adds source-bound Sleep using existing travel/portal/bed
 owners, exact outgoing package-query retirement, sole marker history restoration,
 observed marker procedure phases, typed unchosen-meal failure capture and
