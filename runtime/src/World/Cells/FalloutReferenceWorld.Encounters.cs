@@ -12,6 +12,15 @@ internal sealed partial class FalloutReferenceWorld
     internal int EnterEncounterCell(FalloutFormKey cell, int playerLevel) =>
         CellEncounterZone(cell) is { } zone ? EncounterLevel(zone, playerLevel) : playerLevel;
 
+    internal bool IsInRegion(FalloutFormKey reference, FalloutFormKey region,
+        FalloutReferencePlacement? player, float unitsToMetres)
+    {
+        var placement = SpatialPlacement(reference, player, unitsToMetres);
+        return FalloutExteriorClimate.ContainsRegion(records, region,
+            FalloutCellSceneReader.ParentWorldspace(records.GetEffective(placement.Cell)),
+            placement.Position[0], placement.Position[1]);
+    }
+
     internal bool IsInZone(FalloutFormKey reference, FalloutFormKey zone,
         FalloutReferencePlacement? player, float unitsToMetres)
     {

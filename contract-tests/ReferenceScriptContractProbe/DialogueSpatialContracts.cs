@@ -11,7 +11,7 @@ internal static class DialogueSpatialContracts
         try
         {
             File.WriteAllBytes(Path.Combine(directory.FullName, "Places.esm"), Join(Header(),
-                Record("NPC_", 7), Record("NPC_", 0x100), Record("CREA", 0x101), Record("STAT", 0x110),
+                Record("NPC_", 7), Record("NPC_", 0x100), Record("CREA", 0x101), Record("STAT", 0x110), Record("ECZN", 0x130),
                 Record("ACHR", 0x900, Field("NAME", U32(0x100))),
                 Record("REFR", 0x901, Field("NAME", U32(0x110))),
                 Record("ACRE", 0x902, Field("NAME", U32(0x101))),

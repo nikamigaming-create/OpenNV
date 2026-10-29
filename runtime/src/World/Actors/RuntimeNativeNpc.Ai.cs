@@ -1,3 +1,4 @@
+using Function = OpenNV.Runtime.Content.Definitions.FalloutConditionFunction;
 using System.Buffers.Binary;
 using Godot;
 using OpenNV.Runtime.Content;
@@ -249,6 +250,7 @@ internal partial class RuntimeNativeNpc
         Func<FalloutFormKey, FalloutFormKey, double>? itemCount = null)
     {
         _aiStack = stack;
+        _sharedConditions = null;
         _idleConditions = new(stack);
         _factions = FalloutAiPackages.ReadFactions(stack, Appearance.Npc, _templates);
         _liveFactions = factions;
@@ -268,6 +270,7 @@ internal partial class RuntimeNativeNpc
             world.BindActorAlert(Appearance.Reference!.Value, Activity);
             _baseClock = PreparePendingSandboxStartClock() ?? _sandboxAdmissionStaging?.Clock ?? _aiReferenceState.Animation;
             _aiReferenceState.QueryCurrentPackage = _currentPackageQuery = () => CurrentPackage;
+            _aiReferenceState.QueryNativeCondition = _nativeConditionQuery = EvaluateOwnAiCondition;
             _aiReferenceState.QueryLastIdleRequest = _lastIdleRequestQuery = () => _aiReferenceState.LastIdleRequest;
             _aiReferenceState.QuerySitting = _sittingQuery = () => SittingState;
             _aiReferenceState.QuerySleeping = _sleepingQuery = () => SleepingState;
@@ -630,54 +633,8 @@ internal partial class RuntimeNativeNpc
         }
     }
 
-    internal float EvaluateAiCondition(FalloutCondition condition)
-    {
-        if (condition.Function == 382)
-            return (_aiWorld ?? throw new NotSupportedException("AI note query has no shared world owner."))
-                .EvaluatePlayerNoteCondition(condition)!.Value;
-        if (condition.Function is 573 or 574 or 575)
-            return (_aiWorld ?? throw new NotSupportedException("AI reputation query has no shared world owner."))
-                .EvaluateReputationCondition(condition)!.Value;
-        if (condition.Function == 159)
-            return FalloutAiPackages.Sitting(_aiStack ?? throw new NotSupportedException("AI sitting query has no source owner."),
-                condition, Appearance.Reference!.Value, PackageSitting);
-        if (condition.Function == 451)
-            return (_aiWorld ?? throw new NotSupportedException("AI last-idle query has no shared process owner."))
-                .IsLastIdlePlayed(condition, Appearance.Reference!.Value);
-        if (condition.Function == 49)
-            return FalloutAiPackages.Sleeping(_aiStack ?? throw new NotSupportedException("AI sleeping query has no source owner."),
-                condition, Appearance.Reference!.Value, reference => _aiWorld!.GetSleeping(reference));
-        if (condition.Function == 47)
-            return OpenNV.Runtime.Gameplay.State.FalloutActorInventoryConditions.ItemCount(
-                condition, Appearance.Reference!.Value, _aiItemCount);
-        if (condition.Function is 1 or 14 or 32)
-        {
-            FalloutReferencePlacement? playerPlacement = null;
-            if (Combat?.PackagePlayer is { } player && Combat.PackagePlayerCell is { } playerCell)
-            {
-                var position = player.GlobalPosition / player.UnitsToMeters;
-                playerPlacement = new(playerCell, [position.X, -position.Z, position.Y], [0, 0, 0]);
-            }
-            return (_aiWorld ?? throw new NotSupportedException("AI reference condition has no shared world owner."))
-                .EvaluateActorReferenceCondition(Appearance.Reference!.Value, condition, playerPlacement, Skeleton.UnitsToMetres)!.Value;
-        }
-        if (condition.Function == 84)
-            return (_aiWorld ?? throw new NotSupportedException("AI death count has no shared death history."))
-                .GetDeadCount(condition.FormArgument1);
-        if (condition.Function == 50)
-            return FalloutAiPackages.HasTalkedToPlayer(condition, Appearance.Reference!.Value,
-                reference => (_aiWorld ?? throw new NotSupportedException("AI talked-to-player query has no shared reference owner."))
-                    .Get(reference).TalkedToPlayer) ? 1 : 0;
-        if (condition.Function == 289)
-            return (Combat ?? throw new NotSupportedException("AI combat query has no engagement owner."))
-                .IsInCombat(FalloutAiPackages.ConditionSubject(condition, Appearance.Reference!.Value)) ? 1 : 0;
-        if (condition.Function == 161)
-            return FalloutAiPackages.IsCurrentPackage(condition, Appearance.Reference!.Value, CurrentPackage,
-                reference => (_aiWorld ?? throw new NotSupportedException("AI current-package query has no reference world."))
-                    .CurrentPackage(reference)) ? 1 : 0;
-        if (condition.RunOn == 0) return EvaluateOwnAiCondition(condition);
-        throw new NotSupportedException($"AI condition {condition.Owner.FormKey}/{condition.Function}/{condition.RunOn} has no subject owner.");
-    }
+    internal float EvaluateAiCondition(FalloutCondition condition) =>
+        SharedConditions.Evaluate(condition, new(Appearance?.Reference, LinkedReference: _aiWorld is null ? null : _aiWorld.GetLinkedRef));
 
     private int PackageSitting(FalloutFormKey subject)
     {
@@ -687,40 +644,24 @@ internal partial class RuntimeNativeNpc
             : (_aiWorld ?? throw new NotSupportedException("AI sitting query has no shared reference world.")).GetSitting(subject);
     }
 
-    private float EvaluateOwnAiCondition(FalloutCondition condition) => condition.Function switch
+    private float EvaluateOwnAiCondition(FalloutConditionQuery condition) => condition.Kind switch
     {
-        18 => (_aiClock ?? throw new NotSupportedException("AI time query has no simulation clock.")).Hour,
-        74 => (_aiGlobals ?? throw new NotSupportedException("AI global query has no state owner.")).Get(condition.FormArgument1),
-        25 => _travelActive || Combat?.PackageMoving == true ? 1 : 0,
-        53 => (float)(_aiWorld ?? throw new NotSupportedException("AI script-variable query has no shared reference owner."))
-            .ReadVariable(_questState!, condition.FormArgument1, condition.Argument2),
-        56 => FalloutAiPackages.QuestRunning(condition, _questState!),
-        58 or 59 or 79 or 420 or 421 or 546 => _questState!.Evaluate(condition),
-        63 => Activity.Attacked ? 1 : 0,
-        69 => Appearance.Race == condition.FormArgument1 ? 1 : 0,
-        70 => (Appearance.Female ? 1u : 0u) == condition.Argument1 ? 1 : 0,
-        71 => (_liveFactions?.Invoke() ?? _factions).GetValueOrDefault(condition.FormArgument1, (sbyte)-1) >= 0 ? 1 : 0,
-        73 => (_liveFactions?.Invoke() ?? _factions).GetValueOrDefault(condition.FormArgument1, (sbyte)-1),
-        72 => Appearance.Npc == condition.FormArgument1 ? 1 : 0,
-        77 => _aiRandom.NextBounded(100),
-        91 => Activity.Alerted ? 1 : 0,
-        101 => WeaponDrawn ? 1 : 0,
-        107 => Combat?.KnockedDown == true ? 2 : 0,
-        108 => Combat?.ScriptWeaponAnimationType ?? 0,
-        110 => CurrentAiPackage,
-        143 => CurrentAiProcedure,
-        160 => _seat?.MarkerId ?? 0,
-        162 => _furnitureReference == condition.FormArgument1 ? 1 : 0,
-        163 => _seat?.Furniture == condition.FormArgument1 ? 1 : 0,
-        182 => (Combat ?? throw new NotSupportedException("AI equipment query has no live actor owner."))
-            .PackageIsEquipped(condition.FormArgument1) ? 1 : 0,
-        286 => Activity.Sneaking ? 1 : 0,
-        287 => Activity.Running ? 1 : 0,
-        300 when condition.RunOn == 0 => (_aiWorld ?? throw new NotSupportedException("AI interior query has no world owner."))
-            .IsInInterior(Appearance.Reference ?? throw new NotSupportedException("AI interior query has no placed reference.")) ? 1 : 0,
-        365 => FalloutRaceProperties.IsChild(_aiStack!.GetEffective(Appearance.Race)) ? 1 : 0,
-        392 => 0, // This owner is an NPC; the player's view cannot be its first-person view.
-        247 => 0, // No acquired item is bound to this furniture procedure.
-        _ => throw new NotSupportedException($"AI condition {condition.Owner.FormKey}/{condition.Function} has no authoritative owner."),
+        Function.IsMoving => _travelActive || Combat?.PackageMoving == true ? 1 : 0,
+        Function.GetAttacked => Activity.Attacked ? 1 : 0,
+        Function.GetAlerted => Activity.Alerted ? 1 : 0,
+        Function.IsWeaponOut => WeaponDrawn ? 1 : 0,
+        Function.GetKnockedState => Combat?.KnockedDown == true ? 2 : 0,
+        Function.GetWeaponAnimType => Combat?.ScriptWeaponAnimationType ?? 0,
+        Function.GetCurrentAIPackage => CurrentAiPackage,
+        Function.GetCurrentAIProcedure => CurrentAiProcedure,
+        Function.GetFurnitureMarkerID => _seat?.MarkerId ?? 0,
+        Function.IsCurrentFurnitureRef => _furnitureReference == condition.FormArgument1 ? 1 : 0,
+        Function.IsCurrentFurnitureObj => _seat?.Furniture == condition.FormArgument1 ? 1 : 0,
+        Function.GetEquipped => (Combat ?? throw new NotSupportedException("AI equipment has no live owner.")).PackageIsEquipped(condition.FormArgument1) ? 1 : 0,
+        Function.IsSneaking => Activity.Sneaking ? 1 : 0,
+        Function.IsRunning => Activity.Running ? 1 : 0,
+        Function.IsPC1stPerson => 0, // An NPC is never the player first-person camera owner.
+        Function.GetIsUsedItemType => 0, // No acquired item is bound outside the explicit Eat adapter.
+        _ => throw new NotSupportedException($"AI condition {condition.Owner.FormKey}/{condition.Function} has no native owner."),
     };
 }

@@ -81,22 +81,25 @@ internal static class FactionRelationContracts
                 Require(cold.ActorRelation(Key(0x92), Key(0x91)) == 1, "Rejected cold reaction partly mutated state.");
             }
 
+            float Query(FalloutReferenceWorld current, FalloutCondition condition, FalloutReferencePlacement? player = null) =>
+                new FalloutConditionRuntime(records, new(records), current) { PlayerPlacement = () => player }
+                    .Evaluate(condition, new(Key(0x91)));
             var owner = records.GetEffective(Key(0x40));
             var value = new FalloutCondition(owner, 0, 0, 14, 63, 0, 0, 0);
-            Require(world.EvaluateActorReferenceCondition(Key(0x91), value) == 0, "Initial user actor value was not source zero.");
+            Require(Query(world, value) == 0, "Initial user actor value was not source zero.");
             world.ChangeActorValue(Key(0x91), "variable02", "setav", 5);
             world.ChangeActorValue(Key(0x92), "variable02", "setav", 9);
-            Require(world.EvaluateActorReferenceCondition(Key(0x91), value) == 5 &&
-                world.EvaluateActorReferenceCondition(Key(0x91), value with { RunOn = 1 }) == 9 &&
-                world.EvaluateActorReferenceCondition(Key(0x91), value with { RunOn = 2, Reference = 0x92 }) == 9,
+            Require(Query(world, value) == 5 &&
+                Query(world, value with { RunOn = 1 }) == 9 &&
+                Query(world, value with { RunOn = 2, Reference = 0x92 }) == 9,
                 "Actor-value scope did not resolve actual self, package target and explicit reference.");
-            Reject(() => world.EvaluateActorReferenceCondition(Key(0x91), value with { Argument1 = 47 }));
-            Reject(() => world.EvaluateActorReferenceCondition(Key(0x91), value with { RunOn = 3 }));
+            Reject(() => Query(world, value with { Argument1 = 47 }));
+            Reject(() => Query(world, value with { RunOn = 3 }));
             var distance = value with { Function = 1, Argument1 = 0x14 };
             world.Get(Key(0x91)).QuerySpatialPlacement = () => new(Key(0x80), [3, 4, 12], [0, 0, 0]);
-            Require(world.EvaluateActorReferenceCondition(Key(0x91), distance, new(Key(0x80), [0, 0, 0], [0, 0, 0])) == 13,
+            Require(Query(world, distance, new(Key(0x80), [0, 0, 0], [0, 0, 0])) == 13,
                 "Distance used stale editor placement instead of current native actor and player poses.");
-            Reject(() => world.EvaluateActorReferenceCondition(Key(0x91), distance));
+            Reject(() => Query(world, distance));
             // Read the winning condition from complete binary records. Its placed
             // target is independent of the package's scoped subject.
             var sameCell = FalloutCondition.Read(owner).Single();
@@ -104,36 +107,35 @@ internal static class FactionRelationContracts
                 "Same-cell condition ignored its winning source record/master adjustment.");
             var playerHere = new FalloutReferencePlacement(Key(0x80), [0, 0, 0], [0, 0, 0]);
             var playerElsewhere = playerHere with { Cell = Key(0x81) };
-            Require(world.EvaluateActorReferenceCondition(Key(0x91), sameCell, playerHere) == 1 &&
-                world.EvaluateActorReferenceCondition(Key(0x91), sameCell, playerElsewhere) == 0 &&
-                FalloutCondition.AllPass([sameCell], condition => world.EvaluateActorReferenceCondition(Key(0x91), condition, playerHere)!.Value),
+            Require(Query(world, sameCell, playerHere) == 1 &&
+                Query(world, sameCell, playerElsewhere) == 0 &&
+                FalloutCondition.AllPass([sameCell], condition => Query(world, condition, playerHere)),
                 "Same-cell package predicate did not follow actual player cell ownership.");
-            Require(world.EvaluateActorReferenceCondition(Key(0x91), sameCell with { Argument1 = 0x92 }) == 1 &&
-                world.EvaluateActorReferenceCondition(Key(0x91), sameCell with { Argument1 = 0x93 }) == 0,
+            Require(Query(world, sameCell with { Argument1 = 0x92 }) == 1 &&
+                Query(world, sameCell with { Argument1 = 0x93 }) == 0,
                 "Reference-target same-cell query used the package target or residency in place of its source argument.");
             world.SetPlacement(Key(0x92), playerElsewhere);
-            Require(world.EvaluateActorReferenceCondition(Key(0x91), sameCell with { RunOn = 1 }, playerHere) == 0 &&
-                world.EvaluateActorReferenceCondition(Key(0x91), sameCell with { RunOn = 2, Reference = 0x93 }, playerElsewhere) == 1 &&
-                world.EvaluateActorReferenceCondition(Key(0x91), sameCell with { Argument1 = 0x92 }) == 0,
+            Require(Query(world, sameCell with { RunOn = 1 }, playerHere) == 0 &&
+                Query(world, sameCell with { RunOn = 2, Reference = 0x93 }, playerElsewhere) == 1 &&
+                Query(world, sameCell with { Argument1 = 0x92 }) == 0,
                 "Same-cell scope ignored current moved placement, package target or explicit source reference.");
-            Reject(() => world.EvaluateActorReferenceCondition(Key(0x91), sameCell));
-            Reject(() => world.EvaluateActorReferenceCondition(Key(0x91), sameCell with { Argument2 = 1 }, playerHere));
-            Reject(() => world.EvaluateActorReferenceCondition(Key(0x91), sameCell with { RunOn = 3 }, playerHere));
-            Reject(() => world.EvaluateActorReferenceCondition(Key(0x91), sameCell with { RunOn = 2, Reference = 0 }, playerHere));
+            Reject(() => Query(world, sameCell));
+            Reject(() => Query(world, sameCell with { Argument2 = 1 }, playerHere));
+            Reject(() => Query(world, sameCell with { RunOn = 3 }, playerHere));
+            Reject(() => Query(world, sameCell with { RunOn = 2, Reference = 0 }, playerHere));
             world.Get(Key(0x91)).QuerySpatialPlacement = () => playerElsewhere;
-            Reject(() => world.EvaluateActorReferenceCondition(Key(0x91), sameCell, playerElsewhere));
+            Reject(() => Query(world, sameCell, playerElsewhere));
             world.Get(Key(0x91)).QuerySpatialPlacement = null;
             var spatialState = world.Capture();
             using var spatialCold = new FalloutReferenceWorld(records);
             spatialCold.Restore(JsonSerializer.Deserialize<FalloutReferenceSnapshot[]>(JsonSerializer.Serialize(spatialState))!);
             var coldBeforeQuery = JsonSerializer.Serialize(spatialCold.Capture());
-            Require(spatialCold.EvaluateActorReferenceCondition(Key(0x91), sameCell, playerHere) == 1 &&
-                spatialCold.EvaluateActorReferenceCondition(Key(0x91), sameCell with { RunOn = 1 }, playerHere) == 0 &&
-                spatialCold.EvaluateActorReferenceCondition(Key(0x91), sameCell with { Argument1 = 0x92 }) == 0 &&
+            Require(Query(spatialCold, sameCell, playerHere) == 1 &&
+                Query(spatialCold, sameCell with { RunOn = 1 }, playerHere) == 0 &&
+                Query(spatialCold, sameCell with { Argument1 = 0x92 }) == 0 &&
                 JsonSerializer.Serialize(spatialCold.Capture()) == coldBeforeQuery,
                 "Cold same-cell query lost moved cell state or mutated authoritative state.");
-            Require(world.EvaluateActorReferenceCondition(Key(0x91), sameCell with { Function = 45 }, playerHere) is null,
-                "Same-cell admission silently admitted unsupported detection.");
+            Reject(() => Query(world, sameCell with { Function = 45 }, playerHere));
             Console.WriteLine("OPENNV_AI_SAME_CELL_CONTRACT_PASS fullBinaryReader=true winningMaster=true actualPlayerCell=true placedReferenceTarget=true scopedSubject=true movedCold=true nativeCellMismatchRefused=true unknownDetectionRefused=true");
             Console.WriteLine("OPENNV_FACTION_AI_REFERENCE_CONTRACT_PASS winningSource=true directional=true objectAndQuest=true liveCombat=true cold=true atomicReject=true actualActorValues=true scopedQueries=true nativePoseDistance=true unsupportedRefused=true");
         }

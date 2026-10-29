@@ -7,26 +7,36 @@ FO1 remains an incomplete classic preview with selected movement, inventory,
 equipment, door and save flows. Complete campaign execution and 1:1 3D art are
 unverified. See [current-work.md](current-work.md) for the active owner.
 
-The merged baseline is PR #331, `1f1a44e0`, with its full required local gate,
+The merged baseline is PR #332, `5d324d27`, with its full required local gate,
 selected owned/native checks, diff check and all five hosted checks passed.
-Local main equals origin/main. Fresh branch `codex/idle-history-bot-control` owns source-qualified last-request
-history and bot planning/segment control. The merged scalar repair passes its
+Local main equals origin/main. Fresh branch `codex/shared-script-conditions`
+owns shared function/context dispatch and executable source-family coverage.
+Working source now consolidates actor/dialogue/idle/quest/menu/terminal/unloaded
+and parsed-script query semantics, with production-handler context/namespace,
+clock/global, RNG, player/limb, interruption and cold-history tests passing.
+Selected owned request-history execution and the full required gate pass.
+Bounded fresh-game export de3ccd56 reaches Doc Mitchell speech, name acceptance
+and VCG01 stage36 race/sex UI; normal close preserves canonical 02ABC.
+Background script mutation/parser/Confidence gaps remain explicit. SCDA instruction execution
+is still absent; SCTX execution and compiled-extent accounting are not a VM.
+Source-qualified last-request history and bot control are merged. The scalar repair passes its
 owned/synthetic checks, full gate and actual forward F5.
-The active system-first batch adds source-qualified IsLastIdlePlayed history and
+The merged system-first batch adds source-qualified IsLastIdlePlayed history and
 bot planning/segment control. Focused and actual owned-condition checks pass.
 Export 5b54e57b Continued canonical 02ABC, then correctly refused absent historical
 request data before its next selection. No F5 changed that save; normal close
-disposed source owners. Actual fresh-campaign advancement remains unverified; the final active batch
-full gate passes. Next work implements shared script/condition function
-dispatch and executable headless coverage before representative retail integration.
+disposed source owners. Actual fresh-campaign advancement remains unverified;
+its full gate and all hosted checks pass. Shared script/condition integration
+now precedes representative retail comparison; remaining families and contexts
+stay explicit instead of receiving default results.
 Scalar export 8d346c24 Continued the saved Healing Powder and followed the source
 corridor with ordinary input. F5 command 377 completed at 12:38:58.392 UTC, HP 99,
 no save/cleanup error, saving useful traversal near the north shoulder. Canonical
 SHA256 is `02ABCFE0D0179E3C8B51E0F867363D13D81CB7B364C882EA0CCF8038907E277F`;
-its next Continue is unverified. Objective 40 remains displayed/incomplete. Later,
-function 451 on AI condition 08747d lacked an owner; the RockCanyon18 join also
-remains physically unproved. Normal quit preserved the new save. These are next
-bounded owners after checked scalar publication, without replaying cooking.
+Continue386 restored it. Objective 40 remains displayed/incomplete. Function451
+now has a source-bound request-history owner; the old checkpoint's absent field
+correctly remains unknown. The RockCanyon18 join remains physically unproved.
+Normal quit preserved the save. Shared script/condition execution is next.
 
 The merged batch adds source-bound Sleep using existing travel/portal/bed
 owners, exact outgoing package-query retirement, sole marker history restoration,
@@ -111,7 +121,7 @@ See [implementation-plan.md](implementation-plan.md) for the active delivery pla
 | Traversal | Cross-cell NPC/creature route owners, authored floor destinations and the prior Cheyenne saloon portal remain open. |
 | Fast travel | Earlier bounded flat/XR travel worked. Final population and saving after travel remain unaccepted. |
 | Performance | Native 3840x2160 travel measured rolling median 21.2512 ms, p95 31.2714 ms and p99 38.2948 ms, failing 4K60. Retained attribution identifies creature Sandbox movement, package pursuit and capsule sweeps; nested totals must not be added. Physical 144 Hz, loading/save stalls and headset acceptance remain open. |
-| Builds | Baseline PR #331 passed its full required local gate, selected owned/native checks and all five hosted checks. The active idle-history/bot branch passes final build and focused/owned checks; its final full gate passes. |
+| Builds | Baseline PR #332 passed checked publication. The shared-dispatch/definition candidate passes the full required gate, selected owned audits and a bounded fresh-game smoke; checked publication is pending. |
 | Content | Official ESM selection logged; installed loose/resource winners still need provenance review. Native extensions disabled; pristine vanilla is not established by plugin selection alone. |
 | FO3 | Earlier rendered New Game reached birth stage 22. No accepted standalone FO3 VR release. |
 | Mods/TTW | Deferred until standalone games work. |

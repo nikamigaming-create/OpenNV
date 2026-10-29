@@ -141,7 +141,8 @@ internal static partial class NvseEventProbe
         FalloutQuestState quests, FalloutScriptEvents events) => new(records, world, quests,
             new((_, _) => throw new InvalidOperationException("Unexpected furniture query."),
                 _ => throw new InvalidOperationException("Unexpected presentation effect."),
-                ActorValue: (actor, value) => records.RuntimeFormId(actor) == 0x14 && value == "Health" ? 70 :
+                ActorValue: (actor, value) => records.RuntimeFormId(actor) == 0x14 &&
+                    value.Equals("Health", StringComparison.OrdinalIgnoreCase) ? 70 :
                     throw new InvalidOperationException("Actor query has the wrong caller or value."), Events: events));
 
     private static void CallbackMutation(FalloutScriptEvents events, FalloutReferenceScripts scripts,

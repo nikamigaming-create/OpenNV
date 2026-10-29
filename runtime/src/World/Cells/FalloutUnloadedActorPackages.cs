@@ -30,7 +30,8 @@ internal sealed record FalloutActorPackageAssignment(FalloutFormKey Package, str
 internal sealed class FalloutUnloadedActorPackages(FalloutPluginStack records, FalloutReferenceWorld world,
     FalloutQuestState quests, FalloutGameTime? clock, FalloutGlobalState? globals,
     Action<FalloutPackageEvent, FalloutFormKey> execute, Func<int> playerLevel,
-    Func<FalloutFormKey, int>? sitting = null)
+    Func<FalloutFormKey, int>? sitting = null, float unitsToMetres = 1,
+    Func<FalloutReferencePlacement?>? playerPlacement = null)
 {
     internal const string ContinuationBlocker = "Unloaded actor package assignment awaits its native procedure continuation.";
     private readonly Dictionary<FalloutFormKey, FalloutPackageEvents> _actors = [];
@@ -231,37 +232,20 @@ internal sealed class FalloutUnloadedActorPackages(FalloutPluginStack records, F
         if (state.ProcedureCaptureBlocker == ContinuationBlocker) state.ProcedureCaptureBlocker = null;
     }
 
-    private float Evaluate(FalloutFormKey caller, FalloutCondition condition)
+    private FalloutConditionRuntime? _conditions;
+    private FalloutConditionRuntime Conditions => _conditions ??= new(records, quests, world)
     {
-        if (condition.Function == 382) return world.EvaluatePlayerNoteCondition(condition)!.Value;
-        if (condition.Function is 573 or 574 or 575)
-            return world.EvaluateReputationCondition(condition)!.Value;
-        if (condition.Function == 159)
-            return FalloutAiPackages.Sitting(records, condition, caller, sitting ?? (reference => world.GetSitting(reference)));
-        if (condition.Function == 49)
-            return FalloutAiPackages.Sleeping(records, condition, caller, reference => world.GetSleeping(reference));
-        if (world.EvaluateActorReferenceCondition(caller, condition) is { } referenceQuery) return referenceQuery;
-        if (condition.Function is 56 or 58 or 59 or 79 or 420 or 421 or 546) return quests.Evaluate(condition);
-        if (condition.Function == 18) return (clock ?? throw new NotSupportedException("Unloaded AI has no simulation clock.")).Hour;
-        if (condition.Function == 74) return (globals ?? throw new NotSupportedException("Unloaded AI has no global state.")).Get(condition.FormArgument1);
-        if (condition.Function == 84) return world.GetDeadCount(condition.FormArgument1);
-        if (condition.Function == 53) return (float)world.ReadVariable(quests, condition.FormArgument1, condition.Argument2);
-        if (condition.Function == 161) return FalloutAiPackages.IsCurrentPackage(condition, caller, world.CurrentPackage) ? 1 : 0;
-        if (condition.Function == 50) return FalloutAiPackages.HasTalkedToPlayer(condition, caller,
-            reference => world.Get(reference).TalkedToPlayer) ? 1 : 0;
-        var actor = FalloutAiPackages.ConditionSubject(condition, caller);
-        return condition.Function switch
-        {
-            35 => world.IsEnabled(actor) ? 0 : 1,
-            72 => FalloutReferenceIdentity.Base(records, actor) == condition.FormArgument1 ? 1 : 0,
-            71 => world.ActorFactions(actor).GetValueOrDefault(condition.FormArgument1, (sbyte)-1) >= 0 ? 1 : 0,
-            73 => world.ActorFactions(actor).GetValueOrDefault(condition.FormArgument1, (sbyte)-1),
-            289 => world.IsInCombat(actor) ? 1 : 0,
-            300 => world.IsInInterior(actor) ? 1 : 0,
-            _ => throw new NotSupportedException($"Unloaded actor {actor} package condition {condition.Owner.FormKey}/{condition.Function} is unbound.")
-        };
-    }
+        Globals = globals,
+        Hour = () => (clock ?? throw new NotSupportedException("Unloaded AI has no simulation clock.")).Hour,
+        Sitting = sitting,
+        ItemCount = (subject, item) => FalloutInventoryItemCounts.Count(records,
+            world.Inventory(subject, playerLevel(), globals).Contents, item),
+        PlayerPlacement = playerPlacement,
+        UnitsToMetres = () => unitsToMetres,
+    };
 
+    private float Evaluate(FalloutFormKey caller, FalloutCondition condition) =>
+        Conditions.Evaluate(condition, new(caller, LinkedReference: world.GetLinkedRef));
     private void Remember(FalloutFormKey actor, FalloutPackageEvents events, FalloutActorPackageAssignment? predecessor = null)
     {
         var state = world.Get(actor);

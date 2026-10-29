@@ -1,3 +1,4 @@
+using Function = OpenNV.Runtime.Content.Definitions.FalloutConditionFunction;
 using System.Security.Cryptography;
 using OpenNV.Runtime.Content;
 
@@ -55,12 +56,18 @@ internal sealed partial class FalloutReferenceWorld
 {
     internal float IsLastIdlePlayed(FalloutCondition condition, FalloutFormKey caller, FalloutFormKey? target = null)
     {
-        if (condition.Function != 451 || condition.Argument2 != 0)
+        if (condition.Kind != Function.IsLastIdlePlayed || condition.Argument2 != 0)
             throw new InvalidDataException("Last-idle condition differs from the source IsLastIdlePlayed declaration.");
         var idle = condition.FormArgument1;
         if (records.GetEffective(idle).Signature != "IDLE")
             throw new InvalidDataException("IsLastIdlePlayed requires an IDLE argument.");
         var subject = FalloutAiPackages.ConditionSubject(condition, caller, target);
+        return IsLastIdlePlayed(subject, idle);
+    }
+
+    internal float IsLastIdlePlayed(FalloutFormKey subject, FalloutFormKey idle)
+    {
+        if (records.GetEffective(idle).Signature != "IDLE") throw new InvalidDataException("IsLastIdlePlayed requires an IDLE argument.");
         if (records.RuntimeFormId(subject) == 0x14)
             throw new NotSupportedException("Player last-idle request history has no process owner.");
         if (records.GetEffective(subject).Signature is not ("ACHR" or "ACRE"))

@@ -1,3 +1,4 @@
+using Function = OpenNV.Runtime.Content.Definitions.FalloutConditionFunction;
 using System.Buffers.Binary;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -281,10 +282,10 @@ internal sealed partial class FalloutDialogueTopic
         Func<FalloutFormKey, float> questStage, Func<FalloutCondition, float>? context) =>
         FalloutCondition.AllPass(info.Conditions.Select(bytes => FalloutCondition.Read(info.Record, bytes)).ToArray(), condition =>
         {
-            if (condition.RunOn == 0)
+            if (condition.SubjectRunOn == 0)
             {
-                if (condition.Function == 72) return condition.FormArgument1 == speaker ? 1 : 0;
-                if (condition.Function == 58) return questStage(condition.FormArgument1);
+                if (condition.Kind == Function.GetIsID) return condition.FormArgument1 == speaker ? 1 : 0;
+                if (condition.Kind == Function.GetStage) return questStage(condition.FormArgument1);
             }
             return context?.Invoke(condition) ?? throw new NotSupportedException(
                 $"INFO {info.Record.FormKey} condition {condition.Function} RunOn {condition.RunOn} is unbound.");
@@ -324,16 +325,16 @@ internal sealed partial class FalloutDialogueTopic
         // Pure actor restrictions can prove a line belongs to another actor
         // before unrelated quest/service queries need evaluation. Never split
         // an OR group or move predicates across random queries.
-        if (conditions.Any(condition => condition.Function == 77)) return true;
+        if (conditions.Any(condition => condition.Kind == Function.GetRandomPercent)) return true;
         for (var index = 0; index < conditions.Length; index++)
         {
             var condition = conditions[index];
             if (condition.RunOn != 0 || (condition.Flags & 0x1f) != 0 || index != 0 && (conditions[index - 1].Flags & 1) != 0) continue;
-            if (condition.Function == 72)
+            if (condition.Kind == Function.GetIsID)
             {
                 if (!FalloutCondition.AllPass([condition], value => value.FormArgument1 == speaker ? 1 : 0)) return false;
             }
-            else if (condition.Function is 69 or 70 or 71 or 365 or 427 && context is not null)
+            else if (condition.Kind is Function.GetIsRace or Function.GetIsSex or Function.GetInFaction or Function.IsChild or Function.GetIsVoiceType && context is not null)
             {
                 // Some scalar callers lack actor traits. In that case the
                 // ordinary ordered evaluator retains the unresolved query.

@@ -355,11 +355,13 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
 
     internal void InitializeOwnedState()
     {
+        _scripts.References!.BindPlayerConditions(EvaluatePlayerNativeCondition);
         ConfigureScriptExplosions();
         _playerPackage = new RuntimeNativePlayerPackage(_pluginStack, _player, _scripts.Session, _scripts.References!, () => _activeCell,
             _restorePlayerPackageAudio);
         _scripts.References!.UnloadedPackages = new(_pluginStack, _scripts.References, _quests, _gameTime,
-            _globals, ExecutePackageEvent, () => SourcePlayerLevel, ActorSitting);
+            _globals, ExecutePackageEvent, () => SourcePlayerLevel, ActorSitting, _player.UnitsToMeters,
+            () => SharedConditions.PlayerPlacement?.Invoke());
         _speech = new RuntimeNativeSpeech();
         _speech.PrepareSubtitle = subtitle => (PrepareSubtitle ??
             throw new NotSupportedException("Source subtitle presentation is absent."))(subtitle);
@@ -385,20 +387,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         ConfigureDetectionAndFinishedSpeech();
     }
 
-    private Func<FalloutCondition, float> SpeechConditionContext() => condition =>
-        {
-            if (condition.Function == 382) return _scripts.References!.EvaluatePlayerNoteCondition(condition)!.Value;
-            if (condition.Function is 573 or 574 or 575) return _scripts.References!.EvaluateReputationCondition(condition)!.Value;
-            if (condition.Function == 53) return (float)_scripts.References!.ReadVariable(_quests, condition.FormArgument1, condition.Argument2);
-            if (condition.Function == 74) return (_globals ?? throw new InvalidOperationException("Dialogue has no global owner.")).Get(condition.FormArgument1);
-            if (condition.RunOn == 1 && condition.Function == 70 && condition.Reference == 0)
-            {
-                if (condition.Argument1 > 1) throw new InvalidDataException("GetIsSex has an invalid sex argument.");
-                return (condition.Argument1 == 1) == _character.Female ? 1 : 0;
-            }
-            if (condition.RunOn == 0 && condition.Function is 59 or 79 or 546) return _quests.Evaluate(condition);
-            throw new NotSupportedException($"Dialogue condition {condition.Function} RunOn {condition.RunOn} has no actor/quest owner.");
-        };
+    private Func<FalloutCondition, float> SpeechConditionContext() => EvaluateMessageCondition;
 
     private void Synchronize()
     {

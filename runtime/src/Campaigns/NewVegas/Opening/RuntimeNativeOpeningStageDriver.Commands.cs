@@ -315,94 +315,15 @@ internal partial class RuntimeNativeOpeningStageDriver
         GD.Print($"OPENNV_NATIVE_RECIPE_MENU_OPEN category={category.Form} recipes={recipes.Count} source=RCCT-RCPE owner=shared-inventory parity=unverified");
     }
 
-    internal float EvaluateRecipeCondition(FalloutCondition condition)
-    {
-        if (FalloutPlatformConditions.Evaluate(condition) is { } platform) return platform;
-        if (condition.Function == 382) return _scripts.References!.EvaluatePlayerNoteCondition(condition)!.Value;
-        if (condition.Function is 573 or 574 or 575) return _scripts.References!.EvaluateReputationCondition(condition)!.Value;
-        if (condition.Function is 56 or 58 or 59 or 79 or 420 or 421 or 546) return _quests.Evaluate(condition);
-        if (condition.Function == 74)
-            return (_globals ?? throw new InvalidOperationException("Recipe condition has no global state owner.")).Get(condition.FormArgument1);
-        if (condition.Function == 84) return _scripts.References!.GetDeadCount(condition.FormArgument1);
-        if (condition.Function == 46)
-        {
-            var subject = condition.RunOn switch
-            {
-                1 => _pluginStack.RuntimeFormKey(0x14),
-                2 => condition.Owner.Plugin.AdjustFormId(condition.Reference),
-                _ => _pluginStack.RuntimeFormKey(0x14),
-            };
-            return DialogueActorDead(subject) ? 1 : 0;
-        }
-        if (condition.Function == 242)
-        {
-            var subject = condition.RunOn switch
-            {
-                1 => _pluginStack.RuntimeFormKey(0x14),
-                2 => condition.Owner.Plugin.AdjustFormId(condition.Reference),
-                _ => _pluginStack.RuntimeFormKey(0x14),
-            };
-            if (subject == _pluginStack.RuntimeFormKey(0x14))
-                return Vitals.HitPoints == 0 ? 1 : 0;
-            return _scripts.References!.IsUnconscious(subject) ? 1 : 0;
-        }
-        if (condition.Function == 157)
-        {
-            var subject = condition.RunOn switch
-            {
-                1 => _pluginStack.RuntimeFormKey(0x14),
-                2 => condition.Owner.Plugin.AdjustFormId(condition.Reference),
-                _ => _pluginStack.RuntimeFormKey(0x14),
-            };
-            return _scripts.References!.Get(subject).Destroyed ? 1 : 0;
-        }
-        if (condition.Function == 80 && FalloutInventoryConditions.TargetsPlayer(_pluginStack, condition)) return SourcePlayerLevel;
-        if (condition.Function == 492 && condition.RunOn == 2)
-            return _scripts.References!.MapMarkerVisibility(condition.Owner.Plugin.AdjustFormId(condition.Reference));
-        if (FalloutInventoryConditions.Evaluate(_pluginStack, _inventory, _playerSkills.HasPerk, condition) is { } inventory) return inventory;
-        if (!FalloutInventoryConditions.TargetsPlayer(_pluginStack, condition))
-            throw new NotSupportedException($"Recipe condition {condition.Owner.FormKey}/{condition.Function} selects run-on actor {condition.RunOn}.");
-        return condition.Function switch
-        {
-            14 => _playerSkills.Value(checked((int)condition.Argument1)),
-            67 => FalloutCellQueries.InCell(_pluginStack, _activeCell, condition.FormArgument1) ? 1 : 0,
-            69 => condition.FormArgument1 == _scripts.References!.ActorRace(_pluginStack.RuntimeFormKey(0x14)) ? 1 : 0,
-            70 when condition.Argument1 <= 1 => _character.Female == (condition.Argument1 == 1) ? 1 : 0,
-            72 => condition.FormArgument1 == _raceSexContract.Player ? 1 : 0,
-            _ => throw new NotSupportedException($"Recipe condition {condition.Owner.FormKey}/{condition.Function} is unbound."),
-        };
-    }
+    internal float EvaluateRecipeCondition(FalloutCondition condition) =>
+        SharedConditions.Evaluate(condition, new(_pluginStack.RuntimeFormKey(0x14), _pluginStack.RuntimeFormKey(0x14),
+            LinkedReference: _scripts.References!.GetLinkedRef));
 
-    internal float EvaluateMessageCondition(FalloutCondition condition) => condition.Function == 53 && condition.RunOn == 0
-        ? (float)_scripts.References!.ReadVariable(_quests, condition.FormArgument1, condition.Argument2)
-        : EvaluateRecipeCondition(condition);
+    internal float EvaluateMessageCondition(FalloutCondition condition) => EvaluateRecipeCondition(condition);
 
-    internal float EvaluateTargetCondition(FalloutFormKey targetReference, FalloutCondition condition)
-    {
-        var subject = condition.RunOn switch
-        {
-            0 => targetReference,
-            1 => _pluginStack.RuntimeFormKey(0x14),
-            2 => condition.Owner.Plugin.AdjustFormId(condition.Reference),
-            _ => targetReference,
-        };
-        if (condition.Function == 242)
-        {
-            if (subject == _pluginStack.RuntimeFormKey(0x14))
-                return Vitals.HitPoints == 0 ? 1 : 0;
-            return _scripts.References!.IsUnconscious(subject) ? 1 : 0;
-        }
-        if (condition.Function == 46)
-            return DialogueActorDead(subject) ? 1 : 0;
-        if (condition.Function == 157)
-            return _scripts.References!.Get(subject).Destroyed ? 1 : 0;
-        if (condition.Function == 159)
-            return ActorSitting(subject);
-        if (condition.Function == 53 && condition.RunOn == 0)
-            return (float)_scripts.References!.ReadVariable(_quests, condition.FormArgument1, condition.Argument2);
-        return EvaluateRecipeCondition(condition);
-    }
-
+    internal float EvaluateTargetCondition(FalloutFormKey targetReference, FalloutCondition condition) =>
+        SharedConditions.Evaluate(condition, new(targetReference, _pluginStack.RuntimeFormKey(0x14),
+            _scripts.References!.GetLinkedRef));
     private void CloseRecipeMenu()
     {
         if (_recipeMenu is null) return;

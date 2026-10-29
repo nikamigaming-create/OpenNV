@@ -21,7 +21,7 @@ internal sealed class FalloutIdleConditions(FalloutPluginStack stack)
         {
             if (!visited.Add(form)) throw new InvalidDataException("Package IDLE parent cycle.");
             var entry = Read(form);
-            if (!FalloutCondition.AllPass(entry.Conditions, condition => { evaluated++; return evaluate(condition); }))
+            if (!FalloutCondition.AllPass(entry.Conditions, condition => { evaluated++; return evaluate(condition); }, evaluateRunOn: true))
             {
                 LastDecision = new(idle, false, form, evaluated);
                 return false;

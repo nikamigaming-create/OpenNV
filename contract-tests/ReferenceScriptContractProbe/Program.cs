@@ -1215,6 +1215,11 @@ if (args is ["--audit-sleep", var sleepData])
     OwnedSleepProbe.Run(sleepData);
     return;
 }
+if (args is ["--shared-condition-contracts"])
+{
+    SharedConditionContracts.Run();
+    return;
+}
 if (args is ["--audit-last-idle", var lastIdleData])
 {
     OwnedLastIdleProbe.Run(lastIdleData);
@@ -1811,6 +1816,7 @@ finally
 
 ConversationContracts.Run();
 ConversationSpeakerAdmissionContracts.Run();
+SharedConditionContracts.Run();
 ActorSourceContracts.Run();
 FactionRelationContracts.Run();
 ReputationContracts.Run();

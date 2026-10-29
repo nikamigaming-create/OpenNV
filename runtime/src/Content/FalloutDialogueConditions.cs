@@ -1,3 +1,5 @@
+using OpenNV.Runtime.World.Cells;
+
 namespace OpenNV.Runtime.Content;
 
 internal sealed class FalloutDialogueConditions(FalloutPluginStack records, FalloutQuestState quests,
@@ -14,179 +16,39 @@ internal sealed class FalloutDialogueConditions(FalloutPluginStack records, Fall
     Func<FalloutFormKey, FalloutFormKey, float>? referenceDistance = null,
     Func<FalloutFormKey, FalloutFormKey, bool>? referenceInZone = null, Func<FalloutFormKey, int>? sitting = null,
     Func<FalloutFormKey, int>? deadCount = null, Func<FalloutFormKey, bool>? isDead = null,
-    Func<FalloutFormKey, int>? sleeping = null)
+    Func<FalloutFormKey, int>? sleeping = null, FalloutReferenceWorld? world = null, Func<uint>? randomPercent = null)
 {
     internal FalloutDialogueConditions(FalloutPluginStack records, FalloutQuestState quests, FalloutFormKey speaker,
         FalloutNpcAppearance appearance, Func<FalloutCondition, float>? runtime = null)
         : this(records, quests, speaker, FalloutDialogueSpeaker.Read(records, appearance.Npc), runtime) { }
 
-    private IReadOnlyDictionary<FalloutFormKey, sbyte>? _factions;
     private FalloutFormKey Listener => listener ?? records.RuntimeFormKey(0x14);
-
-    internal float Evaluate(FalloutCondition condition)
+    private readonly FalloutConditionRuntime _runtime = new(records, quests, world)
     {
-        if (condition.Function == 382)
-            return (runtime ?? throw new NotSupportedException("Dialogue has no shared player note owner."))(condition);
-        if (condition.Function is 573 or 574 or 575)
-        {
-            if (condition.RunOn > 2) throw new NotSupportedException("Dialogue reputation query scope is unbound.");
-            return (runtime ?? throw new NotSupportedException("Dialogue has no shared reputation owner."))(condition);
-        }
-        if (condition.Function == 46)
-        {
-            var subject = condition.RunOn switch
-            {
-                0 => speaker,
-                1 => Listener,
-                2 => condition.Owner.Plugin.AdjustOptionalFormId(condition.Reference)
-                    ?? throw new InvalidDataException("Dialogue death query has no explicit reference."),
-                _ => throw new NotSupportedException("Dialogue death query scope is unbound."),
-            };
-            return (isDead ?? throw new NotSupportedException("Dialogue has no shared actor death owner."))(subject) ? 1 : 0;
-        }
-        if (condition.Function == 84)
-            return (deadCount ?? throw new NotSupportedException("Dialogue death count has no shared death history."))(condition.FormArgument1);
-        if (condition.Function == 159)
-            return FalloutAiPackages.Sitting(records, condition, speaker, sitting, Listener);
-        if (condition.Function == 49)
-            return FalloutAiPackages.Sleeping(records, condition, speaker,
-                sleeping ?? throw new NotSupportedException("Dialogue has no shared sleeping owner."), Listener);
-        // The command's reference/quest and declaration index are explicit
-        // arguments. They do not become the speaker or listener's locals.
-        if (condition.Function == 53)
-        {
-            if (condition.RunOn > 2) throw new NotSupportedException("Dialogue script-variable scope is unbound.");
-            return (runtime ?? throw new NotSupportedException("Dialogue has no shared script-variable owner."))(condition);
-        }
-        if (condition.Function == 446)
-        {
-            var subject = condition.RunOn switch
-            {
-                0 => speaker,
-                1 => Listener,
-                2 => condition.Owner.Plugin.AdjustOptionalFormId(condition.Reference)
-                    ?? throw new InvalidDataException("Dialogue zone query has no explicit reference."),
-                _ => throw new NotSupportedException("Dialogue zone query scope is unbound."),
-            };
-            return (referenceInZone ?? throw new NotSupportedException("Dialogue has no shared encounter-zone query owner."))
-                (subject, condition.FormArgument1) ? 1 : 0;
-        }
-        if (condition.Function == 1)
-        {
-            var subject = condition.RunOn switch
-            {
-                0 => speaker,
-                1 => Listener,
-                2 => condition.Owner.Plugin.AdjustOptionalFormId(condition.Reference)
-                    ?? throw new InvalidDataException("Dialogue distance has no explicit reference."),
-                _ => throw new NotSupportedException("Dialogue distance scope is unbound."),
-            };
-            var target = condition.FormArgument1;
-            foreach (var reference in new[] { subject, target })
-                if (reference != records.RuntimeFormKey(0x14) &&
-                    (!records.TryGetEffective(reference, out var placed) || placed.Signature is not ("REFR" or "ACHR" or "ACRE")))
-                    throw new InvalidDataException("Dialogue distance requires actual placed references.");
-            var distance = (referenceDistance ?? throw new NotSupportedException("Dialogue has no shared spatial query owner."))(subject, target);
-            return float.IsFinite(distance) && distance >= 0 ? distance :
-                throw new InvalidDataException("Dialogue spatial owner returned an invalid distance.");
-        }
-        if (condition.Function == 47)
-        {
-            var subject = condition.RunOn switch
-            {
-                0 => speaker,
-                1 => Listener,
-                2 => condition.Owner.Plugin.AdjustOptionalFormId(condition.Reference)
-                    ?? throw new InvalidDataException("Dialogue item count has no explicit reference."),
-                _ => throw new NotSupportedException("Dialogue item-count scope is unbound."),
-            };
-            return (float)(itemCount ?? throw new NotSupportedException("Dialogue has no shared inventory query owner."))
-                (subject, condition.FormArgument1);
-        }
-        if (condition.Function == 40)
-        {
-            if (condition.RunOn > 2) throw new NotSupportedException("Dialogue vampire query scope is unbound.");
-            return (vampireQuery ?? throw new NotSupportedException("Dialogue has no owned vampire query declaration."))();
-        }
-        if (condition.Function == 161)
-            return FalloutAiPackages.IsCurrentPackage(condition, speaker, currentPackage ??
-                throw new NotSupportedException("Dialogue current-package query has no active actor package owner."), Listener) ? 1 : 0;
-        if (condition.Function is 72 or 372)
-        {
-            var subject = condition.RunOn switch
-            {
-                0 => speaker,
-                1 => Listener,
-                2 => condition.Owner.Plugin.AdjustOptionalFormId(condition.Reference)
-                    ?? throw new InvalidDataException("Dialogue identity query has no explicit reference."),
-                _ => throw new NotSupportedException($"Dialogue identity query run-on {condition.RunOn} is unbound."),
-            };
-            return (condition.Function == 372 ? FalloutReferenceIdentity.IsInList(records, subject, condition.FormArgument1) :
-                FalloutReferenceIdentity.Base(records, subject) == condition.FormArgument1) ? 1 : 0;
-        }
-        if (condition.Function == 131 && playerFemale is not null)
-        {
-            if (condition.Argument1 > 1) throw new InvalidDataException("GetPCIsSex has an invalid sex argument.");
-            return playerFemale() == (condition.Argument1 == 1) ? 1 : 0;
-        }
-        if ((condition.Function == 431 && healthPercentage is not null) ||
-            (condition.Function == 14 && actorValue is not null))
-        {
-            var actor = condition.RunOn switch
-            {
-                0 => speaker,
-                1 => Listener,
-                2 => condition.Owner.Plugin.AdjustOptionalFormId(condition.Reference)
-                    ?? throw new InvalidDataException("Dialogue actor query has no explicit reference."),
-                _ => throw new NotSupportedException($"Dialogue actor query run-on {condition.RunOn} is unbound."),
-            };
-            return condition.Function == 431 ? healthPercentage!(actor) : actorValue!(actor, checked((int)condition.Argument1));
-        }
-        // These functions query the explicit QUST argument. Selecting the
-        // speaker, listener or another reference does not change that owner.
-        if (condition.Function is 56 or 58 or 59 or 79 or 420 or 421 or 546) return quests.Evaluate(condition);
-        if (condition.RunOn == 1 && Listener != records.RuntimeFormKey(0x14))
-            return EvaluateActor(condition, Listener, listenerIdentity ??
-                throw new NotSupportedException("Dialogue listener has no authoritative actor identity."));
-        if (condition.Function == 67 && (condition.RunOn is 0 or 1 or 2) && currentCell is not null)
-        {
-            var currentCellKey = currentCell(condition);
-            return FalloutCellQueries.InCell(records, currentCellKey, condition.FormArgument1) ? 1 : 0;
-        }
-        if (condition.RunOn == 0) return EvaluateActor(condition, speaker, identity);
-        return Unbound(condition);
-    }
+        Identity = subject => subject == speaker ? identity : subject == listener ? listenerIdentity : null,
+        Race = actorRace,
+        PlayerFemale = playerFemale,
+        Factions = factions,
+        ActorValue = actorValue,
+        HealthPercentage = healthPercentage,
+        TalkedToPlayer = talkedToPlayer,
+        ItemCount = itemCount,
+        CurrentPackage = currentPackage,
+        Sitting = sitting,
+        Sleeping = sleeping,
+        DeadCount = deadCount,
+        IsDead = isDead,
+        Vampire = vampireQuery,
+        Distance = referenceDistance,
+        InZone = referenceInZone,
+        Cell = currentCell is null ? null : (_, condition) => currentCell(condition),
+        RandomPercent = randomPercent,
+        Global = runtime,
+        Native = (subject, condition) => world is not null ? world.QueryNativeCondition(subject, condition) :
+            subject == records.RuntimeFormKey(0x14) ? (runtime ?? throw new NotSupportedException("Dialogue has no player query owner."))(condition.Declaration) :
+            throw new NotSupportedException($"Dialogue subject {subject} function {condition.Function} has no native owner."),
+    };
 
-    private float EvaluateActor(FalloutCondition condition, FalloutFormKey actor, FalloutDialogueSpeaker actorIdentity)
-    {
-        if (actorIdentity.RecordType == "TACT" && condition.Function is 69 or 70 or 71 or 73 or 365)
-            throw new NotSupportedException($"Talking activator {actor} condition {condition.Function} requires its non-actor query contract.");
-        FalloutFormKey? Race() => actorIdentity.Race is null ? null : actorRace?.Invoke(actor) ?? actorIdentity.Race;
-        return condition.Function switch
-        {
-            50 when talkedToPlayer is not null => talkedToPlayer(actor) ? 1 : 0,
-            69 => Race() == condition.FormArgument1 ? 1 : 0,
-            70 when condition.Argument1 <= 1 => actorIdentity.Female == (condition.Argument1 == 1) ? 1 : 0,
-            71 => ActorFactions(actor, actorIdentity).GetValueOrDefault(condition.FormArgument1, (sbyte)-1) >= 0 ? 1 : 0,
-            73 => ActorFactions(actor, actorIdentity).GetValueOrDefault(condition.FormArgument1, (sbyte)-1),
-            365 => Race() is { } selected && FalloutRaceProperties.IsChild(records.GetEffective(selected)) ? 1 : 0,
-            427 => actorIdentity.VoiceType == condition.FormArgument1 ? 1 : 0,
-            _ => Unbound(condition),
-        };
-    }
-
-    private IReadOnlyDictionary<FalloutFormKey, sbyte> ActorFactions(FalloutFormKey actor, FalloutDialogueSpeaker actorIdentity) =>
-        factions?.Invoke(actor) ?? (actor == speaker ? _factions ??= FalloutAiPackages.ReadFactions(records, identity.Actor, identity.Templates) :
-            FalloutAiPackages.ReadFactions(records, actorIdentity.Actor, actorIdentity.Templates));
-
-    private float Unbound(FalloutCondition condition)
-    {
-        // The older fallback's target context is the player. It must never
-        // answer an unsupported NPC-listener query with the player's state.
-        if (condition.RunOn == 1 && Listener != records.RuntimeFormKey(0x14))
-            throw new NotSupportedException($"Dialogue listener {Listener} condition {condition.Owner.FormKey}/{condition.Function} is unbound.");
-        return runtime?.Invoke(condition) ??
-            throw new NotSupportedException($"Dialogue actor {speaker} condition {condition.Owner.FormKey}/{condition.Function}/{condition.RunOn} is unbound.");
-    }
-
+    internal float Evaluate(FalloutCondition condition) =>
+        _runtime.Evaluate(condition, new(speaker, Listener, world is null ? null : world.GetLinkedRef));
 }

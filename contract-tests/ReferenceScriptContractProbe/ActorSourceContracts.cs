@@ -181,6 +181,14 @@ internal static class ActorSourceContracts
             }
             Console.WriteLine("OPENNV_TALKING_ACTIVATOR_IDENTITY_PASS sourceVoice=true nonActor=true sharedColdHistory=true unknownQueries=visible");
             using var world = new FalloutReferenceWorld(records);
+            var regionConditions = new FalloutConditionRuntime(records, new(records), world)
+            { PlayerPlacement = () => new(Key(0x882), [1, 1, 0], [0, 0, 0]) };
+            var regionCondition = new FalloutCondition(records.GetEffective(Key(0x8f1)), 0, 0, 612, 0x8f1, 0, 1, 0);
+            var regionScope = new FalloutConditionScope(Key(0x900), records.RuntimeFormKey(0x14));
+            Check(regionConditions.Evaluate(regionCondition, regionScope) == 1 &&
+                regionConditions.Evaluate(regionCondition with { RunOn = 2, Reference = 0x14 }, regionScope) == 1 &&
+                regionConditions.Evaluate(regionCondition with { RunOn = 0 }, regionScope) == 1,
+                "PlayerInRegion changed its player owner with the actor subject scope.");
             Check(FalloutActorValue.UserSlot(62) == "variable01" && FalloutActorValue.UserSlot(66) == "variable05" &&
                 FalloutActorValue.UserSlot(71) == "variable10", "Numeric user values changed their engine slots.");
             Reject(() => FalloutActorValue.UserSlot(61));

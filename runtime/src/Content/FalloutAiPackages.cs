@@ -1,3 +1,4 @@
+using Function = OpenNV.Runtime.Content.Definitions.FalloutConditionFunction;
 using System.Buffers.Binary;
 using OpenNV.Runtime.Gameplay.State;
 
@@ -8,7 +9,7 @@ internal static class FalloutAiPackages
     internal static float Sleeping(FalloutPluginStack records, FalloutCondition condition,
         FalloutFormKey caller, Func<FalloutFormKey, int> query, FalloutFormKey? target = null)
     {
-        if (condition.Function != 49 || condition.Argument1 != 0 || condition.Argument2 != 0)
+        if (condition.Kind != Function.GetSleeping || condition.Argument1 != 0 || condition.Argument2 != 0)
             throw new InvalidDataException("Sleeping condition differs from the source GetSleeping declaration.");
         var subject = ConditionSubject(condition, caller, target);
         if (records.GetEffective(subject).Signature is not ("ACHR" or "ACRE"))
@@ -21,7 +22,7 @@ internal static class FalloutAiPackages
     internal static float Sitting(FalloutPluginStack records, FalloutCondition condition,
         FalloutFormKey caller, Func<FalloutFormKey, int>? query, FalloutFormKey? target = null)
     {
-        if (condition.Function != 159 || condition.Argument1 != 0 || condition.Argument2 != 0)
+        if (condition.Kind != Function.GetSitting || condition.Argument1 != 0 || condition.Argument2 != 0)
             throw new InvalidDataException("Sitting condition differs from the source GetSitting declaration.");
         var subject = ConditionSubject(condition, caller, target);
         if (records.RuntimeFormId(subject) != 0x14 &&
@@ -34,7 +35,7 @@ internal static class FalloutAiPackages
 
     internal static float QuestRunning(FalloutCondition condition, FalloutQuestState quests)
     {
-        if (condition.Function != 56)
+        if (condition.Kind != Function.GetQuestRunning)
             throw new InvalidDataException("Quest-running package query has a different source function.");
         if (condition.RunOn != 0)
             throw new NotSupportedException("Quest-running package condition requires its source subject scope owner.");
@@ -54,7 +55,7 @@ internal static class FalloutAiPackages
     internal static bool HasTalkedToPlayer(FalloutCondition condition, FalloutFormKey caller,
         Func<FalloutFormKey, bool> query, FalloutFormKey? target = null)
     {
-        if (condition.Function != 50) throw new InvalidDataException("Talked-to-player query has a different source function.");
+        if (condition.Kind != Function.GetTalkedToPC) throw new InvalidDataException("Talked-to-player query has a different source function.");
         return query(ConditionSubject(condition, caller, target));
     }
 
@@ -65,37 +66,13 @@ internal static class FalloutAiPackages
     internal static bool IsCurrentPackage(FalloutCondition condition, FalloutFormKey caller,
         Func<FalloutFormKey, FalloutFormKey?> query, FalloutFormKey? target = null)
     {
-        if (condition.Function != 161) throw new InvalidDataException("Current-package query has a different source function.");
+        if (condition.Kind != Function.GetIsCurrentPackage) throw new InvalidDataException("Current-package query has a different source function.");
         return query(ConditionSubject(condition, caller, target)) == condition.FormArgument1;
     }
 
     internal static FalloutFormKey ConditionSubject(FalloutCondition condition, FalloutFormKey caller,
         FalloutFormKey? target = null)
-    {
-        var subject = condition.RunOn switch
-        {
-            0 => caller,
-            1 => target ?? Target(),
-            2 => condition.Owner.Plugin.AdjustOptionalFormId(condition.Reference) ??
-                throw new InvalidDataException("Actor condition has no explicit reference."),
-            _ => throw new NotSupportedException($"Actor condition run-on {condition.RunOn} has no subject owner."),
-        };
-        return subject;
-
-        FalloutFormKey Target()
-        {
-            if (condition.Owner.Signature != "PACK")
-                throw new NotSupportedException("Actor condition has no package target owner.");
-            var targets = condition.Owner.ReadSubrecords().Where(field => field.Signature == "PTDT").ToArray();
-            if (targets.Length != 1 || targets[0].Data.Length != 16)
-                throw new InvalidDataException("Actor condition has an invalid package target extent.");
-            var target = targets[0].Data.Span;
-            if (BinaryPrimitives.ReadInt32LittleEndian(target) != 0)
-                throw new NotSupportedException("Actor condition requires its reference package target owner.");
-            return condition.Owner.Plugin.AdjustOptionalFormId(BinaryPrimitives.ReadUInt32LittleEndian(target[4..])) ??
-                throw new InvalidDataException("Actor condition has no package target reference.");
-        }
-    }
+        => new FalloutConditionScope(caller, target).Resolve(condition);
 
     internal static IReadOnlyDictionary<FalloutFormKey, sbyte> ReadFactions(FalloutPluginStack stack, FalloutFormKey npc,
         FalloutActorTemplateSelection? selection = null)

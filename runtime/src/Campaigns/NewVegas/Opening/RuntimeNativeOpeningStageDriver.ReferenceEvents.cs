@@ -1,3 +1,4 @@
+using OpenNV.Runtime.Content.Definitions;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.World.Cells;
@@ -153,29 +154,12 @@ internal partial class RuntimeNativeOpeningStageDriver
             actor => _scripts.References!.ActorFactions(actor), () => _character.Female,
             actor => _scripts.References!.ActorRace(actor), _scripts.ScriptValues.RandomBounded, CurrentActorPackage,
             _scripts.ActorQueries.GetVampire, InventoryCommands.ItemCount, ReferenceDistance, ReferenceInZone, ActorSitting,
-            _scripts.References!.GetDeadCount, DialogueActorDead, _scripts.AddedTopics, _scripts.References!.GetSleeping);
+            _scripts.References!.GetDeadCount, DialogueActorDead, _scripts.AddedTopics, _scripts.References!.GetSleeping,
+            world: _scripts.References);
         AddChild(_conversation);
     }
 
-    private Func<FalloutCondition, float> ConversationConditionContext() => condition =>
-        {
-            if (condition.Function == 382) return _scripts.References!.EvaluatePlayerNoteCondition(condition)!.Value;
-            if (condition.Function is 573 or 574 or 575) return _scripts.References!.EvaluateReputationCondition(condition)!.Value;
-            if (FalloutPlatformConditions.Evaluate(condition) is { } platform) return platform;
-            if (condition.Function is 56 or 58 or 59 or 79 or 420 or 421 or 546) return _quests.Evaluate(condition);
-            if (condition.Function == 74) return (_globals ?? throw new InvalidOperationException("Dialogue has no global state owner.")).Get(condition.FormArgument1);
-            if (condition.Function == 53) return (float)_scripts.References!.ReadVariable(_quests, condition.FormArgument1, condition.Argument2);
-            if (condition.Function == 492 && condition.RunOn == 2)
-                return _scripts.References!.MapMarkerVisibility(condition.Owner.Plugin.AdjustFormId(condition.Reference));
-            if (condition.Function == 612) return FalloutExteriorClimate.ContainsRegion(_pluginStack, condition.FormArgument1,
-                FalloutCellSceneReader.ParentWorldspace(_pluginStack.GetEffective(_activeCell)),
-                _player.GlobalPosition.X / _player.UnitsToMeters, -_player.GlobalPosition.Z / _player.UnitsToMeters) ? 1 : 0;
-            if (FalloutInventoryConditions.EvaluateDialoguePlayer(_pluginStack, _inventory, _playerSkills.HasPerk, condition) is { } inventory)
-                return inventory;
-            if (condition.RunOn == 1 && condition.Function == 70 && condition.Argument1 <= 1)
-                return (condition.Argument1 == 1) == _character.Female ? 1 : 0;
-            throw new NotSupportedException($"Conversation condition {condition.Owner.FormKey}/{condition.Function}/{condition.RunOn} is unbound.");
-        };
+    private Func<FalloutCondition, float> ConversationConditionContext() => EvaluateMessageCondition;
 
     private bool DialogueActorDead(FalloutFormKey actor)
     {
@@ -196,14 +180,15 @@ internal partial class RuntimeNativeOpeningStageDriver
 
     private float DialogueActorValue(FalloutFormKey actor, int value)
     {
-        if (value is >= 62 and <= 71)
+        var id = (FalloutActorValueId)value;
+        if (FalloutActorValueNames.IsUser(id))
             return _scripts.References!.ActorValue(actor, FalloutActorValue.UserSlot(value));
         if (_pluginStack.RuntimeFormId(actor) == 0x14)
         {
-            if (value == 16) return Vitals.ExactHitPoints;
-            if (value == 12) return Vitals.ActionPoints;
-            if (value == 54) return Vitals.RadiationRads;
-            if (value is >= 25 and <= 30)
+            if (id == FalloutActorValueId.Health) return Vitals.ExactHitPoints;
+            if (id == FalloutActorValueId.ActionPoints) return Vitals.ActionPoints;
+            if (id == FalloutActorValueId.RadiationRads) return Vitals.RadiationRads;
+            if (FalloutActorValueNames.IsLimb(id))
             {
                 _dialoguePlayerBodyParts ??= FalloutBodyPartData.Read(_pluginStack.GetEffective(_pluginStack.RuntimeFormKey(0x1d)));
                 return _dialoguePlayerBodyParts.LimbCondition(value, Vitals.MaximumHitPoints, Vitals.LimbDamage);
@@ -211,12 +196,11 @@ internal partial class RuntimeNativeOpeningStageDriver
             return _playerSkills.Value(value);
         }
         var world = _scripts.References!;
-        if (value == 16) return world.Health(actor).Current;
-        if (value is >= 25 and <= 30)
+        if (id == FalloutActorValueId.Health) return world.Health(actor).Current;
+        if (FalloutActorValueNames.IsLimb(id))
             return world.BodyParts(actor).LimbCondition(value, world.HealthSource(actor).Health, world.Get(actor).Injury?.LimbDamage);
-        throw new NotSupportedException($"Dialogue actor {actor} value {value} has no state owner.");
+        return world.ActorValue(actor, FalloutActorValueNames.Name(id));
     }
-
     private FalloutActorAppearanceState PlayerCreationState =>
         FalloutNativeCharacterCreation.ActorState(_pluginStack, _raceSexContract.Player, _character) with { PlayerYoung = _scripts.Session.PlayerYoung };
 

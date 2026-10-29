@@ -43,6 +43,8 @@ internal partial class RuntimeNativeConversation : Node
     private Func<FalloutFormKey, int>? _sleeping;
     private Func<FalloutFormKey, int>? _deadCount;
     private Func<FalloutFormKey, bool>? _isDead;
+    private FalloutReferenceWorld? _world;
+    private Func<uint, uint>? _conditionRandom;
     private FalloutQuestState _quests = null!;
     private CanvasLayer? _layer;
     private NativeOwnedDialogueMenu? _menu;
@@ -79,9 +81,11 @@ internal partial class RuntimeNativeConversation : Node
         Func<FalloutFormKey, FalloutFormKey, float>? referenceDistance = null,
         Func<FalloutFormKey, FalloutFormKey, bool>? referenceInZone = null, Func<FalloutFormKey, int>? sitting = null,
         Func<FalloutFormKey, int>? deadCount = null, Func<FalloutFormKey, bool>? isDead = null,
-        HashSet<FalloutFormKey>? addedTopics = null, Func<FalloutFormKey, int>? sleeping = null)
+        HashSet<FalloutFormKey>? addedTopics = null, Func<FalloutFormKey, int>? sleeping = null,
+        FalloutReferenceWorld? world = null)
     {
         _records = records; _quests = quests; _player = player; _speech = speech; _runtimeConditions = evaluate;
+        _world = world; _conditionRandom = dialogueRandom;
         // Publish focus after the ordinary player camera and animated actors.
         ProcessPriority = 100;
         _resolveRunOnCell = resolveRunOnCell;
@@ -133,7 +137,8 @@ internal partial class RuntimeNativeConversation : Node
             _conditions = new(_records, _quests, _dialogueSubject, identity,
                 _runtimeConditions, currentCell, _healthPercentage, _actorValue, _talkedToPlayer, _factions, _playerFemale, _actorRace,
                 currentPackage: _currentPackage, vampireQuery: _vampireQuery, itemCount: _itemCount, referenceDistance: _referenceDistance,
-                referenceInZone: _referenceInZone, sitting: _sitting, deadCount: _deadCount, isDead: _isDead, sleeping: _sleeping);
+                referenceInZone: _referenceInZone, sitting: _sitting, deadCount: _deadCount, isDead: _isDead, sleeping: _sleeping,
+                world: _world, randomPercent: _conditionRandom is null ? null : () => _conditionRandom(100));
             _speakerName = FalloutDialogueTopic.Text(npc.ReadSubrecords().Single(field => field.Signature == "FULL").Data.Span);
             _speech.BeginPlayerDialogue(_speaker);
             _layer = new CanvasLayer { Layer = 95 }; AddChild(_layer);
