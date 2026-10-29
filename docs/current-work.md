@@ -1,83 +1,84 @@
 # Current work
 
-## Active owner: Sandbox activity integration
+## Active owner: creature and furniture continuation integration
 
-The coordinator plans and reviews. User-authorized GPT-6.1 Sol High implementers
-share one checkout and feature branch; the actor executor alone owns builds,
-game input and Git. Follow [implementation-plan.md](implementation-plan.md).
+The coordinator plans/reviews; user-authorized GPT-6.1 Sol High implementers share
+one checkout and feature branch. The central executor alone owns builds, game
+input and Git. Follow [implementation-plan.md](implementation-plan.md).
 
-Acceptance requires retail systems and presentation through Goodsprings to the
-Strip, sustained native 3840x2160 at 60 FPS indoors and outdoors, and separate
-physical XR acceptance including the 144 Hz target. Arrival or selected checks
-do not establish completion. Historical save compatibility is expendable;
+Acceptance requires retail systems/presentation through Goodsprings to the Strip,
+sustained native 3840x2160 at 60 FPS indoors/outdoors, and separate physical XR
+acceptance including 144 Hz. Historical save compatibility is expendable;
 current-build saving remains a gameplay feature. Recording and trace are off.
 
-Branch `codex/sandbox-activity-execution` is based on merged PR #325,
-`a8c6b15485a5040cf61a7eecb08ded45da361547`. Local main equals origin/main.
-Eighteen unrelated generated classic import EOL changes remain preserved and
-excluded. PR #325 passed its required local and hosted checks. This unpublished
-batch passed its fresh mandatory gate and selected owned native NPC furniture/
-checkpoint audit. Both builds had zero warnings/errors; formatting, contracts,
-launcher and native Godot checks passed. Hosted checks are pending publication.
+Merged PR #326 at `874c56d8b53e6a08d9123b4502060b39611defb7` passed its local
+mandatory gate, selected owned NPC checkpoint audit and hosted checks. Local main
+equals origin/main. Current branch `codex/creature-idle-completion` contains the
+next unpublished patch; its fresh final gate and selected owned checkpoint audit pass. Hosted checks
+await publication. Eighteen unrelated
+generated classic import EOL changes remain preserved and excluded.
 
-## Verified gameplay and next owner
+## Current verified result
 
-ExportRelease candidate `06d9e517-0d91-4e53-b0ee-c3fa50bb1c7f` compiled with zero
-Debug warnings/errors and continued the canonical VCG01 stage-200 save. Both
-exterior NPCs 104f03 and 104f0a executed source LooseRaking through End, retired
-the request and returned to marker selection or Wander without AI/animation
-errors. Ordinary F5 command 103, generation 1, completed; its checkpoint retains
-two marker continuations and request graphs. Cold restoration of those newly
-saved graphs remains unverified. The interrupted held-phase guard is now fixed
-in source, after this candidate's gameplay check, and passes the final gate.
+ExportRelease MVID `d6367556-4a09-427b-ba2c-9dd38a633259` built with zero Debug
+warnings/errors. Ordinary Continue restored tutorial 20, then ordinary rifle
+practice, Sunny's route and hostile combat reached quest 10a214 stage 50. Both
+first-well geckos died through source projectile/health events. Corpse activation
+and Take All added NVGeckoMeat 1; player HP remained100. F5 command141 generation 1
+completed with error/cleanup null, cell 0e1ab6, written 06:31:32.972 UTC.
 
-Ordinary continuation reached Sunny in the saloon, cell 106185. F5 generation 2
-completed before the next conversation. Sunny INFO 10a1e4 / quest 10a214 stage 10
-then failed while Cheyenne executed script idle 0c1991: the creature script-idle
-owner explicitly refuses finite completion/return. This is the next runtime
-owner, not a bot policy failure. Combat was not reached. The game closed normally
-and released its source owners. Shutdown also logged a Godot
-`ExceptionUtils.LogException` NullReferenceException; process exit and owner
-disposal are verified, while clean shutdown logging remains unresolved.
-The canonical current-profile save under
-`local/integrated-baseline-20261028/gameplay` now resumes meaningful stage-200
-saloon progress; do not replay character creation or the questionnaire.
+The canonical profile at `local/integrated-baseline-20261028/gameplay` now holds
+that successful tutorial 50 fight/loot checkpoint. Do not replay opening or
+character creation, and do not return to tutorial 20 without an actual need.
+The game closed normally and disposed source owners. No new creature-retirement,
+exception-logger, missing marker-reservation or furniture-mask error was observed.
+No game or build is running before the publication checks begin.
 
-The actor batch shares furniture physical execution with Sandbox without
-completing the parent package, retains sampled daily scheduling, and selects
-before checking executor support. Doc is no longer a permanent save blocker:
-his real bed marker/reservation, source approach and unchanged parent package
-state can save. Bed entry/loop/exit and ordinary chair entry remain unverified.
-Marker execution now retains current/queued/outgoing requests, source clocks,
-ease-out retirement, ANIO transforms and source cursor. Snapshot blending uses
-the shared signed-priority kernel; explicit skeleton resets preserve owned NIF
-scalar scale without overwriting subsequent live animation or VR transforms.
+## Patch and evidence boundary
 
-Ordinary Hotkey assignment and physical key 1 equipped/drew the Weathered 10mm.
-Earlier integrated gameplay passed Stimpak Drop/Take, 9 -> 8 -> 9, through the
-settled source NIF body and E activation. Repair/Mod, per-instance magazines and
-Take All conservation compile; focused probe cases passed the central gate
-and broader ordinary coverage remains open. Caravan and VATS runtime, input,
-menus and consequences compile, but a complete ordinary match and VATS engagement
-remain untested. No retail parity claim follows from these integrated owners.
+- Finite creature script idles now pass authored End into actual ease-out,
+  retain completed KF state only while the return fade owns it, and restore or
+  retire through the shared clock/pose owner. Actual saloon Continue completed
+  Cheyenne idle 0c1991 at 2.6666667 seconds, resumed package 152afa and allowed
+  Sunny's formerly failing stage 10 to complete all eight steps. Shutdown capture
+  no longer reported its former creature/logger exception. The compact existing
+  continuation regression passes the reference-script probe and full gate.
+- World.Restore now adopts validated idle-marker claims alongside furniture
+  seats. Actual Continue published both formerly missing NPCs 104f03/104f0a with
+  no AI/animation error; source raking resumed and retired normally. No named
+  reset, save edit or new selection was used. The existing cold-owner/conflict
+  regression passes the full gate.
+- Actual NPC 1629a8 selected Furniture 107721 and blocked an earlier post-fight
+  save because FURN 153553 enables ordinal bits 0/1 while its owned lawn-chair NIF
+  has one physical marker 0 of type 14. ReadSeats now iterates physical positions,
+  then filters their ordinal permissions. Source bytes, marker type and GMST
+  offsets remain intact. The exact owned pair and synthetic edge cases ground
+  this decoder correction. Final replay had no blocker and saved, but NPC 1629a8
+  did not retain an active chair continuation at that save; physical chair entry
+  and exact retail surplus-bit behavior remain unverified.
 
-Next publish this reviewed integration through one checked PR after the fresh
-local gate and selected owned audit passes. After merge, fix the reached
-creature finite idle completion/return on a fresh feature branch, then continue
-Sunny's tutorial and actual combat from the current save. No further feature
-expansion before this publication boundary.
+Earlier integrated candidate c7888fb2 exercised real VATS selection/cancel with
+AP 80 unchanged, then two queued 35-AP torso attacks on hostile Gecko 10a1fd. Both
+rolled misses and completed actual rifle shots/impacts; loaded 4 -> 2, reserve 20,
+AP decreased/regenerated, queue completed without error. Hit/damage, cinematic
+and matched VATS behavior remain unverified. Never manipulate rolls or targets.
 
-## Material open work
+## Remaining owners and next action
 
-- Full retail behavior/pixels, FaceGen shading, animation and audio parity remain
-  open. Sandman/Cannibal special-action execution remains unsupported.
-- Native 4K60 travel/streaming/combat is unmet; observed stream commits exceeded
-  budget. No controlled performance or speedup claim is established.
-- Crime/detection and owned lock/hack consequences, complete merchant behavior,
-  crafting/loot/barter coverage, full Caravan and VATS remain open.
-- Other creature packages, LOD materials, SpeedTree, constraints and explicit
-  source divergences remain. Bed/chair end-to-end gameplay is unverified.
-- Physical XR still has malformed rifle hands/forearms and render/session
-  failures. Flat and XR share authoritative gameplay and saves.
+The fresh mandatory gate and selected owned checkpoint audit pass. Publish
+this coherent patch through a checked PR. Continue from tutorial 50 afterward.
+No new feature implementation before that publication boundary.
 
-Keep detailed design in [runtime-repair-design.md](runtime-repair-design.md).
+Active SayTo saving has no serialized speech-channel continuation and refuses
+capture; waiting for a line to finish is not that capability. Background gecko
+16518c uses Find/Food package 1651b1 procedure 0, currently unbound; it is separate
+from tutorial foes and the fixed furniture decoder. Repair/Mod and broader
+magazine use need ordinary coverage. Caravan runtime/UI/consequences compile;
+a complete match remains untested. Doc's bed approach saves, but bed/chair
+entry-loop-exit gameplay remains unverified.
+
+Native 4K60 travel/combat is unmet; observed streaming commits exceeded budget.
+Full retail pixels, FaceGen, audio, crime/factions, merchant/crafting coverage,
+other creature procedures and physical XR hands/render/session acceptance remain
+open. No campaign, parity or performance completion is claimed. Keep detailed
+design in [runtime-repair-design.md](runtime-repair-design.md).

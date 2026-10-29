@@ -1,6 +1,8 @@
 using System.Buffers.Binary;
 using System.Text;
+using System.Text.Json;
 using OpenNV.Runtime.Content;
+using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.World.Cells;
 
 internal static class IdleMarkerReservationContracts
@@ -16,13 +18,17 @@ internal static class IdleMarkerReservationContracts
             var references = Join(Reference("ACHR", 0x900, 0x700), Reference("ACRE", 0x901, 0x701),
                 Reference("REFR", 0x902, 0x710), Reference("REFR", 0x903, 0x710), Reference("REFR", 0x904, 0x711),
                 Record("REFR", 0x905, Field("NAME", [0, 1]), Field("DATA", new byte[24])),
-                Reference("REFR", 0x906, 0x700), Reference("ACHR", 0x907, 0x701));
+                Reference("REFR", 0x906, 0x700), Reference("ACHR", 0x907, 0x701), Reference("ACHR", 0x908, 0x700));
             var group = new byte[24 + references.Length]; Encoding.ASCII.GetBytes("GRUP").CopyTo(group, 0);
             BinaryPrimitives.WriteUInt32LittleEndian(group.AsSpan(4), (uint)group.Length);
             BinaryPrimitives.WriteUInt32LittleEndian(group.AsSpan(8), 0x800);
             BinaryPrimitives.WriteInt32LittleEndian(group.AsSpan(12), 6); references.CopyTo(group, 24);
+            var packageData = new byte[12]; packageData[4] = 12;
+            var location = new byte[12]; location[0] = 3;
             File.WriteAllBytes(path, Join(Record("TES4", 0, Field("HEDR", new byte[12])),
                 Record("NPC_", 0x700), Record("CREA", 0x701), Record("STAT", 0x711),
+                Record("PACK", 0x720, Field("EDID", Encoding.ASCII.GetBytes("MarkerSandbox\0")),
+                    Field("PKDT", packageData), Field("PLDT", location), Field("IDLC", [0]), Field("POBA", [])),
                 Record("IDLM", 0x710, Field("IDLF", [0]), Field("IDLC", [0]), Field("IDLT", BitConverter.GetBytes(0f))),
                 Record("CELL", 0x800, Field("DATA", [1])), group));
             using var records = FalloutPluginStack.Load(directory, ["Markers.esm"]);
@@ -95,8 +101,38 @@ internal static class IdleMarkerReservationContracts
             }
             catch (NotSupportedException error) when (error.Message == "occupancy unavailable") { }
             Require(!world.OwnsIdleMarker(first, 0, actor), "Failed occupancy observation partially acquired a marker.");
+            using (var source = new FalloutReferenceWorld(records))
+            {
+                string Hash(uint id) => FalloutActorFurnitureContinuation.RecordHash(records.GetEffective(Key(id)));
+                var participant = source.Get(actor); var competitor = Key(0x908);
+                _ = source.Get(competitor); _ = source.Get(first);
+                participant.Animation.Change("meshes/fixture/idle.kf", new string('a', 64));
+                participant.Animation.Advance(.5);
+                var assignment = new FalloutActorPackageAssignment(Key(0x720), Hash(0x720), false);
+                participant.PackageAssignment = assignment;
+                participant.PackageMotion = new(Key(0x720), Hash(0x720), "meshes/fixture/idle.kf", new string('a', 64),
+                    .5, false, [0, 0, 0], [0, 0, 0, 1], Sandbox: new(FalloutSandboxActivity.IdleMarker, 9, 1,
+                        new FalloutSandboxPreferences().Capture(), first));
+                participant.SandboxMarker = new(assignment, 0, null, null, null, 123, 0, null, Key(0x720),
+                    new(false, false, false, false, false, false, 0), null, first, Key(0x710), Hash(0x710),
+                    FalloutSandboxMarkerPhase.Approach, null);
+                Require(source.ReserveIdleMarker(first, 0, actor, source.IdleMarkerOccupied), "Source continuation did not own its marker.");
+                var snapshots = JsonSerializer.Deserialize<FalloutReferenceSnapshot[]>(JsonSerializer.Serialize(source.Capture()))!;
+                using var cold = new FalloutReferenceWorld(records);
+                cold.Restore(snapshots); // Its internal validation world has disposed before this returns.
+                Require(cold.OwnsIdleMarker(first, 0, actor) &&
+                    cold.Get(actor).SandboxMarker?.Marker == first &&
+                    !cold.ReserveIdleMarker(first, 0, competitor, cold.IdleMarkerOccupied),
+                    "Cold world lost its validated marker claim or admitted a competing owner after temporary-world disposal.");
+                var retained = snapshots.Single(value => value.Reference == actor);
+                using var conflict = new FalloutReferenceWorld(records);
+                Reject(() => conflict.Restore(snapshots.Select(value => value.Reference == competitor
+                    ? retained with { Reference = competitor } : value).ToArray()));
+                Require(conflict.InstanceCount == 0 && !conflict.OwnsIdleMarker(first, 0, actor),
+                    "Conflicting cold marker continuations partially published actors or reservations.");
+            }
             Console.WriteLine("OPENNV_IDLE_MARKER_RESERVATION_CONTRACT_PASS placedSource=true capacityOne=true separatePlacements=true " +
-                "occupancyAndReservationIndependent=true ownerGuard=true disabledDeletedTakenRefused=true unknownOccupancyRefused=true gameplay=unverified");
+                "occupancyAndReservationIndependent=true ownerGuard=true disabledDeletedTakenRefused=true unknownOccupancyRefused=true coldContinuation=true atomicConflict=true gameplay=unverified");
         }
         finally { File.Delete(path); Directory.Delete(directory, recursive: false); }
     }

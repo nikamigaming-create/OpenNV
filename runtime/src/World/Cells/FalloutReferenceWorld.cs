@@ -1217,6 +1217,7 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
         }
         foreach (var (key, definition) in validated._definitions) _definitions.Add(key, definition);
         foreach (var (seat, actor) in validated._furnitureSeats) _furnitureSeats.Add(seat, actor);
+        foreach (var (marker, actor) in validated._idleMarkerReservations) _idleMarkerReservations.Add(marker, actor);
     }
 
     public void Dispose()

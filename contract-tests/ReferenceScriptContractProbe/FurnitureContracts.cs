@@ -19,6 +19,11 @@ internal static partial class FurnitureContracts
                 Record("NPC_", 0x701, Field("ACBS", new byte[24])), Record("FACT", 0x730),
                 Record("STAT", 0x3b), Record("IDLE", 0x712), Record("FURN", 0x710, Field("MNAM", BitConverter.GetBytes(0x40000001u))),
                 Record("FURN", 0x711, Field("MNAM", BitConverter.GetBytes(0x80000001u))),
+                Record("FURN", 0x714, Field("MNAM", BitConverter.GetBytes(0x40000003u))),
+                Record("GMST", 0x720, Field("EDID", Text("fFurnitureMarker14DeltaX")), Field("DATA", BitConverter.GetBytes(.25f))),
+                Record("GMST", 0x721, Field("EDID", Text("fFurnitureMarker14DeltaY")), Field("DATA", BitConverter.GetBytes(-1.5f))),
+                Record("GMST", 0x722, Field("EDID", Text("fFurnitureMarker14DeltaZ")), Field("DATA", BitConverter.GetBytes(3f))),
+                Record("GMST", 0x723, Field("EDID", Text("fFurnitureMarker14HeadingDelta")), Field("DATA", BitConverter.GetBytes(.125f))),
                 Record("ALCH", 0x713, Field("ENIT", new byte[3])),
                 Record("CELL", 0x800, Field("DATA", [1])), References()));
             var sittingCondition = new byte[28]; BinaryPrimitives.WriteUInt16LittleEndian(sittingCondition.AsSpan(8), 159);
@@ -32,6 +37,14 @@ internal static partial class FurnitureContracts
             using var records = FalloutPluginStack.Load(directory, ["Seats.esm", "Find.esp"]);
             using var world = new FalloutReferenceWorld(records);
             FalloutFormKey Key(uint id) => new("Seats.esm", id);
+            var permitted = records.GetEffective(Key(0x714));
+            var physicalSeats = FalloutFurnitureSource.ReadSeats(records, permitted, FurnitureMarkers(1));
+            Require(physicalSeats.Count == 1 && physicalSeats[0].Index == 0 && physicalSeats[0].MarkerId == 14 &&
+                physicalSeats[0].PlacementOffset.SequenceEqual([.25f, -1.5f, 3f]) && physicalSeats[0].HeadingDelta == .125f,
+                "Unused furniture permission bits invented seats or confused physical ordinals with marker type/settings.");
+            Require(FalloutFurnitureSource.ReadSeats(records, permitted, FurnitureMarkers(33)).Select(seat => seat.Index).SequenceEqual([0, 1]),
+                "Furniture positions outside the lower thirty mask bits wrapped into an enabled ordinal.");
+            Reject(() => FalloutFurnitureSource.ReadSeats(records, permitted, FurnitureMarkers(0)));
             var cell = FalloutCellSceneReader.Read(records, Key(0x800)); world.LoadCell(cell);
             var source = FalloutFindFurniturePackage.Read(records.GetEffective(new("Find.esp", 0x400)));
             var actor = Key(0x900); var chair = Key(0x901); var otherActor = Key(0x90a); var player = Key(0x14);
@@ -240,6 +253,26 @@ internal static partial class FurnitureContracts
         BinaryPrimitives.WriteUInt32LittleEndian(group.AsSpan(4), (uint)group.Length);
         BinaryPrimitives.WriteUInt32LittleEndian(group.AsSpan(8), 0x800); BinaryPrimitives.WriteInt32LittleEndian(group.AsSpan(12), 6);
         body.CopyTo(group, 24); return group;
+    }
+
+    private static FalloutNifFile FurnitureMarkers(int count)
+    {
+        using var bytes = new MemoryStream();
+        using var writer = new BinaryWriter(bytes, Encoding.UTF8, leaveOpen: true);
+        void Sized(string value) { var text = Encoding.UTF8.GetBytes(value); writer.Write(text.Length); writer.Write(text); }
+        writer.Write(Encoding.ASCII.GetBytes("Gamebryo File Format, Version 20.2.0.7\n"));
+        writer.Write(FalloutNifFile.Version); writer.Write((byte)1); writer.Write(FalloutNifFile.UserVersion);
+        writer.Write(1); writer.Write(34u); writer.Write(new byte[] { 1, 0, 1, 0, 1, 0 });
+        writer.Write((ushort)1); Sized("BSFurnitureMarker"); writer.Write((ushort)0); writer.Write(8 + count * 16);
+        writer.Write(1); writer.Write(3); Sized("FRN"); writer.Write(0);
+        writer.Write(0); writer.Write(count);
+        for (var index = 0; index < count; ++index)
+        {
+            writer.Write((float)index); writer.Write(2f); writer.Write(3f);
+            writer.Write((ushort)0); writer.Write((byte)14); writer.Write((byte)14);
+        }
+        writer.Write(1); writer.Write(0); writer.Flush();
+        return FalloutNifFile.Read(bytes.ToArray());
     }
 
     private static byte[] Package(uint id, int targetType, uint target, int count = 0, uint flags = 0x1006)

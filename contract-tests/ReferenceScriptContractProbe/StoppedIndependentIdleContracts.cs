@@ -78,6 +78,51 @@ internal static class StoppedIndependentIdleContracts
             [objectBinding with { RecordSha256 = new string('0', 64) }],
             [objectBinding with { Resource = "meshes/fixture/other.nif" }],
         }) Reject(() => (withObject with { Objects = invalidObjects }).ValidateSource(records));
+        // A finite KF can finish before its live ease-out releases the slot.
+        // Cold state must preserve both clocks, including the final held update.
+        {
+            var settings = new FalloutIdleTransition.Settings(.4f, 1);
+            var metadata = new FalloutIdleTransition.Metadata(0, 0, 0);
+            var transition = FalloutIdleTransition.CreateSnapshot(new(0, false, false, false, false, false), metadata, null, settings);
+            transition.Advance(0); transition.Advance(1);
+            var blend = new FalloutActorIdleSnapshotTransition(transition.Capture(), settings, residual.Copy());
+            var finite = new FalloutIdleAnimationPlayback(0, 2, 1, 2, keys, 0);
+            finite.Advance(2);
+            var fade = new FalloutIdleDeactivation(metadata, settings);
+            fade.Advance(0); fade.Advance(.125);
+            var returning = new FalloutActorStoppedIdleAnimation("script", animation with
+            {
+                Idle = Key(0x31), IdleSha256 = Hash(0x31), Resource = "meshes/fixture/chair-base.kf", Clock = finite.Capture()
+            }, blend, new(2, 3, fade.Capture()));
+            returning.Validate(records);
+            var restored = JsonSerializer.Deserialize<FalloutActorStoppedIdleAnimation>(JsonSerializer.Serialize(returning))!.Copy();
+            restored.Validate(records);
+            Require(restored.Animation.Clock == finite.Capture() && restored.ScriptPhase == returning.ScriptPhase &&
+                restored.Transition!.Phase == blend.Phase &&
+                !ReferenceEquals(restored.Transition!.Pose.Bones[0].Position, returning.Transition!.Pose.Bones[0].Position),
+                "Cold finite return lost its completed KF, partial fade, held transition or immutable pose ownership.");
+            var coldFade = new FalloutIdleDeactivation(metadata, settings);
+            coldFade.Restore(restored.ScriptPhase!.Deactivation!);
+            fade.Advance(.0625); coldFade.Advance(.0625);
+            Require(fade.Capture() == coldFade.Capture() && !coldFade.Complete,
+                "Cold finite return restarted or completed its retained partial ease-out.");
+            Reject(() => (returning with { ScriptPhase = null }).Validate(records));
+            Reject(() => (returning with { ScriptPhase = new(2, 3) }).Validate(records));
+            foreach (var invalidFade in new[]
+            {
+                new FalloutIdleDeactivationSnapshot(.4f, 0, false),
+                new FalloutIdleDeactivationSnapshot(float.NaN, 0, true),
+                new FalloutIdleDeactivationSnapshot(.4f, -.125, true),
+                new FalloutIdleDeactivationSnapshot(0, 0, true),
+                new FalloutIdleDeactivationSnapshot(.4f, .4f, true),
+            }) Reject(() => (returning with { ScriptPhase = new(2, 3, invalidFade) }).Validate(records));
+            var heldClock = new FalloutIdleAnimationPlayback(0, 2, 1, 2, keys, 0);
+            heldClock.DispatchHeldBoundary(_ => { });
+            var held = returning with { Animation = returning.Animation with { Clock = heldClock.Capture() }, ScriptPhase = new(2, 5) };
+            JsonSerializer.Deserialize<FalloutActorStoppedIdleAnimation>(JsonSerializer.Serialize(held))!.Copy().Validate(records);
+            heldClock.Advance(.0625);
+            Reject(() => (held with { Animation = held.Animation with { Clock = heldClock.Capture() } }).Validate(records));
+        }
         var previous = JsonSerializer.Deserialize<FalloutNativeCampaignState>(JsonSerializer.Serialize(new
         { Schema = FalloutNativeCampaignSave.BeforeIdleObjectsSchema, References = captured }))!;
         var upgraded = FalloutNativeCampaignSave.AdmitPreviousOwnerSchema(previous);

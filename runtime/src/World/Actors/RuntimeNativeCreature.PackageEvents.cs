@@ -128,10 +128,6 @@ internal sealed partial class RuntimeNativeCreature
 
     private void DispatchIdleInterval(RuntimeNativeNifAnimation animation, FalloutIdleAnimationInterval interval, FalloutFormKey idle)
     {
-        if (ReferenceEquals(animation, _scriptIdleAnimation) && animation.TextKeys.Any(key => key.Time <= interval.To &&
-            (key.Time > interval.From || interval.IncludeFrom && key.Time == interval.From) &&
-            key.Value.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries).Any(value => value.Trim().Equals("end", StringComparison.OrdinalIgnoreCase))))
-            throw new NotSupportedException("Creature script idle end requires its source completion/return owner.");
         animation.ApplySourceTime(interval.To);
         var declarations = GroupKeys(animation);
         for (var ordinal = 0; ordinal < animation.TextKeys.Count; ++ordinal)
@@ -145,6 +141,10 @@ internal sealed partial class RuntimeNativeCreature
                 var structural = value.Equals("start", StringComparison.OrdinalIgnoreCase) || value.Equals("end", StringComparison.OrdinalIgnoreCase) ||
                     value.Equals("StartLoop", StringComparison.OrdinalIgnoreCase) || value.Equals("EndLoop", StringComparison.OrdinalIgnoreCase);
                 var kind = declarations.Kind(ordinal, segment);
+                if (ReferenceEquals(animation, _scriptIdleAnimation) && kind == FalloutIdleGroupKeyKind.GroupMarker &&
+                    value.Equals("End", StringComparison.OrdinalIgnoreCase) && _scriptIdleClock!.AdditionalLoops == 0 &&
+                    _scriptIdleDeactivation is null)
+                    _scriptIdleEndPending = true;
                 var disposition = kind == FalloutIdleGroupKeyKind.NonmatchingGroupMarker
                     ? "source-nonmatching-group-marker" : kind == FalloutIdleGroupKeyKind.TransitionMetadata &&
                         ReferenceEquals(animation, _scriptIdleAnimation) && _scriptIdleTransition is not null
