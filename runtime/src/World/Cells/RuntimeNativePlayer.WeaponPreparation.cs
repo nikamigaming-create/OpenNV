@@ -15,6 +15,7 @@ internal partial class RuntimeNativePlayer
         {
             _shot = FalloutWeaponShot.Read(_presentationRecords!, weapon.Form,
                 _weaponHandling!.Ammunition(weapon), weapon.HasAmmunitionSource);
+            _shot = FalloutWeaponModifications.Apply(_presentationRecords!, _shot, _presentationInventory!.WeaponModMask(weapon.Form));
             _shot.RequireRuntimeAttackOwner();
             PrepareAutoAimShapes(_shot);
             _ = PrepareAttackVariants(weapon, weapon.AttackGroup);
@@ -48,7 +49,14 @@ internal partial class RuntimeNativePlayer
     {
         if (_muzzleOwner == _firstPerson!.GetInstanceId() && _muzzleProjectile == projectile.Form) return;
         _muzzleOwner = _firstPerson.GetInstanceId(); _muzzleProjectile = projectile.Form; _muzzleError = null;
-        try { _firstPerson.PrepareMuzzle(projectile); _thirdPerson?.PrepareMuzzle(projectile); }
+        try
+        {
+            if (_weaponSoundOwner is not null) EnsureWeaponSounds();
+            _thirdPerson?.PrepareMuzzle(projectile, _weaponSounds);
+            _firstPerson.PrepareMuzzle(projectile, _weaponSounds, _xr is null
+                ? path => (_thirdPerson ?? throw new NotSupportedException("Flat muzzle audio has no actual world weapon.")).MuzzleAddonSoundEmitter(path)
+                : null);
+        }
         catch (Exception error)
         {
             _muzzleError = error.Message;

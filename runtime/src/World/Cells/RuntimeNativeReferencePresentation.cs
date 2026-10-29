@@ -43,7 +43,7 @@ internal partial class RuntimeNativeReferencePresentation : Node
         var sourceReferences = _nodes.Keys.Concat(_warmNodes.Keys).Distinct().Where(key =>
             (_nodes.GetValueOrDefault(key) ?? _warmNodes.GetValueOrDefault(key).Node) is
                 OpenNV.Runtime.World.Actors.RuntimeNativeNpc or OpenNV.Runtime.World.Actors.RuntimeNativeCreature).ToHashSet();
-        if (sourceReferences.Any(key => !_world.Get(key).AnimationSoundEvents.CanCapture))
+        if (sourceReferences.Any(key => !_world.Get(key).AnimationSoundsCaptureReady))
         {
             var tree = GetTree(); var previousPause = tree.Paused;
             try
@@ -66,7 +66,7 @@ internal partial class RuntimeNativeReferencePresentation : Node
             finally { tree.Paused = previousPause; }
         }
         foreach (var key in sourceReferences)
-            if (!_world.Get(key).AnimationSoundEvents.CanCapture) _ = _world.Get(key).AnimationSoundEvents.Capture();
+            if (!_world.Get(key).AnimationSoundsCaptureReady) _ = _world.Get(key).AnimationSoundEvents.Capture();
     }
 
     internal void RetireOverlappingActors(IReadOnlyList<FalloutPlacedReference> destination,

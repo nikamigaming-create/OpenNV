@@ -143,18 +143,19 @@ internal partial class RuntimeNativePlayer
     }
     internal void XrActivate()
     {
-        if (_modalInput || _furniturePhase != 0) return;
+        if (_modalInput || VatsExecuting || _furniturePhase != 0) return;
         if (!_activationEnabled || ActivationObject() is not { } collider) { RejectActivation(); return; }
         if (ActivateReference?.Invoke(collider) != true) RejectActivation();
     }
     internal void XrReload(bool pressed)
     {
-        if (_modalInput || _furniturePhase != 0) return;
+        if (_modalInput || VatsExecuting || _furniturePhase != 0) return;
         using var input = new InputEventAction { Action = _configuration.Player.DesktopInput.Reload.Action, Pressed = pressed };
         WeaponInput(input);
     }
     internal void XrFire(bool pressed)
     {
+        if (VatsExecuting) return;
         if (pressed == _weaponTriggerHeld || pressed && (_modalInput || _furniturePhase != 0)) return;
         using var input = new InputEventAction { Action = _configuration.Player.DesktopInput.Fire.Action, Pressed = pressed };
         WeaponInput(input);

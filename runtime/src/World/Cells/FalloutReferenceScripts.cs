@@ -709,6 +709,8 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                 { ReadOnly = true };
             if (parts.Length <= 2 && operation == "getsitting")
                 return new([], _ => world.GetSitting(Target(), host.Sitting)) { ReadOnly = true };
+            if (parts.Length <= 2 && operation == "getsleeping")
+                return new([], _ => world.GetSleeping(Target())) { ReadOnly = true };
             if (parts.Length <= 2 && operation == "gettalkedtopc")
                 return new([], _ => world.GetTalkedToPlayer(Target()) ? 1 : 0) { ReadOnly = true };
             if (parts.Length <= 2 && operation == "getlinkedref")

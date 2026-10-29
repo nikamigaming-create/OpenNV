@@ -61,7 +61,9 @@ internal sealed record FalloutNativeCampaignState(
     FalloutReputationsSnapshot? Reputations = null,
     FalloutPlayerNotesSnapshot? PlayerNotes = null,
     FalloutPlayerAdvancementSnapshot? PlayerAdvancement = null,
-    bool PlayerSneaking = false, FalloutPlayerCaravanCardsSnapshot? PlayerCaravanCards = null);
+    bool PlayerSneaking = false, FalloutPlayerCaravanCardsSnapshot? PlayerCaravanCards = null,
+    IReadOnlyList<FalloutDroppedReferenceSnapshot>? DroppedItems = null,
+    FalloutActorProjectileLaunch? PlayerProjectileLaunch = null);
 
 internal sealed record FalloutNativeCampaignRestore(
     FalloutNativeCampaignState State,
@@ -392,6 +394,7 @@ internal static class FalloutNativeCampaignSave
             references.RestoreReputations(state.Reputations);
             references.PlayerNotes.Restore(state.PlayerNotes);
             references.PlayerCaravanCards.Restore(state.PlayerCaravanCards);
+            references.RestoreDroppedItems(state.DroppedItems);
         }
         validatedValues?.Arrays.ValidateRestoredRoots();
         foreach (var form in validatedValues?.Arrays.Forms ?? [])
@@ -570,6 +573,7 @@ internal static class FalloutNativeCampaignSave
             throw new InvalidDataException("Earlier campaign schemas cannot own executable HUD notices.");
         if (state.Schema == BeforeExecutableNoticeSchema) state = state with { Schema = ExpectedSchema };
         ValidatePlayerCaravanSchema(state);
+        state.PlayerProjectileLaunch?.Validate();
         if (state.Schema == BeforeCaravanCardsSchema) state = state with { Schema = ExpectedSchema };
         if (state.Schema != ExpectedSchema && state.References?.Any(reference => reference.ProjectileLaunch is not null ||
             reference.CorpseEquipment?.LaunchRefusal is not null) == true)
@@ -613,6 +617,12 @@ internal static class FalloutNativeCampaignSave
     {
         ValidatePlayerNotesSchema(state);
         ValidatePlayerCaravanSchema(state);
+        if (state.DroppedItems is { } dropped)
+        {
+            foreach (var item in dropped) item.ValidateState();
+            if (dropped.Select(item => item.Identity).Distinct().Count() != dropped.Count)
+                throw new InvalidDataException("Saved dynamic dropped reference identity is duplicated.");
+        }
         ValidateReputationSchema(state);
         ValidateTerminalHackStateSchema(state);
         if (state.Schema != ExpectedSchema && state.References?.Any(reference => reference.SandboxAdmissionFailure is not null) == true)

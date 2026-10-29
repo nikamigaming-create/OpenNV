@@ -258,7 +258,11 @@ internal static class CorpseEquipmentContracts
             { Magazines = [virtualMagazine.Magazines.Single() with { UsesInventoryAmmo = true }] }
         }).ValidateSource(records, inventory.Contents));
         var consuming = Inventory(records, Key(0x50), ammunition: true);
-        var alteredPolicy = Equipment(records, new(true, [new(Key(0x50), Key(0x51), 12, false)], 17, 19));
+        var consumingHandling = new FalloutWeaponHandling(consuming.Contents, nativeNpc: true);
+        consumingHandling.CompleteReload(FalloutWeaponPresentation.Read(records, Key(0x50), false));
+        var consumingSnapshot = consumingHandling.Capture();
+        var alteredPolicy = Equipment(records, consumingSnapshot with
+        { Magazines = [consumingSnapshot.Magazines.Single() with { UsesInventoryAmmo = false }] });
         Reject(() => alteredPolicy.ValidateSource(records, consuming.Contents));
     }
 

@@ -25,6 +25,12 @@ internal partial class RuntimeNativeNpc
     {
         using var frameWork = OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Measure(OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Owner.NpcPackages);
         Combat?.StopPackageMotion();
+        if (Combat?.Dead == true || Combat?.OwnsPose == true || Combat?.Restrained == true)
+        {
+            InterruptSandboxFurniture();
+            InterruptSandboxMarker();
+            return;
+        }
         if (_sandboxPackage is not null || _pendingCurrentLocationSandbox is not null) { AdvanceSandbox(delta); return; }
         if (_findFurniture is not null) AdvanceFindFurniture(delta);
         if (_furnitureApproaching) { AdvanceFurnitureApproach(delta); return; }

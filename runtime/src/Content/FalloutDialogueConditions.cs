@@ -13,7 +13,8 @@ internal sealed class FalloutDialogueConditions(FalloutPluginStack records, Fall
     Func<FalloutFormKey, FalloutFormKey, double>? itemCount = null,
     Func<FalloutFormKey, FalloutFormKey, float>? referenceDistance = null,
     Func<FalloutFormKey, FalloutFormKey, bool>? referenceInZone = null, Func<FalloutFormKey, int>? sitting = null,
-    Func<FalloutFormKey, int>? deadCount = null, Func<FalloutFormKey, bool>? isDead = null)
+    Func<FalloutFormKey, int>? deadCount = null, Func<FalloutFormKey, bool>? isDead = null,
+    Func<FalloutFormKey, int>? sleeping = null)
 {
     internal FalloutDialogueConditions(FalloutPluginStack records, FalloutQuestState quests, FalloutFormKey speaker,
         FalloutNpcAppearance appearance, Func<FalloutCondition, float>? runtime = null)
@@ -47,6 +48,9 @@ internal sealed class FalloutDialogueConditions(FalloutPluginStack records, Fall
             return (deadCount ?? throw new NotSupportedException("Dialogue death count has no shared death history."))(condition.FormArgument1);
         if (condition.Function == 159)
             return FalloutAiPackages.Sitting(records, condition, speaker, sitting, Listener);
+        if (condition.Function == 49)
+            return FalloutAiPackages.Sleeping(records, condition, speaker,
+                sleeping ?? throw new NotSupportedException("Dialogue has no shared sleeping owner."), Listener);
         // The command's reference/quest and declaration index are explicit
         // arguments. They do not become the speaker or listener's locals.
         if (condition.Function == 53)

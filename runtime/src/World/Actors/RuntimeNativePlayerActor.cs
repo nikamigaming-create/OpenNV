@@ -84,7 +84,7 @@ internal sealed partial class RuntimeNativePlayerActor : Node3D
         var clip = PipBoyClip;
         var time = clip.Sequence.StartTime + (float)Math.Clamp(buttonSeconds ?? PipBoyDuration, 0, PipBoyDuration);
         _pipBoyIdle ??= ClipPath(FalloutActorIdleSource.Resolve(_records, Actor.Appearance.Female ? "PipboyWaverFemale" : "PipboyWaver").AnimationPath);
-        Skeleton.Node.ResetBonePoses();
+        Skeleton.ResetSourceBonePoses();
         Skeleton.Node.SetBonePose(Skeleton.BoneIndex(_idle!.Sequence.TargetName), Transform3D.Identity);
         _idle!.ApplySourceTime(_idle.Sequence.StartTime);
         var lowered = raised < 1 ? Enumerable.Range(0, Skeleton.Node.GetBoneCount()).Select(Skeleton.Node.GetBonePose).ToArray() : [];
@@ -96,7 +96,7 @@ internal sealed partial class RuntimeNativePlayerActor : Node3D
     }
 
     internal RuntimeNativePlayerActor(FalloutPluginStack records, RuntimeLiveContentSource content, FalloutNpcAppearance appearance,
-        FalloutFormKey? weapon, bool firstPerson, float units, Color ambient)
+        FalloutFormKey? weapon, bool firstPerson, float units, Color ambient, byte weaponMods = 0)
     {
         Name = firstPerson ? "NativeFirstPersonBody" : "NativeThirdPersonBody";
         _records = records; _content = content; _first = firstPerson;
@@ -127,7 +127,7 @@ internal sealed partial class RuntimeNativePlayerActor : Node3D
             }
             if (weapon is { } form)
             {
-                Weapon = FalloutWeaponPresentation.Read(records, form, firstPerson);
+                Weapon = FalloutWeaponPresentation.Read(records, form, firstPerson, weaponMods);
                 _equippedObject = new(Weapon, Skeleton, _content);
                 _weaponAttachment = _equippedObject.Attachment; _weaponRoot = _equippedObject.Root; _weaponRest = _weaponRoot.Transform;
                 _weaponNodes.AddRange(_equippedObject.Nodes);
@@ -224,7 +224,7 @@ internal sealed partial class RuntimeNativePlayerActor : Node3D
             if (group != _group) { _active = Clip(group); _group = group; _seconds = 0; }
             _seconds += delta * (Weapon?.AnimationMultiplier ?? 1);
             SelectMovement(delta, movement, grounded);
-            Skeleton.Node.ResetBonePoses();
+            Skeleton.ResetSourceBonePoses();
             Skeleton.Node.SetBonePose(Skeleton.BoneIndex(_idle!.Sequence.TargetName), Transform3D.Identity);
             var count = 0;
             if (_idle is not null) _animationLayers[count++] = (_idle, SourceTime(_idle, _seconds));

@@ -2,9 +2,8 @@ using OpenNV.Runtime.Content;
 
 namespace OpenNV.Runtime.Gameplay.State;
 
-// Offline match draft. The caller supplies interpreted source-card instances,
-// shuffled stock and the still-unverified opening draw policy. This is not yet
-// connected to scripts, UI, wagers, AI or campaign persistence.
+// Shared turn owner over interpreted source-card instances. Opening draw policy
+// remains explicit; match UI and settlement use the same state in flat and XR.
 internal sealed class FalloutCaravanMatch
 {
     internal enum Kind { Number, King, Queen, Jack, Joker }
@@ -175,7 +174,6 @@ internal sealed class FalloutCaravanMatch
         if (CurrentPhase == Phase.Opening && _board.GetLane(CurrentPlayer, caravan).Entries.Count != 0)
             throw new InvalidOperationException("Each opening card must start a different caravan.");
         var draw = CurrentPhase != Phase.Opening || _drawDuringOpening;
-        RequireDraw(draw);
         _board.PlayNumber(CurrentPlayer, caravan, card.Identity, new(card.Number, card.Suit!.Value));
         Consume(card, draw);
         if (CurrentPhase == Phase.Opening && Enumerable.Range(0, 2).All(player =>
@@ -192,7 +190,6 @@ internal sealed class FalloutCaravanMatch
         var position = new FalloutCaravanRules.Position(player, caravan, target);
         if (card.Kind is Kind.Jack or Kind.Joker)
         {
-            RequireDraw(true);
             var removed = card.Kind == Kind.Jack ? _board.ApplyJack(position) : _board.ApplyJoker(card.Identity, position);
             foreach (var removedIdentity in removed) _discard[_owners[removedIdentity]].Add(_cards[removedIdentity]);
             if (card.Kind == Kind.Jack)
@@ -209,16 +206,18 @@ internal sealed class FalloutCaravanMatch
             Kind.Queen => FalloutCaravanBoard.ModifierKind.Queen,
             _ => throw new InvalidOperationException("A number card cannot be used as a modifier."),
         };
-        RequireDraw(true);
         _board.PlayModifier(player, caravan, target, new(card.Identity, kind, card.Suit!.Value));
         Consume(card, true); FinishTurn();
     }
 
     internal void Discard(FalloutCaravanBoard.CardIdentity identity)
     {
-        RequirePlaying(); var card = InHand(identity); RequireDraw(true);
+        var card = InHand(identity);
+        if (CurrentPhase == Phase.Opening && _stock[CurrentPlayer].Count == 0)
+            throw new InvalidOperationException("Opening discard requires a replacement card.");
         _hands[CurrentPlayer].Remove(card); _discard[CurrentPlayer].Add(card);
-        Draw(); FinishTurn();
+        Draw();
+        if (CurrentPhase != Phase.Opening) FinishTurn();
     }
 
     internal void Disband(int caravan)
@@ -239,17 +238,15 @@ internal sealed class FalloutCaravanMatch
     {
         if (CurrentPhase != Phase.Playing) throw new InvalidOperationException("Caravan action is unavailable in this phase.");
     }
-    private void RequireDraw(bool draw)
-    {
-        if (draw && _stock[CurrentPlayer].Count == 0)
-            throw new NotSupportedException("Caravan behavior with an exhausted stock is unverified.");
-    }
     private void Consume(Card card, bool draw)
     {
         if (!_hands[CurrentPlayer].Remove(card)) throw new InvalidDataException("Caravan hand lost its selected card.");
         if (draw) Draw();
     }
-    private void Draw() => _hands[CurrentPlayer].Add(_stock[CurrentPlayer].Dequeue());
+    private void Draw()
+    {
+        if (_stock[CurrentPlayer].TryDequeue(out var card)) _hands[CurrentPlayer].Add(card);
+    }
     private void FinishTurn()
     {
         if (CurrentPhase == Phase.Playing && (Winner = _board.Winner()) != FalloutCaravanRules.Sale.Unresolved)

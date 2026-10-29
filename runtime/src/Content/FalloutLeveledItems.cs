@@ -2,8 +2,16 @@ using System.Buffers.Binary;
 
 namespace OpenNV.Runtime.Content;
 
+internal sealed record FalloutItemMagazine(FalloutFormKey Ammunition, int Loaded);
 internal sealed record FalloutItemVariant(int Count, float? Condition = null, FalloutFormKey? Owner = null,
-    FalloutFormKey? Global = null, int? FactionRank = null);
+    FalloutFormKey? Global = null, int? FactionRank = null, byte WeaponMods = 0, byte? Hotkey = null,
+    Guid? Instance = null, FalloutItemMagazine? Magazine = null)
+{
+    // A shortcut assigns an inventory entry; it does not change the physical
+    // item's condition, ownership or installed weapon modifications.
+    internal bool SameItem(FalloutItemVariant other) =>
+        this with { Count = 1, Hotkey = null, Instance = null } == other with { Count = 1, Hotkey = null, Instance = null };
+}
 internal sealed record FalloutItemAddition(FalloutFormKey Form, FalloutItemVariant Variant);
 
 internal static class FalloutLeveledItems

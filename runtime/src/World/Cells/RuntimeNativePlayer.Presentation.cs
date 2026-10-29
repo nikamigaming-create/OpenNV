@@ -20,6 +20,8 @@ internal partial class RuntimeNativePlayer
     private TextureRect? _firstPersonPixels;
     private uint[]? _presentationEquipment;
     private long _presentationInventoryRevision = -1;
+    private byte _presentationWeaponMods;
+    private Guid? _presentationWeaponInstance;
     private string? _presentationError;
     private bool _thirdPersonMode, _aiming;
     private FalloutWeaponSight? _weaponSight;
@@ -61,7 +63,8 @@ internal partial class RuntimeNativePlayer
         _playerPolicy = playerPolicy;
         if (playerPolicy is not null) ApplySourceScale(playerPolicy().PlayerScale);
         _weaponHandling = new(inventory);
-        if (handling is not null) _weaponHandling.Restore(handling, key => FalloutWeaponPresentation.Read(records, key));
+        if (handling is not null) _weaponHandling.Restore(handling, key => FalloutWeaponPresentation.Read(records, key),
+            (key, mods) => FalloutWeaponPresentation.Read(records, key, weaponMods: mods));
     }
 
     private bool PresentationInput(InputEvent input)
@@ -133,13 +136,20 @@ internal partial class RuntimeNativePlayer
         if (_xr is not null && _firstPerson is not null) _firstPerson.Visible = _presentationError is null;
         var equipment = _presentationEquipment is not null && _presentationInventoryRevision == _presentationInventory!.Revision
             ? _presentationEquipment : _presentationInventory!.Equipped.ToArray();
-        _presentationInventoryRevision = _presentationInventory.Revision;
         var appearanceRevision = _appearanceRevision?.Invoke() ?? 0;
-        if (_presentationEquipment is null || !equipment.SequenceEqual(_presentationEquipment) || appearanceRevision != _presentationAppearanceRevision)
+        var equippedWeapon = equipment.Select(_presentationRecords.RuntimeFormKey)
+            .FirstOrDefault(form => _presentationRecords.GetEffective(form).Signature == "WEAP");
+        if (equippedWeapon.ObjectId != 0) _presentationInventory.EnsureWeaponInstance(equippedWeapon);
+        _presentationInventoryRevision = _presentationInventory.Revision;
+        var weaponMods = equippedWeapon.ObjectId == 0 ? (byte)0 : _presentationInventory.WeaponModMask(equippedWeapon);
+        var weaponInstance = equippedWeapon.ObjectId == 0 ? null : _presentationInventory.SelectedWeapon(equippedWeapon).Extra.Instance;
+        if (_presentationEquipment is null || !equipment.SequenceEqual(_presentationEquipment) || appearanceRevision != _presentationAppearanceRevision || weaponMods != _presentationWeaponMods || weaponInstance != _presentationWeaponInstance)
         {
             var changing = _presentationEquipment is not null;
             _presentationEquipment = equipment; _presentationError = null; CancelWeaponAction(); _pendingShotCount = 0; _shot = null;
             _presentationAppearanceRevision = appearanceRevision;
+            _presentationWeaponMods = weaponMods;
+            _presentationWeaponInstance = weaponInstance;
             try { RebuildPresentation(equipment); }
             catch (Exception error)
             {
@@ -213,8 +223,8 @@ internal partial class RuntimeNativePlayer
         RuntimeNativePlayerActor? first = null, third = null;
         try
         {
-            first = new(records, content, appearance, weapon, true, UnitsToMeters, ambient);
-            third = new(records, content, appearance, weapon, false, UnitsToMeters, ambient);
+            first = new(records, content, appearance, weapon, true, UnitsToMeters, ambient, _presentationWeaponMods);
+            third = new(records, content, appearance, weapon, false, UnitsToMeters, ambient, _presentationWeaponMods);
             if (first.Error is not null || third.Error is not null) throw new NotSupportedException(first.Error ?? third.Error);
             third.ConfigureBodyContacts(CollisionLayer);
             third.SetMeta("opennv_reference_form_key", records.RuntimeFormKey(0x14).ToString());
@@ -262,6 +272,7 @@ internal partial class RuntimeNativePlayer
                 _thirdPerson.Visible = false;
                 foreach (var contact in _thirdPerson.BodyContacts) contact.CollisionLayer = 0;
             }
+            _firstPerson?.RetireMuzzleSounds(); _thirdPerson?.RetireMuzzleSounds();
             _firstPerson?.QueueFree(); _thirdPerson?.QueueFree();
             _firstPerson = first; _thirdPerson = third;
             first = third = null;

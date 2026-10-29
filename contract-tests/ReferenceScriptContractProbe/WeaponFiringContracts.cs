@@ -105,6 +105,10 @@ internal static class WeaponFiringContracts
                 .Concat(Record("GMST", 52, Field("EDID", Text("fCombatDistance")), Field("DATA", BitConverter.GetBytes(128.0f))))
                 .Concat(Record("GMST", 53, Field("EDID", Text("fCombatHitConeAngle")), Field("DATA", BitConverter.GetBytes(35.0f))))
                 .Concat(Record("GMST", 54, Field("EDID", Text("fIronSightsFOVTimeChange")), Field("DATA", BitConverter.GetBytes(.25f))))
+                .Concat(Record("CELL", 0x800, Field("DATA", [1])))
+                .Concat(Record("NPC_", 0x801, Field("EDID", Text("AmmoOwner"))))
+                .Concat(Record("FACT", 0x802, Field("EDID", Text("AmmoFaction"))))
+                .Concat(Record("GLOB", 0x803, Field("EDID", Text("AmmoOwnershipGlobal")), Field("FNAM", [(byte)'f']), Field("FLTV", BitConverter.GetBytes(1f))))
                 .Concat(shortDnamWeaponRecords.SelectMany(record => record)).ToArray());
             using var records = FalloutPluginStack.Load(directory, ["Test.esm"]);
             FalloutFormKey Key(uint id) => new("Test.esm", id);
@@ -123,6 +127,7 @@ internal static class WeaponFiringContracts
                 weapon.AimGroup(false, true) == "1hpaimis", "First-person sight exclusion also changed third-person or lost the source angle.");
             CheckSight(records, weapon);
             var shot = FalloutWeaponShot.Read(records, Key(1), Key(2));
+            WeaponInstanceMagazineContracts.Run(records, weapon, shot);
             shot.RequireInstantRay();
             foreach (var (extent, index) in new[] { 164, 172, 180, 196 }.Select((extent, index) => (extent, index)))
             {

@@ -238,6 +238,8 @@ internal sealed class FalloutUnloadedActorPackages(FalloutPluginStack records, F
             return world.EvaluateReputationCondition(condition)!.Value;
         if (condition.Function == 159)
             return FalloutAiPackages.Sitting(records, condition, caller, sitting ?? (reference => world.GetSitting(reference)));
+        if (condition.Function == 49)
+            return FalloutAiPackages.Sleeping(records, condition, caller, reference => world.GetSleeping(reference));
         if (world.EvaluateActorReferenceCondition(caller, condition) is { } referenceQuery) return referenceQuery;
         if (condition.Function is 56 or 58 or 59 or 79 or 420 or 421 or 546) return quests.Evaluate(condition);
         if (condition.Function == 18) return (clock ?? throw new NotSupportedException("Unloaded AI has no simulation clock.")).Hour;

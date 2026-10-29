@@ -76,6 +76,13 @@ internal partial class RuntimeNativePlayer
 
     internal void XrReleaseGrab() => ReleaseGrab();
 
+    internal void ReleaseGrabOwner(Node root)
+    {
+        if (!GodotObject.IsInstanceValid(_grabbedBody)) return;
+        for (Node? node = _grabbedBody; node is not null; node = node.GetParent())
+            if (node == root) { ReleaseGrab(); return; }
+    }
+
     private void AdvanceGrab()
     {
         if (_grabbedBody is null) return;

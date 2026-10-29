@@ -27,13 +27,15 @@ internal sealed partial class RuntimeNativeActorCombat
         if (_enemyShot is null || _enemyShot.Ammunition != ammo)
         {
             _enemyShot = FalloutWeaponShot.Read(_records, weapon.Form, ammo, weapon.HasAmmunitionSource);
+            _enemyShot = FalloutWeaponModifications.Apply(_records, _enemyShot,
+                _world.Inventory(_state.Reference, _context!.Level(), _context.Globals).Contents.WeaponModMask(weapon.Form));
             _enemyShot.RequireRuntimeAttackOwner();
             try
             {
                 if (_enemyShot.Projectile.HasMuzzleFlash || _enemyShot.Projectile.MuzzleLight is not null)
                 {
                     _enemyMuzzle ??= new(_records, _content, MuzzleNode(), _skeleton.UnitsToMetres);
-                    _enemyMuzzle.Prepare(_enemyShot.Projectile, encoded: false);
+                    _enemyMuzzle.Prepare(_enemyShot.Projectile, encoded: false, _enemySounds);
                     _muzzlePresentationError = _enemyMuzzle.LightError;
                 }
             }

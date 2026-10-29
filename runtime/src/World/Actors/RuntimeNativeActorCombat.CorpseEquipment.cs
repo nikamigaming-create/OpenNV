@@ -141,7 +141,8 @@ internal sealed partial class RuntimeNativeActorCombat
         {
             weapon = source.ValidateSource(_records, inventory);
             handling = new(inventory, nativeNpc: true);
-            handling.Restore(saved.WeaponHandling!, key => FalloutWeaponPresentation.Read(_records, key, false));
+            handling.Restore(saved.WeaponHandling!, key => FalloutWeaponPresentation.Read(_records, key, false),
+                (key, mods) => FalloutWeaponPresentation.Read(_records, key, false, mods));
         }
 
         if (saved.EmbeddedMuzzleBone is { } muzzle)

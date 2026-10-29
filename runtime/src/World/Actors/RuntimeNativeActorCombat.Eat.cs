@@ -101,7 +101,7 @@ internal sealed partial class RuntimeNativeActorCombat
 
             var pending = meal with { Idle = idle.FormKey, IdleSha256 = idleHash, Objects = _eatObjects?.Bindings };
             PublishEatMotion(package, activity, pending, clip, 0, true);
-            _skeleton.Node.ResetBonePoses();
+            _skeleton.ResetSourceBonePoses();
             var initialRoot = _skeleton.BoneIndex(clip.Animation.Sequence.TargetName);
             if (initialRoot >= 0) _skeleton.Node.SetBonePose(initialRoot, Transform3D.Identity);
             _eatObjects?.SetVisible(true);
@@ -130,7 +130,7 @@ internal sealed partial class RuntimeNativeActorCombat
         Activity.SetMovement(false, false);
         MoveActor(animation.RootDisplacement(motion.Seconds, next), delta, null);
         foreach (var key in animation.Events.Crossed(motion.Seconds, next, motion.StartPending, true)) PackageSounds().Dispatch(key);
-        _skeleton.Node.ResetBonePoses();
+        _skeleton.ResetSourceBonePoses();
         var root = _skeleton.BoneIndex(animation.Animation.Sequence.TargetName);
         if (root >= 0) _skeleton.Node.SetBonePose(root, Transform3D.Identity);
         _eatObjects?.SetVisible(true);

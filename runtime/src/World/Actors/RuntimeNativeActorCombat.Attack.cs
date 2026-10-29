@@ -216,7 +216,7 @@ internal sealed partial class RuntimeNativeActorCombat
 
     private void PublishCombatPose(NativeActorCombatAnimation clip, float seconds, double elapsed)
     {
-        _skeleton.Node.ResetBonePoses();
+        _skeleton.ResetSourceBonePoses();
         _skeleton.Node.SetBonePose(_skeleton.BoneIndex(clip.Animation.Sequence.TargetName), Transform3D.Identity);
         var count = 0;
         _combatLayers[count++] = (_combatIdle!.Animation, _combatIdle.Time(elapsed));

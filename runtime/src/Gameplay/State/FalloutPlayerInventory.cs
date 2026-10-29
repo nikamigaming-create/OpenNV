@@ -20,14 +20,17 @@ internal sealed partial class FalloutPlayerInventory
     internal void TransferTo(FalloutPlayerInventory target, FalloutFormKey form, int count, int? variantIndex = null, bool force = false)
         => ApplyRemovalTransaction(target, (source, destination) => source.TransferToCore(destination!, form, count, variantIndex, force));
 
-    private void TransferToCore(FalloutPlayerInventory target, FalloutFormKey form, int count, int? variantIndex, bool force)
+    private void TransferToCore(FalloutPlayerInventory target, FalloutFormKey form, int count, int? variantIndex, bool force,
+        bool retainOwnership = true)
     {
         if (ReferenceEquals(this, target)) throw new InvalidOperationException("Inventory transfer needs distinct owners.");
         var source = Item(form) ?? throw new InvalidOperationException("Transferred item is absent.");
         if (source.UnequipLocked && !force) throw new InvalidOperationException("Locked equipped items cannot be transferred.");
         if (count <= 0 || count > source.Count) throw new ArgumentOutOfRangeException(nameof(count));
-        if (_equipped.Contains(source.RuntimeFormId) && count != source.Count)
+        if (_equipped.Contains(source.RuntimeFormId) && count != source.Count && source.RecordType != "WEAP")
             throw new NotSupportedException("Partial transfer of an equipped stack needs item-instance selection.");
+        var wornInstance = source.RecordType == "WEAP" && _equipped.Contains(source.RuntimeFormId)
+            ? (source.Variants ?? [new(source.Count)])[0].Instance : null;
         var remaining = (source.Variants ?? [new(source.Count)]).ToList();
         var selected = new List<FalloutItemVariant>();
         var toMove = count;
@@ -35,7 +38,14 @@ internal sealed partial class FalloutPlayerInventory
         {
             if (variantIndex is { } only && index != only) continue;
             var take = Math.Min(toMove, remaining[index].Count);
-            selected.Add(remaining[index] with { Count = take });
+            selected.Add(remaining[index] with
+            {
+                Count = take,
+                Hotkey = null,
+                Owner = retainOwnership ? remaining[index].Owner : null,
+                Global = retainOwnership ? remaining[index].Global : null,
+                FactionRank = retainOwnership ? remaining[index].FactionRank : null
+            });
             remaining[index] = remaining[index] with { Count = remaining[index].Count - take };
             toMove -= take;
         }
@@ -47,7 +57,7 @@ internal sealed partial class FalloutPlayerInventory
         var variants = (previous?.Variants ?? (previous is null ? [] : [new(previous.Count)])).ToList();
         foreach (var item in selected)
         {
-            var index = variants.FindIndex(value => value with { Count = 1 } == item with { Count = 1 });
+            var index = variants.FindIndex(value => value.Instance is null && item.Instance is null && value.Hotkey is null && value.SameItem(item));
             if (index < 0) variants.Add(item);
             else variants[index] = variants[index] with { Count = checked(variants[index].Count + item.Count) };
         }
@@ -62,6 +72,9 @@ internal sealed partial class FalloutPlayerInventory
         target.Publish([addition]);
         if (count == source.Count) { _items.Remove(form); _equipped.Remove(source.RuntimeFormId); }
         else _items[form] = source with { Count = source.Count - count, Variants = remaining.Where(value => value.Count != 0).ToArray() };
+        if (wornInstance is not null && selected.Any(extra => extra.Instance == wornInstance)) _equipped.Remove(source.RuntimeFormId);
+        foreach (var rounds in LoadedRoundTransfers(selected))
+            TransferToCore(target, rounds.Ammunition, rounds.Loaded, null, force: true, retainOwnership);
         ++Revision;
     }
     internal void Remove(FalloutFormKey form, int count, bool silent)
@@ -158,8 +171,7 @@ internal sealed partial class FalloutPlayerInventory
             var variants = previous?.Variants?.ToList() ?? (previous is null ? [] : [new(previous.Count)]);
             foreach (var addition in group)
             {
-                var index = variants.FindIndex(value => value.Condition == addition.Variant.Condition &&
-                    value.Owner == addition.Variant.Owner && value.Global == addition.Variant.Global && value.FactionRank == addition.Variant.FactionRank);
+                var index = variants.FindIndex(value => value.Instance is null && addition.Variant.Instance is null && value.Hotkey is null && addition.Variant.Hotkey is null && value.SameItem(addition.Variant));
                 if (index < 0) variants.Add(addition.Variant);
                 else variants[index] = variants[index] with { Count = checked(variants[index].Count + addition.Variant.Count) };
             }
@@ -182,6 +194,7 @@ internal sealed partial class FalloutPlayerInventory
         RequireNoChangeInProgress();
         var item = Item(form) ?? throw new InvalidOperationException("Cannot equip an item absent from inventory.");
         if (item.RecordType is not ("ARMO" or "WEAP")) throw new NotSupportedException("Equipped item has no armor/weapon owner.");
+        if (item.RecordType == "WEAP") EnsureWeaponInstance(form);
         uint Slots(FalloutFormKey key)
         {
             var data = records.GetEffective(key).ReadSubrecords().Single(field => field.Signature == "BMDT").Data;
@@ -219,9 +232,11 @@ internal sealed partial class FalloutPlayerInventory
         RequireNoChangeInProgress();
         if (replacements.Any(item => item.Count <= 0 || item.Variants is { } variants &&
             (variants.Sum(value => value.Count) != item.Count || variants.Any(value => value.Count <= 0 ||
-                value.Condition is { } condition && (!float.IsFinite(condition) || condition < 0 || condition > 1)))) ||
+                value.Condition is { } condition && (!float.IsFinite(condition) || condition < 0 || condition > 1) ||
+                (value.WeaponMods & ~7) != 0 || value.Hotkey is < 1 or > 8))) ||
             replacements.Select(item => item.FormKey).Distinct().Count() != replacements.Count)
             throw new InvalidDataException("Player inventory transaction contains invalid or duplicate items.");
+        ValidateWeaponInstances(_items.Values.Where(item => replacements.All(value => value.FormKey != item.FormKey)).Concat(replacements));
         foreach (var item in replacements) _items[item.FormKey] = item;
         if (replacements.Count != 0) ++Revision;
     }
@@ -250,7 +265,12 @@ internal sealed partial class FalloutPlayerInventory
         if (inventory.Items.Any(item => item.UnequipLocked &&
             (item.RecordType is not ("ARMO" or "WEAP") || !equipped.Contains(item.RuntimeFormId))))
             throw new InvalidDataException("Restored locked equipment is not worn armor or a weapon.");
+        if (inventory.Items.Any(item => item.RecordType != "WEAP" && item.Variants?.Any(extra => extra.WeaponMods != 0) == true) ||
+            inventory.Items.SelectMany(item => item.Variants ?? []).Where(extra => extra.Hotkey.HasValue)
+                .GroupBy(extra => extra.Hotkey).Any(group => group.Count() > 1))
+            throw new InvalidDataException("Restored inventory repeats a hotkey or installs weapon mods on another item type.");
         Publish(inventory.Items.ToArray());
+        ValidateMagazineAmmunition();
         _equipped.UnionWith(equipped);
         if (randomState is { } state) _random = new(state);
     }

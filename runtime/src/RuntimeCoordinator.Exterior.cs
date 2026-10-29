@@ -249,6 +249,7 @@ public partial class RuntimeCoordinator
         CancelNativeLauncherEntry();
         CancelNativeGridRead();
         if (!_retiringNativeSession) return;
+        _nativeDroppedItems?.RetireAll();
         // Session retirement has drained source workers. Detached prototypes are outside
         // the scene tree and must be released with the retired record owners.
         var retired = 0;

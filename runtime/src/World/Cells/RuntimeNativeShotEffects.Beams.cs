@@ -50,7 +50,7 @@ internal sealed partial class RuntimeNativeShotEffects
             var targetFrame = Basis.LookingAt(targetAxis, Mathf.Abs(targetAxis.Dot(Vector3.Up)) > .99f ? Vector3.Right : Vector3.Up);
             root.Transform = new(targetFrame * Basis.FromScale(new(1, 1, distance / length)) * sourceFrame.Inverse(), origin);
             AddChild(root);
-            var playback = new NativeNifEffectPlayback(root, source.FadeSeconds, encoded: false);
+            var playback = new NativeNifEffectPlayback(root, source.FadeSeconds, encoded: false, _sounds);
             playback.Start();
             _effects.Add(new(root, source.FadeSeconds, playback));
             _lastBeam = new

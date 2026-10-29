@@ -320,7 +320,7 @@ internal partial class RuntimeNativeNpc
             $"distancePerCycle={_travelCycleDistance:R} parity=unmeasured");
     }
 
-    private void PlayLocomotion(bool moving, FalloutActorAnimationSnapshot? continuation = null)
+    private void PlayLocomotion(bool moving, FalloutActorAnimationSnapshot? continuation = null, bool publishPose = true)
     {
         if (continuation is not null && (!moving || !_travelActive))
             throw new InvalidOperationException("A retained walking clock requires its still-active travel controller.");
@@ -359,14 +359,17 @@ internal partial class RuntimeNativeNpc
             };
         }
         _baseAnimation = new(nif, sequence, Skeleton, accumulationRoot: root);
-        Skeleton.Node.SetBonePose(Skeleton.BoneIndex(sequence.TargetName), Transform3D.Identity);
+        if (publishPose) Skeleton.Node.SetBonePose(Skeleton.BoneIndex(sequence.TargetName), Transform3D.Identity);
         _baseAnimationSeconds = sequence.StartTime;
         _baseElapsedSeconds = 0;
         if (moving && continuation is null) { _travelPublishedDistance = 0; _travelPublishedSeconds = 0; }
-        BindBaseClock(nif, path, ambient: !moving, continuation);
+        BindBaseClock(nif, path, ambient: !moving, continuation, publishPose);
         _baseLocomotionMoving = moving;
-        if (_animation is null) _baseAnimation.ApplySourceTime(_baseAnimationSeconds);
-        else RuntimeNativeNifAnimation.ApplyLayers((_baseAnimation, _baseAnimationSeconds), (_animation, _animationSeconds));
+        if (publishPose)
+        {
+            if (_animation is null) _baseAnimation.ApplySourceTime(_baseAnimationSeconds);
+            else RuntimeNativeNifAnimation.ApplyLayers((_baseAnimation, _baseAnimationSeconds), (_animation, _animationSeconds));
+        }
         SetMeta("opennv_base_animation_source", identity);
     }
 

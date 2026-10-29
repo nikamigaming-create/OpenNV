@@ -7,7 +7,11 @@ namespace OpenNV.Runtime.Campaigns.NewVegas.Opening;
 internal partial class RuntimeNativeOpeningStageDriver
 {
     private FalloutInventoryCommands? _inventoryCommands;
-    internal FalloutInventoryCommands InventoryCommands => _inventoryCommands ??= new(_pluginStack,
+    internal FalloutInventoryCommands InventoryCommands
+    {
+        get
+        {
+            return _inventoryCommands ??= new(_pluginStack,
         _scripts.References!, _inventory, () => SourcePlayerLevel, _globals, reference =>
         {
             foreach (var actor in ReferencePresentation().Actors.Where(actor => actor.Appearance.Reference == reference))
@@ -29,4 +33,23 @@ internal partial class RuntimeNativeOpeningStageDriver
                 };
                 (combat ?? throw new NotSupportedException("Actor ingestion has no resident gameplay owner.")).UseIngestible(item);
             });
+        }
+    }
+
+    internal void UseInventoryHotkey(byte slot)
+    {
+        var selected = _inventory.Hotkey(slot);
+        if (selected is null) return;
+        var item = _inventory.Item(selected.Form)!;
+        if (item.RecordType is "ALCH" or "INGR")
+        {
+            _inventory.SelectInstance(selected.Form, selected.Variant, _inventory.Revision);
+            UseAid(selected.Form);
+        }
+        else
+        {
+            _inventory.SelectInstance(selected.Form, selected.Variant, _inventory.Revision);
+            _inventory.Equip(_pluginStack, selected.Form);
+        }
+    }
 }

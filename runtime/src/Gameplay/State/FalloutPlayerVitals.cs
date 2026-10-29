@@ -3,7 +3,7 @@ using OpenNV.Runtime.Content;
 
 namespace OpenNV.Runtime.Gameplay.State;
 
-internal sealed class FalloutPlayerVitals
+internal sealed partial class FalloutPlayerVitals
 {
     private readonly double _baseHealth;
     private readonly double _healthEndurance, _healthLevel, _apBase, _apAgility, _xpBase, _xpBump;

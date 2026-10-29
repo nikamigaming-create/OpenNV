@@ -153,7 +153,9 @@ internal sealed partial class NativeXrRig : Node3D
             _rightInputReady = true;
         if (Edge("menu", LeftGrip.IsButtonPressed(NativeXrActions.Menu) || RightGrip.IsButtonPressed(NativeXrActions.Menu)))
         {
-            if (CombatWheelOpen?.Invoke() == true)
+            if (_player?.VatsMenuActive == true || left && right && LeftGrip.IsButtonPressed(NativeXrActions.Sprint))
+                _player?.XrVats();
+            else if (CombatWheelOpen?.Invoke() == true)
             { CloseCombatWheel?.Invoke(false); _heldWheel = null; _rightInputReady = false; _snapReady = false; }
             else MenuRequested?.Invoke();
         }
@@ -176,12 +178,12 @@ internal sealed partial class NativeXrRig : Node3D
             if (WorldPointer) _player?.XrActivate();
         }
         if (Edge("grab", right && aimTracked && _rightInputReady && RightGrip.IsButtonPressed(NativeXrActions.Grab)) &&
-            !modal && PointAtPipBoy is null) _player?.XrToggleGrab();
+            !modal && _player?.VatsExecuting != true && PointAtPipBoy is null) _player?.XrToggleGrab();
         var reload = right && _rightInputReady && RightGrip.IsButtonPressed(NativeXrActions.Reload);
         if (_buttons.GetValueOrDefault("reload") != reload && PointAtPipBoy is null && !modal) _player?.XrReload(reload);
         _buttons["reload"] = reload;
         var rawTurn = RightGrip.GetVector2(NativeXrActions.Turn).X;
-        var turn = right && !modal && PointAtPipBoy is null ? rawTurn : 0;
+        var turn = right && !modal && _player?.VatsExecuting != true && PointAtPipBoy is null ? rawTurn : 0;
         if (right && MathF.Abs(rawTurn) <= _configuration.Xr.SnapTurnResetThreshold) _snapReady = true;
         if (_player is not null && _calibrated && _snapReady && MathF.Abs(turn) >= _configuration.Xr.SnapTurnActivationThreshold)
         {

@@ -5,7 +5,8 @@ namespace OpenNV.Runtime.Gameplay.State;
 // A selected activity outlives individual movement requests. Its duration is
 // measured by the source game-hour calculation, not elapsed render seconds.
 internal sealed record FalloutSandboxActivityProgress(FalloutSandboxActivity Activity,
-    float StartedHour, float Duration, byte[] Preferences, FalloutFormKey? Target = null)
+    float StartedHour, float Duration, byte[] Preferences, FalloutFormKey? Target = null,
+    FalloutSandboxActivity? ScheduledActivity = null, bool DailyFoodAvailable = false, bool DailyBedAvailable = false)
 {
     internal void Validate()
     {
@@ -13,8 +14,11 @@ internal sealed record FalloutSandboxActivityProgress(FalloutSandboxActivity Act
             !float.IsFinite(Duration) || Duration < 0 || Preferences is null)
             throw new InvalidDataException("Saved Sandbox activity is invalid.");
         _ = new FalloutSandboxPreferences(Preferences);
-        if (Activity == FalloutSandboxActivity.Dialogue && !Target.HasValue ||
-            Activity is not (FalloutSandboxActivity.Dialogue or FalloutSandboxActivity.Eat) && Target.HasValue ||
+        if (ScheduledActivity is { } scheduled &&
+            (scheduled is not (FalloutSandboxActivity.Eat or FalloutSandboxActivity.Sleep) || scheduled != Activity))
+            throw new InvalidDataException("Saved Sandbox scheduled activity conflicts with its selection.");
+        if (Activity is FalloutSandboxActivity.Dialogue or FalloutSandboxActivity.Furniture or FalloutSandboxActivity.Sleep or FalloutSandboxActivity.IdleMarker && !Target.HasValue ||
+            Activity is not (FalloutSandboxActivity.Dialogue or FalloutSandboxActivity.Eat or FalloutSandboxActivity.Furniture or FalloutSandboxActivity.Sleep or FalloutSandboxActivity.IdleMarker) && Target.HasValue ||
             Target is { } target && (string.IsNullOrWhiteSpace(target.OwnerPlugin) || target.ObjectId == 0))
             throw new InvalidDataException("Saved Sandbox activity target is invalid.");
     }

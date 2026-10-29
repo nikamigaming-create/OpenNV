@@ -104,12 +104,15 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer
         voice.SetMeta("opennv_sound_loop_mode", loop.Mode.ToString());
     }
 
-    private int StopVoices(Node3D emitter)
+    internal int StopEmitterLoops(Node3D emitter) => StopVoices(emitter, loopsOnly: true);
+
+    private int StopVoices(Node3D emitter, bool loopsOnly = false)
     {
         var stopped = 0;
         foreach (var (node, voice) in _voices.ToArray())
         {
             if (!voice.FollowEmitter || voice.Emitter != emitter || voice.Releasing) continue;
+            if (loopsOnly && voice.Loop.Mode == FalloutSoundLoopMode.None) continue;
             stopped++;
             if (voice.Loop.Mode is FalloutSoundLoopMode.EnvelopeFast or FalloutSoundLoopMode.EnvelopeSlow)
             {

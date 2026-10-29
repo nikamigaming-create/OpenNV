@@ -4,7 +4,7 @@ namespace OpenNV.Runtime.World.Actors;
 
 internal partial class RuntimeNativeNpc
 {
-    private sealed record PackageSelection(FalloutPluginRecord? Record, FalloutScriptPackage? Declaration);
+    private sealed record PackageSelection(FalloutPluginRecord? Record, FalloutScriptPackage? Declaration, bool Forced = true);
     private PackageSelection? _requestedSelection;
     private FalloutFormKey? _selectedSourcePackage;
     private bool _sourceSelectionKnown;
@@ -19,7 +19,7 @@ internal partial class RuntimeNativeNpc
                     _aiClock, _packageEvents?.Active?.Form, _packageEvents?.Done == true) ??
                     throw new NotSupportedException("NPC package eligibility has no reference state owner."));
         if (_aiReferenceState is not null) _aiReferenceState.SelectionFailure = null;
-        return new(selected, selected is null ? null : FalloutScriptPackage.Read(selected));
+        return new(selected, selected is null ? null : FalloutScriptPackage.Read(selected), Forced: false);
     }
 
     internal void EvaluatePackages(bool reset)
@@ -35,7 +35,7 @@ internal partial class RuntimeNativeNpc
         var selected = SelectSourcePackage();
         if (_aiReferenceState is not null) ClearBindingFailure();
         if (reset) { _aiError = null; _packageIdleError = null; }
-        _requestedSelection = selected;
+        _requestedSelection = selected with { Forced = true };
         if (_aiReferenceState is { } state) state.PendingPackageSelection = null;
         _selectedSourcePackage = selected.Record?.FormKey; _sourceSelectionKnown = true;
         _aiQuestRevision = -1; _aiPollRemaining = 0;

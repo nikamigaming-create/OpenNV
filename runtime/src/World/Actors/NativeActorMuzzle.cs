@@ -12,6 +12,7 @@ internal sealed class NativeActorMuzzle(FalloutPluginStack records, RuntimeLiveC
     private NativeNifEffectPlayback? _playback;
     private OmniLight3D? _light;
     private FalloutFormKey? _lightForm;
+    private NativeOwnedAnimationSoundPlayer? _audioOwner;
     internal string? LightError { get; private set; }
     internal bool CaptureReady => _playback?.Active != true;
     internal string? CaptureBlocker => CaptureReady ? null : FormattableString.Invariant(
@@ -26,15 +27,19 @@ internal sealed class NativeActorMuzzle(FalloutPluginStack records, RuntimeLiveC
         particles = _playback?.Particles.Select(value => new { value.ActiveCount, value.BirthCount, value.EmissionEnabled }).ToArray(),
         light = _light is null ? null : new { form = _lightForm?.ToString(), _light.Visible, _light.OmniRange },
         lightError = LightError,
-        unbound = "addon-audio,shared-master-emitter-pooling,muzzle-light-shadow-selection,flat-world-muzzle-light,retail-billboard-motion-match"
+        addonSounds = _playback?.AddonSoundCount ?? 0,
+        addonAudioError = _playback?.AudioError,
+        unbound = "shared-master-emitter-pooling,muzzle-light-shadow-selection,flat-world-muzzle-light,retail-billboard-motion-match"
     };
 
-    internal void Prepare(FalloutProjectile projectile, bool encoded)
+    internal void Prepare(FalloutProjectile projectile, bool encoded, NativeOwnedAnimationSoundPlayer? sounds = null,
+        Func<NodePath, Node3D>? soundEmitter = null)
     {
         var path = (projectile.Flags & 8) == 0 ? null : projectile.MuzzleFlash;
-        if (_path == path && _lightForm == projectile.MuzzleLight) return;
+        if (_path == path && _lightForm == projectile.MuzzleLight && _audioOwner == sounds) return;
         _light?.Free(); _light = null; _lightForm = null;
         LightError = null;
+        RetireSounds();
         _root?.Free(); _root = null; _playback = null; _path = null;
         if (path is null) return;
         if (!content.TryRead(path, null, out var bytes, out _)) throw new FileNotFoundException(path);
@@ -43,7 +48,8 @@ internal sealed class NativeActorMuzzle(FalloutPluginStack records, RuntimeLiveC
         {
             NativeNifCollisionBuilder.BindAnimatedAttachment(scene.Root);
             socket.AddChild(scene.Root);
-            _playback = new(scene.Root, projectile.MuzzleSeconds, encoded);
+            _playback = new(scene.Root, projectile.MuzzleSeconds, encoded, sounds,
+                soundEmitter is null ? null : node => soundEmitter(scene.Root.GetPathTo(node)));
             if (projectile.MuzzleLight is { } form)
             {
                 try
@@ -68,7 +74,7 @@ internal sealed class NativeActorMuzzle(FalloutPluginStack records, RuntimeLiveC
                     GD.PushWarning($"OPENNV_MUZZLE_LIGHT_UNBOUND source={form} {error.Message}");
                 }
             }
-            _root = scene.Root; _path = path;
+            _root = scene.Root; _path = path; _audioOwner = sounds;
         }
         catch { scene.Root.Free(); _playback = null; throw; }
     }
@@ -78,6 +84,12 @@ internal sealed class NativeActorMuzzle(FalloutPluginStack records, RuntimeLiveC
         _playback?.Start();
         if (_light is not null) _light.Visible = _playback is { Remaining: > 0 };
     }
+
+    internal Node3D AddonSoundEmitter(NodePath path) => _root?.GetNodeOrNull<Node3D>(path) is { } node &&
+        node.HasMeta("opennv_addon_sound_plugin") ? node :
+        throw new NotSupportedException("Muzzle addon sound has no matching actual world emitter.");
+
+    internal void RetireSounds() => _playback?.RetireSounds();
 
     internal void Advance(double delta)
     {

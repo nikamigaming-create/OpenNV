@@ -300,6 +300,8 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
     public override void _UnhandledInput(InputEvent inputEvent)
     {
         ObserveSaveInput(inputEvent, "unhandled");
+        if (VatsInput(inputEvent)) { GetViewport().SetInputAsHandled(); return; }
+        if (InventoryHotkeyInput(inputEvent)) { GetViewport().SetInputAsHandled(); return; }
         if (_xr is not null) return;
         var input = _configuration.Player.DesktopInput;
         if (GrabInput(inputEvent)) { GetViewport().SetInputAsHandled(); return; }
@@ -393,7 +395,7 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
         if (_furniturePhase != 0) { AdvanceFurniture(delta); return; }
         var input = _configuration.Player.DesktopInput;
         var alive = IsDefeated?.Invoke() != true;
-        var movement = alive && _movementEnabled && !_modalInput
+        var movement = alive && _movementEnabled && !_modalInput && !VatsExecuting
             ? _xr?.Movement ?? Input.GetVector(
                 input.MoveLeft.Action,
                 input.MoveRight.Action,
@@ -413,7 +415,7 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
             ? MathF.Min(Velocity.Y, 0.0f)
             : NativeCharacterGravity.AirVelocity(Velocity.Y,
                 _configuration.Simulation.GravityMetersPerSecondSquared, (float)delta);
-        if (alive && _movementEnabled && !_modalInput && IsOnFloor() && _jumpHeightMeters > 0 &&
+        if (alive && _movementEnabled && !_modalInput && !VatsExecuting && IsOnFloor() && _jumpHeightMeters > 0 &&
             (_xr?.ConsumeJump() ?? Input.IsActionJustPressed(input.Jump.Action)))
         {
             velocity.Y = MathF.Sqrt(2 * _configuration.Simulation.GravityMetersPerSecondSquared * _jumpHeightMeters);

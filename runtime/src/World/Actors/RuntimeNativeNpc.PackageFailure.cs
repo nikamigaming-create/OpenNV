@@ -22,7 +22,7 @@ internal partial class RuntimeNativeNpc
         _packageIdleSource is not null && _packageIdles is not null &&
         _sitting == 0 && !_furnitureApproaching && !_travelActive && _travelProgress?.ArrivalPending != true &&
         _escortPackage is null && _editorTravel is null && _dialoguePackage is null && _patrol is null &&
-        (_animation is null || CanCaptureStoppedIndependentIdle(allowFiniteSoundWait)) && !_responseIdleActive && AnimationError is null &&
+        (_animation is null || CanCaptureIdleRequestContinuation()) && !_responseIdleActive && AnimationError is null &&
         _conversationTarget is null && CanCaptureStoppedAiPose(allowFiniteSoundWait) &&
         _baseClock.Resource.Length != 0;
 
@@ -83,7 +83,7 @@ internal partial class RuntimeNativeNpc
                 basis.Y.X, basis.Y.Y, basis.Y.Z, basis.Z.X, basis.Z.Y, basis.Z.Z],
             _baseLocomotionMoving, _aiRandom.State, Math.Max(0, _aiPollRemaining), _aiScheduleTime,
             FalloutPackageRetirement.Capture(_aiStack, _packageEvents!), _blink?.Capture(), CapturePackageIdleState(),
-            _animation is null ? null : CaptureStoppedIndependentIdle(allowFiniteSoundWait));
+            _animation is null || _idleRequestsCapture is not null ? null : CaptureStoppedIndependentIdle(allowFiniteSoundWait));
         failure.Validate(_aiStack, _aiReferenceState!);
         return failure;
     }
@@ -115,7 +115,8 @@ internal partial class RuntimeNativeNpc
         var package = _aiStack!.GetEffective(failure.Package);
         if (failure.IdleState is { } idles)
         {
-            _idleReplays.Restore(idles.Cooldowns.ToDictionary(value => value.Idle, value => value.Remaining));
+            if (_aiReferenceState?.IdleRequests is null)
+                _idleReplays.Restore(idles.Cooldowns.ToDictionary(value => value.Idle, value => value.Remaining));
             _packageIdleError = idles.Error;
         }
         // Retry only the retained pre-begin binding. Source selection and its

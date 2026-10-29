@@ -131,7 +131,24 @@ public partial class NativeActorPerformanceAudit
                 handoff.RestoreRetiredActors(previous);
                 if (handoffWorld.Get(caller).CaptureHeadTracking is null ||
                     JsonSerializer.Serialize(handoffWorld.Get(caller).Capture()) != beforeHandoff)
+                {
+                    using var before = JsonDocument.Parse(beforeHandoff);
+                    var after = JsonSerializer.SerializeToElement(handoffWorld.Get(caller).Capture());
+                    void Difference(JsonElement left, JsonElement right, string path)
+                    {
+                        if (left.GetRawText() == right.GetRawText()) return;
+                        if (left.ValueKind == JsonValueKind.Object && right.ValueKind == JsonValueKind.Object)
+                        {
+                            foreach (var field in left.EnumerateObject())
+                                if (right.TryGetProperty(field.Name, out var value)) Difference(field.Value, value, path + "." + field.Name);
+                            return;
+                        }
+                        static string Bounded(JsonElement value) { var text = value.GetRawText(); return text[..Math.Min(512, text.Length)]; }
+                        GD.Print($"OPENNV_FURNITURE_HANDOFF_DIFFERENCE field={path} before={Bounded(left)} after={Bounded(right)}");
+                    }
+                    Difference(before.RootElement, after, "actor");
                     throw new InvalidDataException("Actor overlap rollback changed its retained source continuation.");
+                }
                 handoff.SetResidency([], _ => throw new InvalidDataException("Warm retirement must not rematerialize."), _ => true);
                 await handoff.PrepareActorAudioTransferAsync([]);
                 handoff.RetireOverlappingActors([placed], out var warmPrevious);

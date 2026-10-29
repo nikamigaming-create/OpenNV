@@ -66,6 +66,7 @@ internal partial class RuntimeNativePlayer
         var furniture = records.GetEffective(reference.Base);
         var path = "meshes/" + FalloutDialogueTopic.Text(furniture.ReadSubrecords().Single(field => field.Signature == "MODL").Data.Span).Replace('\\', '/');
         var seat = FalloutFurnitureSource.Read(records, furniture, Read(path));
+        if (seat.Sleeping) throw new NotSupportedException("Player bed activation requires its rest-menu owner.");
         var body = CreateFurnitureBody?.Invoke() ?? throw new NotSupportedException("Player furniture requires the current owned player body.");
         try
         {

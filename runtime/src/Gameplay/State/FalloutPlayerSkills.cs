@@ -81,7 +81,10 @@ internal sealed partial class FalloutPlayerSkills
             {
                 if (_weightRevision != _inventory.Revision || _weightQuestObjectRevision != _records.QuestObjects.Revision || _weightHardcore != _hardcore())
                 {
-                    _carriedWeight = _inventory.Items.Sum(item => Weight(item) * item.Count);
+                    _carriedWeight = _inventory.Items.Sum(item => item.RecordType == "WEAP"
+                        ? _inventory.Instances(item.FormKey).Sum(instance => FalloutWeaponModifications.Weight(
+                            _records, item.FormKey, instance.Extra.WeaponMods, Weight(item)) * instance.Extra.Count)
+                        : Weight(item) * item.Count);
                     if (!float.IsFinite(_carriedWeight)) throw new InvalidDataException("Carried weight exceeds finite storage.");
                     _weightRevision = _inventory.Revision; _weightHardcore = _hardcore();
                     _weightQuestObjectRevision = _records.QuestObjects.Revision;

@@ -61,7 +61,7 @@ internal static class FalloutWeaponCondition
             }
             variants.Add(worn);
             if (selected.Variant.Count > 1)
-                variants.Add(selected.Variant with { Count = selected.Variant.Count - 1 });
+                variants.Add(selected.Variant with { Count = selected.Variant.Count - 1, Hotkey = null });
         }
         return item with { Variants = variants };
     }
@@ -73,18 +73,15 @@ internal static class FalloutWeaponCondition
         var variants = item.Variants ?? [new FalloutItemVariant(item.Count)];
         if (variants.Count == 0 || variants.Sum(variant => variant.Count) != item.Count)
             throw new InvalidDataException("Weapon condition variants do not match the inventory count.");
-        var first = -1;
         for (var index = 0; index < variants.Count; index++)
         {
             var variant = variants[index];
             var condition = variant.Condition ?? 1;
             if (variant.Count <= 0 || !float.IsFinite(condition) || condition is < 0 or > 1)
                 throw new InvalidDataException("Weapon condition variant is invalid.");
-            if (first < 0) first = index;
-            if (condition > 0) return (variants, index, variant, condition);
         }
-        var broken = variants[first];
-        return (variants, first, broken, broken.Condition ?? 1);
+        var selected = variants[0];
+        return (variants, 0, selected, selected.Condition ?? 1);
     }
 
     private static float ItemHealthLoss(FalloutPluginStack records, FalloutFormKey weapon,

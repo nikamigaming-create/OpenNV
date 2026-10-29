@@ -104,6 +104,7 @@ public partial class RuntimeCoordinator
             botPlanning = NativeBotPlanningState,
             manualSave = new { receipt = _nativeManualSaves.Receipt, history = detailed ? _nativeManualSaves.History : null },
             combatWheel = _nativeCombatWheel?.State,
+            vats = _nativePlayer?.VatsState,
             xr = _nativeXr?.State,
             detail = detailed ? "complete-runtime-snapshot" : "live-summary;request-state-for-actor-presentation-light-reference-controller-and-quest-details",
             reviewScope = !detailed || _nativeActiveCell is null ? null : new
@@ -114,6 +115,7 @@ public partial class RuntimeCoordinator
                 references = _nativeActiveCell.References.Select(reference => reference.FormKey.ToString()).ToArray(),
             },
             referenceEvents = _nativeReferenceEvents?.State,
+            droppedItems = _nativeDroppedItems?.State,
             rigidBodies = detailed ? CaptureNativeRigidBodies() : null,
             modelConstraints = detailed ? _nativeReferencePresentation?.Nodes.SelectMany(reference =>
                 OpenNV.Runtime.SceneGraph.NodeTraversal.Descendants<RuntimeNifHingeJoint>(reference.Value)
@@ -243,6 +245,7 @@ public partial class RuntimeCoordinator
             characterCreation = _nativeOpeningStageDriver?.CharacterCreationState,
             traitMenu = _nativeOpeningStageDriver?.TraitMenuState,
             vigor = _nativeOpeningStageDriver?.VigorState,
+            caravan = _nativeOpeningStageDriver?.CaravanState,
             specialBook = _nativeOpeningStageDriver?.SpecialBookState,
             imageSpace = cellChildren is null ? null : cellNodes.OfType<RuntimeNativeImageSpace>().Select(presenter => new
             {
@@ -655,6 +658,7 @@ public partial class RuntimeCoordinator
             _nativeReferences.RestoreReputations(restore.State.Reputations);
             _nativeReferences.PlayerNotes.Restore(restore.State.PlayerNotes);
             _nativeReferences.PlayerCaravanCards.Restore(restore.State.PlayerCaravanCards);
+            _nativeReferences.RestoreDroppedItems(restore.State.DroppedItems);
         }
         else if (_nativeBootstrap is null)
         {
@@ -1429,7 +1433,7 @@ public partial class RuntimeCoordinator
             RuntimeLiveContentSource.Current!, _configuration.World.GameUnitsToMeters,
             (appearance, part, nif, geometry) => NativeNpcMaterial.Resolve(appearance, part, nif, geometry, _nativePluginStack!,
                 NativeAmbient(_nativeActiveCell?.Cell ?? throw new InvalidOperationException("Player body has no active cell."))));
-        _nativePlayer.ActivateReference = collider => _nativeReferenceEvents?.TryActivate(collider) == true;
+        _nativePlayer.ActivateReference = collider => _nativeDroppedItems?.TryActivate(collider) == true || _nativeReferenceEvents?.TryActivate(collider) == true;
         _nativePlayer.NoActivationFeedback = () =>
             (_nativeQuestScripts ?? throw new InvalidOperationException("Native activation feedback has no quest session."))
                 .Scripts.NoActivationSound.RejectActivation(_nativePluginStack!.RuntimeFormKey(0x14));
@@ -1509,6 +1513,7 @@ public partial class RuntimeCoordinator
         // This owner is part of the load transaction. Native bridge dispatch
         // logs _Ready exceptions without propagating them to that transaction.
         _nativeOpeningStageDriver.InitializeOwnedState();
+        AddNativeDroppedItems();
         _nativeImageSpaceClock = new(_nativeImageSpaceState);
         AddChild(_nativeImageSpaceClock);
         GD.Print(

@@ -56,17 +56,7 @@ internal sealed record FalloutFindFurniturePackage(FalloutFormKey Form, uint Fla
             var markers = furniture.ReadSubrecords().Single(field => field.Signature == "MNAM").Data;
             if (markers.Length != 4) throw new InvalidDataException("Find Furniture has invalid source marker flags.");
             if ((BinaryPrimitives.ReadUInt32LittleEndian(markers.Span) & 0xc0000000u) != 0x40000000u) return false;
-            var ownership = world.Ownership(reference.FormKey);
-            if (ownership.Global is not null)
-                throw new NotSupportedException("Find Furniture global ownership needs its access-condition owner.");
-            if (ownership.Owner is not { } owner) return true;
-            return records.GetEffective(owner).Signature switch
-            {
-                "NPC_" or "CREA" => owner == actorState.Base,
-                "ACHR" or "ACRE" => owner == actor,
-                "FACT" => world.ActorFactions(actor).GetValueOrDefault(owner, (sbyte)-1) >= Math.Max(0, ownership.FactionRank ?? 0),
-                _ => throw new InvalidDataException("Find Furniture has invalid source ownership."),
-            };
+            return world.ActorMayUseFurniture(actor, reference.FormKey);
         }
     }
 }

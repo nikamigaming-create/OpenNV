@@ -23,6 +23,7 @@ internal partial class RuntimeNativeOpeningStageDriver
     private Action? _releaseBarterInput;
     private readonly HashSet<CanvasItem> _screenSplatters = [];
     private string? SaveContinuationBlocker =>
+        _player.VatsSaveBlocker is { } vats ? vats :
         PlayerAdvancementSaveBlocker is { } advancement ? advancement :
         _moviePlaying ? "movie" : _player.FurnitureActive ? "furniture" :
         _conversation?.Active == true ? "conversation" : _speech is { CanCaptureState: false } ? "speech" :
@@ -30,7 +31,7 @@ internal partial class RuntimeNativeOpeningStageDriver
         _specialBookEntry is not null ? "special-book-menu" :
         _vigorEntry is not null ? "special-menu" : _tagSkillEntry is not null ? "tag-menu" :
         _traitEntry is not null ? "trait-menu" : _recipeMenu is not null ? "recipe-menu" :
-        _barterMenu is not null ? "barter-menu" :
+        _barterMenu is not null ? "barter-menu" : _caravanMenu is not null ? "caravan-menu" :
         TerminalSaveBlocker is { } terminal ? terminal :
         _scripts.References?.PendingProcedureCaptureCount > 0 ? "actor-procedure-initialization" :
         _scripts.References?.PendingCorpseEquipmentCaptureCount > 0 ? "actor-corpse-continuation" :
@@ -179,7 +180,8 @@ internal partial class RuntimeNativeOpeningStageDriver
                     _scripts.Sounds.Play(_pluginStack.RuntimeFormKey(0x14), sound.FormKey, systemSound: true);
                     break;
                 }
-                throw new NotSupportedException($"Caravan menu, opponent and match owners are unbound for {request.Opponent}/{request.Deck.Form}.");
+                OpenCaravanMenu(request);
+                break;
             case "playbink" when parts.Length == 1:
                 if (_moviePlaying) throw new InvalidOperationException("Movie player is already active.");
                 var movieCommand = FalloutMovieCommand.FromScript(command + " " + string.Join(' ', arguments)).Single();
@@ -268,6 +270,8 @@ internal partial class RuntimeNativeOpeningStageDriver
             Reputations = _scripts.References.CaptureReputations(),
             PlayerNotes = _scripts.References.PlayerNotes.Capture(),
             PlayerCaravanCards = _scripts.References.PlayerCaravanCards.Capture(),
+            DroppedItems = _scripts.References.CaptureDroppedItems(),
+            PlayerProjectileLaunch = _player.CaptureProjectileLaunch(),
             PlayerAdvancement = _advancement?.CaptureSettled(),
             EncounterZones = _scripts.References.CaptureEncounterZones(),
             ExplosionExposure = _player.CaptureExplosionExposure(),

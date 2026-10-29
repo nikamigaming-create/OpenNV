@@ -17,8 +17,8 @@ internal sealed record FalloutFurnitureClipSnapshot(FalloutFormKey Idle, string 
     }
 }
 
-// A source-selected search or physical chair phase. Pending capsule searches
-// remain refused until their route and contact continuation are owned.
+// A source-selected search or physical chair phase. Approach retains its
+// authored endpoint and floor; disposable route searches resume from real pose.
 internal sealed record FalloutActorFurnitureContinuation(FalloutActorPackageAssignment Assignment,
     long EventRevision, string? LastEvent, FalloutFormKey? LastPackage, string? LastPackageSha256,
     int Phase, double SearchRemaining, float[] Pose, FalloutFormKey? SelectedPackage,
@@ -26,9 +26,13 @@ internal sealed record FalloutActorFurnitureContinuation(FalloutActorPackageAssi
     FalloutScheduleTime? ScheduleTime, FalloutFaceBlinkSnapshot? Blink,
     FalloutFormKey? Furniture = null, string? FurnitureSha256 = null, string? Model = null,
     string? ModelSha256 = null, FalloutFurnitureSeat? Seat = null, float[]? Occupied = null,
-    FalloutFurnitureClipSnapshot? Clip = null, bool InitialPlacement = false, FalloutActorPackageIdleState? IdleState = null)
+    FalloutFurnitureClipSnapshot? Clip = null, bool InitialPlacement = false, FalloutActorPackageIdleState? IdleState = null,
+    bool SandboxActivity = false, bool SandboxPackageExit = false, float[]? Approach = null, float[]? ApproachFloor = null,
+    bool PendingSelectionAccepted = false, bool PendingSelectionForced = false)
 {
     internal const string CaptureBlocker = "Furniture search, reservation and physical animation continuation.";
+    internal int SittingState => Seat?.Sleeping == true || Phase == 1 ? 0 : Phase;
+    internal int SleepingState => Seat?.Sleeping == true && Phase != 1 ? Phase : 0;
     internal static bool ValidKey(FalloutFormKey value) => !string.IsNullOrWhiteSpace(value.OwnerPlugin) &&
         value.ObjectId is > 0 and <= FalloutFormKey.ObjectIdMask;
     internal static bool ValidHash(string? value) => value is { Length: 64 } && value.All(Uri.IsHexDigit);
@@ -36,16 +40,23 @@ internal sealed record FalloutActorFurnitureContinuation(FalloutActorPackageAssi
     internal void Validate()
     {
         (Assignment ?? throw new InvalidDataException("Saved furniture has no package assignment.")).Validate();
-        if (Phase is not (0 or 2 or 3 or 4) || !double.IsFinite(SearchRemaining) || SearchRemaining is < 0 or > .5 ||
+        if (Phase is not (0 or 1 or 2 or 3 or 4) || !double.IsFinite(SearchRemaining) || SearchRemaining is < 0 or > .5 ||
             !double.IsFinite(PollRemaining) || PollRemaining < 0 || EventRevision < 0 || EventRevision == long.MaxValue ||
             SelectedPackage is { } selected && !ValidKey(selected) || PendingPackage is { } pending && !ValidKey(pending) ||
             (EventRevision == 0 ? LastEvent is not null || LastPackage is not null || LastPackageSha256 is not null :
                 LastEvent is not ("POBA" or "POCA" or "POEA") || LastPackage is not { } previous || !ValidKey(previous) || !ValidHash(LastPackageSha256)) ||
-            Assignment.Done != (Phase is 3 or 4) ||
+            Assignment.Done != (!SandboxActivity && Phase is 3 or 4) ||
+            SandboxPackageExit && (!SandboxActivity || Phase != 4 || !PendingSelectionAccepted) ||
+            PendingSelectionForced && !PendingSelectionAccepted || PendingSelectionAccepted && Phase is not (2 or 4) ||
             ScheduleTime is { } time && (time.Month is < 0 or > 11 || time.Date is < 1 or > 31 || time.Weekday is < 0 or > 6 ||
                 !float.IsFinite(time.Hour) || time.Hour is < 0 or >= 24))
             throw new InvalidDataException("Saved furniture phase, source selection or lifecycle is invalid.");
         ValidatePose(Pose);
+        if (Phase == 1) ValidatePose(Approach!);
+        else if (Approach is not null || ApproachFloor is not null)
+            throw new InvalidDataException("Furniture approach geometry has no approaching phase.");
+        if (ApproachFloor is not null && (ApproachFloor.Length != 3 || ApproachFloor.Any(value => !float.IsFinite(value))))
+            throw new InvalidDataException("Furniture approach floor is invalid.");
         Blink?.Validate();
         IdleState?.ActiveAnimation?.Validate();
         if (IdleState?.ActiveAnimation is not null && Phase != 3)
@@ -53,7 +64,7 @@ internal sealed record FalloutActorFurnitureContinuation(FalloutActorPackageAssi
         if (Phase == 0)
         {
             if (Furniture is not null || FurnitureSha256 is not null || Model is not null || ModelSha256 is not null ||
-                Seat is not null || Occupied is not null || Clip is not null || InitialPlacement || PendingPackage is not null)
+                Seat is not null || Occupied is not null || Clip is not null || InitialPlacement || PendingPackage is not null || SandboxActivity)
                 throw new InvalidDataException("Furniture search has an unowned seat or transition.");
             return;
         }
@@ -102,8 +113,16 @@ internal sealed record FalloutActorFurnitureContinuation(FalloutActorPackageAssi
         var package = records.GetEffective(Assignment.Package);
         var source = FalloutScriptPackage.Read(package);
         if (IdleState is { } idles) idles.Validate(records, Assignment.Package);
-        else if (source.Idles.Count != 0) throw new NotSupportedException("Furniture package idles require their retained collection continuation.");
-        if (source.Procedure == 0) _ = FalloutFindFurniturePackage.Read(package);
+        else if (!SandboxActivity && source.Idles.Count != 0) throw new NotSupportedException("Furniture package idles require their retained collection continuation.");
+        if (SandboxActivity)
+        {
+            if (source.Procedure != 12 || IdleState is not null ||
+                actor.PackageMotion is not { Sandbox: { } selectedActivity } motion ||
+                selectedActivity.Activity != (Seat?.Sleeping == true ? FalloutSandboxActivity.Sleep : FalloutSandboxActivity.Furniture) ||
+                motion.Package != Assignment.Package || selectedActivity.Target != Furniture)
+                throw new InvalidDataException("Furniture activity disagrees with its retained parent Sandbox selection.");
+        }
+        else if (source.Procedure == 0) _ = FalloutFindFurniturePackage.Read(package);
         else if (source.Procedure != 6 || source.LocationType != 0 || source.LocationRadius != 0 ||
             source.LocationReference != Furniture) throw new InvalidDataException("Saved furniture has no supported source procedure.");
         if (Phase == 0 && source.Procedure != 0) throw new InvalidDataException("Saved search has no source Find Furniture procedure.");
@@ -112,11 +131,12 @@ internal sealed record FalloutActorFurnitureContinuation(FalloutActorPackageAssi
             RequireHash(Seat!.Furniture, "FURN", FurnitureSha256!);
             if (world.Get(furniture).Base != Seat.Furniture) throw new InvalidDataException("Saved seat has a different source furniture base.");
             var flags = records.GetEffective(Seat.Furniture).ReadSubrecords().Single(field => field.Signature == "MNAM").Data;
-            if (flags.Length != 4 || (BinaryPrimitives.ReadUInt32LittleEndian(flags.Span) & (1u << Seat.Index)) == 0)
+            if (flags.Length != 4 || (BinaryPrimitives.ReadUInt32LittleEndian(flags.Span) & (1u << Seat.Index)) == 0 ||
+                Seat.Sleeping != ((BinaryPrimitives.ReadUInt32LittleEndian(flags.Span) & 0x80000000u) != 0))
                 throw new InvalidDataException("Saved reservation has no enabled source marker.");
             RequireHash(Clip!.Idle, "IDLE", Clip.IdleSha256);
-            if (actor.Animation.Resource.Length == 0 || !actor.Animation.Resource.Equals(Clip.Resource, StringComparison.OrdinalIgnoreCase) ||
-                !actor.Animation.Sha256.Equals(Clip.Sha256, StringComparison.OrdinalIgnoreCase))
+            if (Phase != 1 && (actor.Animation.Resource.Length == 0 || !actor.Animation.Resource.Equals(Clip.Resource, StringComparison.OrdinalIgnoreCase) ||
+                !actor.Animation.Sha256.Equals(Clip.Sha256, StringComparison.OrdinalIgnoreCase)))
                 throw new InvalidDataException("Saved furniture clock differs from its selected animation.");
         }
         if (Blink is not null && Blink.Settings != FalloutFaceBlinkSettings.Read(records))
@@ -128,6 +148,8 @@ internal sealed record FalloutActorFurnitureContinuation(FalloutActorPackageAssi
     {
         Pose = (float[])Pose.Clone(),
         Occupied = Occupied is null ? null : (float[])Occupied.Clone(),
+        Approach = Approach is null ? null : (float[])Approach.Clone(),
+        ApproachFloor = ApproachFloor is null ? null : (float[])ApproachFloor.Clone(),
         Seat = Seat is null ? null : Seat with { PlacementOffset = (float[])Seat.PlacementOffset.Clone() },
         Blink = Blink?.Copy(),
         IdleState = IdleState?.Copy()

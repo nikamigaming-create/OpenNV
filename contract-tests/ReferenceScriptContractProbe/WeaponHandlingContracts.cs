@@ -25,8 +25,9 @@ internal static class WeaponHandlingContracts
             "Script inventory removal left phantom loaded ammunition.");
         inventory.Remove(ammoKey, 8, true);
         Require(!restored.CanReload(weapon) && restored.Loaded(weaponKey) == 0, "Empty inventory allowed reload.");
-        Reject(() => new FalloutWeaponHandling(inventory).Restore(new(true, [new(weaponKey, ammoKey, 13)]), _ => weapon));
-        Reject(() => FalloutWeaponHandling.Validate(new(true, [new(weaponKey, ammoKey, 0), new(weaponKey, ammoKey, 0)])));
+        var magazine = restored.Capture().Magazines.Single();
+        Reject(() => new FalloutWeaponHandling(inventory).Restore(new(true, [magazine with { Loaded = 13 }]), _ => weapon));
+        Reject(() => FalloutWeaponHandling.Validate(new(true, [magazine, magazine])));
         Console.WriteLine("OPENNV_WEAPON_HANDLING_CONTRACT_PASS conservation=true cold=true scriptRemoval=true invalidState=true");
     }
     private static void Require(bool value, string message) { if (!value) throw new InvalidOperationException(message); }
