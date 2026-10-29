@@ -1,6 +1,6 @@
 # Playable OpenNV execution plan
 
-Updated 2026-10-28 under the user's direction: deliver working game code, with
+Updated 2026-10-29 under the user's direction: deliver working game code, with
 the coordinator planning and reviewing and GPT-6.1 Sol at High reasoning doing
 all implementation. This is the sole active implementation plan. Retained
 [repair design notes](runtime-repair-design.md) provide technical context, not a
@@ -24,16 +24,16 @@ them in the integrated product. Continue until the target works.
 
 ## Current implementation boundary
 
-The merged baseline is `874c56d8` (PR #326), with required local and hosted
-checks passed. Current branch `codex/creature-idle-completion` contains the next
-coherent patch; its fresh final gate and selected owned checkpoint audit pass. Hosted checks
-await publication. Complete campaign, retail
+The merged baseline is `8dd40535` (PR #327), with required local gate, selected
+owned checkpoint audit and all five hosted checks passed. Local main equals
+origin/main; current branch `codex/goodsprings-continuation` starts there.
+Complete campaign, retail
 presentation, sustained 4K60 and physical XR acceptance remain unmet.
 
 Actual ExportRelease d6367556 continued tutorial 20, then rifle practice, hostile
 gecko kills and corpse Take All reached tutorial 50 with Gecko Meat 1/HP 100.
-F5 generation 1 completed without error/cleanup error at 06:31:32.972 UTC. This
-is the canonical checkpoint; no opening or questionnaire replay is needed.
+That checkpoint supported the next connected continuation; no opening or
+questionnaire replay is needed.
 
 The patch closes the reached Cheyenne finite-idle return and shutdown-capture
 failure, transfers validated marker reservations during world restore, and
@@ -48,9 +48,22 @@ match remain untested. Active SayTo saving lacks a structured channel continuati
 background creature Find/Food remains unbound. Do not substitute waiting, a
 Sandbox Eat activity, or inventory-only acquisition for those missing owners.
 
-The fresh mandatory gate and selected owned audit pass. Next use checked PR
-publication. Continue connected play from tutorial 50 after that boundary. No
-arrival, selected feature check or plausible frame establishes full acceptance.
+The continuation branch adds source-text timing for audio/LIP-absent responses,
+authored furniture endpoint approach and qualified Sandbox occupied/reselection
+exit procedure codes. ExportRelease bb459162 continued tutorial 50, completed the
+next well encounters and Sunny dialogue, marked tutorial 10a214 completed and
+entered gathering quest 15d912 stage 10. F5 command157 completed at 07:36:11.819
+UTC with save/cleanup errors null and no blocked capture owners; this forward
+save is now canonical. The minimal exit-phase extension no longer blocks actual
+floor activity reselection/re-entry and saving. The game closed normally. Both
+ingredients remain needed; this checkpoint's next Continue is unverified.
+The full mandatory gate, selected owned speech audit and diff check pass;
+publish this bounded repair through one checked PR before the next work block.
+After saving, inspect the actual crafting objectives/ingredients and campfire
+interaction; do not follow an unrelated bot-selected quest as crafting evidence.
+Native 3840x2160 travel median 21.2512 ms also fails the 4K60 target; shared
+movement costs are retained for the next performance block after saving works.
+No arrival, selected feature check or plausible frame establishes acceptance.
 ## One implementation and one build
 
 - Use the shared checkout and one active `codex/` feature branch based on current
@@ -73,7 +86,7 @@ arrival, selected feature check or plausible frame establishes full acceptance.
    resolve actual build/analyzer/contract failures and establish which assembly
    is launched. Preserve the meaningful current-build checkpoint. Exit: the
    required gate is green, current-build continuation works, and the reviewed
-   PR is merged. The current unpublished branch still needs this exit. A green
+   PR is merged. PR #327 completed this boundary. Every new patch repeats it. A green
    build alone is not playable acceptance.
 2. **Finish a dependable Goodsprings session.** Play from New Game through Doc,
    the tutorial interactions and quest

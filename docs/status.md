@@ -1,24 +1,37 @@
 # Product status
 
-Updated 2026-10-28. User priority: **retail behavior and presentation through
+Updated 2026-10-29. User priority: **retail behavior and presentation through
 Goodsprings to the Strip, sustained native 3840x2160 at 60 FPS indoors and
 outdoors, and physical XR acceptance with a separate 144 Hz target**.
 FO1 remains an incomplete classic preview with selected movement, inventory,
 equipment, door and save flows. Complete campaign execution and 1:1 3D art are
 unverified. See [current-work.md](current-work.md) for the active owner.
 
-The merged baseline is PR #326, `874c56d8`, with its local/hosted checks passed.
-Current branch `codex/creature-idle-completion` repairs finite creature idle
-return, restores idle-marker reservation adoption and reads physical furniture
-positions before ordinal permissions. Its fresh publication gate and selected owned checkpoint audit pass; hosted
-checks await publication.
+The merged baseline is PR #327, `8dd40535`, with its local mandatory gate,
+selected owned checkpoint audit and all five hosted checks passed. Local main
+equals origin/main. Current branch `codex/goodsprings-continuation` starts there.
+The merged patch repairs finite creature idle return, restores idle-marker
+reservation adoption and reads physical furniture positions before permissions.
 
-ExportRelease `d6367556-4a09-427b-ba2c-9dd38a633259` continued tutorial 20 and
-reached tutorial 50 through rifle practice, hostile gecko kills and corpse Take
-All. NVGeckoMeat 1 entered inventory; HP remained100. F5 generation 1 completed
-without save/cleanup error at 06:31:32.972 UTC in cell 0e1ab6. This is the canonical
-current checkpoint. The game closed normally, disposing source owners without
-the former creature-retirement/logger failure.
+ExportRelease `bb459162` continued tutorial 50 at native 3840x2160, completed the
+next well encounters and Sunny's dialogue, and marked quest 10a214 completed
+(stored stage 50, objectives through 60 complete). Gathering quest 15d912 reached
+stage 10 with ingredient objective 10 incomplete. F5 command157 completed at
+07:36:11.819 UTC, cell 0e19c5, HP 100, save/cleanup errors null and no blocked
+capture owners. This forward save is now canonical; its next Continue remains
+unverified. The game closed normally and disposed source owners. A previous
+unsaved candidate gathered XanderRoot 1; both ingredients remain needed in the
+current checkpoint.
+
+The branch adds explicit source-text timing for audio/LIP-absent responses,
+authored furniture endpoint approach and source-qualified Sandbox occupied/exit
+procedure codes. Selected retained-source and compact contracts pass; actual
+floor activity reselection/re-entry and forward saving no longer report the
+GetUp failure. The save retains one occupied floor actor and one lawn-chair
+approach; physical lawn-chair entry remains unverified. The full mandatory gate
+and diff check pass; checked publication is pending.
+INFO 17af3d was not encountered in the latest run; its new timer has source and
+synthetic proof, with actual playback and matched retail timing unverified.
 
 Both formerly missing NPCs 104f03/104f0a publish after Continue; source raking
 runs and retires without a missing-reservation error. The lawn-chair mask case
@@ -54,13 +67,13 @@ See [implementation-plan.md](implementation-plan.md) for the active delivery pla
 | Combat | User rejects combat. Ordinary second-well rifle hits expose a shared enable-parent bug: rendering uses effective enabled state while five combat checks use the local flag, freezing pursuit and hit reactions for quest-enabled actors. The correction now produces ordinary gecko pursuit and repeated melee hits through player death, plus settler/gecko combat. The owned parent-enabled retaliation check and full local/hosted runtime gates pass; PR #255 is merged. Blended-terrain impacts now use a source-position vertex/texture-weight query shared by player and NPC shots. The owned terrain audit and an ordinary aimed LAND shot resolve without material errors; the full local runtime gate passes. Matched retail material results and cell-edge lookup remain unverified. Unique compatible attack-group binding now passes source deathclaw/coyote hit, range-miss and cold-clock fixtures. Ordinary deathclaw terrain encounter, embedded emitters and faction assistance remain open. |
 | VR rig | Visible severe rifle hand/forearm deformation around source recording 32:10-32:48. Physical VR acceptance failed. |
 | Launch/render | The D3D12 simulator candidate uses a render boundary for launcher entry and preserves stereo through process cleanup. Direct/launcher close checks report zero view-count/type errors and unchanged checkpoints. A separately identified experimental source template also clears the profile RID leak in synthetic/shared-path and owned direct/launcher checks; the official product engine still leaks it. Native API-hash verification and source-template promotion remain pending. Physical D3D12 white output, shader failures, continuous stereo and headset lifecycle acceptance remain open. |
-| Saves | Current candidate passes canonical stage-200 exterior Continue and F5 retaining two marker continuations/request graphs. Actual Continue restores both reached marker actors; the current candidate also saves tutorial 50 combat/loot progress. Earlier coyote limb-reaction checks retained exact phase, injury and health across processes. The source held-phase interruption correction passes its gate; off-cell audio continuation, save stalls and physical XR persistence remain open. |
+| Saves | ExportRelease bb459162 continued tutorial 50 and saved the next well consequences and accepted crafting lesson in cell 0e19c5 with HP 100, no save/cleanup error and no blocked capture owners. One actor remains floor-seated and another approaches a lawn chair in the save. That checkpoint's next Continue, off-cell audio continuation, save stalls and physical XR persistence remain open. |
 | Quest/scripts | Doc's source-driven opening reaches stage 200 and current-build exterior continuation. Broader campaign scripts, reputation, conversation conditions, triggers and actor-value/effect behavior still require connected gameplay coverage. |
 | Audio/UI | Wrist page changes are visible; complete interaction/input release remains unaccepted. Radio broadcast scheduling is unbound. Audio mix/sync is not certified by this review. |
 | Traversal | Cross-cell NPC/creature route owners, authored floor destinations and the prior Cheyenne saloon portal remain open. |
 | Fast travel | Earlier bounded flat/XR travel worked. Final population and saving after travel remain unaccepted. |
-| Performance | Source-owned DDS reuse, fixed native names, bounded particle reuse and reduced planning allocations are retained. An earlier uncapped 4K exterior sample measured median 13.09 ms and p99 24.23 ms, failing the 6.944 ms 144 Hz budget. It does not establish sustained native 4K60 across indoor/outdoor streaming and combat. Physical 144 Hz, loading/save stalls and headset acceptance remain open. |
-| Builds | PR #325 passed its required gate and hosted checks. The unpublished branch has compiled integrated Debug/Release candidates and reached the gameplay results above, but its final mandatory publication gate is pending. |
+| Performance | Native 3840x2160 travel measured rolling median 21.2512 ms, p95 31.2714 ms and p99 38.2948 ms, failing 4K60. Retained attribution identifies creature Sandbox movement, package pursuit and capsule sweeps; nested totals must not be added. Physical 144 Hz, loading/save stalls and headset acceptance remain open. |
+| Builds | PR #327 passed its required local gate, selected owned checkpoint audit and all five hosted checks. The continuation branch has clean Debug and ExportRelease builds, selected owned speech/compact contracts, actual forward saving and a passed full mandatory gate/diff check. Checked publication is pending. |
 | Content | Official ESM selection logged; installed loose/resource winners still need provenance review. Native extensions disabled; pristine vanilla is not established by plugin selection alone. |
 | FO3 | Earlier rendered New Game reached birth stage 22. No accepted standalone FO3 VR release. |
 | Mods/TTW | Deferred until standalone games work. |

@@ -5,6 +5,12 @@ using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.World.Cells;
 
+if (args is ["--owned-unrecorded-speech", var unrecordedSpeechRoot, var unrecordedSpeechSave])
+{
+    OwnedDialogueVoiceProbe.Unrecorded(unrecordedSpeechRoot, unrecordedSpeechSave);
+    return;
+}
+
 if (args is ["--owned-actor-food-acquisition", var actorFoodAcquisitionRoot])
 {
     RuntimeLiveContentSource.Configure(actorFoodAcquisitionRoot, RuntimeLiveContentSource.FalloutNewVegasGame);

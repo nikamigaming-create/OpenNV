@@ -63,13 +63,31 @@ internal partial class RuntimeNativeNpc
         : _sitting == 2
         ? throw new NotSupportedException("Furniture entry needs its native script-visible procedure code.")
         : _guardPackage is not null ? throw new NotSupportedException("Guard script-visible procedure code has no source declaration.")
-        : _sandboxPackage is not null ? throw new NotSupportedException("Sandbox script-visible procedure code has no source declaration.")
+        : _sandboxPackage is not null ? CurrentSandboxAiProcedure
         : _escortPackage is not null ? _escortProgress?.Complete == true ? 17 : _escortStatus switch
         {
             "ApproachTarget" => 19,
             "WaitForTarget" or "waiting-for-target-residency" => 3,
             _ => 12,
         } : _aiPackage is null ? 0 : _sitting == 4 ? 21 : _travelActive || _editorTravelProgress is { Complete: false } ? 0 : 17);
+
+    private int CurrentSandboxAiProcedure => _furnitureSandboxActivity && _seat is { } seat
+        ? SandboxFurnitureProcedure(_sitting, seat.Sleeping, activityReselectionExit: _sitting == 4 && !_sandboxFurniturePackageExit)
+        : throw new NotSupportedException("Sandbox script-visible procedure code has no admitted native phase.");
+
+    internal static int SandboxFurnitureProcedure(int sitting, bool sleeping, bool activityReselectionExit)
+    {
+        // Sandbox phase three reports its selected activity, independently of
+        // the PACK type and GetSitting. Occupation proves that phase; entry can
+        // still begin in phase two until the next process update observes it.
+        if (sitting == 1 && !activityReselectionExit) return sleeping ? 8 : 48;
+        // Activity reselection resets the source data phase to one before its
+        // handler requests Get Up. Its retained exit cause proves that phase;
+        // leaving for a different parent package has a separate owner.
+        if (sitting == 4 && activityReselectionExit) return 21;
+        throw new NotSupportedException("Sandbox furniture procedure requires an admitted occupied or activity-reselection exit phase.");
+    }
+
     private int CurrentAiPackage => Combat?.ScriptCombatPackage ?? (_requestedSelection is not null || _aiError is not null
         ? throw new NotSupportedException("Current AI package code has no admitted native continuation.")
         : _packageIdleSource is null ? 0 : _packageIdleSource.Procedure switch
@@ -126,7 +144,9 @@ internal partial class RuntimeNativeNpc
             Activity.Revision,
         },
         factions = _factions.Select(value => new { faction = value.Key.ToString(), rank = value.Value }).ToArray(),
-        currentProcedure = Combat?.ScriptCombatProcedure ?? Combat?.ScriptEatProcedure ?? (_sitting == 2 || _requestedSelection is not null || _aiError is not null || _guardPackage is not null || _sandboxPackage is not null ? (int?)null : CurrentAiProcedure),
+        currentProcedure = Combat?.ScriptCombatProcedure ?? Combat?.ScriptEatProcedure ?? (_sitting == 2 || _requestedSelection is not null || _aiError is not null || _guardPackage is not null ||
+            _sandboxPackage is not null && !(_furnitureSandboxActivity && _seat is not null &&
+                (_sitting == 1 || _sitting == 4 && !_sandboxFurniturePackageExit)) ? (int?)null : CurrentAiProcedure),
         navigation = TravelState,
         escort = EscortState,
         editorTravel = EditorTravelState,

@@ -22,6 +22,7 @@ internal partial class RuntimeNativeSpeech : Node
         internal int ResponseIndex;
         internal FalloutDialogueSpeaker? Identity;
         internal FalloutDialogueVoiceBinding? Binding;
+        internal FalloutUnrecordedSpeech? Unrecorded;
         internal string? LipSha256;
         internal bool Advance;
         internal FaceGenLipAnimation? Lip;
@@ -159,6 +160,7 @@ internal partial class RuntimeNativeSpeech : Node
                 finishedFailureReceipt = _emptyCompletions.FinishedFailureReceipt,
                 lastCompletedFailure = _lastCompletedFailure,
                 voiceBinding = voice?.Binding,
+                unrecordedResponse = voice?.Unrecorded?.State,
                 responseSound = voice?.ResponseSound?.LastEvent,
                 audioSha256 = voice?.Player.Stream?.GetMeta("opennv_owned_media_sha256", "").AsString(),
                 lipSha256 = voice?.LipSha256,
@@ -201,6 +203,7 @@ internal partial class RuntimeNativeSpeech : Node
         active = voice.Info is not null,
         playing = voice.Player.Playing,
         voiceBinding = voice.Binding,
+        unrecordedResponse = voice.Unrecorded?.State,
         responseSound = voice.ResponseSound?.LastEvent,
         audioSha256 = voice.Player.Stream?.GetMeta("opennv_owned_media_sha256", "").AsString(),
         lipSha256 = voice.LipSha256,
@@ -482,7 +485,7 @@ internal partial class RuntimeNativeSpeech : Node
         if (SubtitleCandidates().Length > 1 && _unbound.Add("concurrent-subtitle-selection"))
             GD.PushWarning("OPENNV_NATIVE_SPEECH_UNBOUND concurrent-subtitle-selection candidates=retained-in-telemetry");
         RetireRadioPcm(voice);
-        voice.Binding = null; voice.LipSha256 = null; voice.Advance = false;
+        voice.Binding = null; voice.Unrecorded = null; voice.LipSha256 = null; voice.Advance = false;
         voice.Lip = null; voice.LipWeights = [];
         ClearResponseSound(voice);
         EndListenerAnimation(voice);
@@ -513,7 +516,17 @@ internal partial class RuntimeNativeSpeech : Node
             return;
         }
         _voiceIndex ??= new((RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("Owned source is absent.")).ResourcePathsUnder("sound/voice"));
-        voice.Binding = _voiceIndex.Resolve(voice.Identity ?? throw new InvalidOperationException("Source voice type was lost."), info, voice.ResponseIndex);
+        voice.Binding = _voiceIndex.ResolveOrUnrecorded(voice.Identity ?? throw new InvalidOperationException("Source voice type was lost."), info, voice.ResponseIndex);
+        if (voice.Binding is null)
+        {
+            if (cold is not null) throw new InvalidDataException("Recorded radio continuation lost its original source audio.");
+            voice.Player.Stop(); voice.Player.Stream = null;
+            voice.Unrecorded = new(response.Text, FalloutGameSettingFloats.Read(_stack, "fAIDefaultSpeechMult"));
+            GD.Print($"OPENNV_NATIVE_SPEECH_BEGIN info={info.Record.FormKey} response={response.Number} " +
+                $"speaker={voice.Reference} owner=source-unrecorded-text-timer textBytes={voice.Unrecorded.TextBytes} " +
+                $"duration={voice.Unrecorded.DurationSeconds} audio=absent lip=absent parity=unmeasured");
+            return;
+        }
         var lipPath = voice.Binding.LipPath;
         if (RuntimeLiveContentSource.Current!.TryRead(lipPath, null, out var lipBytes, out _))
         {
@@ -569,7 +582,7 @@ internal partial class RuntimeNativeSpeech : Node
                 if (entry.Voice.Info is not null && entry.Voice.Generation == entry.Generation)
                 {
                     if (entry.Voice.Radio is not null) UpdateRadioListener(entry.Voice);
-                    ProcessVoice(entry.Voice);
+                    ProcessVoice(entry.Voice, delta);
                 }
             AdvanceDeferredSpeech();
         }
@@ -580,10 +593,11 @@ internal partial class RuntimeNativeSpeech : Node
         }
     }
 
-    private void ProcessVoice(Voice voice)
+    private void ProcessVoice(Voice voice, double delta)
     {
         // A native mixer failure cannot turn into a successful source line end.
         voice.Pcm?.RequireHealthy();
+        if (!voice.Advance && voice.Unrecorded is { } unrecorded && unrecorded.Advance(delta)) voice.Advance = true;
         if (voice.Lip is not null)
         {
             voice.Lip.Sample(voice.Player.GetPlaybackPosition(), voice.LipWeights);
@@ -591,6 +605,8 @@ internal partial class RuntimeNativeSpeech : Node
         }
         if (!voice.Advance) return;
         voice.Advance = false;
+        var completionOwner = voice.Unrecorded is null ? "audio-finished" : "source-unrecorded-text-timer";
+        voice.Unrecorded = null;
         ClearResponseSound(voice);
         RetireRadioPcm(voice);
         EndListenerAnimation(voice);
@@ -614,7 +630,7 @@ internal partial class RuntimeNativeSpeech : Node
             voice.Topic = null; voice.PackageCompleted = null;
             voice.Info = null; voice.Lip = null; voice.LipWeights = [];
             if (IsInstanceValid(voice.Speaker)) voice.Speaker!.ClearSpeechFace();
-            GD.Print($"OPENNV_NATIVE_SPEECH_END info={completed.Record.FormKey} speaker={voice.Reference} owner=audio-finished");
+            GD.Print($"OPENNV_NATIVE_SPEECH_END info={completed.Record.FormKey} speaker={voice.Reference} owner={completionOwner}");
             if ((completed.Flags & 8) == 0) RunResults(completed, voice.DialogueSubject, false);
         }
         if (voice.Radio is null && voice.NpcExchange is null && packageCompleted is null && completedTopic is { } sourceTopic)
@@ -690,6 +706,7 @@ internal partial class RuntimeNativeSpeech : Node
                 voice.Speaker!.ClearSpeechFace(); voice.Speaker.EndResponseAnimation();
             }
             voice.Advance = false;
+            voice.Unrecorded = null;
         }
     }
 

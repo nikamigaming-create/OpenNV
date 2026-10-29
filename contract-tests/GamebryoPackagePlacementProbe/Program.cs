@@ -1,6 +1,7 @@
 using Godot;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.World.Actors;
+using OpenNV.Runtime.World.Cells;
 
 var furniture = GamebryoPackagePlacement.FromFurnitureMarker(
     "00000010",
@@ -52,6 +53,18 @@ var invalidRootRejected = false;
 try { entryMotion.Sample(new Vector3(float.NaN, 0, 0)); }
 catch (InvalidDataException) { invalidRootRejected = true; }
 if (!invalidRootRejected) throw new InvalidOperationException("Non-finite furniture accumulation was admitted.");
+// A furniture entry can lie beyond the final NAVM edge. That projection owns
+// the required corridor; it cannot replace the authored animation endpoint.
+var furnitureStart = new Vector3(0, 0, 0);
+var furnitureNavm = new Vector3(2, .28f, 0);
+var furnitureEntry = new Vector3(2.5f, 0, .62f);
+var furnitureCorridor = new[] { furnitureNavm };
+var prefix = NativeCapsuleNavigation.Intent(furnitureStart, furnitureCorridor, furnitureEntry, .08f);
+var finalApproach = NativeCapsuleNavigation.Intent(furnitureNavm, furnitureCorridor, furnitureEntry, .08f);
+if (prefix.ReferenceApproach || prefix.Target != furnitureNavm ||
+    !finalApproach.ReferenceApproach || finalApproach.Target != furnitureEntry ||
+    !Mathf.IsEqualApprox(finalApproach.ArrivalRadius, .08f))
+    throw new InvalidOperationException("Furniture entry replaced its authored root or skipped its required source corridor.");
 GamebryoPackagePlacement.RequireSupportHeightOnly(
     furniture.SourceTransform,
     grounded);

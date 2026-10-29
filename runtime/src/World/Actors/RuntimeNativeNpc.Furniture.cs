@@ -103,23 +103,31 @@ internal partial class RuntimeNativeNpc
         {
             var parent = GetParent<Node3D>();
             var authored = parent.ToGlobal(_furnitureApproach.Origin);
-            var destination = _furnitureApproachFloor ??= Combat.ProjectPackageDestination(authored);
-            if (destination.DistanceTo(authored) > .15f)
-                throw new NotSupportedException("Furniture entry root has no matching supported native floor.");
-            Combat.AdvancePackageMotion(_aiPackage!, destination, .08f,
+            if (_furnitureApproachFloor is null)
+            {
+                // NAVM bounds the source corridor, not the chair's entry root.
+                // The shared capsule route walks that prefix before refining
+                // the authored reference approach against native collision.
+                _furnitureApproachFloor = Combat.ProjectPackageDestination(authored);
+                GD.Print($"OPENNV_NATIVE_FURNITURE_APPROACH reference={Appearance.Reference} target={_reservedFurniture} " +
+                    $"authored={authored} navm={_furnitureApproachFloor.Value} owner=source-corridor-and-native-capsule arrival=unobserved");
+            }
+            Combat.AdvancePackageMotion(_aiPackage!, authored, .08f,
                 _furnitureSandboxActivity ? _sandboxPackage!.Running : _findFurniture?.Running == true,
                 delta, weaponDrawn: _furnitureSandboxActivity && _sandboxPackage!.WeaponDrawn, requireArrivalHeight: true);
-            if (!IsOnFloor() || GlobalPosition.DistanceTo(destination) > .1f) return;
+            if (!IsOnFloor() || GlobalPosition.DistanceTo(authored) > .1f) return;
             var direction = -(parent.GlobalBasis * _furnitureApproach.Basis.Z).Normalized();
             Combat.FacePackageDirection(direction, delta);
             if (GlobalBasis.Orthonormalized().Z.AngleTo(-direction) > .04f) return;
             Combat.StopPackageMotion();
+            var arrival = GlobalPosition;
             Transform = _furnitureApproach;
             _furnitureApproaching = false;
             _furnitureReference = _reservedFurniture;
             _sitting = 2;
             StartFurnitureAnimation();
-            GD.Print($"OPENNV_NATIVE_FURNITURE_ENTRY reference={Appearance.Reference} target={_furnitureReference} sourceIndex={_seat!.Index} owner=native-capsule-arrival");
+            GD.Print($"OPENNV_NATIVE_FURNITURE_ENTRY reference={Appearance.Reference} target={_furnitureReference} sourceIndex={_seat!.Index} " +
+                $"arrival={arrival} authored={authored} distance={arrival.DistanceTo(authored):R} owner=native-capsule-arrival");
         }
         catch (Exception error) when (error is InvalidDataException or NotSupportedException or InvalidOperationException or IOException)
         {

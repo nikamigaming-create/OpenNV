@@ -1,7 +1,51 @@
+using System.Security.Cryptography;
+using System.Text.Json;
 using OpenNV.Runtime.Content;
+using OpenNV.Runtime.Gameplay.State;
 
 internal static class OwnedDialogueVoiceProbe
 {
+    internal static void Unrecorded(string root, string savePath)
+    {
+        var saveBytes = File.ReadAllBytes(savePath);
+        var saved = JsonSerializer.Deserialize<FalloutNativeCampaignState>(saveBytes) ??
+            throw new InvalidDataException("Owned speech checkpoint is absent.");
+        RuntimeLiveContentSource.Configure(root, RuntimeLiveContentSource.FalloutNewVegasGame,
+            activePlugins: RuntimeLiveContentSource.ResolveVanillaPlugins(root), includeImplicitPlugins: false);
+        using var content = RuntimeLiveContentSource.Current!;
+        using var records = FalloutPluginStack.Load(content.PluginSources);
+        var reference = records.RuntimeFormKey(0x1629a7);
+        var actor = (saved.References ?? throw new InvalidDataException("Owned speech references are absent."))
+            .Single(snapshot => snapshot.Reference == reference);
+        var templates = new FalloutActorTemplateSelection(actor.Templates ??
+            throw new InvalidDataException("Owned speech retained template selection is absent."));
+        var speaker = FalloutDialogueSpeaker.Read(records, actor.Base, templates);
+        if (speaker.TraitsOwner != records.RuntimeFormKey(0x101c8d) || speaker.VoiceType != records.RuntimeFormKey(0x2d))
+            throw new InvalidDataException("Owned speech differs from its reached retained actor/voice source.");
+        var record = records.GetEffective(records.RuntimeFormKey(0x17af3d));
+        var info = FalloutDialogueTopic.Decode(record);
+        var index = new FalloutDialogueVoiceIndex(content.ResourcePathsUnder("sound/voice"));
+        if (info.Responses.Count != 1 || index.ResolveOrUnrecorded(speaker, info, 0) is not null)
+            throw new InvalidDataException("Owned unrecorded response no longer has its absent-audio/absent-LIP disposition.");
+        var clock = new FalloutUnrecordedSpeech(info.Responses[0].Text,
+            FalloutGameSettingFloats.Read(records, "fAIDefaultSpeechMult"));
+        var sourceText = record.ReadSubrecords().Single(field => field.Signature == "NAM1").Data;
+        if (clock.TextBytes != sourceText.Length - 1 || clock.DurationSeconds <= 0 ||
+            clock.Advance(clock.DurationSeconds + 1) || !clock.Advance(0))
+            throw new InvalidDataException("Owned unrecorded response changed its source byte count or next-tick completion.");
+        if (!SHA256.HashData(File.ReadAllBytes(savePath)).SequenceEqual(SHA256.HashData(saveBytes)))
+            throw new InvalidDataException("Read-only speech audit changed its checkpoint.");
+        Console.WriteLine(JsonSerializer.Serialize(new
+        {
+            kind = "OPENNV_OWNED_UNRECORDED_SPEECH_PASS", reference = reference.ToString(),
+            actor = speaker.Actor.ToString(), traits = speaker.TraitsOwner.ToString(),
+            voice = speaker.VoiceType.ToString(), info = record.FormKey.ToString(), winner = record.Plugin.Name,
+            sourceSha256 = Convert.ToHexString(SHA256.HashData(record.ReadData())),
+            checkpointSha256 = Convert.ToHexString(SHA256.HashData(saveBytes)),
+            timing = clock.State, boundary = "source-and-clock-only; ordinary speech effects and matched retail timing remain unverified"
+        }));
+    }
+
     internal static void Run(string root)
     {
         RuntimeLiveContentSource.Configure(root, RuntimeLiveContentSource.FalloutNewVegasGame);
