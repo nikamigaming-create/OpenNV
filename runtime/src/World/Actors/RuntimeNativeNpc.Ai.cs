@@ -21,6 +21,7 @@ internal partial class RuntimeNativeNpc
     private FalloutReferenceWorld? _aiWorld;
     private FalloutReferenceInstance? _aiReferenceState;
     private Func<FalloutFormKey?>? _currentPackageQuery;
+    private Func<FalloutActorLastIdleRequest?>? _lastIdleRequestQuery;
     private Func<int>? _sittingQuery;
     private Func<int>? _sleepingQuery;
     private Func<FalloutActorPackageAssignment?>? _packageAssignmentCapture;
@@ -267,6 +268,7 @@ internal partial class RuntimeNativeNpc
             world.BindActorAlert(Appearance.Reference!.Value, Activity);
             _baseClock = PreparePendingSandboxStartClock() ?? _sandboxAdmissionStaging?.Clock ?? _aiReferenceState.Animation;
             _aiReferenceState.QueryCurrentPackage = _currentPackageQuery = () => CurrentPackage;
+            _aiReferenceState.QueryLastIdleRequest = _lastIdleRequestQuery = () => _aiReferenceState.LastIdleRequest;
             _aiReferenceState.QuerySitting = _sittingQuery = () => SittingState;
             _aiReferenceState.QuerySleeping = _sleepingQuery = () => SleepingState;
         }
@@ -639,6 +641,9 @@ internal partial class RuntimeNativeNpc
         if (condition.Function == 159)
             return FalloutAiPackages.Sitting(_aiStack ?? throw new NotSupportedException("AI sitting query has no source owner."),
                 condition, Appearance.Reference!.Value, PackageSitting);
+        if (condition.Function == 451)
+            return (_aiWorld ?? throw new NotSupportedException("AI last-idle query has no shared process owner."))
+                .IsLastIdlePlayed(condition, Appearance.Reference!.Value);
         if (condition.Function == 49)
             return FalloutAiPackages.Sleeping(_aiStack ?? throw new NotSupportedException("AI sleeping query has no source owner."),
                 condition, Appearance.Reference!.Value, reference => _aiWorld!.GetSleeping(reference));

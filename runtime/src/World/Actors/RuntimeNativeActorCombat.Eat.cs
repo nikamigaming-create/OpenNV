@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using Godot;
 using OpenNV.Runtime.Content;
+using OpenNV.Runtime.Formats.Gamebryo;
 using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.World.Cells;
 
@@ -13,6 +14,12 @@ internal sealed partial class RuntimeNativeActorCombat
     private FalloutFormKey? _eatIdle;
     private NativeActorIdleObjects? _eatObjects;
     internal int? ScriptEatProcedure => PackageOwnsPose && _state.PackageMotion?.Sandbox?.Activity == FalloutSandboxActivity.Eat ? 10 : null;
+    internal bool OwnsEatIdle(FalloutFormKey idle, OpenNV.Runtime.Formats.Gamebryo.FalloutNifControllerSequence? sequence) =>
+        PackageOwnsPose && _state.PackageMotion?.Eat?.Idle == idle && ReferenceEquals(_eatAnimation?.Animation.Sequence, sequence);
+
+    internal RuntimeNativeNifAnimation? RestoreEatIdleRequest(FalloutFormKey idle) =>
+        _state.PackageMotion?.Eat is { } meal && meal.Idle == idle
+            ? BindEatClip(idle, meal.IdleSha256!, meal.Objects, true).Animation : null;
 
     private void AdvanceSandboxEat(FalloutPluginRecord package, FalloutSandboxPackage source,
         FalloutSandboxActivityProgress activity, double delta, NativeActorCombatContext context)
@@ -82,11 +89,11 @@ internal sealed partial class RuntimeNativeActorCombat
                         _ => throw new NotSupportedException("Eat IDLE predicates have no actor owner.")
                     }
                 });
-            var use = _world.PrepareActorIngestible(_state.Reference, meal.Item, context.Level(), context.Globals,
-                _world.PlayerHardcore, meal.WorldReference);
-            if (use.Sound is { } sound) PackageSounds().PrepareSound(sound);
             if (idle is null)
             {
+                var use = _world.PrepareActorIngestible(_state.Reference, meal.Item, context.Level(), context.Globals,
+                    _world.PlayerHardcore, meal.WorldReference);
+                if (use.Sound is { } sound) PackageSounds().PrepareSound(sound);
                 // No file is a valid IDLE-tree result. Keep the actually
                 // published base pose; this is not a substitute eating clip.
                 use.Commit();
@@ -97,25 +104,43 @@ internal sealed partial class RuntimeNativeActorCombat
                 return;
             }
             var idleHash = Convert.ToHexString(SHA256.HashData(idle.ReadData()));
-            var clip = BindEatClip(idle.FormKey, idleHash);
-
-            var pending = meal with { Idle = idle.FormKey, IdleSha256 = idleHash, Objects = _eatObjects?.Bindings };
-            PublishEatMotion(package, activity, pending, clip, 0, true);
-            _skeleton.ResetSourceBonePoses();
-            var initialRoot = _skeleton.BoneIndex(clip.Animation.Sequence.TargetName);
-            if (initialRoot >= 0) _skeleton.Node.SetBonePose(initialRoot, Transform3D.Identity);
-            _eatObjects?.SetVisible(true);
-            clip.Animation.ApplySourceTime(clip.Time(0));
-            // The procedure's actual item-use transaction follows the admitted
-            // arrival and published eating pose. Animation loops never consume
-            // another item or reapply the effect transaction.
-            use.Commit();
-            meal = pending with { Consumed = true };
-            PublishEatMotion(package, activity, meal, clip, 0, true);
-            if (use.Sound is { } consumedSound) PackageSounds().DispatchSound(consumedSound);
-            foreach (var key in clip.Events.Crossed(0, 0, true, true)) PackageSounds().Dispatch(key);
-            _state.PackageMotion = _state.PackageMotion! with { StartPending = false };
-            _state.ObserveInitialSandboxMotion(package.FormKey);
+            bool OwnsSelection() => _state.PackageMotion?.Package == package.FormKey &&
+                ReferenceEquals(_state.PackageMotion.Sandbox, activity) && _state.PackageMotion.Eat is { Idle: null } selected &&
+                selected.Item == meal.Item && selected.ItemSha256 == meal.ItemSha256 && selected.WorldReference == meal.WorldReference;
+            void Activate(Action<RuntimeNativeNifAnimation, string>? bind = null)
+            {
+                if (!OwnsSelection())
+                    throw new InvalidOperationException("Queued Eat idle lost its selected meal procedure.");
+                // Preparation captures current transaction inputs. Do this at
+                // promotion, never before an arbitrary queued animation delay.
+                var use = _world.PrepareActorIngestible(_state.Reference, meal.Item, context.Level(), context.Globals,
+                    _world.PlayerHardcore, meal.WorldReference);
+                if (use.Sound is { } sound) PackageSounds().PrepareSound(sound);
+                var clip = BindEatClip(idle.FormKey, idleHash);
+                var pending = meal with { Idle = idle.FormKey, IdleSha256 = idleHash, Objects = _eatObjects?.Bindings };
+                PublishEatMotion(package, activity, pending, clip, 0, true);
+                _skeleton.ResetSourceBonePoses();
+                var initialRoot = _skeleton.BoneIndex(clip.Animation.Sequence.TargetName);
+                if (initialRoot >= 0) _skeleton.Node.SetBonePose(initialRoot, Transform3D.Identity);
+                _eatObjects?.SetVisible(true);
+                clip.Animation.ApplySourceTime(clip.Time(0));
+                bind?.Invoke(clip.Animation, clip.Path);
+                // Only actual publication admits ingestion. A refused producer
+                // or a queued request does not consume another item.
+                use.Commit();
+                meal = pending with { Consumed = true };
+                PublishEatMotion(package, activity, meal, clip, 0, true);
+                if (use.Sound is { } consumedSound) PackageSounds().DispatchSound(consumedSound);
+                foreach (var key in clip.Events.Crossed(0, 0, true, true)) PackageSounds().Dispatch(key);
+                _state.PackageMotion = _state.PackageMotion! with { StartPending = false };
+                _state.ObserveInitialSandboxMotion(package.FormKey);
+            }
+            if (_actor is RuntimeNativeNpc npc) npc.QueueProcedureIdle(_records, idle.FormKey, "eat", OwnsSelection, bind => Activate(bind));
+            else
+            {
+                _state.RecordIdleRequest(_records, idle.FormKey);
+                Activate();
+            }
             return;
         }
 

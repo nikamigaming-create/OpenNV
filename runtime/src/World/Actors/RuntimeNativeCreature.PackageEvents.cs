@@ -40,6 +40,7 @@ internal sealed partial class RuntimeNativeCreature
             if (package.Events.GetValueOrDefault(kind) is { } form)
             {
                 var record = _aiRecords!.GetEffective(form);
+                _aiState!.RecordIdleRequest(_aiRecords, form);
                 var idle = FalloutActorIdleSource.Resolve(_aiRecords, record);
                 var timing = FalloutIdleAnimationData.Read(record);
                 var source = ReadIdle(idle);

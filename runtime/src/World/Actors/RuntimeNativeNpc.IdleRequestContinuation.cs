@@ -7,10 +7,15 @@ namespace OpenNV.Runtime.World.Actors;
 
 internal partial class RuntimeNativeNpc
 {
-    private bool CanCaptureIdleRequestContinuation() => !_bindingInitialBase && AnimationError is null &&
-        (_currentIdleRequest?.State != 2 || _animation is not null && _idlePlayback is not null && CanCaptureIdleObjects()) &&
-        _outgoingIdles.All(outgoing => outgoing.Bindings is { } bindings && bindings.Count == outgoing.Objects.Count &&
-            outgoing.Objects.All(node => GodotObject.IsInstanceValid(node) && !node.IsQueuedForDeletion()));
+    private bool CanCaptureIdleRequestContinuation()
+    {
+        RefreshProcedureIdleRequest();
+        return !_bindingInitialBase && AnimationError is null && _queuedIdleRequest?.Procedure is null &&
+            (_currentIdleRequest?.State != 2 || _currentIdleRequest.Procedure is not null ||
+                _animation is not null && _idlePlayback is not null && CanCaptureIdleObjects()) &&
+            _outgoingIdles.All(outgoing => outgoing.Bindings is { } bindings && bindings.Count == outgoing.Objects.Count &&
+                outgoing.Objects.All(node => GodotObject.IsInstanceValid(node) && !node.IsQueuedForDeletion()));
+    }
 
     private void BindIdleRequestCapture()
     {
@@ -56,9 +61,9 @@ internal partial class RuntimeNativeNpc
                 clock.Capture(), revision, pose.Copy(), bindings?.ToArray());
         FalloutActorIdleRequestSnapshot Pending(IdleRequest request) => new(request.Idle,
             FalloutActorFurnitureContinuation.RecordHash(request.Stack.GetEffective(request.Idle)), request.Owner, request.State,
-            request.SequenceState, request.Resource, request.Sha256);
+            request.SequenceState, request.Resource, request.Sha256, Procedure: request.Procedure);
         var current = _currentIdleRequest is { } active ? Pending(active) : null;
-        if (current is { State: 2 })
+        if (current is { State: 2, Procedure: null })
         {
             var counterpart = _idleEaseIn is null ? null : _outgoingIdles.LastOrDefault(outgoing => outgoing.Incoming?.Idle == current.Idle);
             current = current with
@@ -122,7 +127,16 @@ internal partial class RuntimeNativeNpc
             _animation = null; _idlePlayback = null; _idleData = null; _idleForm = null; _idleOwner = null;
             _currentIdleRequest = null; _idleAnimationResource = null; _idleAnimationSha256 = null;
         }
-        if (saved.Current is { State: 2 } current)
+        if (saved.Current is { State: 2, Procedure: not null } procedure)
+        {
+            var binding = procedure.Procedure == "furniture" && _furnitureClip?.Idle == procedure.Idle && _baseAnimation is { } furniture
+                ? furniture : procedure.Procedure == "eat" ? Combat?.RestoreEatIdleRequest(procedure.Idle) : null;
+            if (binding is null || !binding.Source.Sha256.Equals(procedure.Sha256, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException("Saved procedure idle request has no matching physical sequence owner.");
+            _currentIdleRequest = new(_aiStack!, procedure.Idle, procedure.Owner) { Procedure = procedure.Procedure };
+            _currentIdleRequest.Activate(binding, procedure.Resource!);
+        }
+        else if (saved.Current is { State: 2 } current)
         {
             PlayIdle(_aiStack!, current.Idle, current.Owner, current.Animation, restoreCompletePose: true);
             if (current.Ease is { } phase)
@@ -148,7 +162,7 @@ internal partial class RuntimeNativeNpc
             var source = FalloutNifFile.Read(bytes);
             if (!source.Sha256.Equals(terminal.Sha256, StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("Terminal idle sequence hash differs.");
             var sequence = source.Roots.Select(source.ReadObject).OfType<FalloutNifControllerSequence>().Single();
-            _currentIdleRequest = new(_aiStack!, terminal.Idle, terminal.Owner);
+            _currentIdleRequest = new(_aiStack!, terminal.Idle, terminal.Owner) { Procedure = terminal.Procedure };
             _currentIdleRequest.RestoreTerminal(sequence, terminal.Resource!, source.Sha256);
         }
         if (saved.Queued is { } queued) _queuedIdleRequest = new(_aiStack!, queued.Idle, queued.Owner);
