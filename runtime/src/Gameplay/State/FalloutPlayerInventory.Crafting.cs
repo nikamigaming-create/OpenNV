@@ -1,4 +1,5 @@
 using OpenNV.Runtime.Content;
+using OpenNV.Runtime.World.Cells;
 
 namespace OpenNV.Runtime.Gameplay.State;
 
@@ -15,6 +16,12 @@ internal sealed partial class FalloutPlayerInventory
         var ingredients = Requirements(recipe);
         if (ingredients.Any(requirement => (Item(requirement.Key)?.Count ?? 0) < requirement.Value))
             throw new InvalidOperationException($"Recipe {recipe.Record.FormKey} ingredients are no longer available.");
+        var events = ingredients.Select(requirement => new FalloutHudEvent(
+                FalloutHudEventKind.ItemRemoved, requirement.Key, requirement.Value))
+            .Concat(recipe.Outputs.GroupBy(output => output.Form).Select(group => new FalloutHudEvent(
+                FalloutHudEventKind.ItemAdded, group.Key, group.Sum(output => output.Count))))
+            .ToArray();
+        Notifications.RequirePublish(events);
         var priorItems = new Dictionary<FalloutFormKey, FalloutCampaignItem>(_items);
         var priorEquipped = _equipped.ToArray();
         var priorRandom = _random.State;
@@ -24,7 +31,9 @@ internal sealed partial class FalloutPlayerInventory
             foreach (var (form, count) in ingredients)
                 Remove(form, count, silent: true);
             foreach (var output in recipe.Outputs)
-                Add(records, output.Form, output.Count, level, silent: true, globals);
+                Add(records, output.Form, output.Count, level, silent: true, globals,
+                    validateAddition: selected => FalloutReferenceWorld.RequirePlayerItemAcquisition(
+                        records, records.GetEffective(selected), records.RuntimeFormKey(0x14)));
         }
         catch
         {
@@ -37,11 +46,6 @@ internal sealed partial class FalloutPlayerInventory
             throw;
         }
 
-        var events = ingredients.Select(requirement => new FalloutHudEvent(
-                FalloutHudEventKind.ItemRemoved, requirement.Key, requirement.Value))
-            .Concat(recipe.Outputs.GroupBy(output => output.Form).Select(group => new FalloutHudEvent(
-                FalloutHudEventKind.ItemAdded, group.Key, group.Sum(output => output.Count))))
-            .ToArray();
         Notifications.Publish(events);
     }
 

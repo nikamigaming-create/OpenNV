@@ -66,11 +66,11 @@ internal sealed partial class RuntimeNativeCreature
         var nif = FalloutNifFile.Read(bytes);
         var sequences = nif.Roots.Select(nif.ReadObject).OfType<FalloutNifControllerSequence>().ToArray();
         if (sequences.Length != 1) throw new NotSupportedException("Creature event idle requires one source sequence.");
-        var targets = FindChildren("*", "", true, false).OfType<Node3D>()
-            .Select(node => node.GetMeta("opennv_nif_source_name", "").AsString()).ToHashSet(StringComparer.Ordinal);
+        var attachments = IndexAttachmentTargets();
+        var targets = attachments.Keys.ToHashSet(StringComparer.Ordinal);
         targets.UnionWith(sequences[0].ControlledBlocks.Select(link => link.NodeName).Where(name =>
             Skeleton.HasSourceTarget(name) || Skeleton.MaterialChannels.HasSourceTarget(name)));
-        var animation = new RuntimeNativeNifAnimation(nif, sequences[0], Skeleton, link => BindAttachment(nif, link),
+        var animation = new RuntimeNativeNifAnimation(nif, sequences[0], Skeleton, link => BindAttachment(nif, link, attachments),
             externalObjectTargets: targets);
         if (animation.UnboundChannels.Count != 0)
             throw new NotSupportedException("Creature event idle has unbound source channels: " +

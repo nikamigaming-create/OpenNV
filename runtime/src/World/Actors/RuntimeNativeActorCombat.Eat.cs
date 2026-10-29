@@ -55,6 +55,7 @@ internal sealed partial class RuntimeNativeActorCombat
                 var reach = PackageActivationRange;
                 AdvancePackageMotion(package, destination, reach, source.Running, delta, requireArrivalHeight: true);
                 _state.PackageMotion = _state.PackageMotion! with { Sandbox = activity, Wander = null, Eat = meal };
+                _state.ObserveInitialSandboxMotion(package.FormKey);
                 if (_mover?.IsOnFloor() != true || _actor.GlobalPosition.DistanceTo(destination) > reach) return;
             }
             else
@@ -66,6 +67,11 @@ internal sealed partial class RuntimeNativeActorCombat
             var idle = (_eatIdles ??= new(_records, _skeletonPath)).SelectProcedure(10, condition =>
                 condition.Function switch
                 {
+                    // The admitted Eat procedure has published and owns this
+                    // actor's awake approach/idle pose. This does not provide
+                    // a general answer for an unbound Sleep continuation.
+                    49 when condition.RunOn == 0 && condition.Argument1 == 0 && condition.Argument2 == 0 &&
+                        PackageOwnsPose && _state.PackageMotion?.Sandbox?.Activity == FalloutSandboxActivity.Eat => 0,
                     143 when condition.RunOn == 0 && condition.Argument1 == 0 && condition.Argument2 == 0 => 10,
                     246 when condition.RunOn == 0 && condition.Argument2 == 0 => meal.Item == condition.FormArgument1 ? 1 : 0,
                     247 when condition.RunOn == 0 && condition.Argument2 == 0 => condition.Argument1 == 47 ? 1 : 0,
@@ -87,6 +93,7 @@ internal sealed partial class RuntimeNativeActorCombat
                 meal = meal with { Consumed = true, NoIdle = true };
                 _state.PackageMotion = _state.PackageMotion! with { Eat = meal, Sandbox = activity, Wander = null };
                 if (use.Sound is { } noIdleSound) PackageSounds().DispatchSound(noIdleSound);
+                _state.ObserveInitialSandboxMotion(package.FormKey);
                 return;
             }
             var idleHash = Convert.ToHexString(SHA256.HashData(idle.ReadData()));
@@ -108,6 +115,7 @@ internal sealed partial class RuntimeNativeActorCombat
             if (use.Sound is { } consumedSound) PackageSounds().DispatchSound(consumedSound);
             foreach (var key in clip.Events.Crossed(0, 0, true, true)) PackageSounds().Dispatch(key);
             _state.PackageMotion = _state.PackageMotion! with { StartPending = false };
+            _state.ObserveInitialSandboxMotion(package.FormKey);
             return;
         }
 
@@ -128,6 +136,7 @@ internal sealed partial class RuntimeNativeActorCombat
         _eatObjects?.SetVisible(true);
         animation.Animation.ApplySourceTime(animation.Time(next));
         PublishEatMotion(package, activity, meal, animation, next, false);
+        _state.ObserveInitialSandboxMotion(package.FormKey);
     }
 
     private FalloutActorEatProgress SelectMeal(FalloutSandboxActivityProgress activity, NativeActorCombatContext context)
@@ -137,8 +146,10 @@ internal sealed partial class RuntimeNativeActorCombat
         else
         {
             var foods = _world.Inventory(_state.Reference, context.Level(), context.Globals).Contents.Items
-                .Where(item => item.Count > 0 && FalloutActorFood.IsFood(_records, item.FormKey)).ToArray();
-            if (foods.Length != 1) throw new NotSupportedException($"Eat inventory selection requires one qualified food kind; found {foods.Length}.");
+                .Where(item => item.Count > 0 && _world.IsActorFood(item.FormKey)).ToArray();
+            if (foods.Length != 1) throw new NotSupportedException(
+                $"Eat inventory selection requires one qualified food kind; found {foods.Length}: " +
+                string.Join(", ", foods.Select(food => $"{food.FormKey} x{food.Count}")) + ".");
             item = foods[0].FormKey;
         }
         var definition = FalloutIngestible.Read(_records, item);

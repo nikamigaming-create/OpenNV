@@ -446,7 +446,7 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
             }),
                 _inventory.Equipped.Contains(item.RuntimeFormId))).ToArray());
         var equip = Tile("IM_EquipButton");
-        _tiles.Bind(equip, "visible", _selectedItem?.RecordType is "ARMO" or "WEAP" or "ALCH" ? 1 : 0);
+        _tiles.Bind(equip, "visible", _selectedItem?.RecordType is "ARMO" or "WEAP" or "ALCH" or "INGR" ? 1 : 0);
         if (_selectedItem is { } selected)
         {
             var fields = _records.GetEffective(selected.FormKey).ReadSubrecords().ToArray();
@@ -460,7 +460,7 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
             if (_records.QuestObjects.IsQuestObject(selected.FormKey))
                 AddText("Quest item", new(470, 605), new(400, 40));
             var equipped = _inventory.Equipped.Contains(selected.RuntimeFormId);
-            var aid = selected.RecordType == "ALCH";
+            var aid = selected.RecordType is "ALCH" or "INGR";
             _tiles.Text[equip] = Setting(aid ? "sInventoryUse" : equipped ? "sInventoryUnequip" : "sInventoryEquip");
             Target(equip, aid ? "Use" : equipped ? "Unequip" : "Equip", () =>
             {

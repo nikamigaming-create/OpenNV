@@ -121,11 +121,13 @@ public partial class RuntimeCoordinator : Node3D
             {
                 var harness = new Diagnostics.Parity.RuntimeLiveHarness();
                 harness.Configure(harnessDirectory, CaptureParityFrame, () => CaptureNativeDriveState(), () => _nativePluginStack,
-                    () => CaptureNativeDriveState(false), () => (ParityStateKey, _parityObservations.Coverage().EventOrdinal));
+                    () => CaptureNativeDriveState(false), () => (ParityStateKey, _parityObservations.Coverage().EventOrdinal),
+                    CaptureNativePerformanceContext);
                 harness.ConfigureBot(ObserveNativeBot, FindNativeNavigationRoute, _configuration.Player.MouseSensitivityRadiansPerPixel,
                     Enum.Parse<Key>(_configuration.Player.DesktopInput.MoveForward.PhysicalKey),
                     Enum.Parse<Key>(_configuration.Player.DesktopInput.Activate.PhysicalKey),
-                    ApplyNativeBotSimulatorInput, () => _botSimulatorInput?.Pump(), AdvanceNativeReferenceApproachRoute, CancelNativeBotRoute);
+                    ApplyNativeBotSimulatorInput, () => _botSimulatorInput?.Pump(), AdvanceNativeReferenceApproachRoute, CancelNativeBotRoute,
+                    NativeBotPlanningProgress);
                 harness.ConfigureCheckpoints(CreateNativeCheckpoint, LoadNativeCheckpoint, () => _nativeSessionTransitioning,
                     () => _restoredNativeCheckpoint);
                 harness.ConfigureCampaign(ObserveNativeCampaign, _configuration.Player.DesktopInput.Save.Action,

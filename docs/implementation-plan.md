@@ -1,167 +1,134 @@
-# Implementation plan
+# Playable OpenNV execution plan
 
-Current user override (2026-10-26): **1:1 retail and 144 Hz or bust**. Keep one
-maintained main. The user clarifies that **144 Hz targets the VR headset**.
-Desktop draw cadence is a shared-runtime diagnostic, not headset acceptance.
-Require the physical runtime's supported/active refresh, actual eye dimensions,
-CPU/GPU frame times and delivered/missed compositor frames through ordinary
-outdoor movement, streaming and combat. Simulator cadence cannot certify this.
-Cheyenne must retain continuous source-owned poses while idle
-and moving, including outside and after cold Continue. A bounded snapping fix
-does not establish matched retail animation, presentation or campaign parity.
-Required frame budget:
-6.944 ms. The prior 49 FPS/720p diagnostic is rejected as a performance
-handoff. Optimize measured runtime owners while preserving gameplay, visual
-content, shadows, particles, collision and saves. Report CPU/GPU and actual
-draw-interval median/p95/p99, late frames, resolution and display refresh for
-ordinary movement, exterior streaming and combat. Distinguish uncapped engine
-throughput from physical 144 Hz headset presentation; stationary or low-resolution figures alone
-do not pass this target.
+Updated 2026-10-28 under the user's direction: deliver working game code, with
+the coordinator planning and reviewing and GPT-6.1 Sol at High reasoning doing
+all implementation. This is the sole active implementation plan. Retained
+[repair design notes](runtime-repair-design.md) provide technical context, not a
+second work queue.
 
-Updated 2026-10-23: the user directs complete-game playability in flat Fallout:
-New Vegas before repeated deep optimization.
-Start with correct Doc Mitchell positioning and the original questionnaire,
-physical object handling including the skull, every Goodsprings tutorial,
-shooting, creature combat and campfire cooking, then Primm/ED-E and the Strip.
-Repair shared runtime behavior from owned records and actual gameplay. Continue
-to remaining campaign behavior; a selected successful route is not full game
-support. The active owner is in [current-work.md](current-work.md).
-Ordinary play should preserve retail behavior while improving measured frame rate,
-distance and streaming. Track exterior prefetch, transition readiness, cold/warm
-loading and rendered frame stalls. Preserve cell, script and save semantics;
-interior presentation must retain authored teleports/transitions and memory
-ownership rather than assuming all interiors are spatially contiguous. Seamless
-presentation is an acceptance goal, not an established blanket no-load capability.
-The user authorizes coordinated writers. The local integration coordinator owns
-builds, live input and Git; writers use separate scopes and serialize native tests.
+Latest user override: this is a greenfield project. Old saves, historical-state
+restoration, backward compatibility and existing implementations are expendable.
+Start a fresh game on the current product build. Replace or simplify broken
+systems when that delivers working gameplay; do not preserve old machinery for
+its own sake. Current-build saving remains a game feature, not a commitment to
+load historical checkpoints. This overrides preservation-oriented instructions
+in the retained notes and the initial coordination objective.
 
-The user explicitly includes terminals, lockpicking, hacking and all 13 NV skills:
-Barter, Energy Weapons, Explosives, Lockpick, Medicine, Melee Weapons, Repair,
-Science, Guns, Sneak, Speech, Survival and Unarmed. Include their progression,
-temporary modifiers, perks, dialogue checks, crafting and combat consequences.
-Acceptance requires ordinary successful and failed interactions and their real
-world/quest consequences; loading skill values or displaying a menu is insufficient.
+Current explicit acceptance target: sustained native 3840x2160 at 60 FPS both
+indoors and outdoors, with retail behavior and presentation throughout
+Goodsprings to the Strip. Combat, crafting, looting, quests, factions, trading,
+Caravan, VATS and the other retail systems are required. Arrival and a selected
+successful route do not establish coverage. Measure movement, streaming,
+interactions and combat without concurrent builds; keep misses visible and fix
+them in the integrated product. Continue until the target works.
 
-The accepted lockpick runtime connects keyless DOOR/CONT activation to manual
-mouse/rebound-control input and Force outcomes for its admitted unowned,
-unscripted, known-history plain-pin scope. Shared unlock, XP and resident
-activation are owned; ordinary campaign and owned-model presentation acceptance
-remain open. Locked TERM activation now connects owned puzzle generation,
-interactive selection, source lockout/perk admission, XP/statistic outcomes and
-delayed contents; ordinary campaign acceptance remains open. Complete the unsupported ownership,
-script, threshold-cache, variant/history and XR lanes from source evidence;
-never unlock on a skill threshold alone or bypass required quest effects.
+## Honest starting point
 
-The following inventory preserves FNV repair requirements from the rejected
-physical VR playtest of package g. Shared gameplay defects also block flat mode.
-Classic plans remain preserved in [classic-fallout-plan.md](classic-fallout-plan.md)
-and [classic-world-realization.md](classic-world-realization.md).
+OpenNV has working portions of New Vegas, not an accepted complete game. The
+latest retained session crafted Healing Powder, closed the recipe menu, continued
+Sunny's conversation and saved. Campaign completion, dependable population and
+combat, complete presentation and physical XR acceptance remain open. Caravan
+match input/execution and VATS still lack complete runtime integration. The
+current integrated changes have not passed the full repository gate.
 
-## Acceptance reset
+The inspected baseline is b94d8e8d. Existing uncommitted work spans gameplay,
+save schemas, navigation, rendering, streaming, tests and diagnostics. Its
+breadth and inconsistent build validation make regressions difficult to isolate.
+Numerous successful component checks have not established sustained gameplay.
+Performance optimization has also continued without a controlled integrated
+gameplay result. These are delivery problems as well as unfinished engine work.
 
-Package g is rejected as a playable VR candidate. Its earlier component and
-simulator passes remain bounded evidence only. Rendering the world, hands or a
-menu does not establish functioning people, combat, progression or persistence.
-The requested 90-second private edit is selected development footage, not an
-acceptance video. No runtime repair is implemented by this planning change.
+## One implementation and one build
 
-The private 46:25 recording was surveyed across its full timeline at 20-second
-intervals, with denser samples around selected interactions and visible defects.
-This is a sampled review, not uninterrupted normal-speed or every-frame review.
-Timecodes below refer to that original recording, not the highlight edit. Session
-logs provide independent implementation failures; they are not synchronized to
-video frames, and repeated error lines are not distinct affected actors.
+- Use the shared checkout and one active `codex/` feature branch based on current
+  `origin/main`. No parallel worktrees or alternative implementations.
+- The coordinator owns priorities, adversarial review and integration decisions.
+  One Sol High executor owns code changes, builds and gameplay runs. Additional
+  robots, if needed, must use the same model/effort and get nonconflicting work;
+  they must not create another build or branch.
+- Review and replace existing code as needed. Publish coherent integrated
+  changes; do not accumulate recovery snapshots or retain obsolete code merely
+  because it predates this work. Owned retail inputs remain read-only.
+- Finish a block, run the required gate, review and merge its checked PR, verify
+  local main equals origin/main, then start the next branch. Keep one active PR.
+- Builds and audits do not run during measured gameplay. Recording stays off
+  except for a specific visual defect, with temporary frames cleaned afterward.
 
-Selected native source checks now cover deathclaw/coyote attack-group binding,
-real event-key hit/miss range and retained cold attack phases. Ordinary F5 during
-a qualifying coyote limb reaction and separate-process Continue also pass, with
-the exact saved phase, injury/health and resumed combat. Ordinary terrain
-deathclaw combat, older off-cell audio continuations and physical VR acceptance
-remain open. Details and the current owner are in current-work.md.
+## Ordered delivery blocks
 
-## Evidence and repair inventory
+1. **Recover the integrated build.** Resolve actual
+   build/analyzer/contract failures and establish which assembly is launched.
+   Launch the actual Release executable and start a fresh game. Exit: rendered
+   New Game works and the required gate is green. A gate
+   failure keeps this block open. A green build alone is not playable acceptance.
+2. **Finish a dependable Goodsprings session.** Play from New Game through Doc,
+   the tutorial interactions and quest
+   consequences, fight, loot, use inventory and crafting, enter/exit buildings,
+   and save at meaningful progress. Include available trading, factions,
+   Caravan and VATS; implement missing actions when reached rather than skipping
+   them to make the route advance. Repair encountered blockers in coherent
+   gameplay batches. Check a current-build Continue at the completed section;
+   do not replay the opening or cold restoration after every edit.
+   Exit: ordinary play can complete this section and resume current saved
+   progress, without forced quest changes, manual state edits or missing actors
+   being counted as success.
+3. **Reach Primm and the Strip through connected play.** Support actual quest,
+   dialogue, encounter and streaming transitions, including ED-E where reached.
+   Fix broken background behavior and exposed optional interactions as part of
+   their shared system, not named-route exceptions. Exit: connected travel and
+   quest progress survive current-build continuation; each reached failure is resolved
+   or remains explicitly open. Arrival alone does not close world support.
+4. **Extend integrated systems and campaign coverage.** Missing actions exposed
+   in the earlier blocks must already have real input, effects, interruption and
+   persistence. Extend ordinary play to remaining main-quest branches,
+   endings, side content, DLC and all skills. Maintain a concise coverage list;
+   unknown areas stay unknown. FO3, TTW and plugin coverage follow the standalone
+   FNV implementation and remain part of the product objective.
+5. **Deliver the physical XR game and performance targets.** Repair the tracked
+   hands/weapon rig and render/session failures before offering a headset build.
+   Flat and XR must keep the same gameplay and saves. Preserve native 4K60 flat
+   and physical 144 Hz XR targets, source content and visual fidelity. Measure
+   real streaming/combat workloads; a simulator or desktop number cannot pass
+   headset acceptance. Physical user acceptance is required for the XR handoff.
 
-| Priority / item | Evidence and boundary | Runtime owner and required repair | Acceptance before closing |
-| --- | --- | --- | --- |
-| P0: damaged combat state blocks saving | Session reports hit-reaction NIF user version 2 = 27 unsupported and an actual failed manual save. | NIF layout reader, actor hit reaction, player package capture and campaign snapshot: establish corpus-backed version layout and retained reaction continuation. Do not discard the affected actor or reaction to save. | Hit the source creature, save during and after reaction, cold-load and compare actor pose, health, combat and quest state. Original user save stays untouched. |
-| P0: creature attacks fail to bind | About 16:08-16:27 a deathclaw approaches and overlaps the view. Logs reject deathclaw h2hattackleft_a animation-group binding on multiple references. Exact impact/damage timing remains unproven. | FalloutActorAnimationResources, NativeActorCombatAnimation and RuntimeNativeActorCombat.Attack: source variant/group selection, animation clocks, attack windows, reach and contact. | Ordinary terrain encounter visibly winds up, hits at the source event, applies damage and recovers; moving out of range genuinely avoids the hit. Test another creature family and cold continuation. |
-| P0: armed and embedded attacks | User rejects combat. Logs also reject embedded weapons with multiple ProjectileNode emitters and report unsupported impact materials. | RuntimeNativeActorCombat.Weapons, attack-node selection, ranged combat and shot effects: bind authored emitter selection, ammo/reload/projectile events and impact material. | Source-armed NPC detects, aims, fires, reloads and damages through real collision; blocked shots stay blocked. Exercise multi-emitter creature separately. |
-| P0: NPCs do not perform their behavior | User report; NPC response area around 20:56-21:22. Logs require travel/procedure and dialogue-location owners, linked patrol starts, patrol flags and AI condition ownership. Sunny walking around 34:44 is only a bounded positive example. | RuntimeNativeNpc.PackageSelection, PendingPackageSelection, DialoguePackage, shared package schedule/target/procedure owners: resolve full winning conditions and targets before execution, including interruption and resumption. | Observe multiple ordinary NPCs execute eligible travel, patrol, dialogue and idle/schedule changes; provoke, disengage and resume. No named-actor exceptions. |
-| P0: combat relationships/assistance | Logs report conflicting enemy/friendly faction disposition priority. User reports poor response. | FalloutReferenceWorld relationships and RuntimeNativeActorCombat acquisition/engagement/assistance: implement source disposition arbitration and assistance eligibility. | Mixed-faction positive and negative fixtures plus actual combat show the correct actors retaliate, assist, remain neutral or flee. No universal-hostility fallback. |
-| P0: first-person rig is visibly malformed | About 32:10-32:48 the rifle pose produces large deformed/penetrating hand and forearm geometry. Other weapon transitions need dense review. | RuntimeNativePlayerActor.OpenXR/HandContacts, NativeXrArm, NativeXrHandContact and NativeXrWeaponSupport: inspect bind spaces, bone weights, grip targets and pose publication. | Both final eyes retain coherent arms and grip contact during independent head/hand motion, support-hand release, rifle/pistol switching, aim, fire and reload. Physical comfort and alignment need a real headset retest. |
-| P0: reliable launch/render/session lifecycle | Earlier D3D12 run was white; visible local launcher plus Vulkan Continue displayed the world. Logs contain shader compilation, view-count and 2D-versus-2DArray errors near session end. Vulkan recovery is not proof D3D12 is fixed. | Launcher process visibility, renderer resource lifetimes, multiview shaders and OpenXR session transitions. Reproduce the errors before assigning a common cause. | Repeated launch, Continue, New Game, menu return, tracking/focus loss and quit show actual pixels without white/black hangs, bad view counts or stale resources; test each advertised graphics path. |
-| P1: creature procedures and cross-cell routes | Logs reject creature procedures 0/9/12/13 and additional travel inputs; marker travel lacks nearby authored floor. Prior saloon creature portal and Sunny return failures remain open. | Shared creature package binding, CellNavigationGraph, portal/capsule planning, streaming residency and deferred continuation. | Actor reaches source target over real slopes, narrow doors and cell boundaries, survives unload/reload and resumes without teleport, proxy or fabricated target. |
-| P1: dialogue, quest scripts and activation | Around 29:20-30:22 and 43:20-44:10 conversations/UI are exercised. Logs contain AddReputation without owner, unbound conversation conditions, Invalid script else and generic Sequence contains no matching element failures on activation/GameMode/triggers. | Shared script interpreter/control flow, semantic command/condition owners, reference events and conversation results. Replace opaque lookup errors with exact failing source operation context. | Reach the affected conversation/trigger normally; observe real reputation, quest, inventory and package consequences once, then save/cold-load. Synthetic control-flow and absent-target fixtures must fail meaningfully. |
-| P1: survival and actor values | Logs reject LeftMobilityCondition base/formula and an ability effect. | Actor-value formulas and source effect application/persistence. | Damage, cripple/heal and ability changes produce the correct authoritative values and locomotion/combat consequences before and after save. |
-| P1: wrist UI, radio and input release | About 08:00-08:09 visible wrist pages change. Logs reject tuning without station broadcast scheduler. This does not establish every page or action. | NativeOwnedPipBoy, shared menu transactions, native radio/audio scheduling and NativeXrRig input ownership. | Stats/items/quests/map/radio execute genuine actions; tuning plays the selected station on its source schedule. Close, tracking loss and menu changes release held trigger/stick state. |
-| P1: body/creature/model omissions | Logs reject absent creature resources, a protectron part with no presented surfaces, beard texture index -1, NIF skin/head binding restrictions and nonfinite UVs. | Winning resource selection, general NIF/model/skin/material readers and actor construction. Inspect actual source bytes; do not hide missing actors. | Each affected winning source is either correctly presented and animated or has an explicit source-integrity failure. Genuine unsupported layouts get corpus-backed tests, not guessed coercion. |
-| P1: content identity | Official ESM selection is logged, but a missing creature path contains MMM_ghoulvariant_v1. This alone does not establish why the path won or prove the installation pristine. | RuntimeLiveContentSource, loose/BSA precedence and plugin record provenance: trace winning record and every resource layer, privately. | Record exact source winners; distinguish altered owned inputs, missing files and engine defects. Preserve installation and saves; test verified vanilla separately from intended mod support. |
-| P1: collision and physical objects | Logs reject shaped phantoms and model constraints. | Source overlap/contact, Havok joint/constraint and Godot physics owners. | Triggers fire on genuine enter/leave; objects retain constraints through contact and save. Phantom data never becomes fake solid floor. |
-| P2: vegetation, lighting, LOD and effects | Logs repeatedly reject present SpeedTree geometry, missing cactus/agave resources, light flags, shaders, world material for LOD, morph inputs, BSValueNode behavior, impacts and sever effects. Scenery in the edit is incomplete. | Resource readers and rendering/LOD/material/light/effect owners; fix resolution failures before decoding failures. | Traverse the same cells across lighting/LOD transitions and inspect both eyes, including distant draws, vegetation, shadows and impacts. Retail pixel parity requires matched retail evidence. |
-| P2: audio and shutdown | Radio scheduler is unbound; prior NPC fixtures had playback shutdown warnings; this session ends with an OpenXR RID leak. Source recording contains audio, but this review does not certify mix/sync. | Audio voice/scheduler ownership, session retirement and XR resource disposal. | Correct event-bound voices/music/radio, complete finite voice termination and repeated clean shutdown with no dangling runtime resources. |
-| P0: frame pacing and loading | The user requests immediate loading/combat measurement and repair. Fresh optimized flat runs retain roughly 26-31 ms rolling p95 draw intervals and a streaming upload above 200 ms. The firing-sequence window also contains a detailed diagnostic snapshot, so its 181-200 ms peaks are not isolated weapon timings. Desktop cadence is not headset timing. | Source loading, actor/animation ticks, particles, native wrapper lifetime, renderer and telemetry owners. Use recording-free traces to select each repair; preserve source behavior and complete gameplay state. | Measure cold/warm loading, ordinary movement and genuine combat separately, then headset CPU/GPU times and missed frames. Set the refresh-rate budget before claiming performance. |
+Stalls, input loss, rendering failures and save corruption that block the current
+session are fixed immediately inside its block. Performance work otherwise
+follows measured gameplay costs; no isolated optimization loop displaces a
+reached gameplay failure. XR stays an integrated mode throughout these blocks.
 
-## Work order and reviewable blocks
+## The daily burn-down loop
 
-The active flat sequence is Doc Mitchell -> Goodsprings tutorials -> Primm/ED-E
--> the Strip, fixing each reached gameplay blocker at its shared runtime owner.
-The inventory below supplies those owners. Physical VR repairs do not block a
-flat repair; they remain required before a new VR handoff.
+Retail is the reference throughout this loop. Compare each reached interaction
+and repaired presentation against equivalent retail state, including content,
+materials, lighting, camera, animation, UI, sound and behavior. Use existing
+trustworthy private references where they match; acquire missing references
+through the authorized retail observation/input bridge. Keep unmatched or
+different details open. Successful gameplay and component checks cannot close
+retail appearance or behavior. Start with the reported Vigor Tester and
+Reflectron textures/colors, then continue through the connected game.
 
-1. Preserve the failing save/profile privately and bind evidence to source commit,
-   content winners, graphics driver and session. Inventory all observed failure
-   classes; keep unobserved campaign coverage explicitly unknown.
-2. Complete whole-game playability before repeated deep optimization. Measure
-   performance immediately when stalls or resource failures block playability or
-   trustworthy validation; keep builds and recording off during measurements.
-   First save block:
-   reproduce the hit-reaction-to-save failure on the
-   affected owned creature. Repair the general NIF/reaction continuation owner,
-   then prove ordinary hit -> manual save -> cold Continue. This prevents combat
-   investigation from leaving the player unable to preserve progress.
-3. Next blocks: deathclaw attack variants and event timing; embedded/ranged attack
-   ownership; faction assistance. Require real damage and negative collision/range
-   cases. A single attacking gecko or Viper does not close combat.
-4. Repair NPC and creature package execution, schedule/conditions and cross-cell
-   route ownership. Include interruption by combat/dialogue and authoritative
-   resumption. Background actors must continue through the shared world owner.
-5. Repair the malformed tracked rig and render/session lifecycle before another
-   physical VR candidate. Audit both eyes through the complete motion sequence.
-6. Close script/dialogue/reputation/actor-value, radio, content construction,
-   physics and rendering defects from the inventory, ordered by actual route
-   blockers. Retest persistence after every new state owner.
-7. Run a fresh ordinary-input New Game -> Doc exit -> Goodsprings tutorial/wells
-   -> Primm/ED-E route, with real combat, dialogue, doors, loot, crafting where
-   required, fast travel, save and cold continuation. Survey the encountered
-   population, not selected successful actors. Expand beyond this route before
-   making broader game/campaign claims. FO3, mods and TTW remain later work.
+Use one fresh gameplay profile and one current build. Run ordinary input until a
+new failure occurs or a meaningful section completes. Identify whether it is a
+game defect, automation defect, source-integrity problem or unmet performance
+target. Implement a complete repair at the appropriate owner, replacing it if
+needed, replay the failing
+interaction once, then continue forward. A broken bot is not automatically a
+broken game; improving automation must not replace gameplay implementation.
 
-Each block starts on a fresh codex/ branch from current origin/main, retains
-unrelated work, adds meaningful synthetic and owned-data proof, runs the required
-runtime gate, and publishes a checked PR merged into main. Confirm local main
-matches origin/main and no task PR remains before the next block. No asset,
-save, private capture, address or decompilation output enters the repository.
+The coordinator reviews changes for stale-state publication, duplicate effects,
+input ownership, actor disappearance, save continuity and hidden fallbacks.
+Use targeted synthetic/owned-data checks when they catch a relevant regression.
+Do not rerun passed checks without a new change or unresolved risk. Run the
+mandatory full gate before publication, not after every exploratory edit:
 
-## Flat delivery acceptance
-
-The flat handoff needs ordinary gameplay outcomes, full source-state save/cold
-continuation, and actual flat audiovisual and input review across the requested
-route. Whole-game completion additionally requires the remaining campaign and
-supported content. A new VR handoff separately requires final-eye temporal review
-and a successful physical headset retest.
-Keep an explicit pass/fail/unproven entry for population, combat, quest changes,
-input release, rendering, audio, loading and saves. Log every unsupported owner
-and every missing entity; do not turn an exception into nominal success.
-
-Before pushing a runtime or claim change, run the selected owned-data audit and:
-
-~~~powershell
+```powershell
 .\scripts\Test-GodotRuntime.ps1 -Godot 'D:\code\gd\Godot_v4.8-dev7_mono_win64\Godot_v4.8-dev7_mono_win64_console.exe'
 git diff --check
-~~~
+```
 
-Capture only a specific visual check, then stop recording and remove its new
-temporary frames after inspection, including failure paths. Preserve the user's
-original recording and requested highlight. Do not retry earlier cleanup that
-was blocked by automatic approval review. A passing build or selected highlight
-cannot override a rejected playtest.
+Every progress report says what the player can now do, what still stops them,
+and the next concrete code change. Update `current-work.md` with current state
+and next owner, not a growing history of individual checks. Do not promise a
+finish date from record counts or one successful route. Retail comparison is
+required for a parity claim; it must not become a substitute for implementing
+missing game behavior. Keep owned inputs, saves and private observations local.

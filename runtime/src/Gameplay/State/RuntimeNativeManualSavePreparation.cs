@@ -27,7 +27,8 @@ internal sealed partial class RuntimeNativeManualSavePreparation : Node
     private RuntimeNativeSaveProducerPause? _sourcePause;
     private SceneTree? _tree;
     private Action? _releaseInput;
-    private bool _priorPaused, _begun, _finished;
+    private bool _priorPaused, _begun, _finished, _waitingAdmission, _pauseAcquired;
+    private ulong _admissionStarted;
     private Input.MouseModeEnum _priorMouse;
 
     internal RuntimeNativeManualSavePreparation(RuntimeManualSaveRequests requests, Guid session, string source,
@@ -54,32 +55,12 @@ internal sealed partial class RuntimeNativeManualSavePreparation : Node
         if (_begun || !IsInsideTree() || !_requests.Pending)
             throw new InvalidOperationException("Native save preparation has no unique pending scene request.");
         _begun = true;
-        _tree = GetTree(); _priorPaused = _tree.Paused; _priorMouse = Input.MouseMode;
+        _tree = GetTree(); _admissionStarted = Time.GetTicksMsec();
         try
         {
             if (_invalidation() is { } reason) throw new InvalidOperationException(reason);
-            if (_sourceRequests is not null)
-            {
-                _requests.ObserveOrderedSourceSave(_sourceRequests.Receipt);
-                SourceOrder = new(_sourceRequests, _requests.Receipt!, Engine.GetProcessFrames());
-                _requests.ObserveOrderedSourceSave(SourceOrder.Receipt);
-            }
-            var initialAdmission = _admission();
-            if (initialAdmission.Kind == RuntimeManualSaveAdmissionKind.Refused)
-            {
-                _requests.Fail(initialAdmission.Blocker ?? "Manual save admission was refused.");
-                _publish(_requests.Receipt!);
-                Finish();
-                return;
-            }
-            _audio = _sounds.PrepareFiniteSaveDrain();
-            _tree.Paused = true;
-            _sourcePause = new(_sourceProducers);
-            _releaseInput = _player.AcquirePausedSaveInput();
-            Input.MouseMode = Input.MouseModeEnum.Visible;
-            _requests.Prepare(Engine.GetProcessFrames(), Time.GetTicksMsec(), initialAdmission, _audio.Voices, _maximumWaitMilliseconds);
-            _audio.Activate();
-            _publish(_requests.Receipt!);
+            AcquireOrWait();
+            if (!_requests.Pending) Finish();
         }
         catch (Exception error)
         {
@@ -97,6 +78,7 @@ internal sealed partial class RuntimeNativeManualSavePreparation : Node
             if (!_requests.Pending) return;
             if (_requests.Writing) { _requests.CompletePendingWrite(); return; }
             if (_invalidation() is { } reason) { _requests.Cancel(reason); return; }
+            if (_waitingAdmission) { AcquireOrWait(); return; }
             if (_tree?.Paused != true || !_player.ModalInput || Input.MouseMode != Input.MouseModeEnum.Visible)
                 throw new FalloutFiniteSoundSaveDrainInvalidatedException("Manual save lost its gameplay/input pause lease.");
             _sourcePause!.Validate();
@@ -112,6 +94,41 @@ internal sealed partial class RuntimeNativeManualSavePreparation : Node
             _reportFailure(error);
         }
         finally { if (!_requests.Pending) Finish(); }
+    }
+
+    private void AcquireOrWait()
+    {
+        if (_sourceRequests is not null)
+        {
+            _requests.ObserveOrderedSourceSave(_sourceRequests.Receipt);
+            SourceOrder = new(_sourceRequests, _requests.Receipt!, Engine.GetProcessFrames());
+            _requests.ObserveOrderedSourceSave(SourceOrder.Receipt);
+        }
+        var admission = _admission();
+        admission.Validate();
+        if (admission.Kind == RuntimeManualSaveAdmissionKind.Refused)
+        {
+            SourceOrder?.Dispose(); SourceOrder = null;
+            if (RuntimeManualSaveAdmissionWait.ShouldWait(admission, _tree!.Paused,
+                    _admissionStarted, Time.GetTicksMsec()))
+            {
+                _waitingAdmission = true;
+                _publish(_requests.Receipt!);
+                return;
+            }
+            _requests.Fail(admission.Blocker!);
+            return;
+        }
+        _waitingAdmission = false;
+        _priorPaused = _tree!.Paused; _priorMouse = Input.MouseMode;
+        _audio = _sounds.PrepareFiniteSaveDrain();
+        _tree.Paused = true; _pauseAcquired = true;
+        _sourcePause = new(_sourceProducers);
+        _releaseInput = _player.AcquirePausedSaveInput();
+        Input.MouseMode = Input.MouseModeEnum.Visible;
+        _requests.Prepare(Engine.GetProcessFrames(), Time.GetTicksMsec(), admission, _audio.Voices, _maximumWaitMilliseconds);
+        _audio.Activate();
+        _publish(_requests.Receipt!);
     }
 
     internal void Cancel(string reason)
@@ -163,7 +180,7 @@ internal sealed partial class RuntimeNativeManualSavePreparation : Node
         {
             // Restore the tree while audio still has Always mode, then restore
             // each original playback flag after Godot's pause notifications.
-            try { if (_tree is not null && GodotObject.IsInstanceValid(_tree)) _tree.Paused = _priorPaused; }
+            try { if (_pauseAcquired && _tree is not null && GodotObject.IsInstanceValid(_tree)) _tree.Paused = _priorPaused; }
             catch (Exception error) { errors.Add(error); }
         }
         finally
@@ -188,7 +205,7 @@ internal sealed partial class RuntimeNativeManualSavePreparation : Node
                         finally
                         {
                             _releaseInput = null;
-                            try { if (_begun) Input.MouseMode = _priorMouse; }
+                            try { if (_pauseAcquired) Input.MouseMode = _priorMouse; }
                             catch (Exception error) { errors.Add(error); }
                         }
                     }

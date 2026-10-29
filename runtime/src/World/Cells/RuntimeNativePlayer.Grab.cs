@@ -65,6 +65,17 @@ internal partial class RuntimeNativePlayer
         return true;
     }
 
+    // XR's mapped Grab action is a hold/drop toggle. It uses the same source
+    // body, weight limit, force adapter and script events as desktop grab.
+    internal void XrToggleGrab()
+    {
+        if (_grabbedBody is not null) { ReleaseGrab(); return; }
+        if (!_modalInput && _activationEnabled && _furniturePhase == 0 && _sourceCamera is null && IsDefeated?.Invoke() != true)
+            TryGrab();
+    }
+
+    internal void XrReleaseGrab() => ReleaseGrab();
+
     private void AdvanceGrab()
     {
         if (_grabbedBody is null) return;

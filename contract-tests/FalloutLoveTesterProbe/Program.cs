@@ -35,7 +35,9 @@ var result = Read(code.ToArray());
 FalloutNifScalarKey[] stepKeys = [new(1, 3, null, null, null, 5), new(2, 7, null, null, null, 5), new(4, 11, null, null, null, 5)];
 Require(new[] { 0f, 1f, 1.999f, 2f, 3.999f, 4f, 10f }.Select(time => FalloutNifAnimationSampler.SampleScalar(stepKeys, time))
     .SequenceEqual(new[] { 3f, 3f, 3f, 7f, 7f, 11f, 11f }), "Constant animation keys lost their exact step boundary.");
-Require(result.AnimatedModel == animatedPath && result.WideDepth == -70 && result.NarrowDepth == -90 && result.LogicalWidthBoundary == 720, "Source transform declarations were not retained.");
+Require(result.AnimatedModel == animatedPath && result.WideDepth == -90 && result.NarrowDepth == -70 && result.LogicalWidthBoundary == 720, "Source transform declarations were not retained.");
+Require(result.DepthForLogicalWidth(640) == -70 && result.DepthForLogicalWidth(720) == -70 &&
+    result.DepthForLogicalWidth(853) == -90, "Source width comparison selected the wrong model depth.");
 Require(result.RotationRadians.SequenceEqual(new[] { .2f, .3f, .4f }) && result.LightIntensity == .8f && result.LightRadiusMultiple == 4, "Source rotations/light declarations were not retained.");
 Require(result.Transition(1, 1) == "First" && result.Transition(2, 1) == "Second" && result.Transition(0, -1) == "ReturnFirst", "Ordered source page transitions were not retained.");
 Require(Math.Abs(result.HorizontalSlope(60) - MathF.Tan(60 * .6f * MathF.PI / 180) * .7f) < 1e-6f, "Owned projection factors were not used.");

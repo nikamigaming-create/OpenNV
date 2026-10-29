@@ -357,7 +357,8 @@ internal static partial class FalloutExecutableStringTable
             return body[..(end + 4)];
         }
 
-        internal int ScriptCommandStart(string name, byte[] code, ushort? parameterCount = null, bool registration = false)
+        internal int ScriptCommandStart(string name, byte[] code, ushort? parameterCount = null, bool registration = false,
+            ushort referenceFlag = 0)
         {
             var codeBase = CodeBase;
             uint? execute = null;
@@ -376,7 +377,7 @@ internal static partial class FalloutExecutableStringTable
                         !(U32(row, 8) is >= 0x1000 and <= 0xffff || registration && U32(row, 8) == 0) ||
                         handler < codeBase || handler - codeBase >= code.Length ||
                         parameterCount is { } count && (BinaryPrimitives.ReadUInt16LittleEndian(row[18..]) != count ||
-                            BinaryPrimitives.ReadUInt16LittleEndian(row[16..]) != 0))
+                            BinaryPrimitives.ReadUInt16LittleEndian(row[16..]) != referenceFlag))
                         throw new NotSupportedException("Owned script command descriptor is unbound.");
                     if (execute is not null) throw new InvalidDataException("Owned script command declaration is ambiguous.");
                     execute = handler;

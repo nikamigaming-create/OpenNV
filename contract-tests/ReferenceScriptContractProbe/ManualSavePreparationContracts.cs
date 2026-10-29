@@ -88,6 +88,12 @@ internal static class ManualSavePreparationContracts
     private static void QueueFailures(Guid session, string source, FalloutFiniteSoundVoice voice,
         RuntimeManualSaveRequests queue, ref int writes)
     {
+        var initializing = new RuntimeManualSaveAdmission(RuntimeManualSaveAdmissionKind.Refused, "actor-procedure-initialization");
+        Require(RuntimeManualSaveAdmissionWait.ShouldWait(initializing, false, 100, 101) &&
+            !RuntimeManualSaveAdmissionWait.ShouldWait(initializing, false, 100, 2100) &&
+            !RuntimeManualSaveAdmissionWait.ShouldWait(initializing, true, 100, 101) &&
+            !RuntimeManualSaveAdmissionWait.ShouldWait(new(RuntimeManualSaveAdmissionKind.Refused, "unknown-audio"), false, 100, 101),
+            "Manual save waited on a paused, expired, or unsupported admission rather than only running actor initialization.");
         var written = writes;
         RuntimeSaveSlotMetadata NoWrite(Guid id) => throw new InvalidDataException("Refused prepared state reached its writer.");
         queue.Request(session, source, 20); queue.Prepare(20, 2000, Finite(voice), [voice], 20);

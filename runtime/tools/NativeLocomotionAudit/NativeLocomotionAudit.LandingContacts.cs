@@ -1,4 +1,5 @@
 using Godot;
+using OpenNV.Runtime.Content;
 using OpenNV.Runtime.World.Cells;
 
 public partial class NativeLocomotionAudit
@@ -19,11 +20,14 @@ public partial class NativeLocomotionAudit
             await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
             var pose = body.GlobalTransform;
             var geometry = scene.GetChildren().OfType<StaticBody3D>().Select(node => (node, node.GlobalTransform)).ToArray();
-            var probe = new NativeNavigationProbe(null);
+            var source = new FalloutFormKey("Fixture.esm", 1);
+            var probe = new NativeNavigationProbe(null, _ => source);
             _ = NativeCapsuleNavigation.Find(body, pose.Origin, desired, .4f, .32f, _ => true,
                 maximumNodes: 1, probe: probe, corridor: [desired]);
             if (probe.FirstReconciledLanding is not { } support || probe.ReconciledLandings == 0 ||
                 !support.Capsule.Collided || support.Capsule.Contacts.Count == 0 ||
+                support.Capsule.Contacts.Any(contact => contact.Reference != source || contact.Travel != support.Capsule.Travel) ||
+                support.Floor.Reference != source ||
                 support.Capsule.Contacts.Any(contact => contact.Normal.Dot(Vector3.Up) >= MathF.Cos(body.FloorMaxAngle)) ||
                 support.Capsule.Contacts.All(contact => contact.Collider != curb.GetInstanceId()) ||
                 support.Floor.Normal.Dot(Vector3.Up) < MathF.Cos(body.FloorMaxAngle) ||

@@ -8,7 +8,7 @@ internal sealed record FalloutReferenceLock(int Level, FalloutFormKey? Key, bool
 
 internal sealed partial class FalloutReferenceWorld
 {
-    internal static bool IsInventoryItem(string type) => type is "ALCH" or "AMMO" or "ARMO" or "BOOK" or "CCRD" or "CHIP" or "CMNY" or "IMOD" or "KEYM" or "LIGH" or "MISC" or "NOTE" or "WEAP";
+    internal static bool IsInventoryItem(string type) => type is "ALCH" or "AMMO" or "ARMO" or "BOOK" or "CCRD" or "CHIP" or "CMNY" or "IMOD" or "INGR" or "KEYM" or "LIGH" or "MISC" or "NOTE" or "WEAP";
 
     internal FalloutReferenceLock? Lock(FalloutFormKey reference)
     {
@@ -56,7 +56,6 @@ internal sealed partial class FalloutReferenceWorld
         var instance = Get(reference);
         if (!CanActivate(reference)) throw new InvalidOperationException("Item is no longer available.");
         if (!IsInventoryItem(records.GetEffective(instance.Base).Signature)) throw new InvalidDataException("Reference is not an inventory item.");
-        RequirePlayerItemAcquisition(records.GetEffective(instance.Base));
         var source = records.GetEffective(reference);
         var fields = source.ReadSubrecords().ToArray();
         var countField = fields.SingleOrDefault(field => field.Signature == "XCNT").Data;
@@ -66,8 +65,17 @@ internal sealed partial class FalloutReferenceWorld
         if (!conditionField.IsEmpty && conditionField.Length != 4) throw new InvalidDataException("Item health has an invalid extent.");
         float? condition = conditionField.IsEmpty ? null : BinaryPrimitives.ReadSingleLittleEndian(conditionField.Span) / 100;
         var ownership = Ownership(reference);
-        player.Add(records, instance.Base, count, level, false, globals,
-            new(count, condition, ownership.Owner, ownership.Global, ownership.FactionRank));
-        instance.Taken = true;
+        var variant = new FalloutItemVariant(count, condition, ownership.Owner, ownership.Global, ownership.FactionRank);
+        if (TakeWithInventoryEvent(reference, instance, player, level, globals, variant)) return;
+        RequirePlayerItemAcquisition(records, records.GetEffective(instance.Base), records.RuntimeFormKey(0x14));
+        var changed = false;
+        using var lease = new FalloutInventoryChangeLease(() =>
+        {
+            if (!CanActivate(reference) || Ownership(reference) != ownership)
+                throw new InvalidOperationException("Item or ownership changed during pickup.");
+            instance.Taken = true;
+            changed = true;
+        }, () => { if (changed) instance.Taken = false; });
+        player.AddWithPreparedOwner(records, instance.Base, count, level, false, lease, globals, variant);
     }
 }

@@ -17,6 +17,7 @@ public partial class RuntimeCoordinator
         private bool _disposed;
         internal FalloutNpcAppearance Appearance { get; }
         internal Task ReadTask => _read;
+        internal string NextStage => !_read.IsCompleted ? "worker-pending" : _assembly?.NextStage ?? "skeleton-and-assembly-initialize";
 
         internal ExteriorNpcPreparation(FalloutNpcAppearance appearance, RuntimeLiveContentSource source, CancellationToken cancellation)
         {

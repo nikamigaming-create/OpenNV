@@ -22,7 +22,8 @@ internal static partial class NativeCharacterStep
     internal static bool TryStep(CharacterBody3D body, Vector3 motion, float maximumHeight)
         => TryStep(body, motion, maximumHeight, out _);
 
-    internal static bool TryStep(CharacterBody3D body, Vector3 motion, float maximumHeight, out string? blocked)
+    internal static bool TryStep(CharacterBody3D body, Vector3 motion, float maximumHeight, out string? blocked,
+        QueryResources? resources = null)
     {
         blocked = "upward-or-stationary";
         if (body.Velocity.Y > 0 || motion.LengthSquared() < 0.000001f) return false;
@@ -33,9 +34,10 @@ internal static partial class NativeCharacterStep
             // A rounded capsule can report only the riser for a frame while
             // climbing onto a curb. Require nearby floor support instead of
             // losing stepping until the capsule somehow reaches the top.
-            if (!TrySupport(body, from.Origin, maximumHeight, out _)) return false;
+            if (!TrySupport(body, from.Origin, maximumHeight, out _, resources)) return false;
         }
-        if (!TryQuery(body, from, motion, maximumHeight, out var destination, out blocked, out _, floorSupported: true)) return false;
+        if (!TryQuery(body, from, motion, maximumHeight, out var destination, out blocked, out _, floorSupported: true,
+                resources: resources)) return false;
         body.GlobalPosition = destination;
         return true;
     }
@@ -62,9 +64,16 @@ internal static partial class NativeCharacterStep
         var rid = body.GetRid();
         blocked = "no-obstruction";
         if (!TestMotion(rid, parameters, result)) return false;
-        var wall = Enumerable.Range(0, result.GetCollisionCount())
-            .Where(index => result.GetCollisionNormal(index).Dot(Vector3.Up) < floorCosine)
-            .OrderBy(index => result.GetCollisionNormal(index).Dot(motion)).DefaultIfEmpty(-1).First();
+        var wall = -1;
+        var wallScore = 0f;
+        var collisionCount = result.GetCollisionCount();
+        for (var index = 0; index < collisionCount; index++)
+        {
+            var normal = result.GetCollisionNormal(index);
+            if (!(normal.Dot(Vector3.Up) < floorCosine)) continue;
+            var score = normal.Dot(motion);
+            if (wall < 0 || score.CompareTo(wallScore) < 0) { wall = index; wallScore = score; }
+        }
         blocked = "no-riser";
         if (wall < 0) return false;
         // A bevel can be just steeper than the walkable slope. Probe beyond

@@ -38,7 +38,7 @@ internal sealed partial class FalloutReferenceWorld
     internal bool ActorMayEatWorldFood(FalloutFormKey actorReference, FalloutFormKey foodReference)
     {
         var actor = Actor(actorReference); var food = Get(foodReference);
-        if (!CanActivate(foodReference) || IsDead(actorReference) || !FalloutActorFood.IsFood(records, food.Base)) return false;
+        if (!CanActivate(foodReference) || IsDead(actorReference) || !IsActorFood(food.Base)) return false;
         if (food.Script is not null) throw new NotSupportedException("Scripted food acquisition requires its activation event owner.");
         var ownership = Ownership(foodReference);
         if (ownership.Global is not null) throw new NotSupportedException("Conditional food ownership requires its live global access owner.");
@@ -61,7 +61,10 @@ internal sealed partial class FalloutReferenceWorld
         var source = ActorIngestible(item);
         if ((source.Flags & ~7) != 0 || source.Script is not null || source.AddictionChance != 0 ||
             source.Effects.Count > 0 && source.Effects.All(effect => (effect.Flags & 5) == 5))
-            throw new NotSupportedException("Actor ingestible requires its script, addiction, flags or poison owner.");
+            throw new NotSupportedException($"Actor ingestible {item} requires its script, addiction, flags or poison owner: " +
+                $"flags=0x{source.Flags:x2} script={source.Script?.ToString() ?? "none"} " +
+                $"withdrawal={source.Withdrawal?.ToString() ?? "none"} addictionChance={source.AddictionChance:R} " +
+                $"poisonOnly={source.Effects.Count > 0 && source.Effects.All(effect => (effect.Flags & 5) == 5)}.");
         var inventory = Inventory(reference, level, globals).Contents;
         FalloutReferenceInstance? food = null;
         if (worldFood is { } foodReference)
@@ -220,7 +223,7 @@ internal sealed partial class FalloutReferenceWorld
     internal void ValidateEatProgress(FalloutFormKey reference, FalloutActorEatProgress meal)
     {
         _ = Actor(reference); meal.Validate();
-        if (ActorIngestible(meal.Item).Hash != meal.ItemSha256 || !FalloutActorFood.IsFood(records, meal.Item))
+        if (ActorIngestible(meal.Item).Hash != meal.ItemSha256 || !IsActorFood(meal.Item))
             throw new InvalidDataException("Retained Eat item differs from its source food.");
         if (meal.WorldReference is { } food && Get(food).Base != meal.Item)
             throw new InvalidDataException("Retained world food differs from its source reference.");

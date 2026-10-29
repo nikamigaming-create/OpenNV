@@ -7,6 +7,7 @@ internal static class ExteriorNifContracts
     {
         ParticleData();
         ParticleVolumes();
+        MeshUvRecovery();
         foreach (var type in new[] { "BSRangeNode", "BSBlastNode", "BSDamageStage" })
         {
             var range = Bytes(w => { Av(w); w.Write(0U); w.Write(0U); w.Write(new byte[] { 2, 7, 3 }); });
@@ -133,6 +134,28 @@ internal static class ExteriorNifContracts
         try { action(); }
         catch (Exception error) when (error is InvalidDataException or NotSupportedException) { return; }
         throw new InvalidOperationException("Malformed exterior NIF was admitted.");
+    }
+    private static void MeshUvRecovery()
+    {
+        byte[] Mesh(ushort vertices, bool coordinates) => Bytes(w =>
+        {
+            w.Write(0); w.Write(vertices); w.Write((byte)0); w.Write((byte)0); w.Write(false);
+            w.Write((byte)2); w.Write((byte)0); w.Write(false);
+            w.Write(0f); w.Write(0f); w.Write(0f); w.Write(0f); w.Write(false);
+            if (coordinates) { w.Write(.25f); w.Write(.75f); }
+            w.Write((ushort)0); w.Write(-1); w.Write((ushort)0);
+            w.Write(0U); w.Write(false); w.Write((ushort)0);
+        });
+        var unique = FalloutNifFile.Read(File([("NiTriShapeData", Mesh(1, true))])).ReadMeshData(0);
+        if (unique.DecodedUvSets != 1 || unique.TextureCoordinates[0][0] != new FalloutNifTexCoord(.25f, .75f))
+            throw new InvalidOperationException("Unique UV layout recovery lost its source coordinates.");
+        try { _ = FalloutNifFile.Read(File([("NiTriShapeData", Mesh(0, false))])).ReadMeshData(0); }
+        catch (InvalidDataException error) when (error.Message.Contains("UV-set recovery is ambiguous", StringComparison.Ordinal))
+        {
+            Console.WriteLine("OPENNV_NIF_UV_RECOVERY_PASS unique=true ambiguousRefused=true fixture=synthetic gameplay=unverified");
+            return;
+        }
+        throw new InvalidOperationException("Ambiguous UV layout recovery did not fail closed.");
     }
     private static void Net(BinaryWriter w) { w.Write(0); w.Write(0U); w.Write(-1); }
     private static void Av(BinaryWriter w)

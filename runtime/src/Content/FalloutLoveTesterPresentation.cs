@@ -10,6 +10,11 @@ internal sealed record FalloutLoveTesterPresentation(
     internal float HorizontalSlope(float fieldOfView) =>
         MathF.Tan(fieldOfView * FieldOfViewMultiplier * MathF.PI / 180) * ReferenceSlope;
 
+    internal float DepthForLogicalWidth(float width) =>
+        float.IsFinite(width) && width > 0
+            ? width > LogicalWidthBoundary ? WideDepth : NarrowDepth
+            : throw new ArgumentOutOfRangeException(nameof(width));
+
     internal string Transition(int page, int direction)
     {
         if (direction == 1 && page > 0 && page <= ForwardSequences.Count) return ForwardSequences[page - 1];
@@ -101,7 +106,7 @@ internal static partial class FalloutExecutableStringTable
         if (numbers.Any(value => !float.IsFinite(value)) || width[0].Value <= 0 || cameraFloats[0].Value <= 0 ||
             cameraFactors[1].Value <= 0 || lightColors[0].Value < 0 || lightRadius[0].Value <= 0)
             throw new InvalidDataException("Owned LoveTester declaration has invalid numeric values.");
-        return new(animated.Value, cabinet.Value, angles, offsets[0], offsets[4], offsets[1], width[0].Value,
+        return new(animated.Value, cabinet.Value, angles, offsets[4], offsets[0], offsets[1], width[0].Value,
             cameraFloats[0].Value, cameraFactors[1].Value, lightColors[0].Value, lightRadius[0].Value,
             pairs[0].forward.Names, pairs[0].backward.Names);
     }

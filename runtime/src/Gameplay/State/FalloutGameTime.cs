@@ -26,7 +26,15 @@ internal sealed class FalloutGameTime
     internal int Year => DatePart(_globals.Get(_forms.Year));
     internal float TimeScale => _globals.Get(_forms.TimeScale);
     internal float DaysPassed => _globals.Get(_forms.DaysPassed);
-    internal int CalendarDays => _calendar.MonthDays.Sum(value => value);
+    internal int CalendarDays => SumMonths(_calendar.MonthDays.Count);
+
+    private int SumMonths(int count)
+    {
+        var total = 0;
+        for (var month = 0; month < count; month++)
+            total = checked(total + _calendar.MonthDays[month]);
+        return total;
+    }
 
     internal FalloutScheduleTime ScheduleTime(int daysBefore = 0)
     {
@@ -36,7 +44,7 @@ internal sealed class FalloutGameTime
         var offset = carry - daysBefore;
         var month = checked((int)_globals.Get(_forms.Month));
         var date = checked((int)_globals.Get(_forms.Day));
-        var dayOfYear = _calendar.MonthDays.Take(month).Sum(value => value) + date - 1;
+        var dayOfYear = SumMonths(month) + date - 1;
         dayOfYear = (int)(((long)dayOfYear + offset) % CalendarDays + CalendarDays) % CalendarDays;
         month = 0;
         while (dayOfYear >= _calendar.MonthDays[month]) dayOfYear -= _calendar.MonthDays[month++];
@@ -82,8 +90,7 @@ internal sealed class FalloutGameTime
         // with Gregorian date arithmetic or the separate GameDaysPassed global.
         if (currentYear > year || startMonth < currentMonth)
             days += (currentYear > year ? ((long)currentYear - year) * CalendarDays : 0) +
-                _calendar.MonthDays.Take(currentMonth).Sum(value => value) -
-                _calendar.MonthDays.Take(startMonth).Sum(value => value) - 1;
+                SumMonths(currentMonth) - SumMonths(startMonth) - 1;
         if (days is < int.MinValue or > int.MaxValue)
             throw new NotSupportedException("GetGameDaysPassed exceeds its source signed 32-bit date span.");
         return (float)days + Hour * (1.0f / 24.0f);
@@ -173,9 +180,16 @@ internal sealed class FalloutGameTime
     private void Validate()
     {
         var month = _globals.Get(_forms.Month);
-        if (_calendar.MonthDays.Count != 12 || _calendar.MonthDays.Any(value => value == 0) ||
+        if (_calendar.MonthDays.Count != 12 || HasEmptyMonth() ||
             month != MathF.Truncate(month) || month < 0 || month >= 12 || TimeScale < 0 || Hour < 0 ||
             _globals.Get(_forms.Day) < 1 || _globals.Get(_forms.Year) < 0 || DaysPassed < 0)
             throw new NotSupportedException("Game time has an unbound calendar/global state.");
+    }
+
+    private bool HasEmptyMonth()
+    {
+        for (var index = 0; index < _calendar.MonthDays.Count; index++)
+            if (_calendar.MonthDays[index] == 0) return true;
+        return false;
     }
 }

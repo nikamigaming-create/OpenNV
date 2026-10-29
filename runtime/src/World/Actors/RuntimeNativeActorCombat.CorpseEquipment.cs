@@ -54,7 +54,7 @@ internal sealed partial class RuntimeNativeActorCombat
         if (!Dead) return true;
         try
         {
-            _ = CaptureCorpseEquipment();
+            _ = CaptureCorpseEquipmentForRetirement(allowFiniteSoundWait);
             foreach (var (owner, sounds) in new[] { ("combat", _enemySounds), ("hit-reaction", _hitReactionSounds), ("package", _packageSounds) })
                 if (sounds?.CanCaptureSilent == false && !(allowFiniteSoundWait && sounds.CanAwaitFiniteCompletion))
                     throw new NotSupportedException($"Corpse equipment retains an unfinished or unowned source sound continuation: " +
@@ -69,7 +69,10 @@ internal sealed partial class RuntimeNativeActorCombat
         }
     }
 
-    private FalloutActorCorpseEquipment? CaptureCorpseEquipment()
+    private FalloutActorCorpseEquipment? CaptureCorpseEquipment() => CaptureCorpseEquipmentForRetirement(false);
+    private FalloutActorCorpseEquipment? CaptureCorpseEquipmentForFiniteWait() => CaptureCorpseEquipmentForRetirement(true);
+
+    private FalloutActorCorpseEquipment? CaptureCorpseEquipmentForRetirement(bool allowFiniteSoundWait)
     {
         if (!Dead) return null;
         if (!_deathPresentationAttempted || !_corpseEquipmentRestored || _ragdoll?.CaptureReady != true)
@@ -82,7 +85,7 @@ internal sealed partial class RuntimeNativeActorCombat
         if (Error is not null || _assistanceError is not null || _engagementError is not null &&
             (!_launchRefusalOwnsError || _launchRefusal is null || _engagementError != _launchRefusal.Error || _state.ProjectileLaunch is not null))
             throw new NotSupportedException("Corpse equipment retains an unowned combat failure.");
-        if (_enemyMuzzle?.CaptureReady == false || _enemyShotEffects?.CaptureReady == false)
+        if (_enemyMuzzle?.CaptureReady == false || _enemyShotEffects?.CaptureReadyWithFiniteSoundWait(allowFiniteSoundWait) == false)
             throw new NotSupportedException("Corpse equipment has a pending source attack effect, projectile, decal or effect fault: " +
                 $"muzzle=[{_enemyMuzzle?.CaptureBlocker ?? "ready"}]; shotEffects=[{_enemyShotEffects?.CaptureBlocker ?? "ready"}].");
         if (_corpseVisualBoundary is { } boundary) throw new NotSupportedException(boundary);
@@ -198,7 +201,7 @@ internal sealed partial class RuntimeNativeActorCombat
             var ready = CorpseEquipmentCaptureReady(false);
             var finiteReady = CorpseEquipmentCaptureReady(true);
             _retiredCorpseEquipmentReady = ready; _retiredCorpseEquipmentFiniteReady = finiteReady;
-            if (finiteReady) _state.CorpseEquipment = CaptureCorpseEquipment()?.Copy();
+            if (finiteReady) _state.CorpseEquipment = CaptureCorpseEquipmentForRetirement(true)?.Copy();
         }
     }
 }

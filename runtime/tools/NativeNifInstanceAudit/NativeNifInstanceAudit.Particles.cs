@@ -7,6 +7,17 @@ public partial class NativeNifInstanceAudit
     private static void ExerciseParticleBuffer()
     {
         ExerciseParticleDrawOrdering();
+        var cache = new NativeParticleAngleCache();
+        float[] angles = [0f, 0f, -0f, -0f, 1f, 1f, -2f, float.PositiveInfinity,
+            float.NaN, BitConverter.Int32BitsToSingle(unchecked((int)0xffc00001)), 0f];
+        foreach (var angle in angles)
+        {
+            var expectedAngle = MathF.SinCos(angle);
+            var actualAngle = cache.Get(angle);
+            if (BitConverter.SingleToInt32Bits(expectedAngle.Sin) != BitConverter.SingleToInt32Bits(actualAngle.Sin) ||
+                BitConverter.SingleToInt32Bits(expectedAngle.Cos) != BitConverter.SingleToInt32Bits(actualAngle.Cos))
+                throw new InvalidOperationException("Particle angle cache changed sine or cosine bits.");
+        }
         var random = new Random(73);
         for (var index = 0; index < 1000; index++)
         {
@@ -21,7 +32,9 @@ public partial class NativeNifInstanceAudit
             var expectedPose = new Transform3D(camera * new Basis(Vector3.Back, angle) *
                 Basis.FromScale(Vector3.One * radius), position);
             var pose = NativeParticleDrawBuffer.Billboard(camera, angle, radius, position);
-            if (pose != expectedPose)
+            var (sin, cos) = cache.Get(angle);
+            var cachedPose = NativeParticleDrawBuffer.Billboard(camera, sin, cos, radius, position);
+            if (cachedPose != pose || pose != expectedPose)
                 throw new InvalidOperationException("Expanded billboard columns differ from the source matrix composition.");
         }
         using var quad = new QuadMesh();

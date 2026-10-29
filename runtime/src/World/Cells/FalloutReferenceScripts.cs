@@ -39,7 +39,9 @@ internal sealed record FalloutReferenceScriptHost(Func<FalloutFormKey, FalloutFo
     Action<double>? RewardXp = null, FalloutGameTime? GameTime = null,
     Func<FalloutFormKey, bool>? IsDead = null,
     Func<FalloutFormKey, float>? HealthPercentage = null,
-    Func<string, int>? MiscStatistic = null, Func<FalloutFormKey, bool>? IsSneaking = null);
+    Func<string, int>? MiscStatistic = null, Func<FalloutFormKey, bool>? IsSneaking = null,
+    Func<FalloutFormKey, FalloutFormKey?>? InventoryContainer = null,
+    Action<FalloutFormKey, FalloutFormKey?>? RemoveInventoryInstance = null);
 internal sealed record FalloutReferenceScriptEventResult(FalloutFormKey Reference, string Event, int Blocks, string? Error,
     string? RecoveredError = null);
 internal sealed record FalloutReferenceScriptEvent(string Name, FalloutFormKey? ActionReference = null,
@@ -533,6 +535,10 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                 })
                 { ReadOnly = true };
             FalloutFormKey Target() => suppliedTarget ?? (parts.Length == 1 ? source : Reference(parts[0]));
+            if (parts.Length <= 2 && operation == "getcontainer")
+                return FalloutScriptFunction.Typed([], _ => FalloutScriptValue.Form(
+                    (host.InventoryContainer ?? throw new NotSupportedException("GetContainer has no inventory-instance owner."))(Target()) is { } container
+                        ? records.RuntimeFormId(container) : 0), readOnly: true);
             if (parts.Length <= 2 && operation == "placeatme")
                 return world.TransientExplosions.Function(Target);
             if (parts.Length <= 2 && operation == "playsound3d")
@@ -1140,6 +1146,9 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                 case "stopcombatalarmonactor" or "scaonactor" when arguments.Count == 0:
                     world.StopCombatAlarmOnActor(target);
                     break;
+                case "startcombat" when arguments.Count == 1:
+                    world.StartCombat(target, Reference(arguments[0]));
+                    break;
                 case "matchrace" when arguments.Count == 1:
                     world.MatchRace(target, Reference(arguments[0]));
                     break;
@@ -1424,6 +1433,25 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                     (host.Command ?? throw new NotSupportedException("ShowBarterMenu has no native menu owner."))(
                         source, bindings, command,
                         [((int)discount).ToString(System.Globalization.CultureInfo.InvariantCulture)]);
+                    break;
+                case "showcaravanmenu" when arguments.Count == 3:
+                    var caravan = FalloutCaravanCommandRequest.Read(records, target, bindings.Form(arguments[0]),
+                        Number(arguments[1]), Number(arguments[2]));
+                    (host.Command ?? throw new NotSupportedException("ShowCaravanMenu has no native menu owner."))(
+                        source, bindings, command,
+                        [arguments[0], caravan.AiType.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                            caravan.BetPercentage.ToString("R", System.Globalization.CultureInfo.InvariantCulture)]);
+                    break;
+                case "addcardtoplayer" or "addcard" when arguments.Count == 0:
+                    // The command's caller is a real reference whose effective
+                    // base record supplies the card identity. Inventory event
+                    // delivery and RemoveMe are separate owners.
+                    world.PlayerCaravanCards.Add(world.Get(target).Base);
+                    break;
+                case "removeme" when arguments.Count <= 1:
+                    var removeMeDestination = arguments.Count == 0 || arguments[0] == "0" ? (FalloutFormKey?)null : Reference(arguments[0]);
+                    (host.RemoveInventoryInstance ?? throw new NotSupportedException("RemoveMe has no inventory-instance owner."))
+                        (target, removeMeDestination);
                     break;
                 case "activate" when arguments.Count == 0:
                     host.Apply(new(FalloutReferenceEffectKind.DefaultActivate, source, target, actor));

@@ -12,6 +12,11 @@ public partial class RuntimeCoordinator
         FalloutPlacedReference reference, FalloutNifFile? preparedModel = null)
     {
         var started = Stopwatch.GetTimestamp();
+        if (DisplayServer.GetName() != "headless" && preparedModel is not null &&
+            cell.BaseObjects.TryGetValue(reference.Base, out var staticSource) &&
+            staticSource.Signature is not ("NPC_" or "CREA") && staticSource.ModelPath is { } staticPath &&
+            !_nativeNifPrototypes.ContainsKey(staticPath) && _nativeReferences!.IsEnabled(reference.FormKey))
+            return await PlaceNativeStaticCellReferenceResponsive(root, cell, reference, staticPath, preparedModel);
         if (DisplayServer.GetName() == "headless" ||
             !cell.BaseObjects.TryGetValue(reference.Base, out var source) || source.Signature != "NPC_" ||
             !_nativeReferences!.IsEnabled(reference.FormKey))
@@ -32,6 +37,7 @@ public partial class RuntimeCoordinator
             if (preparation is not null)
                 GD.Print($"OPENNV_NATIVE_NPC_PREPARING reference={reference.FormKey} source=bounded-worker detached=true");
             maximumStep = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+            var sliceStarted = Stopwatch.GetTimestamp();
             while (preparation is not null)
             {
                 if (_nativeSessionTransitioning || _retiringNativeSession)
@@ -45,10 +51,21 @@ public partial class RuntimeCoordinator
                     continue;
                 }
                 started = Stopwatch.GetTimestamp();
+                var stage = preparation.NextStage;
                 var complete = preparation.Advance(this, cell, out actor);
-                maximumStep = Math.Max(maximumStep, Stopwatch.GetElapsedTime(started).TotalMilliseconds);
+                var step = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+                maximumStep = Math.Max(maximumStep, step);
+                if (_options.ContainsKey("live-harness") && step > 16.667)
+                    GD.Print($"OPENNV_NATIVE_NPC_PREPARATION_SLOW reference={reference.FormKey} stage={stage} milliseconds={step:F3}");
                 if (complete) break;
-                await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+                // Small detached hierarchy steps may share the existing
+                // loading allowance; pending source work and native operations
+                // that exhaust it yield without publishing a partial actor.
+                if (!preparation.ReadTask.IsCompleted || Stopwatch.GetElapsedTime(sliceStarted).TotalMilliseconds >= 2)
+                {
+                    await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+                    sliceStarted = Stopwatch.GetTimestamp();
+                }
             }
             started = Stopwatch.GetTimestamp();
             PlaceNativeReference(root, cell, reference, preparedNpc: actor);

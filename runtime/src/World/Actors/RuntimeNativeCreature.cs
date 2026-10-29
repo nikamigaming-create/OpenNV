@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using System.Diagnostics;
 using Godot;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Formats.Gamebryo;
@@ -72,59 +73,69 @@ internal sealed partial class RuntimeNativeCreature : CharacterBody3D
     };
 
     internal static RuntimeNativeCreature Create(FalloutPluginStack stack, RuntimeLiveContentSource content,
-        FalloutPlacedReference reference, FalloutReferenceInstance state, float unitsToMetres)
+        FalloutPlacedReference reference, FalloutReferenceInstance state, float unitsToMetres, bool tracePreparation = false,
+        PreparedGeometry? preparedGeometry = null)
     {
+        var stepStarted = Stopwatch.GetTimestamp();
+        void Mark(string stage)
+        {
+            if (!tracePreparation) return;
+            var now = Stopwatch.GetTimestamp();
+            var milliseconds = Stopwatch.GetElapsedTime(stepStarted, now).TotalMilliseconds;
+            if (milliseconds > 16.667)
+                GD.Print($"OPENNV_NATIVE_CREATURE_PREPARATION_SLOW reference={reference.FormKey} stage={stage} milliseconds={milliseconds:F3}");
+            stepStarted = now;
+        }
         if (state.Reference != reference.FormKey || state.Base != reference.Base)
             throw new InvalidDataException("Creature presentation is bound to a different reference state.");
         var appearance = FalloutCreatureAppearanceResolver.Resolve(stack, reference.Base, reference.FormKey, state.Templates);
+        Mark("source-appearance");
         var actor = new RuntimeNativeCreature { Name = $"Reference_{reference.FormKey}", Appearance = appearance, _clock = state.Animation, _content = content };
         try
         {
             actor.PrepareSandboxAdmissionSource(state);
+            actor.PreparePendingSandboxStartSource(stack, state);
+            Mark("sandbox-source");
             actor.SetMeta("opennv_reference_form_key", reference.FormKey.ToString());
             actor.SetMeta("opennv_creature_form_key", reference.Base.ToString());
             actor.SetMeta("opennv_source_form", appearance.ModelOwner.ToString());
             actor.SetMeta("opennv_source_skeleton", appearance.SkeletonPath);
-            actor.Skeleton = NativeNifMeshBuilder.BuildActorSkeleton(Read(appearance.SkeletonPath), unitsToMetres);
-            actor.Skeleton.Node.SetMeta("opennv_source_model", appearance.SkeletonPath);
-            actor.Skeleton.Node.Scale = Vector3.One * appearance.BaseScale;
-            actor.AddChild(actor.Skeleton.Node);
-            var directory = appearance.SkeletonPath[..appearance.SkeletonPath.LastIndexOf('/')];
-            var idle = FalloutCreatureAppearanceResolver.SelectIdle(appearance,
-                new[] { directory + "/mtidle.kf", directory + "/locomotion/mtidle.kf" }
-                    .Where(path => content.TryResolve(path, null, out _)));
-            var bytes = Read(idle);
-            var animation = FalloutNifFile.Read(bytes);
-            var sequences = animation.Roots.Select(animation.ReadObject).OfType<FalloutNifControllerSequence>().ToArray();
-            if (sequences.Length != 1) throw new NotSupportedException("CREA movement idle requires a unique source KF sequence.");
-            var sequence = sequences[0];
-            var controlledNodes = sequence.ControlledBlocks.Where(link => link.ControllerType is "NiTransformController" or "NiVisController")
-                .Select(link => link.NodeName).ToHashSet(StringComparer.Ordinal);
-            var parts = new List<RuntimeNativeNifScene>();
-            foreach (var path in appearance.Models)
+            if (preparedGeometry is null)
             {
-                try
-                {
-                    var part = NativeNifMeshBuilder.AddActorPart(Read(path), actor.Skeleton,
-                        externalTransformTargets: controlledNodes, contentSource: content);
-                    part.Root.SetMeta("opennv_source_model", path);
-                    part.Root.SetMeta("opennv_source_form", appearance.ModelOwner.ToString());
-                    parts.Add(part);
-                }
-                catch (Exception error) when (error is InvalidDataException or NotSupportedException or FileNotFoundException)
-                { throw new NotSupportedException($"CREA {appearance.Creature} part {path}: {error.Message}", error); }
+                var preparedSource = PreparedSource.Read(appearance, content, unitsToMetres, CancellationToken.None);
+                using var assembly = new GeometryAssembly(preparedSource, content, unitsToMetres);
+                while (!assembly.Advance()) { }
+                preparedGeometry = assembly.Take();
             }
-            actor.Parts = parts;
+            using (preparedGeometry)
+            {
+                var preparedAppearance = preparedGeometry.Source.Appearance;
+                if (preparedGeometry.Source.UnitsToMetres != unitsToMetres || preparedAppearance.Creature != appearance.Creature || preparedAppearance.Reference != appearance.Reference ||
+                    preparedAppearance.ModelOwner != appearance.ModelOwner || preparedAppearance.StatsOwner != appearance.StatsOwner ||
+                    preparedAppearance.SkeletonPath != appearance.SkeletonPath || preparedAppearance.BaseScale != appearance.BaseScale ||
+                    preparedAppearance.ModelFlags != appearance.ModelFlags || !preparedAppearance.Models.SequenceEqual(appearance.Models) ||
+                    !preparedAppearance.AnimationFiles.SequenceEqual(appearance.AnimationFiles))
+                    throw new InvalidDataException("Prepared creature appearance no longer matches its source selection.");
+                actor.Skeleton = preparedGeometry.Skeleton;
+                preparedGeometry.Adopt(actor);
+                actor.Parts = preparedGeometry.Parts;
+            }
+            var parts = actor.Parts;
+            var idle = preparedGeometry.Source.Idle;
+            var bytes = preparedGeometry.Source.IdleBytes;
+            var animation = preparedGeometry.Source.Animation;
+            var sequence = preparedGeometry.Source.Sequence;
+            Mark("prepared-geometry");
             if (parts.Count == 0 && actor.Skeleton.GeometryAttachments.Count == 0)
                 throw new InvalidDataException("CREA has no source body geometry.");
             if ((appearance.ModelFlags & (1u << 19)) != 0)
                 foreach (var mesh in actor.FindChildren("*", "", true, false).OfType<GeometryInstance3D>())
                     mesh.CastShadow = GeometryInstance3D.ShadowCastingSetting.Off;
-            var sourceTargets = actor.FindChildren("*", "", true, false).OfType<Node3D>()
-                .Select(node => node.GetMeta("opennv_nif_source_name", "").AsString()).ToHashSet(StringComparer.Ordinal);
+            var attachments = preparedGeometry.AttachmentTargets;
+            var sourceTargets = attachments.Keys.ToHashSet(StringComparer.Ordinal);
             sourceTargets.UnionWith(sequence.ControlledBlocks.Select(link => link.NodeName).Where(name =>
                 actor.Skeleton.HasSourceTarget(name) || actor.Skeleton.MaterialChannels.HasSourceTarget(name)));
-            actor._animation = new(animation, sequence, actor.Skeleton, link => actor.BindAttachment(animation, link),
+            actor._animation = new(animation, sequence, actor.Skeleton, link => actor.BindAttachment(animation, link, attachments),
                 externalObjectTargets: sourceTargets);
             actor._textKeys = new(actor._animation.TextKeys, sequence.StartTime, sequence.StopTime, sequence.CycleType, sequence.Frequency);
             actor._clock.Bind(idle, Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant());
@@ -132,9 +143,11 @@ internal sealed partial class RuntimeNativeCreature : CharacterBody3D
                 actor._clock.StartAmbientLoop(reference.FormKey, (sequence.StopTime - sequence.StartTime) / sequence.Frequency);
             actor.Skeleton.Node.SetBonePose(actor.Skeleton.BoneIndex(sequence.TargetName), Transform3D.Identity);
             actor._animation.ApplySourceTime(actor.SourceSeconds);
+            Mark("animation-binding");
             actor.Skeleton.BindSoundSource(actor);
             actor._sounds = new(stack, content, actor, unitsToMetres, state.SoundRandom, state.AnimationSoundEvents);
             actor.AddChild(actor._sounds);
+            Mark("sound-owner");
             actor._unbound.UnionWith(["creature-package-procedures-and-special-idle-selection", "combat-and-actor-controller-dynamics",
                 "retail-animation-phase-and-blending", "creature-enum-impact-and-sound-events",
                 "attachment-controller-and-particle-cold-state", "shaderless-material-lighting-parity"]);
@@ -143,14 +156,12 @@ internal sealed partial class RuntimeNativeCreature : CharacterBody3D
         }
         catch { actor.Free(); throw; }
 
-        byte[] Read(string path) => content.TryRead(path, null, out var bytes, out _)
-            ? bytes : throw new FileNotFoundException("Owned creature resource is absent: " + path);
     }
 
     public override void _Process(double delta)
     {
         using var frameWork = OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Measure(OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Owner.CreatureAnimation);
-        if (Combat?.Dead == true || Combat?.OwnsPose == true) return;
+        if (HasDetachedPendingSandboxStart || Combat?.Dead == true || Combat?.OwnsPose == true) return;
         if (Error is not null) return;
         if (_aiState?.ScriptError is not null) return;
         try
@@ -198,14 +209,28 @@ internal sealed partial class RuntimeNativeCreature : CharacterBody3D
             ? elapsed * sequence.Frequency % duration : Math.Min(elapsed * sequence.Frequency, duration));
     }
 
-    private Action<float>? BindAttachment(FalloutNifFile source, FalloutNifControllerLink link)
+    // Binding is synchronous and does not mutate the source tree. Build a
+    // fresh index for each animation so later attachments cannot go stale.
+    private Dictionary<string, Node3D?> IndexAttachmentTargets() => IndexAttachmentTargets(this, includeRoot: false);
+
+    private static Dictionary<string, Node3D?> IndexAttachmentTargets(Node3D root, bool includeRoot)
+    {
+        var targets = new Dictionary<string, Node3D?>(StringComparer.Ordinal);
+        var descendants = root.FindChildren("*", "", true, false).OfType<Node3D>();
+        foreach (var node in includeRoot ? descendants.Prepend(root) : descendants)
+        {
+            var name = node.GetMeta("opennv_nif_source_name", "").AsString();
+            if (!targets.TryAdd(name, node)) targets[name] = null;
+        }
+        return targets;
+    }
+
+    private Action<float>? BindAttachment(FalloutNifFile source, FalloutNifControllerLink link,
+        IReadOnlyDictionary<string, Node3D?> targets)
     {
         if (link.ControllerType is not ("NiTransformController" or "NiVisController") ||
             link.PropertyType.Length != 0 || link.Variable1.Length != 0 || link.Variable2.Length != 0) return null;
-        var targets = FindChildren("*", "", true, false).OfType<Node3D>().Where(node =>
-            node.GetMeta("opennv_nif_source_name", "").AsString() == link.NodeName).ToArray();
-        if (targets.Length != 1) return null;
-        var target = targets[0];
+        if (!targets.TryGetValue(link.NodeName, out var target) || target is null) return null;
         if (link.ControllerType == "NiVisController")
         {
             var visibility = new FalloutNifBoolAnimation(source, link.Interpolator);

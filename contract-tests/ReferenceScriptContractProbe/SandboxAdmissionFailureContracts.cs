@@ -6,6 +6,7 @@ using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Formats.Gamebryo;
 using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.World.Cells;
+using OpenNV.Runtime.World.Actors;
 
 internal static class SandboxAdmissionFailureContracts
 {
@@ -20,6 +21,10 @@ internal static class SandboxAdmissionFailureContracts
             var reference = Record("ACHR", 0x900, Field("NAME", BitConverter.GetBytes(0x10u)), Field("DATA", new byte[24]));
             var creatureReference = Record("ACRE", 0x902, Field("NAME", BitConverter.GetBytes(0x11u)), Field("DATA", new byte[24]));
             var turningReference = Record("ACRE", 0x903, Field("NAME", BitConverter.GetBytes(0x12u)), Field("DATA", new byte[24]));
+            var bodyPart = new byte[84]; BinaryPrimitives.WriteSingleLittleEndian(bodyPart, 1); bodyPart[4] = 1; bodyPart[6] = 100;
+            BinaryPrimitives.WriteSingleLittleEndian(bodyPart.AsSpan(24), 1);
+            BinaryPrimitives.WriteSingleLittleEndian(bodyPart.AsSpan(40), 1);
+            BinaryPrimitives.WriteSingleLittleEndian(bodyPart.AsSpan(80), 1);
             var creatureStats = new byte[24]; BinaryPrimitives.WriteUInt16LittleEndian(creatureStats.AsSpan(14), 100);
             var group = new byte[24 + reference.Length + creatureReference.Length + turningReference.Length]; Encoding.ASCII.GetBytes("GRUP").CopyTo(group, 0);
             BinaryPrimitives.WriteUInt32LittleEndian(group.AsSpan(4), (uint)group.Length);
@@ -36,10 +41,17 @@ internal static class SandboxAdmissionFailureContracts
                     Field("IDLC", [idle ? (byte)1 : (byte)0]), Field("IDLA", idle ? BitConverter.GetBytes(0x30u) : []),
                     Field("POBA", []));
             }
+            var currentLocation = (byte[])location.Clone(); currentLocation[0] = 2;
             File.WriteAllBytes(path, Join(Record("TES4", 0, Field("HEDR", new byte[12])),
-                Record("NPC_", 0x10, Field("ACBS", new byte[24]), Field("PKID", BitConverter.GetBytes(0x20u)),
-                    Field("PKID", BitConverter.GetBytes(0x21u))), Package(0x20, false), Package(0x21, true), Package(0x22, false, 0x200),
-                Record("CREA", 0x11, Field("ACBS", creatureStats), Field("TNAM", BitConverter.GetBytes(0f)), Field("PKID", BitConverter.GetBytes(0x20u))),
+                Record("BPTD", 0x1d, Field("BPNN", Encoding.ASCII.GetBytes("Root\0")),
+                    Field("BPNT", Encoding.ASCII.GetBytes("Root\0")), Field("BPND", bodyPart)),
+                Record("NPC_", 0x10, Field("ACBS", new byte[24]), Field("DATA", new byte[11]), Field("NAM4", BitConverter.GetBytes(6u)), Field("PKID", BitConverter.GetBytes(0x20u)),
+                    Field("PKID", BitConverter.GetBytes(0x21u)), Field("PKID", BitConverter.GetBytes(0x24u))), Package(0x20, false), Package(0x21, true), Package(0x22, false, 0x200),
+                Package(0x23, false, 0x400000),
+                Record("PACK", 0x24, Field("EDID", Encoding.ASCII.GetBytes("CurrentSandbox\0")), Field("PKDT", data),
+                    Field("PLDT", currentLocation), Field("IDLC", [0]), Field("IDLA", []), Field("POBA", [])),
+                Record("CREA", 0x11, Field("ACBS", creatureStats), Field("TNAM", BitConverter.GetBytes(0f)), Field("PKID", BitConverter.GetBytes(0x20u)),
+                    Field("PKID", BitConverter.GetBytes(0x24u))),
                 Record("CREA", 0x12, Field("ACBS", creatureStats), Field("TNAM", BitConverter.GetBytes(180f)), Field("PKID", BitConverter.GetBytes(0x20u))),
                 Record("CELL", 0x800, Field("DATA", [1, 0])), group,
                 Record("CELL", 0x801, Field("DATA", [1, 0])), NavigationFloor(0x802, 0x801)));
@@ -47,6 +59,9 @@ internal static class SandboxAdmissionFailureContracts
             FalloutFormKey Key(uint id) => new("Admission.esm", id);
             string Hash(uint id) => FalloutActorFurnitureContinuation.RecordHash(records.GetEffective(Key(id)));
             var continuingSandbox = FalloutSandboxPackage.Read(records.GetEffective(Key(0x22)));
+            Require(FalloutSandboxPackage.Read(records.GetEffective(Key(0x23))).DefensiveCombat &&
+                !FalloutSandboxPackage.Read(records.GetEffective(Key(0x20))).DefensiveCombat,
+                "Sandbox defensive combat flag was not retained from the source package.");
             Require(continuingSandbox.ContinueIfPlayerNear && continuingSandbox.RetainsSelection(true, false) &&
                 !continuingSandbox.RetainsSelection(false, false) && !continuingSandbox.RetainsSelection(true, true) &&
                 !FalloutSandboxPackage.Read(records.GetEffective(Key(0x20))).RetainsSelection(true, false),
@@ -89,6 +104,31 @@ internal static class SandboxAdmissionFailureContracts
             Require(untouchedEvents.Revision == 0 && effects == 1, "Rejected pending Sandbox source mutated events.");
             Reject(() => (pendingStart with { EventRevision = 0 }).Validate());
             Reject(() => pendingStart.ValidateShape(pendingSnapshot with { ScriptError = "independent source failure" }));
+            var currentPending = pendingStart with { Package = Key(0x24), PackageSha256 = Hash(0x24), LastPackage = Key(0x24) };
+            pendingActor.PackageAssignment = new(Key(0x24), Hash(0x24), false);
+            Reject(() => currentPending.Validate(records, pendingActor));
+            pendingActor.PackageStartLocation = new(Key(0x800), [10, 20, 30]);
+            currentPending.Validate(records, pendingActor);
+            pendingActor.PackageStartLocation = null;
+            pendingActor.PackageAssignment = new(Key(0x20), Hash(0x20), false);
+            using (var activeWorld = new FalloutReferenceWorld(records))
+            {
+                var active = activeWorld.Get(Key(0x900));
+                active.PackageAssignment = new(Key(0x24), Hash(0x24), false);
+                active.PackageStartLocation = new(Key(0x800), [10, 20, 30]);
+                active.PackageMotion = new(Key(0x24), Hash(0x24), "meshes/fixture/idle.kf", new('a', 64), 1, false,
+                    [0, 0, 0], [0, 0, 0, 1], Sandbox: new(FalloutSandboxActivity.Wander, 9, 1,
+                        new FalloutSandboxPreferences().Capture()));
+                var activeSnapshot = activeWorld.Capture();
+                using var activeCold = new FalloutReferenceWorld(records);
+                activeCold.Restore(activeSnapshot);
+                Require(activeCold.Get(Key(0x900)).PackageStartLocation!.Position.SequenceEqual([10f, 20f, 30f]),
+                    "Active Sandbox lost its actor search center during cold restore.");
+                using var missingCenter = new FalloutReferenceWorld(records);
+                Reject(() => missingCenter.Restore(activeSnapshot.Select(value => value.Reference == Key(0x900)
+                    ? value with { PackageStartLocation = null } : value).ToArray()));
+                Require(missingCenter.InstanceCount == 0, "Missing Sandbox center partially restored the world.");
+            }
             var saved = new FalloutActorSandboxAdmissionFailure(Key(0x20), Hash(0x20),
                 FalloutActorSandboxAdmissionFailure.AdmissionErrorPrefix + "IdleMarker reference=Admission.esm:000901 base=Admission.esm:000030 inventory=False",
                 [3, 4, 5], [1, 0, 0, 0, 1, 0, 0, 0, 1],
@@ -96,8 +136,88 @@ internal static class SandboxAdmissionFailureContracts
                 new(false, true, false, false, false, false, 2), live.Revision, live.LastEvent!,
                 live.LastPackage!.Value, Hash(0x20));
             saved.Validate(records, actor);
+            var currentAdmission = saved with { Package = Key(0x24), PackageSha256 = Hash(0x24),
+                LastPackage = Key(0x24), LastPackageSha256 = Hash(0x24) };
+            Reject(() => currentAdmission.Validate(records, actor));
+            actor.PackageStartLocation = new(Key(0x800), [10, 20, 30]);
+            currentAdmission.Validate(records, actor);
+            actor.PackageStartLocation = null;
+            using (var interruptedWorld = new FalloutReferenceWorld(records))
+            {
+                var dead = interruptedWorld.Get(Key(0x900));
+                dead.Animation.Restore(new("meshes/fixture/idle.kf", new('a', 64), 12.5, false));
+                dead.PackageAssignment = new(saved.Package, saved.PackageSha256, false);
+                dead.SandboxAdmissionFailure = saved.Copy();
+                dead.ProcedureCaptureBlocker = FalloutSandboxPackage.CaptureBlockerPrefix + saved.Error;
+                dead.ActorValues["health"] = new FalloutActorValue(10, Damage: -10);
+                dead.Injury = new(true, null, new Dictionary<byte, float>());
+                dead.Ragdoll = new(new('c', 64), [new(7, [1,0,0,0,1,0,0,0,1,9,8,7], [0,0,0], [0,0,0], true)]);
+                var receipt = dead.SandboxAdmissionFailure;
+                Require(!FalloutActorSandboxAdmissionFailure.RetainInterrupted(records, dead, receipt, saved.Package,
+                    saved.Error, live, false) && ReferenceEquals(dead.SandboxAdmissionFailure, receipt),
+                    "An unready corpse consumed its prior Sandbox failure.");
+                Require(!FalloutActorSandboxAdmissionFailure.RetainInterrupted(records, dead, receipt, saved.Package,
+                    "different source failure", live, true) && ReferenceEquals(dead.SandboxAdmissionFailure, receipt),
+                    "A different live failure consumed its prior Sandbox receipt.");
+                Require(FalloutActorSandboxAdmissionFailure.RetainInterrupted(records, dead, receipt, saved.Package,
+                    saved.Error, live, true) && dead.SandboxAdmissionFailure is null &&
+                    dead.InterruptedSandboxAdmission is not null && interruptedWorld.PendingProcedureCaptureCount == 0,
+                    "Matching death did not preserve the earlier stopped source failure as history.");
+                var retained = dead.Capture();
+                FalloutReferenceSnapshot.Validate([retained]);
+                Require(retained.InterruptedSandboxAdmission!.Position.SequenceEqual(saved.Position) &&
+                    retained.Ragdoll!.Bodies[0].Transform[9] == 9 && retained.SandboxAdmissionFailure is null,
+                    "Historical failure replaced the actual corpse pose or became a live Sandbox continuation.");
+                Reject(() => FalloutReferenceSnapshot.Validate([retained with { Injury = retained.Injury! with { Dead = false } }]));
+                Reject(() => FalloutReferenceSnapshot.Validate([retained with { Ragdoll = null }]));
+                var serialized = JsonSerializer.Serialize(interruptedWorld.Capture());
+                using var interruptedCold = new FalloutReferenceWorld(records);
+                interruptedCold.Restore(JsonSerializer.Deserialize<FalloutReferenceSnapshot[]>(serialized)!);
+                Require(JsonSerializer.Serialize(interruptedCold.Capture()) == serialized &&
+                    interruptedCold.Get(dead.Reference).InterruptedSandboxAdmission is not null && effects == 1,
+                    "Cold restore changed the corpse/history or replayed its package start.");
+            }
             var creature = new FalloutReferenceInstance(records.GetEffective(Key(0x902)), null);
             creature.Animation.Restore(new("meshes/fixture/idle.kf", new('a', 64), 12.5, false));
+            using (var pendingWorld = new FalloutReferenceWorld(records))
+            {
+                var pendingCreature = pendingWorld.Get(Key(0x902));
+                pendingCreature.Animation.Restore(new("meshes/fixture/idle.kf", new('a', 64), 12.5, false));
+                pendingCreature.PackageAssignment = new(Key(0x24), Hash(0x24), false);
+                pendingCreature.PackageStartLocation = new(Key(0x800), [10, 20, 30]);
+                pendingCreature.ProcedureCaptureBlocker = FalloutActorPendingSandboxStart.CaptureBlocker;
+                var pendingCreatureStart = currentPending with
+                {
+                    Reference = pendingCreature.Reference, PriorityOwner = Key(0x11), PrioritySha256 = Hash(0x11),
+                    RandomState = pendingCreature.SoundRandom.State, SelectionAttempts = 2,
+                };
+                pendingCreatureStart.Validate(records, pendingCreature);
+                Reject(() => (pendingCreatureStart with { SelectionAttempts = null }).Validate(records, pendingCreature));
+                Reject(() => (pendingCreatureStart with { RandomState = pendingCreatureStart.RandomState + 1 }).Validate(records, pendingCreature));
+                pendingCreature.PendingSandboxStart = pendingCreatureStart;
+                var creatureSnapshots = pendingWorld.Capture();
+                var campaign = JsonSerializer.Deserialize<FalloutNativeCampaignState>(
+                    "{\"Schema\":\"opennv-native-fnv-campaign-save/v64\",\"References\":[]}")!;
+                Reject(() => FalloutNativeCampaignSave.AdmitPreviousOwnerSchema(campaign with { References = creatureSnapshots }));
+                var previousWithoutCreature = FalloutNativeCampaignSave.AdmitPreviousOwnerSchema(campaign);
+                Require(previousWithoutCreature.Schema == FalloutNativeCampaignSave.ExpectedSchema,
+                    "Previous campaign schema did not migrate without inventing a creature continuation.");
+                var bytes = JsonSerializer.Serialize(creatureSnapshots);
+                using var pendingColdWorld = new FalloutReferenceWorld(records);
+                pendingColdWorld.Restore(JsonSerializer.Deserialize<FalloutReferenceSnapshot[]>(bytes)!);
+                var coldCreature = pendingColdWorld.Get(pendingCreature.Reference);
+                var coldEvents = new FalloutPackageEvents(Dispatch);
+                coldCreature.PendingSandboxStart!.RestoreEvents(records, coldCreature, coldEvents);
+                Require(effects == 1 && coldEvents.Revision == pendingCreatureStart.EventRevision &&
+                    coldCreature.PendingSandboxStart.SelectionAttempts == 2 && coldCreature.PackageMotion is null &&
+                    coldCreature.Animation.ElapsedSeconds == 12.5 && coldCreature.PackageStartLocation!.Position.SequenceEqual([10f, 20f, 30f]),
+                    "Creature pending Sandbox cold restore replayed POBA or lost its source state.");
+                pendingWorld.SetActorAlerted(pendingCreature.Reference, true);
+                var alerted = pendingCreature.PendingSandboxStart!;
+                Require(alerted.Activity.Alerted && alerted.Activity.Revision == pendingCreatureStart.Activity.Revision + 1 &&
+                    alerted.ActivityRevision == alerted.Activity.Revision && pendingWorld.ActorAlerted(pendingCreature.Reference),
+                    "An unloaded creature pending Sandbox lost its shared alert transition.");
+            }
             var creatureEffects = 0;
             var creatureLive = new FalloutPackageEvents((_, kind) => { if (kind == "POBA") creatureEffects++; });
             creatureLive.Change(FalloutScriptPackage.Read(records.GetEffective(Key(0x20))));
@@ -118,6 +238,7 @@ internal static class SandboxAdmissionFailureContracts
             creature.ProcedureCaptureBlocker = FalloutSandboxPackage.CaptureBlockerPrefix + creatureSaved.Error;
             var creatureSnapshot = creature.Capture();
             FalloutReferenceSnapshot.Validate([creatureSnapshot]);
+            ActorAlertContracts.RunStoppedCreature(records, creatureSnapshot);
             var creatureCold = JsonSerializer.Deserialize<FalloutActorSandboxAdmissionFailure>(JsonSerializer.Serialize(creatureSaved))!;
             var creatureEvents = new FalloutPackageEvents((_, kind) => { if (kind == "POBA") creatureEffects++; });
             creatureCold.RestoreEvents(records, creature, creatureEvents);
@@ -141,6 +262,11 @@ internal static class SandboxAdmissionFailureContracts
                 motionActor.SoundRandom.State, saved.Activity, .25, saved.ScheduleTime, 4, 1,
                 motionLive.Revision, motionLive.LastEvent!, motionLive.LastPackage!.Value);
             motionFailure.Validate(records, motionActor);
+            var currentMotionFailure = motionFailure with { Package = Key(0x24), PackageSha256 = Hash(0x24), LastPackage = Key(0x24) };
+            Reject(() => currentMotionFailure.Validate(records, motionActor));
+            motionActor.PackageStartLocation = new(Key(0x800), [10, 20, 30]);
+            currentMotionFailure.Validate(records, motionActor);
+            motionActor.PackageStartLocation = null;
             var motionCold = JsonSerializer.Deserialize<FalloutActorSandboxMotionFailure>(JsonSerializer.Serialize(motionFailure))!;
             var motionEvents = new FalloutPackageEvents((_, kind) => { if (kind == "POBA") motionEffects++; });
             motionCold.RestoreEvents(records, motionActor, motionEvents);

@@ -11,12 +11,91 @@ internal static class BotNavigationContracts
         ProjectedEndpoints();
         MovingTargetEndpoints();
         ClosingAndStationaryBounds();
+        LongInteractionApproach();
+        ProgressResetsObstructionHistory();
         QueuedPlanning();
+        PlanningProgressBound();
         MovingTargetQueuedSegments();
         RouteDoors();
         RefinementProvenance();
         ObservedProjectionHandoff();
+        WaypointFloorHandoff();
         Console.WriteLine("Reference bot navigation: short/inside endpoints, partial corridors, projection refinement, moving-target endpoints, queued/stale planning, ordinary route doors, ray result, closing progress and stationary bounds PASS.");
+    }
+
+    private static void WaypointFloorHandoff()
+    {
+        var observation = Observation(6);
+        var waypoint = new Vector3(0, -1, 1);
+        var bot = new ReactiveReferenceBot(_ => observation, (_, end, _) =>
+            new([waypoint], end, end, false), (_, _) => { });
+        bot.Start("reference", "travel", 1); bot.Tick(.016f);
+        observation = Move(observation, 1); bot.Tick(.016f);
+        Require(Phase(bot) != "replanning-segment", "A waypoint on a lower floor was treated as observed arrival.");
+        observation = observation with { Position = waypoint, Camera = waypoint + Vector3.UnitY };
+        bot.Tick(.016f);
+        Require(Phase(bot) == "replanning-segment", "Movement onto the supported waypoint did not complete the segment.");
+        bot.Stop();
+    }
+
+    private static void PlanningProgressBound()
+    {
+        var observation = Observation(100);
+        long steps = 0;
+        var bot = new ReactiveReferenceBot(_ => observation,
+            (_, _, _) => throw new InvalidOperationException("Asynchronous search fell back to a synchronous route."),
+            (_, _) => { }, (_, _, _, _, _) => null,
+            planningProgress: () => new BotPlanningProgress(1, steps));
+        bot.Start("reference", "interact", 1.5f);
+        for (var second = 0; second < 240; second++)
+        {
+            steps++;
+            bot.Tick(1);
+            Require(bot.CampaignSkill.Error is null && Phase(bot) == "planning",
+                "A bounded search making observable work was mistaken for a stationary movement failure.");
+        }
+        for (var second = 0; second < 200 && bot.CampaignSkill.Error is null; second++) bot.Tick(1);
+        Require(bot.CampaignSkill.Error?.Contains("without observed closing progress", StringComparison.Ordinal) == true,
+            "A search that stopped advancing escaped the execution bound.");
+    }
+
+    private static void LongInteractionApproach()
+    {
+        var observation = Observation(500);
+        var bot = new ReactiveReferenceBot(_ => observation, (start, end, _) =>
+            new([end], end, end, true), (_, _) => { });
+        bot.Start("reference", "interact", 1.5f);
+        for (var second = 0; second < 240; second++)
+        {
+            observation = Move(observation, second * .1f);
+            bot.Tick(1f);
+            Require(bot.CampaignSkill.Error is null, "A long interaction approach failed while the player was closing on its source target.");
+        }
+        using var state = State(bot);
+        Require(state.RootElement.GetProperty("elapsedSeconds").GetSingle() >= 180 &&
+            state.RootElement.GetProperty("goalNoClosingSeconds").GetSingle() < 10,
+            "The execution bound did not retain elapsed time and observed closing progress separately.");
+        bot.Stop();
+    }
+
+    private static void ProgressResetsObstructionHistory()
+    {
+        var observation = Observation(20);
+        var bot = new ReactiveReferenceBot(_ => observation, (start, end, _) =>
+            new([start + Vector3.UnitZ], end, end, false), (_, _) => { });
+        bot.Start("reference", "travel", 1);
+        for (var index = 0; index < 5; index++)
+        {
+            bot.Tick(.016f); bot.Tick(1f);
+            Require(Phase(bot) == "replanning-obstruction", "A stationary segment did not request an ordinary replan.");
+            bot.Tick(.016f);
+            observation = Move(observation, index + 1);
+            bot.Tick(.016f);
+            using var state = State(bot);
+            Require(Phase(bot) == "replanning-segment" && state.RootElement.GetProperty("obstructionReplans").GetInt32() == 0,
+                "Completed source-supported movement retained old, nonconsecutive obstruction failures.");
+        }
+        bot.Stop();
     }
 
     private static void ObservedProjectionHandoff()
@@ -121,7 +200,7 @@ internal static class BotNavigationContracts
         bot.Start("actor", "follow", 1.5f);
         for (var frame = 0; frame < 16; frame++)
         {
-            observation = observation with { Target = new(0, 0, 6 + frame * .1f), Aim = new(0, 1, 6 + frame * .1f) };
+            observation = observation with { Target = new(0, 0, 6 + frame * .5f), Aim = new(0, 1, 6 + frame * .5f) };
             bot.Tick(1f / 60);
         }
         Require(requests.Count == 1 && input.Forward && Phase(bot) == "approaching",
@@ -145,6 +224,18 @@ internal static class BotNavigationContracts
         Require(Phase(bot) == "following-at-distance" && pending is null && !input.Forward &&
             input.Combat is null && !input.Pause && input.AimAt == observation.Aim,
             "An approaching actor did not cancel the pending route at the live follow distance.");
+        bot.Stop();
+
+        observation = Observation(12);
+        pending = null; requests.Clear(); polls = 0;
+        bot.Start("actor", "shoot", 6);
+        for (var frame = 0; frame < 16; frame++)
+        {
+            observation = observation with { Target = new(0, 0, 12 + frame * .5f), Aim = new(0, 1, 12 + frame * .5f) };
+            bot.Tick(1f / 60);
+        }
+        Require(requests.Count == 1 && input.Forward && Phase(bot) == "approaching",
+            "Moving shooting target repeatedly cancelled its queued collision-checked segment.");
         bot.Stop();
     }
 
@@ -262,6 +353,27 @@ internal static class BotNavigationContracts
         }
         Require(Phase(bot) == "blocked" && input == default,
             "Repeated moving-target replans reset the stationary capsule bound.");
+
+        observation = Observation(5);
+        var projectionRadii = new List<float>();
+        var polls = 0;
+        bot = new(_ => observation, (_, _, _) => throw new InvalidOperationException("Expected queued approach."),
+            (intent, _) => input = intent,
+            (start, end, _, radius, _) =>
+            {
+                projectionRadii.Add(radius);
+                if (++polls == 1) return null;
+                return polls == 2 ? new([start + Vector3.UnitZ * .05f], end, start + Vector3.UnitZ * .05f, true) :
+                    new([end], end, end, true);
+            });
+        bot.Start("actor", "follow", 1.5f); bot.Tick(.016f);
+        observation = observation with { Target = new(0, 0, 5.25f), Aim = new(0, 1, 5.25f) };
+        bot.Tick(.016f);
+        Require(Phase(bot) == "replanning-endpoint" && !input.Forward,
+            "Moving target drift masked a projection onto the stationary player's current floor.");
+        bot.Tick(.016f);
+        Require(projectionRadii[^1] < projectionRadii[0] && input.Forward,
+            "Follow did not narrow the missed projection and pursue the live target.");
     }
 
     private static void ShortApproaches()

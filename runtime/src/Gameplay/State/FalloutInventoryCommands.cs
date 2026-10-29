@@ -59,11 +59,13 @@ internal sealed class FalloutInventoryCommands(FalloutPluginStack records, Fallo
                     {
                         world.AcquirePlayerNote(changedItem, player.Notifications); return;
                     }
-                    FalloutReferenceWorld.RequirePlayerItemAcquisition(source);
+                    FalloutReferenceWorld.RequirePlayerItemAcquisition(records, source, command.Target);
                 }
                 var revision = inventory.Revision;
                 if (command.Kind == FalloutInventoryCommandKind.Add)
-                    inventory.Add(records, changedItem, command.Count, level(), command.Silent || !isPlayer, globals);
+                    inventory.Add(records, changedItem, command.Count, level(), command.Silent || !isPlayer, globals,
+                        validateAddition: isPlayer ? selected => FalloutReferenceWorld.RequirePlayerItemAcquisition(
+                            records, records.GetEffective(selected), command.Target) : null);
                 else
                 {
                     // Retire an actual worn weapon before deleting its last item.
@@ -80,7 +82,7 @@ internal sealed class FalloutInventoryCommands(FalloutPluginStack records, Fallo
                 var destination = command.Destination is { } target ? Inventory(target) : null;
                 if (command.Destination is { } noteReceiver && IsPlayer(noteReceiver))
                     foreach (var transferred in inventory.Items)
-                        FalloutReferenceWorld.RequirePlayerItemAcquisition(records.GetEffective(transferred.FormKey));
+                        FalloutReferenceWorld.RequirePlayerItemAcquisition(records, records.GetEffective(transferred.FormKey), noteReceiver);
                 if (!isPlayer && world.Get(command.Target).Injury?.Dead != true) prepareActorChange?.Invoke(command.Target);
                 inventory.RemoveAll(records, isPlayer, destination, command.RetainOwnership,
                     command.Destination is { } receiver && IsPlayer(receiver) && !command.Silent);
@@ -89,7 +91,7 @@ internal sealed class FalloutInventoryCommands(FalloutPluginStack records, Fallo
                 break;
             case FalloutInventoryCommandKind.Equip:
                 var item = command.Item ?? throw new InvalidDataException("EquipItem has no item.");
-                if (records.GetEffective(item).Signature == "ALCH")
+                if (records.GetEffective(item).Signature is "ALCH" or "INGR")
                 {
                     if (inventory.Item(item) is null) return;
                     if (command.NoUnequip) throw new NotSupportedException("An ingestible cannot retain an equipped lock.");

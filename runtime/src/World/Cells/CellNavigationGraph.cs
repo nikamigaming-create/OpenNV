@@ -20,6 +20,8 @@ internal sealed partial class CellNavigationGraph
     private readonly IReadOnlyList<NavigationMeshRecord> _navmeshes;
     private readonly NavigationMeshRecord[] _projectionMeshes;
     private readonly IReadOnlyDictionary<string, NavigationMeshRecord> _navmeshesByFormId;
+    private readonly object _searchPoolGate = new();
+    private readonly Stack<NavigationSearchWork> _searchPool = new();
     internal string SourceSha256 { get; private set; } = "";
 
     private CellNavigationGraph(IReadOnlyList<NavigationMeshRecord> navmeshes)
@@ -64,15 +66,15 @@ internal sealed partial class CellNavigationGraph
         Vector3 startGameUnits,
         Vector3 destinationGameUnits,
         Func<Vector3, bool>? permittedPortal = null,
-        float destinationRadiusGameUnits = 0)
-        => FindPath(startGameUnits, destinationGameUnits, out _, permittedPortal, destinationRadiusGameUnits);
+        float destinationRadiusGameUnits = 0, Func<Vector3, float>? portalPenalty = null)
+        => FindPath(startGameUnits, destinationGameUnits, out _, permittedPortal, destinationRadiusGameUnits, portalPenalty);
 
     internal IReadOnlyList<Vector3> FindPath(
         Vector3 startGameUnits,
         Vector3 destinationGameUnits,
         out Func<Vector3, int, float, float, Func<Vector3, bool>> prefixRegion,
         Func<Vector3, bool>? permittedPortal = null,
-        float destinationRadiusGameUnits = 0)
+        float destinationRadiusGameUnits = 0, Func<Vector3, float>? portalPenalty = null)
     {
         if (_navmeshes.Count == 0)
             throw new InvalidOperationException(
@@ -82,7 +84,7 @@ internal sealed partial class CellNavigationGraph
         if (!float.IsFinite(destinationRadiusGameUnits) || destinationRadiusGameUnits < 0)
             throw new ArgumentOutOfRangeException(nameof(destinationRadiusGameUnits));
         var trianglePath = FindTrianglePath(start.Node, destination.Node, permittedPortal,
-            destinationGameUnits, destinationRadiusGameUnits);
+            destinationGameUnits, destinationRadiusGameUnits, portalPenalty);
         var result = new List<Vector3>();
         foreach (var pair in trianglePath.Zip(trianglePath.Skip(1)))
             result.Add(Portal(pair.First, pair.Second));
@@ -147,8 +149,8 @@ internal sealed partial class CellNavigationGraph
                 start.Node.TriangleIndex,
                 destination.Node.TriangleIndex))
             return destination.Point;
-        if (Neighbors(start.Node).Contains(destination.Node))
-            return destination.Point;
+        foreach (var neighbor in Neighbors(start.Node))
+            if (neighbor == destination.Node) return destination.Point;
         return start.Point;
     }
 
@@ -194,78 +196,124 @@ internal sealed partial class CellNavigationGraph
     private IReadOnlyList<NavigationNode> FindTrianglePath(
         NavigationNode start,
         NavigationNode destination,
-        Func<Vector3, bool>? permittedPortal, Vector3 approachTarget, float approachRadius)
+        Func<Vector3, bool>? permittedPortal, Vector3 approachTarget, float approachRadius,
+        Func<Vector3, float>? portalPenalty)
     {
         if (start == destination)
             return new[] { start };
-        var internalOnly = permittedPortal is null && start.NavMesh == destination.NavMesh &&
+        var internalOnly = permittedPortal is null && portalPenalty is null && start.NavMesh == destination.NavMesh &&
             start.NavMesh.CanReach(start.TriangleIndex, destination.TriangleIndex);
-        var frontier = new PriorityQueue<NavigationNode, float>();
-        var previous = new Dictionary<NavigationNode, NavigationNode>();
-        var costs = new Dictionary<NavigationNode, float> { [start] = 0.0f };
-        var closed = new HashSet<NavigationNode>();
-        frontier.Enqueue(start, 0.0f);
-        while (frontier.TryDequeue(out var current, out _))
+        NavigationSearchWork work;
+        lock (_searchPoolGate) work = _searchPool.Count == 0 ? new() : _searchPool.Pop();
+        var frontier = work.Frontier;
+        var previous = work.Previous;
+        var costs = work.Costs;
+        var closed = work.Closed;
+        try
         {
-            if (!closed.Add(current)) continue;
-            if (current == destination)
-                break;
-            if (approachRadius > 0 && current.NavMesh.ClosestPoint(current.TriangleIndex, approachTarget)
-                    .DistanceSquaredTo(approachTarget) <= approachRadius * approachRadius)
+            costs.Add(start, 0.0f);
+            frontier.Enqueue(start, 0.0f);
+            while (frontier.TryDequeue(out var current, out _))
             {
-                destination = current;
-                break;
+                if (!closed.Add(current)) continue;
+                if (current == destination)
+                    break;
+                if (approachRadius > 0 && current.NavMesh.ClosestPoint(current.TriangleIndex, approachTarget)
+                        .DistanceSquaredTo(approachTarget) <= approachRadius * approachRadius)
+                {
+                    destination = current;
+                    break;
+                }
+                foreach (var adjacent in Neighbors(current))
+                {
+                    if (internalOnly && adjacent.NavMesh != start.NavMesh) continue;
+                    if (closed.Contains(adjacent)) continue;
+                    var portal = permittedPortal is not null || portalPenalty is not null ? Portal(current, adjacent) : default;
+                    if (permittedPortal?.Invoke(portal) == false) continue;
+                    var penalty = portalPenalty?.Invoke(portal) ?? 0;
+                    if (!float.IsFinite(penalty) || penalty < 0)
+                        throw new InvalidDataException("Navigation portal penalty must be finite and nonnegative.");
+                    var cost = costs[current] + current.Centroid.DistanceTo(adjacent.Centroid) + penalty;
+                    if (costs.TryGetValue(adjacent, out var known) && cost >= known)
+                        continue;
+                    costs[adjacent] = cost;
+                    previous[adjacent] = current;
+                    frontier.Enqueue(
+                        adjacent,
+                        cost + adjacent.Centroid.DistanceTo(destination.Centroid));
+                }
             }
-            foreach (var adjacent in Neighbors(current).Where(value =>
-                         !internalOnly || value.NavMesh == start.NavMesh))
-            {
-                if (closed.Contains(adjacent)) continue;
-                if (permittedPortal?.Invoke(Portal(current, adjacent)) == false) continue;
-                var cost = costs[current] + current.Centroid.DistanceTo(adjacent.Centroid);
-                if (costs.TryGetValue(adjacent, out var known) && cost >= known)
-                    continue;
-                costs[adjacent] = cost;
-                previous[adjacent] = current;
-                frontier.Enqueue(
-                    adjacent,
-                    cost + adjacent.Centroid.DistanceTo(destination.Centroid));
-            }
+            if (destination == start) return [start];
+            if (!previous.ContainsKey(destination))
+                throw new InvalidOperationException(
+                    $"Owned NAVM active set has no route between {start.NavMesh.FormId} " +
+                    $"and {destination.NavMesh.FormId}.");
+            var path = new List<NavigationNode> { destination };
+            while (path[^1] != start)
+                path.Add(previous[path[^1]]);
+            path.Reverse();
+            return path;
         }
-        if (destination == start) return [start];
-        if (!previous.ContainsKey(destination))
-            throw new InvalidOperationException(
-                $"Owned NAVM active set has no route between {start.NavMesh.FormId} " +
-                $"and {destination.NavMesh.FormId}.");
-        var path = new List<NavigationNode> { destination };
-        while (path[^1] != start)
-            path.Add(previous[path[^1]]);
-        path.Reverse();
-        return path;
+        finally
+        {
+            // Never retain an unusually large frontier or a partial query's
+            // source references across requests. Reentrant/concurrent calls
+            // lease separate workspaces; pooling changes no graph admission.
+            var retain = frontier.EnsureCapacity(0) <= 8192 && previous.EnsureCapacity(0) <= 8192 &&
+                costs.EnsureCapacity(0) <= 8192 && closed.EnsureCapacity(0) <= 8192;
+            frontier.Clear(); previous.Clear(); costs.Clear(); closed.Clear();
+            if (retain)
+                lock (_searchPoolGate)
+                    if (_searchPool.Count < 4) _searchPool.Push(work);
+        }
     }
 
-    private IEnumerable<NavigationNode> Neighbors(NavigationNode node)
+    private sealed class NavigationSearchWork
     {
-        var triangle = node.NavMesh.Triangles[node.TriangleIndex];
-        for (var edge = 0; edge < TriangleEdgeCount; edge++)
+        internal PriorityQueue<NavigationNode, float> Frontier { get; } = new();
+        internal Dictionary<NavigationNode, NavigationNode> Previous { get; } = [];
+        internal Dictionary<NavigationNode, float> Costs { get; } = [];
+        internal HashSet<NavigationNode> Closed { get; } = [];
+    }
+
+    private NavigationNeighbors Neighbors(NavigationNode node) => new(this, node);
+
+    // Source neighbors are bounded by the three authored triangle edges.
+    // A value enumerator avoids a heap iterator per expanded navigation node.
+    private readonly record struct NavigationNeighbors(CellNavigationGraph Owner, NavigationNode Node)
+    {
+        public Enumerator GetEnumerator() => new(Owner, Node);
+
+        internal struct Enumerator(CellNavigationGraph owner, NavigationNode node)
         {
-            var adjacent = triangle.AdjacentTriangles[edge];
-            if (adjacent < 0) continue;
-            if ((triangle.Flags & (1u << edge)) == 0)
+            private readonly NavigationTriangle _triangle = node.NavMesh.Triangles[node.TriangleIndex];
+            private int _edge;
+            public NavigationNode Current { get; private set; }
+
+            public bool MoveNext()
             {
-                if (!node.NavMesh.IsInternalNeighbor(node.TriangleIndex, adjacent) ||
-                    (node.NavMesh.Triangles[adjacent].Flags & 8) != 0) continue;
-                yield return new NavigationNode(node.NavMesh, adjacent);
-                continue;
+                while (_edge < TriangleEdgeCount)
+                {
+                    var edge = _edge++;
+                    var adjacent = _triangle.AdjacentTriangles[edge];
+                    if (adjacent < 0) continue;
+                    if ((_triangle.Flags & (1u << edge)) == 0)
+                    {
+                        if (!node.NavMesh.IsInternalNeighbor(node.TriangleIndex, adjacent) ||
+                            (node.NavMesh.Triangles[adjacent].Flags & 8) != 0) continue;
+                        Current = new(node.NavMesh, adjacent);
+                        return true;
+                    }
+                    if (adjacent >= node.NavMesh.ExternalConnections.Count) continue;
+                    var external = node.NavMesh.ExternalConnections[adjacent];
+                    if (!owner._navmeshesByFormId.TryGetValue(external.NavMeshFormId, out var target)) continue;
+                    if (external.TriangleIndex < 0 || external.TriangleIndex >= target.Triangles.Count ||
+                        (target.Triangles[external.TriangleIndex].Flags & 8) != 0) continue;
+                    Current = new(target, external.TriangleIndex);
+                    return true;
+                }
+                return false;
             }
-            if (adjacent < 0 || adjacent >= node.NavMesh.ExternalConnections.Count)
-                continue;
-            var external = node.NavMesh.ExternalConnections[adjacent];
-            if (!_navmeshesByFormId.TryGetValue(external.NavMeshFormId, out var target))
-                continue;
-            if (external.TriangleIndex < 0 ||
-                external.TriangleIndex >= target.Triangles.Count || (target.Triangles[external.TriangleIndex].Flags & 8) != 0)
-                continue;
-            yield return new NavigationNode(target, external.TriangleIndex);
         }
     }
 
@@ -462,10 +510,13 @@ internal sealed partial class CellNavigationGraph
         internal Vector3 Centroid(int triangleIndex)
         {
             var triangle = Triangles[triangleIndex];
-            return triangle.VertexIndices
-                .Select(index => Vertices[index])
-                .Aggregate(Vector3.Zero, (sum, value) => sum + value) /
-                TriangleCentroidDivisor;
+            // NAVM triangles always have three validated indices. Keep the
+            // original zero-seeded accumulation order without constructing a
+            // LINQ iterator and delegate on every path-search visit.
+            var sum = Vector3.Zero;
+            for (var index = 0; index < triangle.VertexIndices.Count; index++)
+                sum += Vertices[triangle.VertexIndices[index]];
+            return sum / TriangleCentroidDivisor;
         }
 
         internal Vector3? VerticalPlanePoint(int triangleIndex, Vector3 point)

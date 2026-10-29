@@ -10,6 +10,14 @@ public partial class NativeActorPerformanceAudit : Node
         try
         {
             var args = OS.GetCmdlineUserArgs();
+            if (args is ["--owned-creature-pending-sandbox", var pendingGame, var pendingActor])
+            {
+                OwnedCreaturePendingSandbox(pendingGame, pendingActor); GetTree().Quit(); return;
+            }
+            if (args is ["--owned-current-sandbox-start", var sandboxStartGame, var sandboxStartActor])
+            {
+                OwnedCurrentSandboxStart(sandboxStartGame, sandboxStartActor); GetTree().Quit(); return;
+            }
             if (args is ["--pursuit-waypoint"])
             {
                 await CheckPursuitWaypoint(); GetTree().Quit(); return;
@@ -152,6 +160,13 @@ public partial class NativeActorPerformanceAudit : Node
             {
                 ExerciseCreatureAssembly(creatureGame, creatureMod, creatureModRoot,
                     creatureReferences.Split(','), creatureDependencies);
+                GetTree().Quit(); return;
+            }
+            if (args is ["--creature-appearance", var creatureRoot, .. var creatures])
+            {
+                using var creatureContent = RuntimeLiveContentSource.Open(creatureRoot, RuntimeLiveContentSource.FalloutNewVegasGame,
+                    activePlugins: RuntimeLiveContentSource.ResolveVanillaPlugins(creatureRoot), includeImplicitPlugins: false);
+                ExerciseCreatureAssembly(creatureContent, creatures);
                 GetTree().Quit(); return;
             }
             if (args is ["--dialogue-package", var dialogueRoot, var dialogueMod, var dialogueModRoot, var dialogueActor,

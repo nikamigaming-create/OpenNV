@@ -70,6 +70,27 @@ internal static class CombatAlarmContracts
         world.StopCombatAlarmOnActor(player);
         if (first.Engagement?.Target != target.Reference || second.Engagement?.Target != target.Reference)
             throw new InvalidDataException("Combat alarm erased a new engagement created by its completion event.");
+        using var initiated = new FalloutReferenceWorld(records);
+        var initiatingScripts = new FalloutReferenceScripts(records, initiated, new(records), new((_, _) => false,
+            _ => throw new InvalidDataException("Script combat invented a presentation effect.")));
+        void Start(string command) => initiatingScripts.ExecuteProgram(records.GetEffective(Key(0x906)), records.GetEffective(Key(0x892)),
+            FalloutGameModeProgram.Read($"begin GameMode\n{command}\nend"), 0);
+        Start("BoundCreature.StartCombat player");
+        var started = initiated.Get(first.Reference).Engagement;
+        if (started?.Target != player) throw new InvalidDataException("Explicit script combat lost its actor or target.");
+        Start("BoundCreature.StartCombat player");
+        if (!ReferenceEquals(started, initiated.Get(first.Reference).Engagement))
+            throw new InvalidDataException("Repeated combat initiation restarted an existing engagement.");
+        try { initiated.StartCombat(first.Reference, target.Reference); throw new InvalidOperationException("Unowned target replacement was accepted."); }
+        catch (NotSupportedException) { }
+        try { initiated.StartCombat(second.Reference, second.Reference); throw new InvalidOperationException("Self combat was accepted."); }
+        catch (InvalidDataException) { }
+        if (!ReferenceEquals(started, initiated.Get(first.Reference).Engagement) || initiated.Get(second.Reference).Engagement is not null)
+            throw new InvalidDataException("Refused combat initiation changed an engagement.");
+        using var initiatedCold = new FalloutReferenceWorld(records);
+        initiatedCold.Restore(JsonSerializer.Deserialize<FalloutReferenceSnapshot[]>(JsonSerializer.Serialize(initiated.Capture()))!);
+        if (initiatedCold.Get(first.Reference).Engagement?.Target != player)
+            throw new InvalidDataException("Scripted combat target did not survive cold restoration.");
         Console.WriteLine("OPENNV_COMBAT_ALARM_CONTRACT_PASS player=true implicit=true compiledActor=true aliases=true distinctTargets=true onceOnlyRetirement=true cold=true invalidActorAtomic=true completionRetarget=true attackRandomRetiredCold=true invalidAttackRandom=true");
     }
 }

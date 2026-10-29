@@ -13,6 +13,26 @@ internal readonly record struct NativeParticleDrawOrder(float Distance, int Inde
     }
 }
 
+// Presentation-only memo: source angle remains authoritative. Bitwise keys
+// preserve signed zero and distinct NaN representations across reuse.
+internal struct NativeParticleAngleCache
+{
+    private int _bits;
+    private float _sin, _cos;
+    private bool _initialized;
+
+    internal (float Sin, float Cos) Get(float angle)
+    {
+        var bits = BitConverter.SingleToInt32Bits(angle);
+        if (!_initialized || bits != _bits)
+        {
+            (_sin, _cos) = MathF.SinCos(angle);
+            _bits = bits; _initialized = true;
+        }
+        return (_sin, _cos);
+    }
+}
+
 internal static class NativeParticleDrawBuffer
 {
     // MultiMesh 3D rows, RGBA, then the four source atlas coordinates.
@@ -21,6 +41,11 @@ internal static class NativeParticleDrawBuffer
     internal static Transform3D Billboard(Basis camera, float angle, float radius, Vector3 position)
     {
         var (sin, cos) = MathF.SinCos(angle);
+        return Billboard(camera, sin, cos, radius, position);
+    }
+
+    internal static Transform3D Billboard(Basis camera, float sin, float cos, float radius, Vector3 position)
+    {
         // camera * Z-rotation * uniform-scale, expanded by columns without
         // two general matrix products for every live particle.
         return new(new Basis((camera.X * cos + camera.Y * sin) * radius,

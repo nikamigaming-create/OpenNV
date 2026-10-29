@@ -283,9 +283,16 @@ internal sealed partial class RuntimeLiveContentSource : IDisposable
     {
         // A provenance hint must never bypass the winning resource in the active stack.
         ValidateArchiveHint(preferredArchive);
-        if (ArchiveWarmup.IsCompletedSuccessfully &&
-            _archiveWinners.TryGetValue(canonical, out archivePath!))
-            return true;
+        if (ArchiveWarmup.IsCompletedSuccessfully)
+        {
+            // Successful warmup enumerated every selected archive. An absent
+            // key is an authoritative archive miss; loose files were checked
+            // separately immediately before this call. Do not re-scan every
+            // archive for each missing source reference.
+            if (_archiveWinners.TryGetValue(canonical, out archivePath!)) return true;
+            archivePath = string.Empty;
+            return false;
+        }
         foreach (var candidate in _archivePaths.Reverse())
         {
             if (GetArchive(candidate).Contains(canonical))

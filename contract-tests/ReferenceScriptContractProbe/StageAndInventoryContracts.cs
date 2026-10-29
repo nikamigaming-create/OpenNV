@@ -41,6 +41,18 @@ internal static class StageAndInventoryContracts
             var recipe = new FalloutRecipe(conditionOwner, "SyntheticRecipe", "Recipe", -1, 0, null, null, [],
                 [new(Key(1), 2), new(Key(1), 3)], [new(Key(2), 2)]);
             var emptyInventory = JsonSerializer.Serialize(inventory.Capture());
+            var blockedCraft = new OpenNV.Runtime.Gameplay.State.FalloutPlayerInventory(123);
+            blockedCraft.Add(records, Key(1), 5, 1, silent: true);
+            blockedCraft.Notifications.Restore(new(long.MaxValue, null, 0, []));
+            var blockedBefore = JsonSerializer.Serialize(blockedCraft.Capture());
+            try
+            {
+                blockedCraft.Craft(records, recipe, 1, null);
+                throw new InvalidDataException("Crafting admitted an overflowing notification batch.");
+            }
+            catch (OverflowException) { }
+            Require(blockedBefore == JsonSerializer.Serialize(blockedCraft.Capture()),
+                "Refused crafting notifications consumed inputs or advanced random state.");
             Require(!inventory.CanCraft(recipe), "Missing ingredients offered crafting.");
             Reject(() => inventory.Craft(records, recipe, 1, null));
             Require(JsonSerializer.Serialize(inventory.Capture()) == emptyInventory, "Missing ingredients created free outputs or mutated inventory.");

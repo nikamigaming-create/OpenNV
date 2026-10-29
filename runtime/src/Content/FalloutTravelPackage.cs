@@ -42,7 +42,11 @@ internal sealed record FalloutTravelPackage(FalloutFormKey Form, uint Flags, int
             (flags & 0x1000) == 0 && data.BehaviorFlags != 0 || data.SpecificFlags is not (null or 0) ||
             record.ReadSubrecords().Any(field => field.Signature is "PLD2" or "PTDT" or "PTD2") ||
             !ownsIdleCollection && source.Idles.Count != 0)
-            throw new NotSupportedException("Travel has additional unowned behavior, target or idle-collection inputs.");
+            throw new NotSupportedException($"Travel {record.FormKey} has unowned inputs: " +
+                $"flags=0x{flags & ~supported:x8}, behavior=0x{data.BehaviorFlags:x4}, " +
+                $"specific={(data.SpecificFlags is { } specific ? $"0x{specific:x4}" : "absent")}, " +
+                $"targets=[{string.Join(',', record.ReadSubrecords().Where(field => field.Signature is "PLD2" or "PTDT" or "PTD2").Select(field => field.Signature))}], " +
+                $"idles={source.Idles.Count}, idleOwner={ownsIdleCollection}.");
         return new(record.FormKey, flags, source.LocationType.Value,
             source.LocationReference, source.LocationRadius);
     }

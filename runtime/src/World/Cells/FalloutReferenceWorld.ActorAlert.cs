@@ -47,15 +47,37 @@ internal sealed partial class FalloutReferenceWorld
         if (stopped is not null)
         {
             stopped.Validate(records, state!);
+            var activity = stopped.Activity with { Alerted = value, Revision = checked(stopped.Activity.Revision + 1) };
             updated = stopped.Copy() with
             {
-                Activity = stopped.Activity with { Alerted = value, Revision = checked(stopped.Activity.Revision + 1) }
+                Activity = activity,
+                ActivityRevision = stopped.SelectionAttempts is not null ? activity.Revision : stopped.ActivityRevision
             };
             updated.Validate(records, state!);
         }
+        var pending = state?.PendingSandboxStart;
+        if (state is { } pendingState && pendingState.CanCapturePendingSandboxStart?.Invoke() == true)
+            pending = pendingState.CapturePendingSandboxStart?.Invoke() ??
+                throw new InvalidDataException("Pending Sandbox alert update has no capture owner.");
+        FalloutActorPendingSandboxStart? updatedPending = null;
+        if (pending is not null)
+        {
+            pending.Validate(records, state!);
+            var activity = pending.Activity with { Alerted = value, Revision = checked(pending.Activity.Revision + 1) };
+            updatedPending = pending.Copy() with
+            {
+                Activity = activity,
+                ActivityRevision = pending.SelectionAttempts is not null ? activity.Revision : pending.ActivityRevision
+            };
+            updatedPending.Validate(records, state!);
+        }
         _actorOverrides[actor] = previous with { Alerted = value };
         _alertRevisions[actor] = nextRevision;
-        if (state is not null) state.SandboxAdmissionFailure = updated;
+        if (state is not null)
+        {
+            state.SandboxAdmissionFailure = updated;
+            state.PendingSandboxStart = updatedPending;
+        }
     }
 
     internal void SetActorAlert(FalloutFormKey actor, double value)

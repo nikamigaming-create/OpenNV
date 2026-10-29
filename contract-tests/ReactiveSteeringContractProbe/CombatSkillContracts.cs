@@ -19,7 +19,8 @@ internal static class CombatSkillContracts
     internal static BotCombatObservation Discharge(BotCombatObservation before, float damage = 35, bool delayed = false)
     {
         var health = before.Targets[0].Health!.Value - damage;
-        var impact = new BotCombatImpact(Target, Weapon, Projectile, damage, health <= 0, true);
+        var impact = new BotCombatImpact(Target, Weapon, Projectile, damage, health <= 0, true,
+            HealthBefore: before.Targets[0].Health, HealthAfter: health);
         var shot = new BotCombatShot(before.Firing.Shots + 1, Weapon, Ammo, Projectile, Target,
             "actual-fixture-body-collider", 10, 1, delayed ? 1 : 0, delayed ? null : impact);
         return before with
@@ -64,6 +65,29 @@ internal static class CombatSkillContracts
         var state = original with { Targets = [bystander, missing, disabled, dead, original.Targets[0]] };
         Require(ReactiveCombatSkill.SelectThreat(state)?.Reference == Target &&
             ReactiveCombatSkill.SelectThreat(state, "bystander") is null, "The skill fabricated hostility/residency or accepted an explicit nonthreat.");
+        var attackingProtected = bystander with { Reference = "attacker", ProtectedTarget = "protected-actor" };
+        Require(ReactiveCombatSkill.SelectThreat(original with { Targets = [attackingProtected] })?.Reference == "attacker" &&
+            ReactiveCombatSkill.SelectThreat(original with { Targets = [attackingProtected, original.Targets[0]] })?.Reference == Target,
+            "The skill ignored a protected actor's attacker or put it ahead of a direct player threat.");
+        Require(ReactiveCombatSkill.SelectThreat(original with { Targets = [bystander with { QuestThreat = true }] })?.Reference == "bystander",
+            "The skill ignored an admitted hostile source quest participant before it selected a combat target.");
+        var blockedNear = original.Targets[0] with { Reference = "blocked", Position = new(0, 0, 2), MuzzleRayReference = "wall" };
+        Require(ReactiveCombatSkill.SelectThreat(original with { Targets = [blockedNear, original.Targets[0]] },
+                requireClearSight: true)?.Reference == Target &&
+            ReactiveCombatSkill.SelectThreat(original with { Targets = [blockedNear] }, requireClearSight: true) is null,
+            "Takeover preferred an obstructed target or treated an obstructed ray as clear.");
+        var assisting = Start(original with { Targets = [original.Targets[0] with
+            { TargetsPlayer = false, ProtectedTarget = "protected-actor" }] });
+        var assistStep = assisting.Tick(original with { Sample = 2, Targets = [original.Targets[0] with
+            { TargetsPlayer = false, ProtectedTarget = "protected-actor" }] }, .016f);
+        Require(assisting.Active && (assistStep.Input.AimAt is not null || assistStep.Input.Combat?.Fire == true),
+            "The skill stopped before engaging an actor attacking a protected target.");
+        var far = original.Targets[0] with { Position = new(0, 0, 25), BodyPoint = new(0, 1, 25) };
+        Require(ReactiveCombatSkill.SelectThreat(original with { Targets = [far] })?.Reference == Target,
+            "An in-range source weapon target was rejected by an unrelated fixed distance.");
+        var outsideBody = far with { Position = new(0, 0, 29), BodyPoint = new(0, 1, 31) };
+        Require(ReactiveCombatSkill.SelectThreat(original with { Targets = [outsideBody] }) is null,
+            "Combat admission used the actor origin while the actual body was outside weapon range.");
         var skill = Start(original);
         state = original with { Sample = 2, Forward = Vector3.UnitX, AimedReference = "bystander", Weapon = original.Weapon! with { Aiming = false } };
         var step = skill.Tick(state, .016f);
@@ -102,7 +126,8 @@ internal static class CombatSkillContracts
             skill.Feedback.Receipts.Single().VerifiedDeath && skill.Feedback.Receipts[0].HealthAfter == -5,
             "The actual raw negative actor health/death receipt was lost.");
 
-        state = Observation() with { Firing = new(0, 0, null, new(Target, Weapon, Projectile, 35, true, true), "identical-old-impact") };
+        state = Observation() with { Firing = new(0, 0, null, new(Target, Weapon, Projectile, 35, true, true,
+            HealthBefore: 30, HealthAfter: -5), "identical-old-impact") };
         skill = Start(state); skill.Tick(state, .016f);
         var pending = Discharge(state, delayed: true);
         step = skill.Tick(pending, .016f);
@@ -122,11 +147,47 @@ internal static class CombatSkillContracts
         completed = pending with
         {
             Weapon = pending.Weapon! with { Action = null },
-            Firing = pending.Firing with { PendingImpacts = 0, LastImpact = new(Target, Weapon, Projectile, 35, true, true), ImpactToken = "fresh-impact" },
+            Firing = pending.Firing with { PendingImpacts = 0, LastImpact = new(Target, Weapon, Projectile, 35, true, true,
+                HealthBefore: 30, HealthAfter: -5), ImpactToken = "fresh-impact" },
             Targets = [pending.Targets[0] with { Dead = true, TargetsPlayer = false, Health = -5 }]
         };
         skill.Tick(completed, .016f);
         Require(skill.Feedback?.Success == true, "A fresh isolated delayed impact between observations was rejected.");
+
+        state = Observation(); skill = Start(state); skill.Tick(state, .016f);
+        var concurrent = Discharge(state, damage: 10);
+        concurrent = concurrent with
+        {
+            Firing = concurrent.Firing with { Last = concurrent.Firing.Last! with
+                { ImmediateImpact = concurrent.Firing.Last!.ImmediateImpact! with { HealthBefore = 27, HealthAfter = 17 } } },
+            Targets = [concurrent.Targets[0] with { Health = 17 }]
+        };
+        skill.Tick(concurrent, .016f);
+        Require(skill.Active && skill.Feedback is null, "Concurrent actor damage invalidated an attributable player impact.");
+        skill.Cancel("fixture complete");
+        var receipt = skill.Feedback!.Receipts.Single();
+        Require(receipt.VerifiedContact && receipt.HealthBefore == 27 && receipt.HealthAfter == 17 &&
+            receipt.ObservedHealthBefore == 30 && receipt.ObservedHealthAfter == 17,
+            "Impact-local health and the wider concurrent observation were conflated.");
+
+        state = Observation(); skill = Start(state); skill.Tick(state, .016f);
+        var teammateKill = Discharge(state);
+        teammateKill = teammateKill with { Firing = teammateKill.Firing with
+            { Last = teammateKill.Firing.Last! with { Reference = "rock", ImmediateImpact = null } } };
+        skill.Tick(teammateKill, .016f);
+        Require(skill.Feedback is { Success: false, FailureKind: "safety-stop" } &&
+            !skill.Feedback.Receipts.Single().VerifiedDeath,
+            "A teammate's kill after an obstructed player shot was credited to the player or halted recovery as a corrupt receipt.");
+
+        state = Observation(); skill = Start(state); skill.Tick(state, .016f);
+        var corpseContact = Discharge(state);
+        corpseContact = corpseContact with { Firing = corpseContact.Firing with
+            { Last = corpseContact.Firing.Last! with { ImmediateImpact = corpseContact.Firing.Last!.ImmediateImpact! with
+                { HealthBefore = -5, HealthAfter = -5, HealthDamage = 0, Died = false } } } };
+        skill.Tick(corpseContact, .016f);
+        Require(skill.Feedback is { Success: false, FailureKind: "safety-stop" } &&
+            !skill.Feedback.Receipts.Single().VerifiedDeath,
+            "A player impact on an already-dead actor was credited as a kill or treated as missing telemetry.");
     }
 
     private static void ReloadAndMissRecovery()
@@ -225,7 +286,8 @@ internal static class CombatSkillContracts
         { unchanged = unchanged with { Sample = unchanged.Sample + 1 }; waiting.Tick(unchanged, 1); }
         Require(waiting.Feedback is { Success: false, FailureKind: "receipt-refusal" }, "Delivered fire with no actual shot was unbounded.");
 
-        var oldImpact = new BotCombatImpact(Target, Weapon, Projectile, 35, true, true);
+        var oldImpact = new BotCombatImpact(Target, Weapon, Projectile, 35, true, true,
+            HealthBefore: 30, HealthAfter: -5);
         initial = initial with { Firing = initial.Firing with { LastImpact = oldImpact, ImpactToken = "old" } };
         waiting = Start(initial); waiting.Tick(initial, .016f);
         var hiddenPending = Discharge(initial, delayed: true);
@@ -293,6 +355,15 @@ internal static class CombatSkillContracts
              "lastHitscanImpact":null}}
             """);
         Require(BotCombatTelemetry.ReadFiring(delayed.RootElement).Error is not null, "A different source pending impact was silently bound to this shot.");
+        using var resolved = JsonDocument.Parse("""
+            {"firing":{"shots":8,"pendingHitscanImpacts":0,"last":null,
+             "lastHitscanImpact":{"state":"actor-damaged","reference":"Fixture.esm:000101",
+              "weapon":"Fixture.esm:000201","projectile":"Fixture.esm:000401",
+              "healthBefore":27,"healthAfter":17,"healthDamage":10,"died":false,"hitEventMarked":true}}}
+            """);
+        Require(BotCombatTelemetry.ReadFiring(resolved.RootElement).LastImpact is
+            { HealthBefore: 27, HealthAfter: 17, HealthDamage: 10 },
+            "Delayed impact lost its own actor health transaction.");
     }
 
     private static void Refusal(BotCombatObservation rejected, string kind, BotCombatObservation? initial = null)

@@ -20,6 +20,7 @@ internal sealed record BotNavigationRefinement(string Scope, Vector3 Target, flo
     string SourceSha256, BotNavigationProjection? Projection = null);
 
 internal sealed record BotNavigationProjection(Vector3 Requested, Vector3 Selected, float Radius, Vector3 Accepted);
+internal readonly record struct BotPlanningProgress(long Search, long Steps);
 
 // Goals use source references. Travel may approach an authored exterior object
 // before it streams in, but arrival still requires its live presentation.
@@ -32,6 +33,7 @@ internal sealed partial class ReactiveReferenceBot
     private readonly Func<Vector3, Vector3, float, BotNavigationRoute> _route;
     private readonly Func<Vector3, Vector3, Vector3, float, float, BotNavigationRoute?>? _approachRoute;
     private readonly Action? _cancelRoute;
+    private readonly Func<BotPlanningProgress?>? _planningProgress;
     private readonly Action<SteeringIntent, bool> _input;
     private readonly ReactiveSteering _steering = new();
     private IReadOnlyList<Vector3>? _path;
@@ -60,6 +62,10 @@ internal sealed partial class ReactiveReferenceBot
     private int _waypoint, _replans, _movingTargetReplans;
     private int _obstructionReplans, _endpointReplans, _progressWaypoint = -1;
     private float _elapsed, _stalled, _waiting, _endpointAiming, _distance = 1.5f, _approachDistance = 1.5f;
+    private float _goalNoClosingSeconds, _bestGoalDistance;
+    private BotPlanningProgress? _lastPlanningProgress;
+    private float _planningIdleSeconds;
+    private string? _goalProgressReference;
     private float _projectionRadius = 2, _arrivalRadius, _bestWaypointDistance, _segmentStartDistance;
     private float _motionlessSeconds;
     private float _controlWaitSeconds;
@@ -80,6 +86,7 @@ internal sealed partial class ReactiveReferenceBot
         routeDoor = _routeDoor,
         scene = _scene,
         elapsedSeconds = _elapsed,
+        goalNoClosingSeconds = _goalNoClosingSeconds,
         waypoint = _waypoint,
         waypoints = _path?.Count ?? 0,
         replans = _replans,
@@ -146,10 +153,11 @@ internal sealed partial class ReactiveReferenceBot
     internal ReactiveReferenceBot(Func<string, BotObservation> observe,
         Func<Vector3, Vector3, float, BotNavigationRoute> route, Action<SteeringIntent, bool> input,
         Func<Vector3, Vector3, Vector3, float, float, BotNavigationRoute?>? approachRoute = null, Action? cancelRoute = null,
-        VerifiedBotSkillLibrary? skills = null, Action? persistSkills = null)
+        VerifiedBotSkillLibrary? skills = null, Action? persistSkills = null, Func<BotPlanningProgress?>? planningProgress = null)
     {
         _observe = observe; _route = route; _input = input; _approachRoute = approachRoute; _cancelRoute = cancelRoute;
         _combatSkills = skills ?? new(); _persistSkills = persistSkills;
+        _planningProgress = planningProgress;
     }
 
     internal void Start(string? reference, string mode, float distance, bool combatTakeover = true, bool pauseAfter = true,
@@ -162,12 +170,14 @@ internal sealed partial class ReactiveReferenceBot
         Stop(); _goalReference = string.IsNullOrWhiteSpace(reference) ? null : reference;
         _reference = _goalReference ?? CombatObservationIdentity; _mode = mode;
         _distance = _approachDistance = distance; _phase = "observing";
-        _combat = null; _combatFeedbackPublished = false; _combatCount = 0; _phaseBeforeCombat = null;
+        _combat = null; _combatFeedbackPublished = false; _combatCount = 0; _combatRetryPosition = null; _phaseBeforeCombat = null;
         _combatTakeover = combatTakeover; _pauseAfter = pauseAfter; _combatObservation = null; _failureKind = null;
         _minimumCombatHitPoints = minimumCombatHitPoints; _maximumCombatSimulationSeconds = maximumCombatSimulationSeconds;
         _combatSimulationSeconds = 0; _combatPolicySample = _combatPhysicsSample = -1; _combatPolicyStop = null;
         _combatSessionBinding = null; _combatSessionScene = null; _terminalInputReleased = false;
         _elapsed = _stalled = _waiting = _endpointAiming = 0;
+        _goalNoClosingSeconds = 0; _bestGoalDistance = float.PositiveInfinity; _goalProgressReference = null;
+        _lastPlanningProgress = null; _planningIdleSeconds = 0;
         _replans = _obstructionReplans = _endpointReplans = _movingTargetReplans = 0; _error = null;
         _navigation = null; _observation = null; _projectionRadius = 2; _progressWaypoint = -1;
         _motionPosition = null; _motionlessSeconds = 0;
@@ -225,7 +235,35 @@ internal sealed partial class ReactiveReferenceBot
             }
             _elapsed += seconds;
             var bound = _mode is "travel" or "follow" or "shoot" or "combat" ? 900 : 180;
-            if (_elapsed > bound) throw new InvalidOperationException("Goal exceeded its execution bound.");
+            var planning = _phase == "planning" && _request is not null ? _planningProgress?.Invoke() : null;
+            if (planning is { } current && current.Steps > 0 &&
+                (_lastPlanningProgress is not { } previousSearch || current.Search != previousSearch.Search || current.Steps > previousSearch.Steps))
+                _planningIdleSeconds = 0;
+            else _planningIdleSeconds += seconds;
+            _lastPlanningProgress = planning;
+            // A bounded native search that is actually advancing is not a
+            // stationary movement failure. Allow brief scheduler gaps, but a
+            // search that stops advancing eventually hits the ordinary bound.
+            var planningAdvancing = planning is not null && _planningIdleSeconds < 10;
+            if (_mode is "interact" or "travel" or "approach")
+            {
+                if (_goalProgressReference != _reference)
+                {
+                    _goalProgressReference = _reference;
+                    _bestGoalDistance = float.PositiveInfinity;
+                    _goalNoClosingSeconds = 0;
+                }
+                var distance = Vector3.Distance(state.Position, state.Target);
+                if (distance < _bestGoalDistance - .5f)
+                {
+                    _bestGoalDistance = distance;
+                    _goalNoClosingSeconds = 0;
+                }
+                else if (!planningAdvancing) _goalNoClosingSeconds += seconds;
+            }
+            else if (!planningAdvancing) _goalNoClosingSeconds += seconds;
+            if (_elapsed > bound && _goalNoClosingSeconds > bound)
+                throw new InvalidOperationException("Goal exceeded its execution bound without observed closing progress.");
             if (_routeDoor is not null)
             {
                 var door = state.Door ?? throw new InvalidOperationException("Route door lost its resident source motion owner.");
@@ -333,15 +371,16 @@ internal sealed partial class ReactiveReferenceBot
             }
             if (move)
             {
-                // Follow consumes one verified segment before refreshing its
-                // moving target. Cancelling each pending query on target drift
-                // can otherwise prevent any route from reaching the executor.
-                if (_path is not null && Vector3.Distance(state.Target, _plannedTarget) > (_mode == "follow" ? 5.0f : .4f))
+                // Follow and shooting targets can move during a queued query.
+                // Execute one collision-checked segment before refreshing the
+                // target, or continuous drift can starve the route forever.
+                var movingTarget = _mode is "follow" or "shoot";
+                if (_path is not null && !movingTarget && Vector3.Distance(state.Target, _plannedTarget) > .4f)
                 { CancelRoute(); _path = null; _projectionRadius = 2; _endpointReplans = 0; }
                 if (_path is null)
                 {
                     if (_request is { } pending && (Vector3.Distance(pending.Start, state.Position) > .2f ||
-                        Vector3.Distance(pending.Target, state.Target) > (_mode == "follow" ? 5.0f : .4f))) CancelRoute();
+                        !movingTarget && Vector3.Distance(pending.Target, state.Target) > .4f)) CancelRoute();
                     _request ??= new(state.Position, state.Target - (offset.Length() > .001f ? Vector3.Normalize(offset) * _approachDistance : Vector3.Zero), state.Target);
                     var request = _request;
                     var destination = request.Endpoint;
@@ -376,8 +415,10 @@ internal sealed partial class ReactiveReferenceBot
                     _arrivalRadius = Math.Clamp(_segmentStartDistance * .25f, _mode == "follow" ? .2f : .02f, .2f);
                     _progressWaypoint = -1; _endpointAiming = 0;
                 }
+                // A waypoint on another floor is not observed movement. Match
+                // the native source-height admission used by route planning.
                 while (_waypoint < _path.Count && FlatDistance(state.Position, _path[_waypoint]) <= (_waypoint == _path.Count - 1 ? _arrivalRadius : .4f) &&
-                    MathF.Abs(state.Position.Y - _path[_waypoint].Y) < 2.0f) _waypoint++;
+                    MathF.Abs(state.Position.Y - _path[_waypoint].Y) < .6f) _waypoint++;
                 if (_waypoint == _path.Count)
                 {
                     if (!_navigation!.ReachesProjectedEndpoint)
@@ -386,6 +427,10 @@ internal sealed partial class ReactiveReferenceBot
                         { ReplanObstruction("segment already inside its arrival radius without closing the route"); return; }
                         // Only the next segment is capsule-verified. Replan
                         // from observed arrival before entering that corridor.
+                        // An actual completed segment is progress; failures at
+                        // earlier, different obstacles are not consecutive.
+                        if (_segmentStartDistance - FlatDistance(state.Position, _path[^1]) > .1f)
+                            _obstructionReplans = 0;
                         Replan("replanning-segment");
                         return;
                     }
@@ -396,6 +441,17 @@ internal sealed partial class ReactiveReferenceBot
                         // Its new goal needs a new route, not tighter projection.
                         var closing = _segmentStartDistance - FlatDistance(state.Position, _path[^1]);
                         if (closing > .002f) _obstructionReplans = 0;
+                        else if (FlatDistance(_navigation.RequestedEndpoint, _navigation.ProjectedEndpoint) > .2f)
+                        {
+                            // A live target may drift while the search projects
+                            // its requested standoff back onto the player's
+                            // current floor. Repeating the same broad projection
+                            // cannot close that gap; retain the bounded endpoint
+                            // refinement even though the target also moved.
+                            _movingTargetReplans++;
+                            ReplanEndpoint(false);
+                            return;
+                        }
                         else if (++_obstructionReplans > 3)
                             throw new InvalidOperationException("Moving target replans made no capsule closing progress.");
                         _movingTargetReplans++; _endpointReplans = 0; _projectionRadius = 2;

@@ -14,9 +14,9 @@ internal static partial class RuntimeNativeNifMeshBuilder
     private static readonly ConditionalWeakTable<FalloutNifFile,
         ConcurrentDictionary<(int Block, float Units), PreparedGeometry>> PreparedGeometryCache = new();
 
-    internal static void PrepareStaticGeometry(FalloutNifFile source, float units, CancellationToken cancellation)
+    internal static void PrepareStaticGeometry(FalloutNifFile source, float units, CancellationToken cancellation, bool externalSkeleton = false)
     {
-        var state = new BuildState(source, units, null);
+        var state = new BuildState(source, units, null, externalSkeleton: externalSkeleton);
         foreach (var block in source.Blocks)
         {
             cancellation.ThrowIfCancellationRequested();

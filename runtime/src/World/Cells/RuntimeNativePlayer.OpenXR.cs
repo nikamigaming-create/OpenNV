@@ -124,6 +124,7 @@ internal partial class RuntimeNativePlayer
     }
     public override void _ExitTree()
     {
+        _stepQueries?.Dispose(); _stepQueries = null;
         ReleaseGrab();
         ReleaseAutoAimShapes();
         ReleaseFurnitureReservation();

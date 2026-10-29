@@ -124,8 +124,16 @@ public partial class NativeReferenceEventsAudit
             Require(pins == 1 && closed == 8 && !session.Won && !player.ModalInput,
                 "Actual obstructed input did not retire on exactly one depleted pin.");
             menu!.Free(); menu = null;
+            // Recipe and other modals may keep the world unpaused. Player
+            // input must not consume Escape before the modal receives it.
+            session = Open(100);
+            tree.Paused = false;
+            await Press(Godot.Key.Escape);
+            Require(session.Finished && closed == 9 && !player.ModalInput,
+                "Unpaused player consumed modal Cancel before the menu could retire.");
+            menu!.Free(); menu = null;
             GD.Print("OPENNV_LOCKPICK_INPUT_PASS actualKeyIngress=true duplicateDuringTurn=true retainedSourceClock=true success=true failure=true cancel=true " +
-                "exception=true disposal=true nestedModal=true focusLoss=true originalPauseMouse=true rejectedAdmissionUnchanged=true reboundManual=true relativeMouse=true obstructionPin=true actualWorldUnlockAndOwnedActivation=unverified");
+                "exception=true disposal=true nestedModal=true unpausedModalCancel=true focusLoss=true originalPauseMouse=true rejectedAdmissionUnchanged=true reboundManual=true relativeMouse=true obstructionPin=true actualWorldUnlockAndOwnedActivation=unverified");
         }
         finally
         {

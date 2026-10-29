@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Reflection;
 using System.Text.Json;
 using OpenNV.Runtime.Content;
+using OpenNV.Runtime.Gameplay.State;
 
 if (args is ["--codec-fixture", var fixtureScenario, var fixtureRole])
 {
@@ -20,6 +21,24 @@ foreach (var invalid in new[] { "PlayBink unquoted.bik", "PlayBink \"x.bik\" 1 1
     catch (NotSupportedException) { }
 }
 Console.WriteLine("OPENNV_MOVIE_COMMAND_OK defaults=true quotedPaths=true sourceOrder=true unsupportedArgumentsRejected=true");
+foreach (var priorPause in new[] { false, true })
+{
+    var active = new RuntimeMoviePause();
+    active.Acquire(true); // Initial world construction owns a temporary pause.
+    Require(active.RebaseLoadingPause(priorPause) && active.Active, "loading release must retain the active movie pause");
+    Require(active.Release() == priorPause && active.Release() is null, "movie completion/retirement must release its actual inherited pause once");
+    Require(!active.RebaseLoadingPause(!priorPause) && !active.Active, "loading cannot revive a completed movie pause");
+
+    var early = new RuntimeMoviePause();
+    early.Acquire(true);
+    Require(early.Release() == true && !early.RebaseLoadingPause(priorPause), "early movie completion must leave temporary loading pause for the loader");
+    Require(!early.Active && early.Release() is null, "early completion cleanup must be idempotent");
+}
+var retired = new RuntimeMoviePause();
+retired.Acquire(true);
+Require(retired.RebaseLoadingPause(true) && retired.Release() == true && retired.Release() is null,
+    "cancelled loading must retain its retirement pause without leaking movie ownership");
+Console.WriteLine("OPENNV_MOVIE_LOADING_PAUSE_PASS loadFirst=true movieFirst=true priorPauseRetained=true retirement=true repeatedCleanup=true");
 var fixtureSource = Path.GetTempFileName();
 try
 {

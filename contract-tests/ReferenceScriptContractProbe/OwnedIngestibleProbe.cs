@@ -1,9 +1,57 @@
 using System.Text.Json;
+using System.Buffers.Binary;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Gameplay.State;
+using OpenNV.Runtime.World.Cells;
 
 internal static class OwnedIngestibleProbe
 {
+    internal static void RunActorInventory(string root)
+    {
+        RuntimeLiveContentSource.Configure(root, RuntimeLiveContentSource.FalloutNewVegasGame);
+        using var content = RuntimeLiveContentSource.Current!;
+        using var records = FalloutPluginStack.Load(content.PluginSources);
+        using var world = new FalloutReferenceWorld(records);
+        var actor = new FalloutFormKey("FalloutNV.esm", 0x15a796);
+        var globals = FalloutGlobalState.Read(records);
+        var inventory = world.Inventory(actor, 1, globals);
+        var instance = world.Get(actor);
+        var owner = FalloutActorTemplateOwner.Resolve(records, records.GetEffective(instance.Base), 256, instance.Templates);
+        var source = owner.ReadSubrecords().Where(field => field.Signature == "CNTO").Select(field =>
+        {
+            if (field.Data.Length != 8) throw new InvalidDataException("Source inventory entry is malformed.");
+            var item = owner.Plugin.AdjustFormId(BinaryPrimitives.ReadUInt32LittleEndian(field.Data.Span));
+            return new { item = item.ToString(), signature = records.GetEffective(item).Signature,
+                count = BinaryPrimitives.ReadInt32LittleEndian(field.Data.Span[4..]) };
+        }).ToArray();
+        var foods = inventory.Contents.Items.Where(item => world.IsActorFood(item.FormKey))
+            .Select(item => new { item = item.FormKey.ToString(), item.Count }).ToArray();
+        var possible = new HashSet<FalloutFormKey>();
+        void Expand(FalloutFormKey key)
+        {
+            if (!possible.Add(key)) return;
+            var record = records.GetEffective(key);
+            if (record.Signature != "LVLI") return;
+            foreach (var entry in record.ReadSubrecords().Where(field => field.Signature == "LVLO"))
+            {
+                if (entry.Data.Length != 12) throw new InvalidDataException("Leveled food source entry has an invalid extent.");
+                Expand(record.Plugin.AdjustFormId(BinaryPrimitives.ReadUInt32LittleEndian(entry.Data.Span[4..])));
+            }
+        }
+        foreach (var entry in owner.ReadSubrecords().Where(field => field.Signature == "CNTO"))
+            Expand(owner.Plugin.AdjustFormId(BinaryPrimitives.ReadUInt32LittleEndian(entry.Data.Span)));
+        var candidateFoods = possible.Where(key => records.GetEffective(key).Signature == "ALCH" && world.IsActorFood(key))
+            .Select(key => FalloutIngestible.Read(records, key)).Select(value => new
+            {
+                item = value.Form.ToString(), value.Flags, script = value.Script?.ToString(),
+                withdrawal = value.Withdrawal?.ToString(), value.AddictionChance,
+                poisonOnly = value.Effects.Count > 0 && value.Effects.All(effect => (effect.Flags & 5) == 5)
+            }).ToArray();
+        Console.WriteLine(JsonSerializer.Serialize(new { kind = "owned-actor-food-source", actor = actor.ToString(),
+            sourceOwner = owner.FormKey.ToString(), source, resolvedFoods = foods, candidateFoods,
+            random = "fresh-source-resolution", retailOrdering = "unverified", gameplay = "separate" }));
+    }
+
     internal static void Run(string root)
     {
         RuntimeLiveContentSource.Configure(root, RuntimeLiveContentSource.FalloutNewVegasGame);
@@ -22,6 +70,31 @@ internal static class OwnedIngestibleProbe
         if (foods == 0) throw new InvalidDataException("Owned ingestibles supplied no actor food.");
         Console.WriteLine($"OPENNV_OWNED_ACTOR_FOOD_PASS ingestibles=true foodCount={foods} medicineExcluded=true gameplay=unverified");
         var body = FalloutBodyPartData.Read(records.GetEffective(records.RuntimeFormKey(0x1d)));
+        var waterSpell = FalloutDialogueTopic.Find(records, "SPEL", "WaterHeal1Purified").FormKey;
+        var waterSource = FalloutIngestible.ReadActorEffect(records, waterSpell);
+        var waterVitals = new FalloutPlayerVitals(records, player, new(5, 5, 5, 5, 5, 5, 5));
+        waterVitals.Damage(50);
+        var waterBefore = waterVitals.State.ExactHitPoints;
+        var waterInventory = new FalloutPlayerInventory();
+        var waterOwner = new FalloutPlayerIngestibles(records, waterInventory, waterVitals, body, _ => 50, _ => false, () => false);
+        if (waterOwner.PrepareActorEffect(waterSpell).Commit().Consumed || waterInventory.Item(waterSpell) is not null)
+            throw new InvalidDataException("Owned water effect unexpectedly consumed inventory.");
+        waterOwner.Advance(2);
+        var waterColdVitals = new FalloutPlayerVitals(records, player, new(5, 5, 5, 5, 5, 5, 5), waterVitals.State);
+        var waterCold = new FalloutPlayerIngestibles(records, waterInventory, waterColdVitals, body, _ => 50, _ => false, () => false);
+        waterCold.Restore(JsonSerializer.Deserialize<FalloutIngestiblesSnapshot>(JsonSerializer.Serialize(waterOwner.Capture()))!);
+        waterOwner.Advance(100); waterCold.Advance(100);
+        var healingEffect = waterSource.Effects.Single(effect => effect.ActorValue == 16);
+        var waterExpected = waterBefore + healingEffect.Magnitude * healingEffect.EffectiveDuration;
+        if (waterVitals.State.ExactHitPoints != waterExpected || waterColdVitals.State.ExactHitPoints != waterExpected ||
+            waterOwner.Capture().Effects.Count != 0)
+            throw new InvalidDataException("Owned water actor effect lost its duration or cold remainder.");
+        var hardcoreWater = new FalloutPlayerIngestibles(records, waterInventory, waterVitals, body, _ => 50, _ => false, () => true);
+        try { hardcoreWater.PrepareActorEffect(waterSpell); throw new InvalidDataException("Unsupported dehydration effect was admitted."); }
+        catch (NotSupportedException) { }
+        if (waterVitals.State.ExactHitPoints != waterExpected || hardcoreWater.Capture().Effects.Count != 0)
+            throw new InvalidDataException("Unsupported dehydration partially applied water healing.");
+        Console.WriteLine("OPENNV_OWNED_WATER_EFFECT_PASS nonconsuming=true timedHealth=true coldRemainder=true unsupportedDehydrationRefused=true delivery=unverified");
         var expectedMagnitude = source.Effects.Single(effect => effect.Archetype == 34 && effect.Magnitude == 30).Magnitude *
             (FalloutGameSettingFloats.Read(records, "fMagicMedicineSkillBase") + FalloutGameSettingFloats.Read(records, "fMagicMedicineSkillMult") * .5f);
         foreach (var hardcore in new[] { false, true })

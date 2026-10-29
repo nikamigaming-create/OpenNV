@@ -45,7 +45,9 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
     FalloutActorSandboxMotionFailure? SandboxMotionFailure = null,
     FalloutActorStoppedIdleAnimation? CreatureScriptIdle = null,
     FalloutActorPendingSandboxStart? PendingSandboxStart = null,
-    FalloutActorProjectileLaunch? ProjectileLaunch = null, FalloutActorIngestiblesSnapshot? Ingestibles = null)
+    FalloutActorProjectileLaunch? ProjectileLaunch = null, FalloutActorIngestiblesSnapshot? Ingestibles = null,
+    FalloutActorSandboxAdmissionFailure? InterruptedSandboxAdmission = null,
+    FalloutActorPackageStartLocation? PackageStartLocation = null)
 {
     internal static void Validate(IReadOnlyList<FalloutReferenceSnapshot> snapshots)
     {
@@ -69,6 +71,7 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
             if (snapshot.ConversationSuppressionSeconds is { } suppression && !float.IsFinite(suppression))
                 throw new InvalidDataException("Saved conversation suppression is not finite.");
             snapshot.ConversationHistory?.Validate();
+            snapshot.PackageStartLocation?.Validate();
             if (snapshot.Ingestibles is { } ingestibles) FalloutActorIngestiblesSnapshot.Validate(ingestibles);
             if (snapshot.Animation is { } animation) FalloutActorAnimationState.Validate(animation);
             snapshot.GrabEvents?.Validate(snapshot.Reference);
@@ -111,6 +114,17 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
             snapshot.DeferredPackageContinuation?.ValidateShape(snapshot);
             snapshot.PackageBindingFailure?.Validate();
             snapshot.SandboxAdmissionFailure?.Validate();
+            snapshot.InterruptedSandboxAdmission?.Validate();
+            if (snapshot.InterruptedSandboxAdmission is { } interrupted &&
+                (snapshot.Injury?.Dead != true || snapshot.Ragdoll is null || snapshot.SandboxAdmissionFailure is not null ||
+                 snapshot.PackageMotion is not null || snapshot.PackageIdle is not null ||
+                 snapshot.SandboxMotionFailure is not null || snapshot.PackageBindingFailure is not null ||
+                 snapshot.SelectionFailure is not null || snapshot.PendingPackageSelection is not null ||
+                 snapshot.PendingSandboxStart is not null || snapshot.FurnitureContinuation is not null ||
+                 snapshot.DialogueContinuation is not null || snapshot.DeferredPackageContinuation is not null ||
+                 snapshot.PackageAssignment is not { } assignment || assignment.Package != interrupted.Package || assignment.Done ||
+                 !assignment.Sha256.Equals(interrupted.PackageSha256, StringComparison.OrdinalIgnoreCase)))
+                throw new InvalidDataException("Interrupted Sandbox history requires its dead actor, captured body and unchanged source assignment.");
             snapshot.SandboxMotionFailure?.Validate();
             snapshot.CreatureScriptIdle?.Validate();
             if (snapshot.CreatureScriptIdle is { } scriptIdle && (scriptIdle.Owner != "script" ||
@@ -188,6 +202,14 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
 
 internal sealed partial class FalloutReferenceInstance
 {
+    // A newly discovered source reference can already have unloaded package
+    // state before its first native process is materialized. A restored record
+    // with missing process history has a different, explicitly unknown past.
+    internal bool HasRestoredSnapshot { get; set; }
+    internal bool MayInitializeLaunchProcess(bool hasNativeOwner) => !hasNativeOwner && ProjectileLaunch is null &&
+        (!HasRestoredSnapshot || Animation.Resource.Length == 0 && PackageAssignment is null && PackageMotion is null &&
+            Engagement is null && AggroWarning is null && SandboxAdmissionFailure is null && InterruptedSandboxAdmission is null && SandboxMotionFailure is null &&
+            PendingSandboxStart is null);
     internal FalloutFormKey Reference { get; }
     internal FalloutFormKey Cell { get; }
     internal FalloutFormKey Base { get; }
@@ -263,12 +285,26 @@ internal sealed partial class FalloutReferenceInstance
     internal bool? BroadcastState { get; set; }
     internal FalloutFormKey? TalkingActivatorActor { get; set; }
     internal FalloutActorPackageMotion? PackageMotion { get; set; }
+    internal void ObserveInitialSandboxMotion(FalloutFormKey package)
+    {
+        if (ProcedureCaptureBlocker != FalloutActorPendingSandboxStart.CaptureBlocker) return;
+        if (PackageMotion is not { Sandbox: not null } motion || motion.Package != package)
+            throw new InvalidOperationException("Sandbox has no matching published activity and native motion.");
+        ProcedureCaptureBlocker = null;
+    }
     internal FalloutActorIngestiblesSnapshot? Ingestibles { get; set; }
     internal FalloutActorPackageAssignment? PackageAssignment { get; set; }
     internal FalloutActorDeferredPackageContinuation? DeferredPackageContinuation { get; set; }
     internal Func<FalloutActorPackageAssignment?>? CapturePackageAssignment { get; set; }
     internal FalloutActorPackageBindingFailure? PackageBindingFailure { get; set; }
     internal FalloutActorSandboxAdmissionFailure? SandboxAdmissionFailure { get; set; }
+    internal FalloutActorSandboxAdmissionFailure? InterruptedSandboxAdmission { get; set; }
+    internal bool InterruptedSandboxAdmissionCaptureReady => Injury?.Dead == true &&
+        InterruptedSandboxAdmission is { } history && SandboxAdmissionFailure is null &&
+        PackageMotion is null && PackageIdle is null && PackageAssignment is { } assignment &&
+        assignment.Package == history.Package && !assignment.Done &&
+        assignment.Sha256.Equals(history.PackageSha256, StringComparison.OrdinalIgnoreCase) &&
+        ProcedureCaptureBlocker == FalloutSandboxPackage.CaptureBlockerPrefix + history.Error && CorpseEquipmentCaptureReady;
     internal FalloutActorSandboxMotionFailure? SandboxMotionFailure { get; set; }
     internal FalloutActorPendingSandboxStart? PendingSandboxStart { get; set; }
     internal Func<bool>? CanCapturePendingSandboxStart { get; set; }
@@ -322,6 +358,7 @@ internal sealed partial class FalloutReferenceInstance
     internal bool PackageBindingFailureCaptureReady => CanCapturePackageBindingFailure?.Invoke() ??
         PackageBindingFailure is { } failure && ProcedureCaptureBlocker == failure.Error;
     internal List<FalloutPackageStart> PackageStarts { get; } = [];
+    internal FalloutActorPackageStartLocation? PackageStartLocation { get; set; }
     internal FalloutPackageEventIdle? PackageIdle { get; set; }
     internal string? ProcedureCaptureBlocker { get; set; }
     internal FalloutActorHeadTrackingSnapshot? HeadTracking { get; set; }
@@ -369,6 +406,7 @@ internal sealed partial class FalloutReferenceInstance
     internal FalloutActorCorpseEquipment? CorpseEquipment { get; set; }
     internal Func<bool, bool>? CanCaptureCorpseEquipment { get; set; }
     internal Func<FalloutActorCorpseEquipment?>? CaptureCorpseEquipment { get; set; }
+    internal Func<FalloutActorCorpseEquipment?>? CaptureCorpseEquipmentForFiniteWait { get; set; }
     internal Func<FalloutOpeningInventoryGrant, FalloutOpeningInventoryGrant, FalloutInventoryChangeLease?>? PrepareNativeInventoryRemoval { get; set; }
     internal string? CorpseEquipmentCaptureBlocker { get; private set; }
     internal void SetCorpseEquipmentCaptureBlocker(Func<FalloutActorCorpseEquipment?> owner, string? blocker)
@@ -464,7 +502,7 @@ internal sealed partial class FalloutReferenceInstance
             throw new NotSupportedException($"Reference {Reference} cannot save its active creature script idle.");
         var failureReady = bindingOverride is not null || PackageBindingFailureCaptureReady;
         var selectionReady = selectionOverride is not null || SelectionFailureCaptureReady;
-        if (ProcedureCaptureBlocker is { } blocker && !failureReady && !FurnitureCaptureReady && !selectionReady && !DialogueCaptureReady && !PendingPackageSelectionCaptureReady && !SandboxAdmissionFailureCaptureReady && !SandboxMotionFailureCaptureReady && !PendingSandboxStartCaptureReady &&
+        if (ProcedureCaptureBlocker is { } blocker && !failureReady && !FurnitureCaptureReady && !selectionReady && !DialogueCaptureReady && !PendingPackageSelectionCaptureReady && !SandboxAdmissionFailureCaptureReady && !InterruptedSandboxAdmissionCaptureReady && !SandboxMotionFailureCaptureReady && !PendingSandboxStartCaptureReady &&
             DeferredPackageContinuation?.CanCapture(this) != true)
             throw new NotSupportedException($"Reference {Reference} cannot save: {blocker}");
         var bindingFailure = bindingOverride?.Copy() ?? (failureReady ? CapturePackageBindingFailure is { } captureFailure
@@ -475,7 +513,7 @@ internal sealed partial class FalloutReferenceInstance
             _soundRandom?.State, Animation.Capture(), Unconscious, MapMarker,
             Injury is null ? null : Injury with { LimbDamage = new Dictionary<byte, float>(Injury.LimbDamage) }, CaptureRagdoll?.Invoke() ?? Ragdoll,
             CaptureEngagement?.Invoke() ?? Engagement, Templates?.Capture(), Placement?.Copy(), Restrained, PlayerTeammate,
-            TalkedToPlayer, PackageMotion, HitReaction?.Copy(), _hitReactionRandom?.State, KnockedDown, Destruction,
+            TalkedToPlayer, PackageMotion?.Copy(), HitReaction?.Copy(), _hitReactionRandom?.State, KnockedDown, Destruction,
             CaptureObjectAnimations?.Invoke() ?? ObjectAnimations, DoorMotion, LockState, OwnershipOverride,
             PackageStarts.Count == 0 ? null : PackageStarts.ToArray(), PackageIdle, TalkingActivatorActor,
             CapturePackageAssignment is { } captureAssignment ? captureAssignment() : PackageAssignment, bindingFailure, BroadcastState,
@@ -489,7 +527,8 @@ internal sealed partial class FalloutReferenceInstance
             PendingPackageSelection: PendingPackageSelectionCaptureReady ? CapturePendingPackageSelection is { } capturePending
                 ? capturePending() : PendingPackageSelection?.Copy() : null,
             AnimationSoundEvents: soundEvents, HitReactionFaults: hitReactionFaults, ActivationRelay: ActivationRelay?.Copy(),
-            CorpseEquipment: CaptureCorpseEquipment is { } captureEquipment ? captureEquipment() : CorpseEquipment?.Copy(),
+            CorpseEquipment: nonaudioRetirement && CaptureCorpseEquipmentForFiniteWait is { } finiteEquipment
+                ? finiteEquipment() : CaptureCorpseEquipment is { } captureEquipment ? captureEquipment() : CorpseEquipment?.Copy(),
             DeferredPackageContinuation: DeferredPackageContinuation, AggroWarning: AggroWarning, GrabEvents: GrabEvents,
             ObjectPhysics: CaptureObjectPhysics?.Invoke() ?? ObjectPhysics?.Select(body => body.Copy()).ToArray(),
             ConversationSuppressionSeconds: ConversationSuppressionSeconds, ConversationHistory: ConversationHistory?.Copy(),
@@ -502,7 +541,9 @@ internal sealed partial class FalloutReferenceInstance
                 ? captureScriptIdle()?.Copy() : CreatureScriptIdle?.Copy(),
             PendingSandboxStart: PendingSandboxStartCaptureReady ? CapturePendingSandboxStart is { } captureSandboxStart
                 ? captureSandboxStart() : PendingSandboxStart?.Copy() : null,
-            ProjectileLaunch: ProjectileLaunch, Ingestibles: Ingestibles?.Copy());
+            ProjectileLaunch: ProjectileLaunch, Ingestibles: Ingestibles?.Copy(),
+            InterruptedSandboxAdmission: InterruptedSandboxAdmissionCaptureReady ? InterruptedSandboxAdmission?.Copy() : null,
+            PackageStartLocation: PackageStartLocation?.Copy());
     }
 }
 
@@ -534,6 +575,7 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
     internal FalloutInputControls? Controls { get; } = controls;
     internal FalloutPlayerMoves PlayerMoves { get; } = new();
     internal FalloutPlayerNotes PlayerNotes { get; } = new(records);
+    internal FalloutPlayerCaravanCards PlayerCaravanCards { get; } = new(records);
     internal FalloutScriptMenus Menus { get; } = new();
     private FalloutReferencePackageEvents? _packageEvents;
     internal FalloutReferencePackageEvents PackageEvents => _packageEvents ??= new(records);
@@ -551,8 +593,10 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
     internal FalloutScreenBlood ScreenBlood => _screenBlood ??= new(records);
     private readonly Dictionary<FalloutFormKey, FalloutReferenceInstance> _instances = [];
     private readonly Dictionary<FalloutFormKey, FalloutReferenceScriptDefinition> _definitions = [];
+    private readonly Dictionary<FalloutFormKey, FalloutReferenceScriptDefinition?> _baseScriptDefinitions = [];
     private readonly Dictionary<FalloutFormKey, IReadOnlyList<FalloutReferenceInstance>> _residentCells = [];
     private readonly Dictionary<FalloutFormKey, int> _residentReferences = [];
+    private FalloutReferenceInstance[]? _residentSnapshot;
     private bool _disposed;
 
     internal int InstanceCount => _instances.Count;
@@ -560,6 +604,11 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
     internal bool IsCellResident(FalloutFormKey cell) => _residentCells.ContainsKey(cell);
     internal int ScriptDefinitionCount => _definitions.Count;
     internal IEnumerable<FalloutReferenceInstance> ResidentInstances => _residentReferences.Keys.Select(key => _instances[key]);
+    internal IReadOnlyList<FalloutReferenceInstance> ResidentSnapshot()
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        return _residentSnapshot ??= ResidentInstances.ToArray();
+    }
     internal bool IsResident(FalloutFormKey reference) => _residentReferences.ContainsKey(reference);
     internal FalloutReferenceInstance Retained(FalloutFormKey reference)
     {
@@ -610,12 +659,14 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
         if (instances.Where((instance, index) => instance.Cell != scene.References[index].Cell).Any() ||
             instances.Select(instance => instance.Reference).Distinct().Count() != instances.Length)
             throw new InvalidDataException("Resident cell has conflicting reference ownership.");
+        _residentSnapshot = null;
         _residentCells.Add(scene.Cell.FormKey, instances);
         _placementSourceCells.TryAdd(scene.Cell.FormKey, scene);
         foreach (var reference in scene.References)
             _placementSourceReferences.TryAdd(reference.FormKey, reference);
         foreach (var instance in instances)
             _residentReferences[instance.Reference] = _residentReferences.GetValueOrDefault(instance.Reference) + 1;
+        _residentSnapshot = null;
         return instances;
     }
 
@@ -623,6 +674,7 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         if (!_residentCells.Remove(cell, out var instances)) throw new InvalidOperationException($"Cell {cell} is not resident.");
+        _residentSnapshot = null;
         foreach (var instance in instances)
         {
             var remaining = _residentReferences[instance.Reference] - 1;
@@ -630,6 +682,7 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
             _residentReferences.Remove(instance.Reference);
             if (instance.DeletePending) { instance.Deleted = true; instance.DeletePending = false; }
         }
+        _residentSnapshot = null;
     }
 
     internal FalloutReferenceInstance Get(FalloutFormKey key)
@@ -645,12 +698,21 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
         var baseKey = FalloutDialogueTopic.RequiredForm(record, "NAME");
         // Engine primitive bases need no ESM base record; their XPRM reference
         // still has a real identity and lifetime. Other missing bases fail closed.
-        var script = records.TryGetEffective(baseKey, out _) ? FalloutScriptLocals.AttachedScript(records, record) :
-            record.ReadSubrecords().Any(field => field.Signature == "XPRM") ? null :
-            throw new InvalidDataException($"Reference {key} has no winning base {baseKey}.");
-        FalloutReferenceScriptDefinition? definition = null;
-        if (script is not null && !_definitions.TryGetValue(script.FormKey, out definition))
-            _definitions.Add(script.FormKey, definition = new(script));
+        if (!_baseScriptDefinitions.TryGetValue(baseKey, out var definition))
+        {
+            // Winning base records are immutable for this world. Cache only
+            // successfully resolved definitions; locals and faults remain on
+            // each reference instance and malformed attachments still fail.
+            if (records.TryGetEffective(baseKey, out var baseRecord))
+            {
+                var script = FalloutScriptLocals.AttachedScript(records, baseRecord);
+                if (script is not null && !_definitions.TryGetValue(script.FormKey, out definition))
+                    _definitions.Add(script.FormKey, definition = new(script));
+                _baseScriptDefinitions.Add(baseKey, definition);
+            }
+            else if (!record.ReadSubrecords().Any(field => field.Signature == "XPRM"))
+                throw new InvalidDataException($"Reference {key} has no winning base {baseKey}.");
+        }
         var instance = new FalloutReferenceInstance(record, definition, () => IsEnabled(key));
         instance.TerminalHackState = InitialTerminalHackState(instance);
         _instances.Add(key, instance);
@@ -686,7 +748,7 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
 
     private bool PendingProcedureCapture(FalloutReferenceInstance instance) =>
         !instance.CreatureScriptIdleCaptureReady || instance.ProcedureCaptureBlocker is not null && !instance.PackageBindingFailureCaptureReady && !instance.FurnitureCaptureReady &&
-        !instance.SelectionFailureCaptureReady && !instance.DialogueCaptureReady && !instance.PendingPackageSelectionCaptureReady && !instance.SandboxAdmissionFailureCaptureReady && !instance.SandboxMotionFailureCaptureReady && !instance.PendingSandboxStartCaptureReady &&
+        !instance.SelectionFailureCaptureReady && !instance.DialogueCaptureReady && !instance.PendingPackageSelectionCaptureReady && !instance.SandboxAdmissionFailureCaptureReady && !instance.InterruptedSandboxAdmissionCaptureReady && !instance.SandboxMotionFailureCaptureReady && !instance.PendingSandboxStartCaptureReady &&
         (IsResident(instance.Reference) || instance.DeferredPackageContinuation?.CanCapture(instance) != true);
     internal int PendingProcedureCaptureCount => _instances.Values.Count(PendingProcedureCapture);
     internal int StoppedPackageBindingCount => _instances.Values.Count(instance => instance.PackageBindingFailureCaptureReady);
@@ -748,6 +810,7 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
             if (snapshot is null || validated._instances.ContainsKey(snapshot.Reference))
                 throw new InvalidDataException("Saved reference is absent or duplicated.");
             var instance = validated.Get(snapshot.Reference);
+            instance.HasRestoredSnapshot = true;
             if (snapshot.ObjectPhysics is not null && records.GetEffective(snapshot.Reference).Signature is not ("REFR" or "PGRE" or "PMIS"))
                 throw new InvalidDataException($"Object physics for {snapshot.Reference} cannot replace an actor continuation owner.");
             if (snapshot.Templates is { } templates)
@@ -823,6 +886,8 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
                 if (records.GetEffective(placement.Cell).Signature != "CELL") throw new InvalidDataException("Saved placement has no winning CELL.");
                 instance.Placement = placement.Copy();
             }
+            if (snapshot.PackageStartLocation is { } packageStart)
+                validated.SetActorPackageStartLocation(snapshot.Reference, packageStart);
             // Effective access metadata belongs to the restored location, not
             // the editor cell. All staging remains in the temporary world.
             validated.RestoreAccess(instance, snapshot);
@@ -870,6 +935,8 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
                         throw new InvalidDataException("Saved package motion differs from the winning package.");
                     if (motion.Patrol is { } patrol) FalloutPatrolRoute.Read(records, package, snapshot.Reference).Validate(patrol);
                     if (motion.Escort is { } escort) { _ = FalloutEscortPackage.Read(package); escort.Validate(); }
+                    if (motion.Sandbox is not null)
+                        FalloutSandboxPackage.Read(package).RequireRetainedStart(records, instance);
                     if (motion.EditorTravel is { } editorTravel)
                         FalloutEditorTravelPackage.Read(package).Validate(validated, snapshot.Reference, editorTravel);
                     if (motion.DialogueCompleted)
@@ -880,18 +947,14 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
                             throw new InvalidDataException("Saved dialogue completion has no supported source procedure.");
                     }
                 }
-                instance.PackageMotion = motion with
-                {
-                    Position = (float[])motion.Position.Clone(),
-                    Rotation = (float[])motion.Rotation.Clone(),
-                    Travel = motion.Travel is { } travel ? travel with
-                    {
-                        Location = (float[])travel.Location.Clone(),
-                        RouteTarget = travel.RouteTarget is null ? null : (float[])travel.RouteTarget.Clone(),
-                        RouteWaypoints = travel.RouteWaypoints?.Select(point => (float[])point.Clone()).ToArray()
-                    } : null,
-                    Guard = motion.Guard is { } guard ? guard with { Location = (float[])guard.Location.Clone() } : null
-                };
+                instance.PackageMotion = motion.Copy();
+                // Older snapshots retained this exact Travel destination but
+                // had no separate actor location field. Only the matching
+                // current assignment supplies an unambiguous recovery value.
+                if (instance.PackageStartLocation is null && motion.Travel is { } priorTravel &&
+                    snapshot.PackageAssignment?.Package == motion.Package &&
+                    FalloutScriptPackage.Read(records.GetEffective(motion.Package)).LocationType == 2)
+                    validated.SetActorPackageStartLocation(snapshot.Reference, new(priorTravel.Cell, priorTravel.Location));
             }
             validated.RestorePackageTiming(instance, snapshot);
             if (snapshot.ConversationSuppressionSeconds is { } suppression)
@@ -1022,6 +1085,13 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
                 actor.SandboxMotionFailure = motionFailure.Copy();
                 actor.ProcedureCaptureBlocker = FalloutSandboxPackage.CaptureBlockerPrefix + motionFailure.Error;
             }
+            if (snapshot.InterruptedSandboxAdmission is { } interrupted)
+            {
+                var actor = validated.Get(snapshot.Reference);
+                interrupted.Validate(records, actor);
+                actor.InterruptedSandboxAdmission = interrupted.Copy();
+                actor.ProcedureCaptureBlocker = FalloutSandboxPackage.CaptureBlockerPrefix + interrupted.Error;
+            }
             if (snapshot.SandboxAdmissionFailure is { } sandbox)
             {
                 var actor = validated.Get(snapshot.Reference);
@@ -1108,14 +1178,20 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
         Menus.Publish(true);
         _residentCells.Clear();
         _residentReferences.Clear();
+        _residentSnapshot = null;
         _furnitureSeats.Clear();
         _idleMarkerReservations.Clear();
         _instances.Clear();
         _enableWork.Clear();
         _activationWork.Clear();
         _definitions.Clear();
+        _baseScriptDefinitions.Clear();
         _healthSources.Clear();
         _bodyParts.Clear();
+        _actorFoodSources.Clear();
+        _sandboxPrimitiveReferences.Clear();
+        _baseSignatures.Clear();
+        _furnitureMarkerFlags.Clear();
         _encounterZones.Clear();
         _cellEncounterZones.Clear();
         _disposed = true;

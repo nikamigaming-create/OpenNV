@@ -23,10 +23,12 @@ public partial class RuntimeCoordinator
     private Queue<(string Source, Func<bool> Upload)>? _nativeGridUploads;
     private readonly List<Node3D> _nativeGridStaged = [];
     private readonly List<RuntimeNativeLandscapeTransportBuilder.Assembly> _nativeLandPreparations = [];
+    private readonly HashSet<RuntimeNativeNifMeshBuilder.StaticAssembly> _nativeStaticPreparations = [];
     private readonly Dictionary<FalloutFormKey, Node3D> _nativeGridModels = [];
     private readonly Dictionary<FalloutFormKey, RuntimeNativeNpc> _nativeGridNpcModels = [];
     private (int X, int Y)? _nativeGridFailed;
     private readonly NativePublicationTiming _nativeGridUploadTiming = new();
+    private readonly NativePublicationTiming _nativePrototypeRetirementTiming = new();
     private double _nativeGridCommitMilliseconds;
     private IReadOnlyDictionary<string, double>? _nativeGridCommitPhases;
     private (int X, int Y)? _nativeGridTarget;
@@ -34,6 +36,8 @@ public partial class RuntimeCoordinator
     private readonly HashSet<(int X, int Y)> _nativeWalkableGrid = [];
     private readonly Dictionary<FalloutFormKey, ulong> _nativeLandLastUse = [];
     private readonly Queue<HashSet<string>> _nativeRecentModelSets = [];
+    private readonly NativePrototypeRetirement<RuntimeNativeNifPrototype> _nativePrototypeRetirements = new();
+    private ulong _nativePrototypeRetirementFrame = ulong.MaxValue;
     private ulong _nativeGridGeneration;
     private bool NativeCollisionResident(Vector3 position)
     {
@@ -69,6 +73,13 @@ public partial class RuntimeCoordinator
         uploadBatches = _nativeGridUploadTiming.Batches,
         preparingNpcs = _nativeGridNpcPreparations.Count,
         preparedNpcBodies = _nativeGridNpcModels.Count,
+        preparingCreatures = _nativeGridCreaturePreparations.Count,
+        preparedCreatureBodies = _nativeGridCreatureModels.Count,
+        pendingPrototypeRetirements = _nativePrototypeRetirements.Count,
+        prototypeRetirementSteps = _nativePrototypeRetirementTiming.Steps,
+        prototypeRetirementFaults = _nativePrototypeRetirementTiming.FaultedSteps,
+        maximumPrototypeRetirementMilliseconds = _nativePrototypeRetirementTiming.MaximumStepMilliseconds,
+        maximumPrototypeRetirementSource = _nativePrototypeRetirementTiming.MaximumStepSource,
         lastCommitMilliseconds = _nativeGridCommitMilliseconds,
         lastCommitPhasesMilliseconds = _nativeGridCommitPhases,
         error = _nativeGridError
@@ -101,6 +112,7 @@ public partial class RuntimeCoordinator
                 _nativeGridRead = null;
                 StageNativeExteriorGrid(read.GetAwaiter().GetResult());
             }
+            if (_nativeGridUploads is null) AdvanceNativePrototypeRetirement();
             if (_nativeGridUploads is { } uploads)
             {
                 NativePublicationBudget.SetPending(false, uploads.Count != 0);
@@ -118,6 +130,9 @@ public partial class RuntimeCoordinator
                     }
                 }
                 finally { _nativeGridUploadTiming.RecordBatch(Stopwatch.GetElapsedTime(started).TotalMilliseconds); }
+                // Give ready uploads first use of the allowance. A pending
+                // worker can leave spare time for detached prototype cleanup.
+                AdvanceNativePrototypeRetirement();
                 if (uploads.Count == 0 && coordinates == _nativeGridPending!.Scene.Cell.Coordinates) CommitNativeExteriorGrid();
                 return;
             }
@@ -178,6 +193,8 @@ public partial class RuntimeCoordinator
         NativePublicationBudget.SetPending(false, false);
         foreach (var preparation in _nativeLandPreparations) preparation.Dispose();
         _nativeLandPreparations.Clear();
+        foreach (var preparation in _nativeStaticPreparations) preparation.Dispose();
+        _nativeStaticPreparations.Clear();
         _retiredGridReads.RemoveAll(task => task.IsCompleted);
         foreach (var preparation in _nativeGridNpcPreparations)
         {
@@ -185,6 +202,14 @@ public partial class RuntimeCoordinator
             preparation.Dispose();
         }
         _nativeGridNpcPreparations.Clear();
+        foreach (var preparation in _nativeGridCreaturePreparations)
+        {
+            _retiredGridReads.Add(preparation.ReadTask);
+            preparation.Dispose();
+        }
+        _nativeGridCreaturePreparations.Clear();
+        foreach (var geometry in _nativeGridCreatureModels.Values) geometry.Dispose();
+        _nativeGridCreatureModels.Clear();
         _nativeGridReadCancellation?.Cancel();
         _nativeGridReadCancellation?.Dispose(); _nativeGridReadCancellation = null;
         if (_nativeGridRead is { } abandoned)
@@ -235,6 +260,7 @@ public partial class RuntimeCoordinator
         }
         GD.Print($"OPENNV_NATIVE_SESSION_RETIRE phase=prototypes-freed count={retired}");
         _nativeNifPrototypes.Clear();
+        _nativePrototypeRetirements.Drain(prototype => prototype.Scene.Root.Free());
         _nativePrewarmedInitialCellRoot?.Free(); _nativePrewarmedInitialCellRoot = null;
         _nativeReferences?.Dispose(); _nativePluginStack?.Dispose();
         _nativeIndexCancellation.Dispose();
@@ -274,23 +300,60 @@ public partial class RuntimeCoordinator
                 continue;
             }
             ExteriorNpcPreparation? npc = null;
+            ExteriorCreaturePreparation? creature = null;
+            RuntimeNativeNifMeshBuilder.StaticAssembly? staticAssembly = null;
+            var staticChecked = false;
             _nativeGridUploads.Enqueue((reference.FormKey.ToString(), () =>
             {
                 // Decode/upload native resources without entering the live tree.
                 // Ready callbacks can start authored sounds and gameplay bindings;
                 // they belong to committed residency, never preparation ahead.
-                var stagedReference = new Node3D();
+                Node3D? stagedReference = null;
                 RuntimeNativeNpc? preparedNpc = null;
+                RuntimeNativeCreature.PreparedGeometry? preparedCreature = null;
+                RuntimeNativeNifScene? preparedStatic = null;
                 try
                 {
                     var model = grid.Scene.BaseObjects[reference.Base].ModelPath;
+                    var definition = grid.Scene.BaseObjects[reference.Base];
+                    var cachedPrototype = model is null ? null : _nativeNifPrototypes.GetValueOrDefault(model);
+                    var nif = model is null ? null : prepared.Models.GetValueOrDefault(model) ?? cachedPrototype?.Source;
+                    var enabled = _nativeReferences!.IsEnabled(reference.FormKey);
+                    if (!enabled && staticAssembly is not null)
+                    { _nativeStaticPreparations.Remove(staticAssembly); staticAssembly.Dispose(); staticAssembly = null; }
+                    if (definition.Signature is not ("NPC_" or "CREA") && model is not null && nif is not null &&
+                        enabled)
+                    {
+                        if (cachedPrototype is { RequiresFreshOwners: false } && staticAssembly is not null)
+                        { _nativeStaticPreparations.Remove(staticAssembly); staticAssembly.Dispose(); staticAssembly = null; }
+                        if ((cachedPrototype is null || cachedPrototype.RequiresFreshOwners) && !staticChecked)
+                        {
+                            if (_nativeStaticPreparations.Count >= FalloutContentWorkers.Concurrency) return false;
+                            staticAssembly = RuntimeNativeNifMeshBuilder.StaticAssembly.TryCreate(nif,
+                                _configuration.World.GameUnitsToMeters, RuntimeLiveContentSource.Current!);
+                            staticChecked = true;
+                            if (staticAssembly is not null) _nativeStaticPreparations.Add(staticAssembly);
+                        }
+                        if (staticAssembly is not null)
+                        {
+                            if (!staticAssembly.Advance()) return false;
+                            preparedStatic = staticAssembly.Take();
+                            _nativeStaticPreparations.Remove(staticAssembly); staticAssembly.Dispose(); staticAssembly = null;
+                            var prototype = new RuntimeNativeNifPrototype(nif, _configuration.World.GameUnitsToMeters, preparedStatic);
+                            if (cachedPrototype is null && !prototype.RequiresFreshOwners)
+                            {
+                                prototype.Scene.Root.Name = $"Prototype_{reference.Base}";
+                                _nativeNifPrototypes.Add(model, prototype); preparedStatic = null;
+                            }
+                        }
+                    }
                     if (grid.Scene.BaseObjects[reference.Base].Signature == "NPC_" && _nativeReferences!.IsEnabled(reference.FormKey))
                     {
                         if (npc is null)
                         {
                             // Bound both jobs and completed bodies awaiting GPU
                             // publication; worker slots alone do not bound memory.
-                            if (_nativeGridNpcPreparations.Count >= FalloutContentWorkers.Concurrency) return false;
+                            if (_nativeGridNpcPreparations.Count + _nativeGridCreaturePreparations.Count >= FalloutContentWorkers.Concurrency) return false;
                             npc = PrepareExteriorNpc(reference, _nativeGridReadCancellation!.Token);
                         }
                         if (npc is not null)
@@ -302,7 +365,31 @@ public partial class RuntimeCoordinator
                             if (!npc.Advance(this, grid.Scene, out preparedNpc)) return false;
                         }
                     }
-                    if (preparedNpc is not null)
+                    if (definition.Signature == "CREA" && enabled)
+                    {
+                        if (creature is null)
+                        {
+                            if (_nativeGridCreaturePreparations.Count + _nativeGridNpcPreparations.Count >= FalloutContentWorkers.Concurrency) return false;
+                            creature = PrepareExteriorCreature(reference, _nativeGridReadCancellation!.Token);
+                        }
+                        if (creature is not null)
+                        {
+                            var stage = creature.NextStage;
+                            var started = Stopwatch.GetTimestamp();
+                            var complete = creature.Advance(_configuration.World.GameUnitsToMeters, out preparedCreature);
+                            var milliseconds = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+                            if (_options.ContainsKey("live-harness") && milliseconds > 16.667)
+                                GD.Print($"OPENNV_NATIVE_CREATURE_ASSEMBLY_SLOW reference={reference.FormKey} stage={stage} milliseconds={milliseconds:F3}");
+                            if (!complete) return false;
+                        }
+                    }
+                    else if (creature is not null) { ReleaseExteriorCreature(creature); creature = null; }
+                    if (preparedCreature is not null)
+                    {
+                        _nativeGridCreatureModels.Add(reference.FormKey, preparedCreature);
+                        preparedCreature = null;
+                    }
+                    else if (preparedNpc is not null)
                     {
                         // Keep only assembled geometry ahead of residency. The
                         // normal placement path binds AI/combat/save callbacks
@@ -310,26 +397,42 @@ public partial class RuntimeCoordinator
                         _nativeGridNpcModels.Add(reference.FormKey, preparedNpc);
                         preparedNpc = null;
                     }
-                    else PlaceNativeReference(stagedReference, grid.Scene, reference, observe: false,
-                        preparedModel: model is null ? null : prepared.Models.GetValueOrDefault(model));
-                    var nodes = stagedReference.GetChildren().OfType<Node3D>().ToArray();
-                    if (nodes.Length > 1) throw new InvalidDataException("A source reference must have one presentation root.");
-                    foreach (var node in nodes)
+                    else
                     {
-                        stagedReference.RemoveChild(node);
-                        _nativeGridStaged.Add(node); _nativeGridModels.Add(reference.FormKey, node);
+                        stagedReference = new Node3D();
+                        PlaceNativeReference(stagedReference, grid.Scene, reference, observe: false,
+                            preparedModel: nif, preparedStaticRoot: preparedStatic?.Root);
+                        var children = stagedReference.GetChildren();
+                        Node3D[] nodes;
+                        using ((Godot.Collections.Array)children) nodes = children.OfType<Node3D>().ToArray();
+                        if (nodes.Length > 1) throw new InvalidDataException("A source reference must have one presentation root.");
+                        foreach (var node in nodes)
+                        {
+                            stagedReference.RemoveChild(node);
+                            _nativeGridStaged.Add(node); _nativeGridModels.Add(reference.FormKey, node);
+                        }
+                        if (preparedStatic is not null && nodes.Contains(preparedStatic.Root)) preparedStatic = null;
                     }
                 }
                 catch (Exception error) when (error is IOException or InvalidDataException or NotSupportedException or InvalidOperationException)
                 {
+                    if (staticAssembly is not null)
+                    { _nativeStaticPreparations.Remove(staticAssembly); staticAssembly.Dispose(); staticAssembly = null; }
                     if (preparedNpc is not null && GodotObject.IsInstanceValid(preparedNpc) && preparedNpc.GetParent() is null) preparedNpc.Free();
+                    preparedCreature?.Dispose();
                     _nativeReferenceDivergences[reference.FormKey.ToString()] = error.Message;
                     if (grid.Scene.BaseObjects[reference.Base].Signature == "NPC_")
                         _nativeActorDivergences[reference.FormKey.ToString()] = error.Message;
                     GD.PushError($"OPENNV_NATIVE_REFERENCE_DIVERGENCE reference={reference.FormKey}: {error.Message}");
                 }
-                finally { stagedReference.Free(); }
+                finally
+                {
+                    stagedReference?.Free();
+                    if (preparedStatic is not null && GodotObject.IsInstanceValid(preparedStatic.Root) && preparedStatic.Root.GetParent() is null)
+                        preparedStatic.Root.Free();
+                }
                 ReleaseExteriorNpc(npc); npc = null;
+                ReleaseExteriorCreature(creature); creature = null;
                 return true;
             }
             ));
@@ -367,9 +470,10 @@ public partial class RuntimeCoordinator
         Mark("source-discovery");
         _nativeReferencePresentation!.SetResidency(grid.Scene.References, reference => MaterializeNativeReference(root, grid.Scene, reference),
             reference => Math.Abs((int)MathF.Floor(reference.Position[0] / 4096) - center.X) <= grid.Radius + 1 &&
-                Math.Abs((int)MathF.Floor(reference.Position[1] / 4096) - center.Y) <= grid.Radius + 1);
+                Math.Abs((int)MathF.Floor(reference.Position[1] / 4096) - center.Y) <= grid.Radius + 1, phases);
         Mark("reference-residency");
         var references = grid.Scene.References.ToDictionary(reference => reference.FormKey);
+        var npcPublicationStarted = phases is null ? 0 : Stopwatch.GetTimestamp();
         foreach (var (key, actor) in _nativeGridNpcModels.ToArray())
         {
             _nativeGridNpcModels.Remove(key);
@@ -389,10 +493,50 @@ public partial class RuntimeCoordinator
                 if (GodotObject.IsInstanceValid(actor) && actor.GetParent() is null) actor.Free();
             }
         }
+        var creaturePublicationStarted = phases is null ? 0 : Stopwatch.GetTimestamp();
+        if (phases is not null)
+            phases.Add("reference-publication-npc", Stopwatch.GetElapsedTime(npcPublicationStarted, creaturePublicationStarted).TotalMilliseconds);
+        foreach (var (key, geometry) in _nativeGridCreatureModels.ToArray())
+        {
+            _nativeGridCreatureModels.Remove(key);
+            try
+            {
+                var childCount = root.GetChildCount();
+                PlaceNativeReference(root, grid.Scene, references[key], observe: false, preparedCreature: geometry);
+                var added = root.GetChildCount() - childCount;
+                if (added != 0)
+                {
+                    if (added != 1 || root.GetChild(childCount) is not RuntimeNativeCreature actor || actor.Appearance.Reference != key)
+                        throw new InvalidDataException("Creature publication did not produce its single source actor.");
+                    _nativeReferencePresentation.Register(key, actor);
+                    _nativeGridStaged.Add(actor);
+                }
+            }
+            finally { geometry.Dispose(); }
+        }
+        var modelPublicationStarted = phases is null ? 0 : Stopwatch.GetTimestamp();
+        if (phases is not null)
+            phases.Add("reference-publication-creature", Stopwatch.GetElapsedTime(creaturePublicationStarted, modelPublicationStarted).TotalMilliseconds);
+        double modelAttachMilliseconds = 0, modelRegisterMilliseconds = 0;
         foreach (var (key, model) in _nativeGridModels)
         {
+            var modelStarted = phases is null ? 0 : Stopwatch.GetTimestamp();
             root.AddChild(model);
+            if (phases is not null)
+            {
+                var registeredAt = Stopwatch.GetTimestamp();
+                modelAttachMilliseconds += Stopwatch.GetElapsedTime(modelStarted, registeredAt).TotalMilliseconds;
+                modelStarted = registeredAt;
+            }
             _nativeReferencePresentation.Register(key, model);
+            if (phases is not null)
+                modelRegisterMilliseconds += Stopwatch.GetElapsedTime(modelStarted).TotalMilliseconds;
+        }
+        if (phases is not null)
+        {
+            phases.Add("reference-publication-models", Stopwatch.GetElapsedTime(modelPublicationStarted).TotalMilliseconds);
+            phases.Add("reference-publication-model-attach", modelAttachMilliseconds);
+            phases.Add("reference-publication-model-register", modelRegisterMilliseconds);
         }
         Mark("reference-publication");
         foreach (var land in root.GetChildren().OfType<RuntimeNativeLandscapeTransport>())
@@ -433,10 +577,7 @@ public partial class RuntimeCoordinator
         _nativeRecentModelSets.Enqueue(models);
         while (_nativeRecentModelSets.Count > 3) _nativeRecentModelSets.Dequeue();
         var warmModels = _nativeRecentModelSets.SelectMany(set => set).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        foreach (var path in _nativeNifPrototypes.Keys.Where(path => !warmModels.Contains(path)).ToArray())
-        {
-            _nativeNifPrototypes[path].Scene.Root.Free(); _nativeNifPrototypes.Remove(path);
-        }
+        _nativePrototypeRetirements.EnqueueCold(_nativeNifPrototypes, warmModels);
         Mark("prototype-eviction");
         var textures = root.GetChildren().OfType<RuntimeNativeLandscapeTransport>().Where(land => !land.IsQueuedForDeletion())
             .SelectMany(land => land.Source.Textures.Values).SelectMany(texture => new[] { texture.DiffusePath, texture.NormalPath })
@@ -445,6 +586,21 @@ public partial class RuntimeCoordinator
         Mark("texture-prune");
         _nativeGridCommitMilliseconds = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
         GD.Print($"OPENNV_EXTERIOR_STREAM_READY previous={previous} active={grid.Scene.Cell.FormKey} cells={grid.Cells.Count} overlap=retained commitMs={_nativeGridCommitMilliseconds:F3}");
+    }
+
+    private void AdvanceNativePrototypeRetirement()
+    {
+        var frame = Engine.GetProcessFrames();
+        if (_nativePrototypeRetirements.Count == 0 || _nativePrototypeRetirementFrame == frame ||
+            !NativePublicationBudget.TryBegin(false, out var started)) return;
+        _nativePrototypeRetirementFrame = frame;
+        var source = _nativePrototypeRetirements.NextSource!; var faulted = true;
+        try
+        {
+            _nativePrototypeRetirements.RetireNext(prototype => prototype.Scene.Root.Free());
+            faulted = false;
+        }
+        finally { _nativePrototypeRetirementTiming.RecordStep(source, NativePublicationBudget.Complete(started), faulted); }
     }
 
     private Node3D? MaterializeNativeReference(Node3D root, FalloutCellScene cell, FalloutPlacedReference reference)

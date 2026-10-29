@@ -43,12 +43,12 @@ public partial class NativeLocomotionAudit
                 var points = graph.FindPath(Source(pose.Origin), destination, out var prefixFactory);
                 var region = prefixFactory(points[0], 1, .01f, .6f);
                 bool Arrival(Vector3 point) => region(Source(point));
-                var route = NativeCapsuleNavigation.FindRefined(body, pose.Origin, World(points[0]), .4f, .66f, .165f,
+                var route = NativeCapsuleNavigation.Find(body, pose.Origin, World(points[0]), .4f, .66f,
                     _ => true, 512, corridor: [World(points[0])], arrival: Arrival);
-                if (body.GlobalTransform != pose || obstacle.GlobalTransform != obstaclePose || !Arrival(route.Path[^1]) ||
-                    route.Path[^1].DistanceTo(World(points[0])) < .75f)
+                if (body.GlobalTransform != pose || obstacle.GlobalTransform != obstaclePose || !Arrival(route[^1]) ||
+                    route[^1].DistanceTo(World(points[0])) < .75f)
                     throw new InvalidOperationException("Source prefix query moved geometry or required its occupied portal midpoint.");
-                await WalkTerminalArrivalRoute(body, route.Path);
+                await WalkTerminalArrivalRoute(body, route);
                 if (!body.IsOnFloor() || !Arrival(body.GlobalPosition))
                     throw new InvalidOperationException("Native movement did not cross the source portal through its clear width.");
             }

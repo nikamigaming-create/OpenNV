@@ -123,6 +123,8 @@ internal sealed class FalloutAnimationSoundEvents(FalloutFormKey reference, Func
         });
     internal IEnumerable<FalloutAnimationSoundEvent> PendingNativeCompletion =>
         _events.Where(entry => entry.End == FalloutAnimationSoundEnd.Active && !CanCapturePlayback(entry.Generation));
+    internal bool HasPlaybackBinding(long generation) => _playbackCaptures.ContainsKey(generation);
+    internal bool HasLivePlayback(long generation) => CanCapturePlayback(generation);
     internal IEnumerable<string> PartialLanes => _events.SelectMany(entry => entry.PartialLanes.Select(lane => entry.Sound + ":" + lane)).Distinct(StringComparer.Ordinal);
     internal IEnumerable<string> OwnedLanes => PartialLanes.Concat(_faults.Select(fault => fault.TextKey + ":" + fault.Error));
 

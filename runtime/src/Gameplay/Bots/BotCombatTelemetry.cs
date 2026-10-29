@@ -25,7 +25,7 @@ internal static class BotCombatTelemetry
             if (Object(shot, "damage") is { } damage)
                 immediate = new(Form(damage.GetProperty("reference")), weapon, projectile,
                     damage.GetProperty("healthDamage").GetSingle(), damage.GetProperty("died").GetBoolean(),
-                    error is null, error);
+                    error is null, error, damage.GetProperty("healthBefore").GetSingle(), damage.GetProperty("healthAfter").GetSingle());
             last = new(shot.GetProperty("ordinal").GetInt64(), weapon, Text(shot, "ammunition"), projectile,
                 Text(shot, "reference"), Text(shot, "collider"), shot.GetProperty("distanceMeters").GetSingle(),
                 shot.GetProperty("projectiles").GetInt32(), shot.GetProperty("projectileDamageEventsPending").GetInt32(), immediate);
@@ -40,7 +40,8 @@ internal static class BotCombatTelemetry
             if (Text(resolved, "state") == "actor-damaged" && Text(resolved, "reference") is { } reference)
                 impact = new(reference, resolved.GetProperty("weapon").GetString()!,
                     resolved.GetProperty("projectile").GetString()!, resolved.GetProperty("healthDamage").GetSingle(),
-                    resolved.GetProperty("died").GetBoolean(), resolved.GetProperty("hitEventMarked").GetBoolean(), impactError);
+                    resolved.GetProperty("died").GetBoolean(), resolved.GetProperty("hitEventMarked").GetBoolean(), impactError,
+                    resolved.GetProperty("healthBefore").GetSingle(), resolved.GetProperty("healthAfter").GetSingle());
             error ??= impactError;
         }
         if (pending == 1 && last is not null)

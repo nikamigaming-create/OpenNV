@@ -57,6 +57,19 @@ internal static class ConversationContracts
             File.WriteAllBytes(file, data);
             using var records = FalloutPluginStack.Load(directory, ["Dialogue.esm"]);
             var quests = new FalloutQuestState(records);
+            var topicScripts = new FalloutQuestScripts(records, quests, new HashSet<FalloutFormKey>(), new(), defaultProcessingDelay: 0);
+            topicScripts.AddedTopics.Add(Key(0x802));
+            var savedTopics = topicScripts.Capture();
+            var restoredTopics = new FalloutQuestScripts(records, new FalloutQuestState(records), new HashSet<FalloutFormKey>(), new(), defaultProcessingDelay: 0);
+            restoredTopics.Restore(savedTopics);
+            Require(restoredTopics.AddedTopics.SetEquals([Key(0x802)]), "Added dialogue topics did not survive cold restoration.");
+            try
+            {
+                var invalid = new FalloutQuestScripts(records, new FalloutQuestState(records), new HashSet<FalloutFormKey>(), new(), defaultProcessingDelay: 0);
+                invalid.Restore(savedTopics with { AddedTopics = [Key(0x700)] });
+                throw new InvalidOperationException("Non-DIAL saved topic was admitted.");
+            }
+            catch (InvalidDataException) { }
             Require(FalloutDialogueTopic.Priority(records, Key(0x80f)) == 50 && !FalloutDialogueTopic.DefaultTopics(records).Contains(Key(0x80f)),
                 "Legacy one-byte DIAL metadata did not retain its default priority/non-top-level state.");
             var scopedStage = new FalloutCondition(records.GetEffective(Key(0x910)), 0, 0, 58, 0x700, 0, 1, 0);
@@ -73,6 +86,14 @@ internal static class ConversationContracts
             float Unknown(FalloutCondition condition) => throw new NotSupportedException($"Unbound synthetic query {condition.Function}.");
             FalloutConversation Create(Action<FalloutDialogueInfo, bool>? result = null) => new(records, quests, Unknown,
                 result ?? ((info, begin) => calls.Add((info.Record.FormKey.ObjectId, begin))));
+            var sharedTopics = new HashSet<FalloutFormKey>();
+            var addInResult = new FalloutConversation(records, quests, Unknown, (info, begin) =>
+            {
+                if (!begin) sharedTopics.Add(Key(0x802));
+            }, addedTopics: sharedTopics);
+            addInResult.Start(Key(0x900), Key(0x80a)); addInResult.CompleteResponse();
+            Require(addInResult.Choices.Any(choice => choice.Topic == Key(0x802)) && sharedTopics.Contains(Key(0x802)),
+                "A result-added topic did not appear in the same conversation and shared state.");
             var immediate = Create(); immediate.Start(Key(0x900), Key(0x818));
             Require(calls.SequenceEqual([(0x9a4u, true), (0x9a4u, false)]) && immediate.Phase == "speaking",
                 "Run Immediately did not consume both result blocks at selected conversation generation.");
@@ -171,7 +192,13 @@ internal static class ConversationContracts
                 "Scripted selection evaluated a stage condition or lost its source quest argument.");
             queries++; return member ? 1 : 0;
         }
-        var topic = FalloutDialogueTopic.Read(records, Key(0x816));
+        var topics = new FalloutDialogueTopicCache(records);
+        var topic = topics.Read(Key(0x816));
+        Require(ReferenceEquals(topic, topics.Read(Key(0x816))), "Source topic was decoded again during a live selection.");
+        Reject(() => topics.Read(Key(0x814)));
+        Reject(() => topics.Read(Key(0x814)));
+        Require(!ReferenceEquals(topic, new FalloutDialogueTopicCache(records).Read(Key(0x816))),
+            "Independent speech owners unexpectedly share decoded declarations.");
         FalloutDialogueInfo? Select() => selection.Select(topic, Key(0x900), new HashSet<FalloutFormKey>(),
             quest => quests.Stage(quest), Evaluate);
         Require(Select()!.Record.FormKey == Key(0x9a2) && queries == 1,

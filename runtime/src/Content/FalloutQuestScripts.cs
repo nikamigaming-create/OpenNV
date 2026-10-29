@@ -66,7 +66,7 @@ internal sealed record FalloutQuestScriptsSnapshot(IReadOnlyList<FalloutQuestScr
     IReadOnlyList<FalloutFormKey>? SaidInfos = null, int ParserVersion = 0,
     FalloutScriptValueStoreSnapshot? Values = null, FalloutAuxiliaryStoreSnapshot? Auxiliary = null,
     FalloutChallengesSnapshot? Challenges = null, FalloutRadioStationsSnapshot? Radio = null,
-    FalloutMiscStatisticsSnapshot? MiscStatistics = null)
+    FalloutMiscStatisticsSnapshot? MiscStatistics = null, IReadOnlyList<FalloutFormKey>? AddedTopics = null)
 {
     internal void Validate()
     {
@@ -84,6 +84,9 @@ internal sealed record FalloutQuestScriptsSnapshot(IReadOnlyList<FalloutQuestScr
         FalloutQuestObjectFlags.ValidateSnapshot(Session?.QuestObjects);
         if (SaidInfos is { } said && (said.Distinct().Count() != said.Count || said.Any(key => key.ObjectId == 0 || string.IsNullOrWhiteSpace(key.OwnerPlugin))))
             throw new InvalidDataException("Saved dialogue history is invalid or duplicated.");
+        if (AddedTopics is { } topics && (topics.Distinct().Count() != topics.Count ||
+            topics.Any(key => key.ObjectId == 0 || string.IsNullOrWhiteSpace(key.OwnerPlugin))))
+            throw new InvalidDataException("Saved dialogue topics are invalid or duplicated.");
         if (Messages.Count != 0 && MessageResults is null ||
             Messages.Any(message => message is null || message.Sequence == 0 || message.Sequence > MessageResults?.Sequence) ||
             Messages.Select(message => message.Sequence).Distinct().Count() != Messages.Count)
@@ -262,6 +265,7 @@ internal sealed partial class FalloutQuestScripts
     internal FalloutRadioStations? Radio { get; }
     internal FalloutScriptEvents Events { get; }
     internal HashSet<FalloutFormKey> SaidInfos { get; } = [];
+    internal HashSet<FalloutFormKey> AddedTopics { get; } = [];
     internal double Variable(FalloutFormKey owner, uint index) => References?.ReadVariable(_quests, owner, index) ?? _quests.Variable(owner, index);
     internal void SetVariable(FalloutFormKey owner, uint index, double value)
     {
@@ -340,7 +344,7 @@ internal sealed partial class FalloutQuestScripts
             .Concat(_messages.Select(message => message.Request!)).Where(MessageResults.IsPending).ToArray(),
         _inventory.Notifications.Capture(), MessageResults.Capture(), Session.Capture(), SaidInfos.OrderBy(key => _records.RuntimeFormId(key)).ToArray(),
         FalloutGameModeProgram.ParserVersion, ScriptValues.Capture(), Auxiliary.CapturePermanent(), Challenges.Capture(), Radio?.Capture(),
-        MiscStatistics.Capture());
+        MiscStatistics.Capture(), AddedTopics.OrderBy(key => _records.RuntimeFormId(key)).ToArray());
     }
 
     internal void Restore(FalloutQuestScriptsSnapshot snapshot)
@@ -381,6 +385,11 @@ internal sealed partial class FalloutQuestScripts
         {
             if (_records.GetEffective(info).Signature != "INFO") throw new InvalidDataException("Saved dialogue history contains a non-INFO source.");
             SaidInfos.Add(info);
+        }
+        foreach (var topic in snapshot.AddedTopics ?? [])
+        {
+            if (_records.GetEffective(topic).Signature != "DIAL") throw new InvalidDataException("Saved dialogue topic is not a DIAL source.");
+            AddedTopics.Add(topic);
         }
         foreach (var instance in _instances)
         {
@@ -1058,6 +1067,13 @@ internal sealed partial class FalloutQuestScripts
                     .StopCombatAlarmOnActor(parts.Length == 1 ? instance.Quest.FormKey : instance.Bindings.Reference(parts[0]));
                 return;
             }
+            if (parts.Length == 2 && operation == "startcombat")
+            {
+                if (arguments.Count != 1) throw new InvalidDataException("StartCombat requires one actor target.");
+                (References ?? throw new NotSupportedException("Script combat has no shared reference owner."))
+                    .StartCombat(ReferenceArgument(parts[0]), ReferenceArgument(arguments[0]));
+                return;
+            }
             if (parts.Length == 2 && parts[0].Equals("player", StringComparison.OrdinalIgnoreCase) &&
                 operation is "setav" or "setactorvalue" or "modav" or "modactorvalue" or "forceav" or "forceactorvalue")
             {
@@ -1323,13 +1339,20 @@ internal sealed partial class FalloutQuestScripts
                         (References ?? throw new NotSupportedException("Note acquisition has no shared world owner."))
                             .AcquirePlayerNote(item.FormKey, _inventory.Notifications); break;
                     }
-                    FalloutReferenceWorld.RequirePlayerItemAcquisition(item);
-                    var previous = _inventory.Item(item.FormKey);
-                    var request = new FalloutCampaignInventoryRequest(_records.RuntimeFormId(item.FormKey), arguments[0], item.Signature,
-                        checked((previous?.Count ?? 0) + count));
-                    var addition = FalloutCampaignInventoryResolver.Resolve(_records, [request], null).Items.Single();
-                    _inventory.Publish([addition]);
-                    if (silent == 0) _inventory.Notifications.Publish([new(FalloutHudEventKind.ItemAdded, item.FormKey, count, instance.Quest.FormKey, instance.Script.FormKey)]);
+                    FalloutReferenceWorld.RequirePlayerItemAcquisition(_records, item, _records.RuntimeFormKey(0x14));
+                    if (item.Signature == "LVLI")
+                    {
+                        (host?.Inventory ?? throw new NotSupportedException("Fallback leveled item additions require the current player-level owner."))
+                            .Execute(new(FalloutInventoryCommandKind.Add, _records.RuntimeFormKey(0x14), Item: item.FormKey,
+                                Count: count, Silent: silent == 1));
+                        break;
+                    }
+                    var notices = silent == 0 ? new[] { new FalloutHudEvent(FalloutHudEventKind.ItemAdded, item.FormKey, count, instance.Quest.FormKey, instance.Script.FormKey) } : [];
+                    _inventory.Notifications.RequirePublish(notices);
+                    // Direct forms do not use level selection; the shared item
+                    // owner retains existing variants and equipment locks.
+                    _inventory.Add(_records, item.FormKey, count, 1, silent: true);
+                    _inventory.Notifications.Publish(notices);
                     break;
                 case "setstage" when arguments.Count == 2:
                     if (host is null) throw new NotSupportedException("SetStage has no result-script execution owner.");

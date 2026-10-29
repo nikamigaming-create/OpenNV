@@ -29,6 +29,11 @@ internal sealed partial class FalloutPlayerInventory
         });
     }
 
+    internal void TransferToWithPreparedOwner(FalloutPlayerInventory target, FalloutFormKey form, int count,
+        int variantIndex, FalloutInventoryChangeLease effects) =>
+        ApplyRemovalTransaction(target, (source, destination) =>
+            source.TransferToCore(destination!, form, count, variantIndex, false), effects);
+
     internal void ConsumeOne(FalloutFormKey item, FalloutInventoryChangeLease effects)
     {
         ArgumentNullException.ThrowIfNull(effects);
@@ -41,6 +46,30 @@ internal sealed partial class FalloutPlayerInventory
 
     internal void ConsumeWorldItem(FalloutInventoryChangeLease effects) =>
         ApplyRemovalTransaction(null, (_, _) => { }, effects);
+
+    // Publish addition and a prepared external owner together. This primitive
+    // does not dispatch item scripts: their instance identity and effects must
+    // be prepared separately before they can use this transaction.
+    internal void AddWithPreparedOwner(FalloutPluginStack records, FalloutFormKey form, int count, int level,
+        bool silent, FalloutInventoryChangeLease effects, FalloutGlobalState? globals = null,
+        FalloutItemVariant? extra = null, Action<FalloutFormKey>? validateAddition = null,
+        Action<FalloutPlayerInventory>? stageAddition = null)
+    {
+        ArgumentNullException.ThrowIfNull(effects);
+        IReadOnlyList<FalloutHudEvent> notices = [];
+        ApplyRemovalTransaction(null, (staged, _) =>
+        {
+            var previous = staged.Items.ToDictionary(item => item.FormKey, item => item.Count);
+            staged.Add(records, form, count, level, true, globals, extra, validateAddition);
+            notices = silent ? [] : staged.Items.Select(item => new
+            { item.FormKey, Count = item.Count - previous.GetValueOrDefault(item.FormKey) })
+                .Where(item => item.Count > 0).Select(item => new FalloutHudEvent(FalloutHudEventKind.ItemAdded,
+                    item.FormKey, item.Count)).ToArray();
+            Notifications.RequirePublish(notices);
+            stageAddition?.Invoke(staged);
+        }, effects);
+        Notifications.Publish(notices);
+    }
 
     private void ApplyRemovalTransaction(FalloutPlayerInventory? other,
         Action<FalloutPlayerInventory, FalloutPlayerInventory?> plan, FalloutInventoryChangeLease? effects = null)

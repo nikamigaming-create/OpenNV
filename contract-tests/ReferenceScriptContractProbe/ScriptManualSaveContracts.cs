@@ -223,7 +223,7 @@ internal sealed class ScriptSaveFixture : IDisposable
     internal FalloutPluginRecord Script => Records.GetEffective(new("Saves.esm", 0x50));
 
     internal ScriptSaveFixture(string body, string questBody = "", Func<bool>? hardcore = null, string? functionBody = null,
-        string gameModeBody = "", string? artifactDirectory = null)
+        string gameModeBody = "", string? artifactDirectory = null, bool includeSecondReference = false)
     {
         _directory = artifactDirectory is null ? Directory.CreateTempSubdirectory("opennv-script-save-") :
             Directory.CreateDirectory(Path.Combine(artifactDirectory, "source-save-ordering-" + Guid.NewGuid().ToString("N")));
@@ -243,7 +243,8 @@ internal sealed class ScriptSaveFixture : IDisposable
                 "float saved\nfloat suffix\nbegin Function {}\n" + functionBody + "\nend")),
             Record("CELL", 0x80, Field("DATA", [1])), Group(0x80,
                 Record("REFR", 0x90, Field("NAME", U32(1)), Field("DATA", new byte[24])),
-                Record("ACHR", 0x91, Field("EDID", Text("Other")), Field("NAME", U32(2)), Field("DATA", new byte[24])))));
+                Record("ACHR", 0x91, Field("EDID", Text("Other")), Field("NAME", U32(2)), Field("DATA", new byte[24])),
+                includeSecondReference ? Record("REFR", 0x92, Field("NAME", U32(1)), Field("DATA", new byte[24])) : [])));
         Records = FalloutPluginStack.Load(_directory.FullName, ["Saves.esm"]);
         World = new(Records);
         World.LoadCell(FalloutCellSceneReader.Read(Records, Cell));

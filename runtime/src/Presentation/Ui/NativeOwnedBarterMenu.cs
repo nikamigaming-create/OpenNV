@@ -90,6 +90,10 @@ internal sealed partial class NativeOwnedBarterMenu : Control
         var clear = new Button { Name = "ClearBarterOffers", Text = "Clear Offers", CustomMinimumSize = new(140, 44), FocusMode = FocusModeEnum.All };
         clear.Pressed += () => { _offers.Clear(); _message.Text = ""; Refresh(); }; actions.AddChild(clear);
         _closeButton = new Button { Name = "CloseBarterMenu", Text = "Cancel", CustomMinimumSize = new(130, 44), FocusMode = FocusModeEnum.All };
+        _closeButton.SetMeta("opennv_source_choice_kind", "barter-back");
+        _closeButton.SetMeta("opennv_source_choice_id", "cancel");
+        _closeButton.SetMeta("opennv_source_choice_menu", "barter");
+        _closeButton.SetMeta("opennv_source_choice_goodbye", true);
         _closeButton.Pressed += Close; actions.AddChild(_closeButton);
         _acceptButton = new Button { Name = "AcceptBarter", Text = "Accept", CustomMinimumSize = new(160, 44), FocusMode = FocusModeEnum.All };
         _acceptButton.Pressed += Accept; actions.AddChild(_acceptButton);

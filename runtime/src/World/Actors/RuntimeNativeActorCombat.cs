@@ -15,6 +15,7 @@ internal sealed partial class RuntimeNativeActorCombat : Node
     private FalloutPluginStack _records = null!;
     private RuntimeLiveContentSource _content = null!;
     private string _skeletonPath = "";
+    private bool _headless;
     private bool _newLaunchProcess;
     private uint _layer, _mask;
     private RuntimeNativeActorRagdoll? _ragdoll;
@@ -74,6 +75,7 @@ internal sealed partial class RuntimeNativeActorCombat : Node
             _actor = actor,
             _skeleton = skeleton,
             _skeletonPath = skeletonPath,
+            _headless = DisplayServer.GetName() == "headless",
             _world = world,
             _state = state,
             _records = records,
@@ -83,7 +85,6 @@ internal sealed partial class RuntimeNativeActorCombat : Node
             _newLaunchProcess = newLaunchProcess,
             _context = context
         };
-        state.QuerySpatialPlacement = owner.CaptureSpatialPlacement;
         state.ConversationSuppressionSeconds ??= FalloutConversationSuppression.Sample(records.NumericSettings, state.SoundRandom.NextUnitFloat);
         state.ConversationHistory ??= FalloutConversationHistory.Create(records.NumericSettings);
         owner.PrepareHitReactionResources();
@@ -93,6 +94,8 @@ internal sealed partial class RuntimeNativeActorCombat : Node
 
     private FalloutReferencePlacement CaptureSpatialPlacement()
     {
+        if (!_actor.IsInsideTree())
+            throw new InvalidOperationException("Detached actor cannot publish a live spatial placement.");
         var position = _actor.GlobalPosition / _skeleton.UnitsToMetres;
         var rotation = GamebryoCoordinate.ReferenceEuler(_actor.GlobalBasis);
         return new(_world.Placement(_state.Reference).Cell, [position.X, -position.Z, position.Y],
@@ -102,6 +105,7 @@ internal sealed partial class RuntimeNativeActorCombat : Node
     public override void _Ready()
     {
         AddToGroup(CombatActorsGroup);
+        _state.QuerySpatialPlacement = CaptureSpatialPlacement;
         // Publish only after this actual process entered the live scene. A cold
         // or previously materialized actor without the field stays unknown.
         if (_newLaunchProcess && _state.ProjectileLaunch is null)
@@ -111,6 +115,7 @@ internal sealed partial class RuntimeNativeActorCombat : Node
         _state.CaptureEngagement = CaptureEngagement;
         _state.CanCaptureCorpseEquipment = CorpseEquipmentCaptureReady;
         _state.CaptureCorpseEquipment = CaptureCorpseEquipment;
+        _state.CaptureCorpseEquipmentForFiniteWait = CaptureCorpseEquipmentForFiniteWait;
         _state.PrepareNativeInventoryRemoval = PrepareNativeInventoryRemoval;
         RestorePackageMotion();
         RestoreEngagementPose();

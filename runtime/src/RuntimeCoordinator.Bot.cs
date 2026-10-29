@@ -149,6 +149,7 @@ public partial class RuntimeCoordinator
         var key = new FalloutFormKey(identity[..separator], objectId);
         var world = _nativeReferences ?? throw new InvalidOperationException("Reference world is not active.");
         var referenceState = world.Get(key);
+        var actorTarget = _nativePluginStack!.GetEffective(referenceState.Base).Signature is "NPC_" or "CREA";
         var targetFault = _nativeReferenceEvents?.CanAdmitIndependentDefaultInteraction(key) == true ? null :
             referenceState.ScriptError ?? referenceState.SelectionFailure?.Error ?? referenceState.PackageBindingFailure?.Error;
         var executionFault = _nativeOpeningStageDriver?.BlockingExecutionFault ?? _nativeQuestScripts?.StartupError ??
@@ -170,7 +171,9 @@ public partial class RuntimeCoordinator
         var travelReady = false;
         if (!resident && _nativeActiveCell?.Cell.Worldspace is { } worldspace)
         {
-            var targetPlacement = world.Placement(key);
+            var targetPlacement = actorTarget
+                ? world.SpatialPlacement(key, null, _configuration.World.GameUnitsToMeters)
+                : world.Placement(key);
             if (FalloutCellSceneReader.ParentWorldspace(_nativePluginStack!.GetEffective(targetPlacement.Cell)) == worldspace)
             {
                 target = new Vector3(targetPlacement.Position[0], targetPlacement.Position[2], -targetPlacement.Position[1]) * _configuration.World.GameUnitsToMeters;
@@ -242,9 +245,8 @@ public partial class RuntimeCoordinator
             (controls.PointOfView ? 8 : 0) | (controls.Looking ? 16 : 0) | (controls.RolloverText ? 32 : 0) | (controls.Sneaking ? 64 : 0);
         var menus = string.Join(',', (NativeActiveMenus() ?? []).Order());
         if (_nativeOpeningStageDriver?.PresentedConversationSpeaker is { } speaker) menus += "|conversation:" + speaker;
-        var targetHit = referenceState.Deleted || referenceState.Taken ||
-            referenceState.DeathCount > 0 ||
-            referenceState.Variables.Values.Any(v => v != 0) ||
+        var targetHit = referenceState.Deleted || referenceState.Taken || referenceState.DeathCount > 0 ||
+            !actorTarget && referenceState.Variables.Values.Any(v => v != 0) ||
             RuntimeNativeActorCombat.Find(node) is { Dead: true };
         return new(_nativeActiveCell!.Cell.FormKey.ToString(), Numeric(player.GlobalPosition), Numeric(player.Camera.GlobalPosition),
             Numeric(-player.Camera.GlobalBasis.Z), Numeric(target), Numeric(aim), aimed, GetTree().Paused,

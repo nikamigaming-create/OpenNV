@@ -16,6 +16,7 @@ internal sealed record NativeNavigationRejection(string Reason, Vector3 From, Ve
 
 internal sealed class NativeNavigationProbe(NativeNavigationContact? corridorContact, Func<ulong, FalloutFormKey?>? source = null)
 {
+    private readonly record struct RawContact(ulong Collider, int Shape, Vector3 Point, Vector3 Normal);
     internal NativeNavigationContact? CorridorContact { get; } = corridorContact is null ? null :
         corridorContact with { Reference = source?.Invoke(corridorContact.Collider) };
     internal NativeNavigationContact? RejectedContact { get; private set; }
@@ -42,6 +43,27 @@ internal sealed class NativeNavigationProbe(NativeNavigationContact? corridorCon
         else OmittedRejectionObservations++;
     }
     internal void BeginEdge() { SampledEdges++; LastDownwardSweep = null; }
+    internal void ObserveDownward(PhysicsTestMotionResult3D hit, Vector3 from, Vector3 desired, bool collided)
+    {
+        var travel = hit.GetTravel();
+        var count = hit.GetCollisionCount();
+        // Capture the native fields before source lookup, as in the original
+        // two-stage observation. Most sweeps have at most four contacts; do
+        // not allocate temporary managed contacts just to add their identities.
+        Span<RawContact> raw = count <= 4 ? stackalloc RawContact[count] : new RawContact[count];
+        for (var index = 0; index < count; index++)
+            raw[index] = new(hit.GetColliderId(index), hit.GetColliderShape(index),
+                hit.GetCollisionPoint(index), hit.GetCollisionNormal(index));
+        var contacts = count == 0 ? Array.Empty<NativeNavigationContact>() : new NativeNavigationContact[count];
+        for (var index = 0; index < count; index++)
+        {
+            var value = raw[index];
+            contacts[index] = new(value.Collider, value.Shape, value.Point, value.Normal, from, desired,
+                source?.Invoke(value.Collider), travel);
+        }
+        LastDownwardSweep = new(from, desired, travel, collided, contacts);
+        FirstDownwardSweep ??= LastDownwardSweep;
+    }
     internal void ObserveDownward(NativeNavigationSweep sweep)
     {
         LastDownwardSweep = sweep with
@@ -113,12 +135,6 @@ internal static partial class NativeCapsuleNavigation
     private static NativeNavigationContact? FirstContact(PhysicsTestMotionResult3D hit, Vector3 from, Vector3 desired)
         => hit.GetCollisionCount() == 0 ? null : new(hit.GetColliderId(0), hit.GetColliderShape(0),
             hit.GetCollisionPoint(0), hit.GetCollisionNormal(0), from, desired, Travel: hit.GetTravel());
-
-    private static NativeNavigationSweep CaptureSweep(PhysicsTestMotionResult3D hit, Vector3 from, Vector3 desired,
-        bool collided) => new(from, desired, hit.GetTravel(), collided,
-            Enumerable.Range(0, hit.GetCollisionCount()).Select(index => new NativeNavigationContact(
-                hit.GetColliderId(index), hit.GetColliderShape(index), hit.GetCollisionPoint(index),
-                hit.GetCollisionNormal(index), from, desired, Travel: hit.GetTravel())).ToArray());
 
     internal static NativeNavigationContact? FirstCorridorContact(CharacterBody3D body, Vector3 start, IReadOnlyList<Vector3> corridor)
     {

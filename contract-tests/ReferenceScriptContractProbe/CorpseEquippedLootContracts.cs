@@ -203,7 +203,7 @@ internal static class CorpseEquippedLootContracts
 
     private static void RefusalContracts(FalloutPluginStack records, IReadOnlyList<FalloutReferenceSnapshot> saved)
     {
-        foreach (var scope in new[] { "moving", "pending-hit", "resident-no-owner", "opaque-native", "source-drift" })
+        foreach (var scope in new[] { "moving", "pending-hit", "resident-no-owner", "opaque-native", "finite-owner", "source-drift" })
         {
             using var world = Restore(records, saved);
             var state = world.Get(Key(0x900)); var contents = world.Inventory(state.Reference, 1).Contents;
@@ -219,6 +219,7 @@ internal static class CorpseEquippedLootContracts
                 state.SetCorpseEquipmentCaptureBlocker(originalOwner, "Original opaque equipment continuation.");
                 state.CaptureCorpseEquipment = null;
             }
+            if (scope == "finite-owner") state.CaptureCorpseEquipmentForFiniteWait = () => state.CorpseEquipment;
             if (scope == "source-drift") state.CorpseEquipment = state.CorpseEquipment! with
             {
                 Attachments = state.CorpseEquipment!.Attachments.Select(attachment => attachment with

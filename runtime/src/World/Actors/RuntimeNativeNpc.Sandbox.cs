@@ -8,6 +8,9 @@ internal partial class RuntimeNativeNpc
 {
     private FalloutSandboxPackage? _sandboxPackage;
     private FalloutWanderProgress? _sandboxWander;
+    private (FalloutPluginRecord Package, bool Initializing)? _pendingCurrentLocationSandbox;
+
+    internal bool PackageAllowsUnprovokedCombat => _sandboxPackage?.DefensiveCombat != true;
 
     private void BeginSandbox(FalloutPluginRecord package, bool initializing)
     {
@@ -18,6 +21,23 @@ internal partial class RuntimeNativeNpc
             ? Combat.PackageMotion.Wander : null;
         var restoring = retained is not null || initializing && Combat!.PackageMotion?.Package == package.FormKey &&
             Combat.PackageMotion.Sandbox is not null;
+        if (source.LocationType == 2)
+        {
+            if (restoring)
+                _ = _aiWorld!.ActorPackageStartLocation(Appearance.Reference!.Value) ??
+                    throw new InvalidDataException("Restored current-location Sandbox has no actor start location.");
+            else
+            {
+                if (!IsInsideTree())
+                {
+                    _pendingCurrentLocationSandbox = (package, initializing);
+                    _aiPackage = package;
+                    _aiReferenceState!.ProcedureCaptureBlocker = FalloutSandboxPackage.CaptureBlockerPrefix + "awaiting live native start pose.";
+                    return;
+                }
+                _aiWorld!.CaptureActorPackageStartLocation(Appearance.Reference!.Value, Skeleton.UnitsToMetres);
+            }
+        }
         if (retained is not null) _aiWorld!.ValidatePackageWander(Appearance.Reference!.Value, retained);
         _sandboxPackage = source; _sandboxWander = retained;
         _aiPackage = package; _packageIdles = null;
@@ -33,13 +53,20 @@ internal partial class RuntimeNativeNpc
 
     private void AdvanceSandbox(double delta)
     {
-        if (_sandboxPackage is not { } source || Combat is null || _aiError is not null || Combat.OwnsPose ||
+        if (Combat is null || _aiError is not null || Combat.OwnsPose ||
             !Combat.PackageMovementReady || _conversationTarget is not null ||
-            _pendingSandboxStagedReceipt is not null && !_pendingSandboxPublicationComplete) return;
+            _pendingSandboxStagedReceipt is not null && !_pendingSandboxPublicationComplete ||
+            _pendingCurrentLocationSandbox is not null && !IsInsideTree()) return;
         var previousMotion = Combat.PackageMotion;
         var completed = false;
         try
         {
+            if (_pendingCurrentLocationSandbox is { } pending)
+            {
+                _pendingCurrentLocationSandbox = null;
+                BeginSandbox(pending.Package, pending.Initializing);
+            }
+            var source = _sandboxPackage ?? throw new InvalidOperationException("Sandbox did not acquire its live start owner.");
             _sandboxWander = Combat.AdvanceSandboxWander(_aiPackage!, source, _sandboxWander, delta);
             completed = true;
             // Dialogue-busy admission returns before selecting an activity.

@@ -9,14 +9,18 @@ internal sealed record BotCombatBindings(string FireAction, string AimAction, st
 internal sealed record BotCombatTarget(string Reference, Vector3 Position, Vector3? BodyPoint,
     string? BodyOwner, bool Resident, bool Enabled, bool TargetsPlayer, bool Dead, float? Health,
     string? BodyRayReference, string? MuzzleRayReference, string? Obstruction, string? Error = null,
-    string? SourceFault = null);
+    string? SourceFault = null, string? ProtectedTarget = null, bool QuestThreat = false)
+{
+    internal bool EligibleThreat => TargetsPlayer || ProtectedTarget is not null || QuestThreat;
+}
 
 internal sealed record BotCombatWeapon(string Reference, string? Ammunition, string? Projectile,
     bool Drawn, bool Aiming, int Loaded, int Reserve, float RangeMeters, bool Supported,
     string? Action = null, string? Error = null, string? Limit = null);
 
 internal sealed record BotCombatImpact(string Reference, string Weapon, string Projectile,
-    float HealthDamage, bool Died, bool HitEventMarked, string? Error = null);
+    float HealthDamage, bool Died, bool HitEventMarked, string? Error = null,
+    float? HealthBefore = null, float? HealthAfter = null);
 
 internal sealed record BotCombatShot(long Ordinal, string Weapon, string? Ammunition, string Projectile,
     string? Reference, string? Collider, float DistanceMeters, int Projectiles, int PendingAtDischarge,
@@ -65,6 +69,8 @@ internal sealed record BotCombatObservation(long Sample, string Scene, BotSkillB
             target.Resident,
             target.Enabled,
             target.TargetsPlayer,
+            target.ProtectedTarget,
+            target.QuestThreat,
             target.Dead,
             target.Health,
             target.BodyRayReference,
@@ -104,7 +110,8 @@ internal sealed record BotCombatReceipt(long BeforeSample, long Sample, long Bef
     string Reference, string Weapon, string Ammunition, string Projectile,
     int LoadedBefore, int LoadedAfter, int ReserveBefore, int ReserveAfter,
     float HealthBefore, float HealthAfter, float HealthDamage, bool Contact, bool Died, bool Dead,
-    string? Collider, string? Error = null, BotCombatAimEvidence? Aim = null)
+    string? Collider, string? Error = null, BotCombatAimEvidence? Aim = null,
+    float? ObservedHealthBefore = null, float? ObservedHealthAfter = null)
 {
     internal bool VerifiedShot => Error is null && Sample > BeforeSample && Shot == BeforeShots + 1 &&
         LoadedBefore > 0 && LoadedAfter == LoadedBefore - 1 && ReserveBefore >= 0 && ReserveAfter == ReserveBefore;

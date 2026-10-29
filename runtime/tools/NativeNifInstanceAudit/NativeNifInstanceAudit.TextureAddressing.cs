@@ -108,6 +108,26 @@ public partial class NativeNifInstanceAudit
             try
             {
                 AddChild(scene.Root);
+                var embedded = scene.Root.FindChildren("*", "", true, false).OfType<RuntimeNifEmbeddedSkin>().ToArray();
+                foreach (var skeleton in embedded)
+                {
+                    if (!skeleton.IsNodeReady() || skeleton.SourceBones.Count != skeleton.GetBoneCount())
+                        throw new InvalidDataException("Embedded source skin did not publish its bone owners.");
+                    var sourceRoot = skeleton.GetNode<Node3D>(skeleton.SourceRoot);
+                    for (var boneIndex = 0; boneIndex < skeleton.GetBoneCount(); boneIndex++)
+                    {
+                        var sourceBone = skeleton.GetNode<Node3D>(skeleton.SourceBones[boneIndex]);
+                        var before = sourceBone.Transform;
+                        try
+                        {
+                            sourceBone.Position += new Vector3(.013f, 0, 0);
+                            skeleton.Publish();
+                            if (!skeleton.GetBonePose(boneIndex).IsEqualApprox(RuntimeNifEmbeddedSkin.Relative(sourceRoot, sourceBone)))
+                                throw new InvalidDataException("Embedded skin did not publish the current source bone transform.");
+                        }
+                        finally { sourceBone.Transform = before; skeleton.Publish(); }
+                    }
+                }
                 var meshes = scene.Root.FindChildren("*", "MeshInstance3D", true, false).Cast<MeshInstance3D>().ToArray();
                 var effects = meshes.Where(mesh => mesh.Mesh is not null).SelectMany(mesh => Enumerable.Range(0, mesh.Mesh.GetSurfaceCount())
                     .Select(index => mesh.Mesh.SurfaceGetMaterial(index))).OfType<ShaderMaterial>()
@@ -140,7 +160,7 @@ public partial class NativeNifInstanceAudit
                         }
                     }
                 }
-                GD.Print($"OPENNV_OWNED_NIF_PRESENTATION_PASS source={identity} nodes={scene.Nodes} surfaces={scene.Surfaces} collisionBodies={scene.CollisionBodies} collisionShapes={scene.CollisionShapes} samplerModes={string.Join(',', samplerModes)} textureChannelSamples={channels} finalPixels=unverified");
+                GD.Print($"OPENNV_OWNED_NIF_PRESENTATION_PASS source={identity} nodes={scene.Nodes} surfaces={scene.Surfaces} collisionBodies={scene.CollisionBodies} collisionShapes={scene.CollisionShapes} embeddedSkins={embedded.Length} samplerModes={string.Join(',', samplerModes)} textureChannelSamples={channels} finalPixels=unverified");
             }
             finally { scene.Root.Free(); }
             if (!content.TryRead(model, null, out var after, out var afterIdentity) || identity != afterIdentity || !bytes.AsSpan().SequenceEqual(after))

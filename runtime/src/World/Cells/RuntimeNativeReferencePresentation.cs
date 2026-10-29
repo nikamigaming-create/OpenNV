@@ -128,52 +128,101 @@ internal partial class RuntimeNativeReferencePresentation : Node
     }
 
     internal void SetResidency(IReadOnlyList<FalloutPlacedReference> references, Func<FalloutPlacedReference, Node3D?> materialize,
-        Func<FalloutPlacedReference, bool>? retainWarm = null)
+        Func<FalloutPlacedReference, bool>? retainWarm = null, IDictionary<string, double>? timing = null)
     {
+        var started = timing is null ? 0 : System.Diagnostics.Stopwatch.GetTimestamp();
+        void Mark(string name)
+        {
+            if (timing is null) return;
+            var now = System.Diagnostics.Stopwatch.GetTimestamp();
+            timing.Add("reference-residency-" + name, System.Diagnostics.Stopwatch.GetElapsedTime(started, now).TotalMilliseconds);
+            started = now;
+        }
         var retained = references.Select(reference => reference.FormKey).ToHashSet();
-        var previous = _references.ToDictionary(reference => reference.FormKey);
+        if (retained.Count != references.Count)
+            throw new InvalidDataException("Resident presentation contains duplicate source references.");
+        Mark("index");
+        // The retained index still describes the previous residency until the
+        // end of this transaction. Reuse it instead of rebuilding a second
+        // dictionary for every exterior-grid commit.
+        var previous = _referencesByKey;
+        double unbindMilliseconds = 0, soundMilliseconds = 0, disableMilliseconds = 0, retainMilliseconds = 0;
+        long StartPart() => timing is null ? 0 : System.Diagnostics.Stopwatch.GetTimestamp();
+        void FinishPart(ref double total, long partStarted)
+        {
+            if (timing is not null) total += System.Diagnostics.Stopwatch.GetElapsedTime(partStarted).TotalMilliseconds;
+        }
         foreach (var key in _enabled.Keys.Where(key => !retained.Contains(key)).ToArray())
         {
             if (_nodes.Remove(key, out var node))
             {
+                var partStarted = StartPart();
                 UnbindObjectAnimation(key);
+                FinishPart(ref unbindMilliseconds, partStarted);
                 // A warm model is only a construction cache. It has left the
                 // authoritative resident set, so attached loops unload exactly
                 // as they do when its model is freed. Finite voices stay hosted.
+                partStarted = StartPart();
                 NativeOwnedAnimationSoundPlayer.UnloadSourceLoops(node);
+                FinishPart(ref soundMilliseconds, partStarted);
+                partStarted = StartPart();
                 GamebryoReferenceEnableRuntime.Apply(node, false);
+                FinishPart(ref disableMilliseconds, partStarted);
+                partStarted = StartPart();
                 if (retainWarm?.Invoke(previous[key]) == true) _warmNodes.Add(key, (previous[key], node));
                 else
                 {
                     RuntimeCoordinator.RetireNativeActorBindings(node);
                     node.QueueFree();
                 }
+                FinishPart(ref retainMilliseconds, partStarted);
             }
             _enabled.Remove(key); _fadeGeometry.Remove(key); _publishedOpacity.Remove(key);
         }
+        Mark("departing");
+        if (timing is not null)
+        {
+            timing.Add("reference-residency-departing-unbind", unbindMilliseconds);
+            timing.Add("reference-residency-departing-sound", soundMilliseconds);
+            timing.Add("reference-residency-departing-disable", disableMilliseconds);
+            timing.Add("reference-residency-departing-retain", retainMilliseconds);
+        }
+        double warmReentryMilliseconds = 0, warmEvictionMilliseconds = 0;
         foreach (var (key, warm) in _warmNodes.ToArray())
         {
             if (retained.Contains(key))
             {
+                var partStarted = StartPart();
                 _warmNodes.Remove(key);
                 Register(key, warm.Node);
+                FinishPart(ref warmReentryMilliseconds, partStarted);
             }
             else if (retainWarm?.Invoke(warm.Source) != true)
             {
+                var partStarted = StartPart();
                 _warmNodes.Remove(key);
                 RuntimeCoordinator.RetireNativeActorBindings(warm.Node);
                 NativeOwnedAnimationSoundPlayer.UnloadSourceLoops(warm.Node);
                 warm.Node.QueueFree();
+                FinishPart(ref warmEvictionMilliseconds, partStarted);
             }
+        }
+        Mark("warm");
+        if (timing is not null)
+        {
+            timing.Add("reference-residency-warm-reentry", warmReentryMilliseconds);
+            timing.Add("reference-residency-warm-eviction", warmEvictionMilliseconds);
         }
         foreach (var reference in references)
             if (!_enabled.ContainsKey(reference.FormKey))
                 _enabled.Add(reference.FormKey, _world.IsEnabled(reference.FormKey));
+        Mark("enable-state");
         _references = references; _materialize = materialize;
         _referencesByKey.Clear();
         foreach (var reference in references) _referencesByKey[reference.FormKey] = reference;
         _unresolvable.Clear();
         _publishedStateRevision = -1; _publishedAppearanceRevision = -1;
+        Mark("publish-index");
     }
 
     internal RuntimeNativeReferencePresentation(FalloutReferenceWorld world, IReadOnlyList<FalloutPlacedReference> references,

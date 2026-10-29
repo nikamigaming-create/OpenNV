@@ -75,6 +75,42 @@ internal sealed partial class FalloutPlayerInventory
         Notifications.Publish(events);
     }
 
+    // Selection is a current inventory variant, not an invented persistent
+    // item-reference identity. A selection expires after any inventory change.
+    internal void RemoveVariant(FalloutFormKey form, int variantIndex, int count, bool silent, long expectedRevision)
+    {
+        if (Revision != expectedRevision) throw new InvalidOperationException("Selected inventory revision is stale.");
+        if (count <= 0) throw new ArgumentOutOfRangeException(nameof(count));
+        var item = Item(form) ?? throw new InvalidOperationException("Selected item is absent.");
+        var variants = item.Variants ?? [new(item.Count)];
+        if (variantIndex < 0 || variantIndex >= variants.Count || count > variants[variantIndex].Count)
+            throw new InvalidOperationException("Selected item variant is absent or has too few items.");
+        if (_equipped.Contains(item.RuntimeFormId) && count != item.Count)
+            throw new NotSupportedException("Partial removal of equipped items needs the worn instance owner.");
+        var events = silent ? Array.Empty<FalloutHudEvent>() : [new FalloutHudEvent(FalloutHudEventKind.ItemRemoved, form, count)];
+        Notifications.RequirePublish(events);
+        ApplyRemovalTransaction(null, (source, _) => source.RemoveVariantCore(form, variantIndex, count));
+        Notifications.Publish(events);
+    }
+
+    private void RemoveVariantCore(FalloutFormKey form, int variantIndex, int count)
+    {
+        var item = Item(form) ?? throw new InvalidOperationException("Selected item is absent.");
+        var variants = (item.Variants ?? [new(item.Count)]).ToList();
+        if (variantIndex < 0 || variantIndex >= variants.Count || count <= 0 || count > variants[variantIndex].Count)
+            throw new InvalidOperationException("Selected item variant changed before removal.");
+        if (_equipped.Contains(item.RuntimeFormId) && count != item.Count)
+            throw new NotSupportedException("Partial removal of equipped items needs the worn instance owner.");
+        if (count == item.Count)
+        {
+            _items.Remove(form); _equipped.Remove(item.RuntimeFormId); ++Revision;
+            return;
+        }
+        variants[variantIndex] = variants[variantIndex] with { Count = variants[variantIndex].Count - count };
+        Publish([item with { Count = item.Count - count,
+            Variants = item.Variants is null ? null : variants.Where(value => value.Count != 0).ToArray() }]);
+    }
+
     private void RemoveCore(FalloutFormKey form, int count, bool silent)
     {
         if (count <= 0) throw new ArgumentOutOfRangeException(nameof(count));
@@ -104,10 +140,15 @@ internal sealed partial class FalloutPlayerInventory
         return stacks.Where(stack => stack.Count != 0).ToArray();
     }
     internal void Add(FalloutPluginStack records, FalloutFormKey form, int count, int level, bool silent,
-        FalloutGlobalState? globals = null, FalloutItemVariant? extra = null)
+        FalloutGlobalState? globals = null, FalloutItemVariant? extra = null, Action<FalloutFormKey>? validateAddition = null)
     {
+        RequireNoChangeInProgress();
         var random = new FalloutSoundRandomState(_random.State);
         var additions = FalloutLeveledItems.Resolve(records, form, count, level, random.NextBounded, globals is null ? null : globals.Get, extra);
+        // Leveled sources can resolve to a different set of forms. Check the
+        // selected winners before publishing inventory or the random state.
+        if (validateAddition is not null)
+            foreach (var selected in additions.Select(addition => addition.Form).Distinct()) validateAddition(selected);
         var replacements = new List<FalloutCampaignItem>();
         foreach (var group in additions.GroupBy(addition => addition.Form))
         {
@@ -127,9 +168,13 @@ internal sealed partial class FalloutPlayerInventory
                 [new(records.RuntimeFormId(group.Key), name, source.Signature, total)], null).Items.Single() with
             { Variants = variants, UnequipLocked = previous?.UnequipLocked ?? false });
         }
+        var notices = silent ? [] : additions.GroupBy(addition => addition.Form)
+            .Select(group => new FalloutHudEvent(FalloutHudEventKind.ItemAdded, group.Key, group.Sum(value => value.Variant.Count))).ToArray();
+        // Validate the complete HUD publication before committing inventory and
+        // random state; a refused notice must not partially apply the pickup.
+        Notifications.RequirePublish(notices);
         Publish(replacements); _random = random;
-        if (!silent) Notifications.Publish(additions.GroupBy(addition => addition.Form)
-            .Select(group => new FalloutHudEvent(FalloutHudEventKind.ItemAdded, group.Key, group.Sum(value => value.Variant.Count))).ToArray());
+        Notifications.Publish(notices);
     }
 
     internal void Equip(FalloutPluginStack records, FalloutFormKey form, bool? noUnequip = null)

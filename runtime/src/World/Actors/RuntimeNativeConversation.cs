@@ -77,7 +77,8 @@ internal partial class RuntimeNativeConversation : Node
         Func<FalloutFormKey, FalloutFormKey, double>? itemCount = null,
         Func<FalloutFormKey, FalloutFormKey, float>? referenceDistance = null,
         Func<FalloutFormKey, FalloutFormKey, bool>? referenceInZone = null, Func<FalloutFormKey, int>? sitting = null,
-        Func<FalloutFormKey, int>? deadCount = null, Func<FalloutFormKey, bool>? isDead = null)
+        Func<FalloutFormKey, int>? deadCount = null, Func<FalloutFormKey, bool>? isDead = null,
+        HashSet<FalloutFormKey>? addedTopics = null)
     {
         _records = records; _quests = quests; _player = player; _speech = speech; _runtimeConditions = evaluate;
         // Publish focus after the ordinary player camera and animated actors.
@@ -99,7 +100,7 @@ internal partial class RuntimeNativeConversation : Node
         _sitting = sitting;
         _deadCount = deadCount;
         _isDead = isDead;
-        _conversation = new(records, quests, condition => _conditions!.Evaluate(condition), (info, begin) => results(info, _dialogueSubject, begin), saidInfos, dialogueRandom);
+        _conversation = new(records, quests, condition => _conditions!.Evaluate(condition), (info, begin) => results(info, _dialogueSubject, begin), saidInfos, dialogueRandom, addedTopics);
     }
 
     internal void Request(FalloutFormKey speaker, FalloutFormKey target, FalloutFormKey? topic, Action? completed = null)

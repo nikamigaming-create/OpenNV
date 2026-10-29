@@ -14,7 +14,13 @@ internal static class QuestObjectContracts
         try
         {
             File.WriteAllBytes(Path.Combine(directory.FullName, "Items.esm"), Join(Header(),
-                Item(1, 0x400, 3), Item(2, 0, 2), Record("NPC_", 7, 0), Quest(), Script()));
+                Item(1, 0x400, 3), Item(2, 0, 2), Record("NPC_", 7, 0), Quest(), Script(),
+                Record("LVLI", 12, 0, Field("EDID", Text("LevelList")), Field("LVLF", [0]), Field("LVLD", [0]),
+                    Field("LVLO", LeveledEntry(1, 2)), Field("LVLO", LeveledEntry(5, 1))),
+                Record("QUST", 0x101, 0, Field("EDID", Text("PickupQuest")), Field("DATA", new byte[8]), Field("SCRI", BitConverter.GetBytes(0x201u))),
+                PickupScript(),
+                Record("QUST", 0x102, 0, Field("EDID", Text("LeveledQuest")), Field("DATA", new byte[8]), Field("SCRI", BitConverter.GetBytes(0x202u))),
+                LeveledScript()));
             File.WriteAllBytes(Path.Combine(directory.FullName, "Winner.esp"), Join(Header("Items.esm"), Item(1, 0x400, 7.5f)));
             using var records = FalloutPluginStack.Load(directory.FullName, ["Items.esm", "Winner.esp"]);
             var item = records.GetEffective(Key(1));
@@ -66,8 +72,46 @@ internal static class QuestObjectContracts
             var scripts = new FalloutQuestScripts(records, quests, new HashSet<FalloutFormKey> { quest.FormKey }, inventory,
                 defaultProcessingDelay: 1);
             scripts.AdvanceClaimed(quest.FormKey, 1.1, new((_, _) => throw new InvalidDataException("Fallback changed a quest stage."), _ => 0));
-            Require(!records.QuestObjects.IsQuestObject(Key(1)) && scripts.Capture().Instances.Single().Error is null,
+            Require(!records.QuestObjects.IsQuestObject(Key(1)) && scripts.Capture().Instances.Single(value => value.Quest == quest.FormKey).Error is null,
                 $"Fallback quest script did not share the result-script form owner: {JsonSerializer.Serialize(scripts.Capture().Instances)}.");
+            var pickupInventory = new FalloutPlayerInventory(123);
+            pickupInventory.Add(records, Key(2), 1, 1, true, extra: new(1, .4f, Key(7)));
+            var normalQuests = new FalloutQuestState(records);
+            normalQuests.SetRunning(Key(0x101), true);
+            var normalScripts = new FalloutQuestScripts(records, normalQuests, new HashSet<FalloutFormKey> { Key(0x101) },
+                pickupInventory, defaultProcessingDelay: 1);
+            normalScripts.AdvanceClaimed(Key(0x101), 1.1, new((_, _) => throw new InvalidDataException("Unexpected stage."), _ => 0));
+            Require(pickupInventory.Item(Key(2)) is { Count: 2, Variants: { } variants } &&
+                variants.Any(value => value.Count == 1 && value.Condition == .4f && value.Owner == Key(7)) &&
+                variants.Any(value => value.Count == 1 && value.Condition is null && value.Owner is null) &&
+                pickupInventory.Notifications.Capture().Pending.Single().Event is { Quest: var sourceQuest, Script: var sourceScript } &&
+                sourceQuest == Key(0x101) && sourceScript == Key(0x201),
+                "Fallback addition lost existing item variants or source notification identity.");
+            var blockedInventory = new FalloutPlayerInventory();
+            blockedInventory.Notifications.Restore(new(long.MaxValue, null, 0, []));
+            var blockedBefore = JsonSerializer.Serialize(blockedInventory.Capture());
+            var pickupQuests = new FalloutQuestState(records);
+            pickupQuests.SetRunning(Key(0x101), true);
+            var pickupScripts = new FalloutQuestScripts(records, pickupQuests, new HashSet<FalloutFormKey> { Key(0x101) },
+                blockedInventory, defaultProcessingDelay: 1);
+            try
+            {
+                pickupScripts.AdvanceClaimed(Key(0x101), 1.1, new((_, _) => throw new InvalidDataException("Unexpected stage."), _ => 0));
+                throw new InvalidDataException("Overflowing pickup notification was admitted.");
+            }
+            catch (OverflowException) { }
+            Require(blockedBefore == JsonSerializer.Serialize(blockedInventory.Capture()) &&
+                blockedInventory.Notifications.Capture().LastOrdinal == long.MaxValue,
+                "Fallback pickup notification failure partially changed inventory.");
+            var leveledInventory = new FalloutPlayerInventory(321);
+            var leveledQuests = new FalloutQuestState(records); leveledQuests.SetRunning(Key(0x102), true);
+            var leveledScripts = new FalloutQuestScripts(records, leveledQuests, new HashSet<FalloutFormKey> { Key(0x102) },
+                leveledInventory, defaultProcessingDelay: 1);
+            var inventoryOwner = new FalloutInventoryCommands(records, world, leveledInventory, () => 5);
+            leveledScripts.AdvanceClaimed(Key(0x102), 1.1,
+                new((_, _) => throw new InvalidDataException("Unexpected stage."), _ => 0, Inventory: inventoryOwner));
+            Require(leveledInventory.Item(Key(1))?.Count == 1 && leveledInventory.Item(Key(2)) is null,
+                "Fallback leveled addition did not use the shared current-level owner.");
             var beforeFlag = JsonSerializer.Serialize(records.QuestObjects.Capture());
             Reject(() => Execute("SetQuestObject QuestLoot 2"));
             Reject(() => records.QuestObjects.Set(Key(7), true));
@@ -106,6 +150,24 @@ internal static class QuestObjectContracts
         var header = new byte[20]; header[16] = 1; BinaryPrimitives.WriteUInt32LittleEndian(header.AsSpan(4), 1);
         return Record("SCPT", 0x200, 0, Field("SCHR", header), Field("SCRO", BitConverter.GetBytes(1u)),
             Field("SCTX", Text("begin GameMode\nSetQuestObject QuestLoot 0\nend")));
+    }
+    private static byte[] PickupScript()
+    {
+        var header = new byte[20]; header[16] = 1; BinaryPrimitives.WriteUInt32LittleEndian(header.AsSpan(4), 2);
+        return Record("SCPT", 0x201, 0, Field("SCHR", header), Field("SCRO", BitConverter.GetBytes(0x14u)),
+            Field("SCRO", BitConverter.GetBytes(2u)), Field("SCTX", Text("begin GameMode\nplayer.AddItem OtherLoot 1\nend")));
+    }
+    private static byte[] LeveledScript()
+    {
+        var header = new byte[20]; header[16] = 1; BinaryPrimitives.WriteUInt32LittleEndian(header.AsSpan(4), 2);
+        return Record("SCPT", 0x202, 0, Field("SCHR", header), Field("SCRO", BitConverter.GetBytes(0x14u)),
+            Field("SCRO", BitConverter.GetBytes(12u)), Field("SCTX", Text("begin GameMode\nplayer.AddItem LevelList 1\nend")));
+    }
+    private static byte[] LeveledEntry(ushort level, uint item)
+    {
+        var data = new byte[12]; BinaryPrimitives.WriteUInt16LittleEndian(data, level);
+        BinaryPrimitives.WriteUInt32LittleEndian(data.AsSpan(4), item); BinaryPrimitives.WriteUInt16LittleEndian(data.AsSpan(8), 1);
+        return data;
     }
     private static byte[] Record(string type, uint id, uint flags, params byte[][] fields)
     {

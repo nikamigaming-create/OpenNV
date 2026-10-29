@@ -21,7 +21,7 @@ internal static class FalloutInventoryItemCounts
         return total;
 
         double Direct(FalloutPluginRecord item) => item.Signature is
-            "ALCH" or "AMMO" or "ARMO" or "BOOK" or "CCRD" or "CHIP" or "CMNY" or "IMOD" or "KEYM" or "LIGH" or "MISC" or "WEAP"
+            "ALCH" or "AMMO" or "ARMO" or "BOOK" or "CCRD" or "CHIP" or "CMNY" or "IMOD" or "INGR" or "KEYM" or "LIGH" or "MISC" or "WEAP"
                 ? inventory.Item(item.FormKey)?.Count ?? 0 : 0;
     }
 }

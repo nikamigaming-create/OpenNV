@@ -27,7 +27,14 @@ internal static class FalloutMenuXml
         lock (cache)
         {
             if (!cache.TryGetValue(normalized, out var parsed) || parsed.Hash != hash)
-                cache[normalized] = parsed = (hash, Parse(bytes));
+            {
+                try { cache[normalized] = parsed = (hash, Parse(bytes)); }
+                catch (System.Xml.XmlException error)
+                {
+                    throw new System.Xml.XmlException($"Owned menu {normalized}: {error.Message}", error,
+                        error.LineNumber, error.LinePosition);
+                }
+            }
             // Every menu owns its mutable tiles; only the declaration is shared.
             document = new XElement(parsed.Root);
         }

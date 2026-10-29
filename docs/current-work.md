@@ -1,135 +1,104 @@
 # Current work
 
-## Active owner: sustained physical headset 144 Hz frame pacing
+## Active owner: integrated gameplay recovery
 
-The user requires one maintained `main`, all authored gameplay and sustained
-144 Hz in the VR headset. The frame budget is 1000/144 = 6.944 ms. Desktop
-measurements diagnose shared costs and do not establish headset throughput.
-The previous 49 FPS at 720p
-diagnostic is rejected as a performance handoff. Whole-game completion and
-144 Hz acceptance remain unverified.
+The coordinator plans and reviews. GPT-6.1 Sol at High reasoning is the sole
+implementation executor. Follow [implementation-plan.md](implementation-plan.md).
+Use one shared checkout, one active feature branch and one integrated build.
 
-Main retains immutable CELL definitions per plugin stack, indexes resident
-references and bounds repeated failed materialization. Unsupported SpeedTree
-geometry remains an explicit divergence. Terrain shadows are retained. Dynamic
-bodies retain their final live physics before teardown. Owned presentation and
-physics audits, the full runtime gate and hosted checks pass for those owners.
+User acceptance: native 4K60 indoors and outdoors, every retail system and
+presentation through Goodsprings to the Strip, including combat, crafting,
+looting, quests, factions/trading, Caravan and VATS. Keep going; arrival alone
+does not satisfy this. No complete-game or nearly-finished claim is warranted.
 
-The runtime implements:
+Latest user direction: greenfield. Old saves, historical restoration and
+backward compatibility are not requirements. Replace broken implementations as
+needed. Advance fresh ordinary gameplay, with current-build saves as a player
+feature rather than a reason to preserve old state machinery.
 
-- Resumable native capsule samples during lattice expansion and smoothing,
-  retaining collision, floor, actor-size and route checks. Native scheduling and
-  full locomotion checks pass.
-- Authoritative tutorial death/health/limb/sneaking/equipped-condition/statistic
-  queries. The 43 statistic names come from the owned executable. Legacy player
-  record errors retry only a proven initial read with no possible effect replay.
-  A persisted receipt prevents any second attempt after a stopped suffix, even
-  when the suffix reports the same error; repeated/cold-prefix tests pass.
-- Source menu identity for initial/transfer loading and the session menu; known
-  technical pauses retain script clocks, while unbound modals remain visible.
-- Live control labels and an explicit flat bootstrap-to-gameplay HUD handoff.
-  The native audit proves one advancing owner, hidden waiting, retained notice
-  ordinal/elapsed time, late binding, actual input-map labels and rebinding.
-  XR retains its existing bootstrap consumer; headset acceptance is open.
-- Correct NIF model roots beneath `meshes`, including `trees\...NIF`; only
-  SpeedTree `TREE`/`.spt` resources keep the separate `trees` root. Three winning
-  cactus models resolve to exact BSA bytes and parsed NIFs with inputs unchanged.
+Current branch: `codex/integrated-gameplay-continuation`, based on freshly fetched
+`origin/main` at `b94d8e8df22fc70fc9d3280bf8c2d7581b212eb1`. Existing changes are
+preserved and unpublished. Their initial file hashes and the prior detailed work
+notes are retained privately under `local/integrated-baseline-20261028`.
 
-Ordinary-input New Game completes the Vigor Tester, questionnaire, skills/traits,
-final Doc dialogue and the exterior door transition at VCG01 stage 200. The
-source tutorial ticks without errors and ordinary F5 completes outside. A
-separate copied existing save recovers the initial tutorial failure once and
-also completes F5. The final release passes cold Continue, pause/resume and
-another F5 with one
-retained recovery receipt, a healthy tutorial clock, no HUD error and no cactus
-resolution failure. An ordinary checkpoint load visibly displays the movement prompt with mapped
-W/A/S/D labels in the rendered room. The final full gate passes.
+The fresh full required gate passes: Release and Debug builds, formatting and
+analyzers, managed contracts and native Godot checks. The selected owned creature
+pending-Sandbox publication audit and `git diff --check` also pass. This audit
+checks state publication, not ordinary creature gameplay or retail parity.
+Product ExportRelease uses the normal launcher script. Recording is off; builds
+and gameplay are serialized.
 
-The first 144 Hz block retains fixed native names, disposes temporary wind,
-combat and navigation collection wrappers and samples particle source transforms
-once per step without lifecycle observers. Exact native particle state, lifecycle,
-random consumption, packed buffers, callback mutations and material interleaving
-checks pass. Owned fountain/controller audits and the full runtime gate pass.
-Startup honors engine resolution; the prior capture-size override forced every
-ordinary window back to 1280x720. Default size remains 1280x720 in project settings.
+Two reviewed runtime repairs are implemented in this block: stopped creature
+alert changes now keep the retained activity revisions consistent (focused
+regression passes), and live-root creature placement now invokes the shared
+source-publication owner after configuration. The second fixes a missing join
+that could leave streamed pending-Sandbox creatures frozen and unsaveable.
+Ordinary gameplay validation of these fixes is still pending.
 
-The runtime removes idle reference closures, cached reference lookup
-closures and navigation projection arrays. Synthetic and native checks retain
-source event order, live delegate replacement, exact nearest-triangle selection,
-nonfinite refusal and concurrent pooled queries. Warmed lookup/projection paths
-allocate zero bytes. Script expression views reuse immutable source inputs while
-retaining fresh command argument arrays and invocation semantics. The full final
-gate and selected owned-data audits pass.
+## Active integration checkpoint
 
-The user's Cheyenne report is reproduced outside beside the player, in her
-source-selected shooting-tutorial idle package. The actor's saved current location
-is authoritative; its authored saloon reference does not establish its live cell.
-Before repair, 776 samples contain six one-tick false walk/idle transitions despite
-identical body positions. The shared pursuit owner now consumes already-reached
-waypoints after a newly completed route before choosing locomotion. A repeat
-four-second observation has 799 samples, no clip switches or backward clocks and
-361 distinct bone poses. A native contract retains genuine movement, next-waypoint
-selection and exactly one stall update. Ordinary F5, separate-process Continue
-and another F5 complete on the private copy. After cold Continue, 680 samples
-retain idle, continuous clocks and 361 distinct bone poses. Further ordinary
-movement and matched retail animation remain unproven. The final release also
-retains idle across 640 samples with no clock resets and completes ordinary F5.
+Resumed at the user's explicit request on 2026-10-28 from local WIP commit
+`45f525bb`. The active goal is authorized again. Fresh required gate and selected
+owned check now pass; the integrated scope has been reviewed. Publish one checked
+integration PR before the next gameplay repair block. The 18 unrelated generated
+classic import EOL changes remain preserved and excluded. Recording is off and
+the game stays closed during validation.
 
-The latest selected release diagnostic uses actual 3840x2160 fullscreen, scale 1,
-Forward+, uncapped, VSync disabled and native physics at 90 Hz. It uses the ordinary
-Safe renderer on the main thread. A fresh unpaused 15-second exterior sample
-reports 75 FPS at its final observation, median draw interval 13.09 ms, p95
-18.97 ms, p99 24.23 ms and maximum 34.18 ms. All 512 intervals exceed 6.944 ms.
-Root GPU time is 3.24 ms plus 0.24 ms for first-person rendering. The display
-reports 60 Hz; headset metadata is explicitly null in this flat run. This fails
-the engine budget and is not a controlled before/after comparison, headset
-measurement or movement/streaming/combat acceptance. Separate rendering remains
-an unpromoted experiment. The user's original save remains unchanged.
+The final ExportRelease product MVID is
+`9d38a82d-9efe-42fd-949a-1b86ba6d46a7`. Ordinary New Game passed the formerly
+failing post-load movie skip. Ordinary Load of the current opening save now
+restores the name menu after loading releases its temporary pause; accepting it
+resumes source progression without a detached-node error. Opening presentation
+and source ticking activate only after the state owners and live tree are ready.
 
-Explicit performance publication keeps simulation/input running and omits labeled
-gameplay/identity/control snapshots. Recording and trace capture remain off.
-Inclusive scopes identify native capsule sweeps (2.04 seconds, 59,861 queries in
-the selected interval), actor movement and particle publication. Particle buffers
-upload about 6.56 times active capacity; no particles or capacity have been removed.
-Embedded skinning and alpha sorting are inactive in this interval. Native kernel
-profiling is unavailable under the current Windows policy; wall-stack samples do
-not establish finalizer or audio CPU consumption. Bounded main-thread callback and
-draw-submission counters have pure contract coverage. The final 15-second sample
-records 3.50 seconds of process callbacks, 4.32 seconds of physics callbacks and
-4.37 seconds of draw submission, with no invalid or unpaired spans. These spans
-are inclusive and must not be added to nested owner scopes. Fullscreen requests
-now update the owning Godot Window property; actual 3840x2160 fullscreen survives
-cold Continue. The desktop monitor advertises
-4K at 60 Hz and no 144 Hz mode. The user explicitly targets the VR headset.
-VDXR is the registered runtime. A physical preflight reaches the loader but
-fails during chained instance creation, so no headset session is established.
-The cause and headset model remain unqualified; no global runtime setting was
-changed and the process exits cleanly. Cached read-only diagnostics now expose
-the selected OpenXR interface's runtime identity, supported/active refresh,
-actual/recommended target dimensions and view count, without initialization or
-setting changes. Physical presentation and compositor delivered/missed frames
-remain explicitly unverified. Qualify these before physical acceptance; a
-simulator must not substitute for the headset.
+Final native 3840x2160 Male-page and initial Strength 5 / 05-point frames were
+compared with private retail references. Shared menu materials now keep source
+textures/colors and authored lights without inheriting cell fog; the existing
+blurred-world compositor is visible. Reflectron uses its source vertical slope;
+Vigor's decoded wide/narrow depth branches now select the source-correct depth.
+The confirmed flat-color and framing defects are removed. Fine FaceGen shading,
+exact pixel/color parity and other presentation channels remain open. Selected
+private diagnostics stay under the ignored gameplay directory, outside commits.
 
-Planning queries now reuse search-owned native parameter/result wrappers while
-retaining every sweep/ray and live-world lookup. Paired native outcomes, exact
-contacts, query counts, mask/margin changes, world changes and disposal pass;
-256 warmed queries allocate 385,024 versus 716,800 bytes. Full native locomotion
-passes. Particle distance/index value keys retain exact draw order with zero
-warmed sort allocation; renderer-backed native buffer and owned fountain bounds
-checks pass. Source capacity, active population, random consumption, callbacks and
-full upload size remain unchanged. The final full runtime gate and renderer-backed
-owned fountain audit pass. Independent review finds no material regressions.
+Ordinary SPECIAL allocation then completed, advancing to VCG01 stage 80. F5
+saved successfully (v65, Courier, Strength 10 and other SPECIAL values 5, HP 100).
+The canonical current save and profile are under
+`local/integrated-baseline-20261028/gameplay`; this is the new playthrough, not a
+historical restore. PID 19632 exited normally and disposed its source owners.
+Recording, render trace and campaign automation are off. No game/build is running.
 
-Next: qualify the physical OpenXR runtime for the user's 144 Hz target and
-reprofile the remaining source-allocation
-and rendering owners on a fresh branch. Keep native sweeps: the pinned backend
-can publish pending collision bodies during queries, so duplicate-looking calls
-are not established as redundant. Preserve every
-collision/support query, source callback, actor, shadow, particle and authoritative
-simulation tick. Complete ordinary movement, exterior streaming and combat windows
-with median/p95/p99 and late counts before accepting 144 Hz. Separate uncapped
-engine throughput from actual display presentation. Require matched retail state,
-timing and pixels before any 1:1 claim.
-Keep unsupported SpeedTree/Sandbox and other behavior visible. Then resume the
-remaining ordinary Doc/Goodsprings lessons and campaign coverage.
+The full gate, selected owned publication check, focused menu, movie-pause and
+owned LoveTester checks pass. Hosted checks and checked publication are next.
+Continue ordinary play
+from the current save after the integration boundary. The next reached gameplay
+repair is NPC Sandbox Furniture: candidate enumeration currently refuses chairs
+before selection. Reuse source reservation/approach/entry/exit while retaining
+Sandbox package lifecycle and events. Do not suppress the failure.
+
+## Material open work
+
+- In-progress creature staging and animation-index changes have selected checks
+  but no integrated gameplay result. Preserve clock/random state, selection,
+  cancellation and source ownership when publishing staged actors.
+- Creature Find food execution/Allow Killing, Travel Allow Falls and full
+  current-location package lifecycle remain incomplete. Offline source readers
+  and transactions are not a functioning actor procedure.
+- Inventory Repair/Mod/Drop/Hotkey actions are hidden; VATS lacks an input-driven
+  runtime owner; a qualifying Caravan command refuses match launch despite
+  existing offline rules. Implement these reached retail actions in the shared
+  gameplay owners. Crime/detection consequences and owned lock/hack admission
+  are also incomplete. Crafting, loot and barter have owners but fresh-route
+  coverage remains open; merchant restock/pricing inputs remain incomplete.
+- Source failures include SpeedTree, distant LOD materials, model constraints
+  and other actor/rendering inputs. Missing entities remain visible divergence.
+- Native 4K60 and physical XR 144 Hz targets remain unmet/unverified. The latest
+  recorded grid commit was 193.77 ms with 129.47 ms creature publication. Build
+  overlap contaminated later performance intervals; no speedup is established.
+- Physical XR acceptance failed previously, including malformed rifle
+  hands/forearms and render/session issues. Flat and XR must share game/save
+  state; no headset-ready or retail-parity claim is justified.
+
+Run the selected owned-data check and the mandatory runtime gate before a checked
+PR merge. Update this file with the next verified state and owner; keep detailed
+technical context in [runtime-repair-design.md](runtime-repair-design.md), not
+an expanding task history here.

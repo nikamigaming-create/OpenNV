@@ -40,7 +40,7 @@ internal sealed partial class NativeXrRig : Node3D
             // when that surface closes or changes during an equipment rebuild.
             _rightInputReady = false; _pointerPressed = false; _snapReady = false;
             WorldPointer = false;
-            if (_player is { } player && IsInstanceValid(player)) player.XrFire(false);
+            if (_player is { } player && IsInstanceValid(player)) { player.XrFire(false); player.XrReleaseGrab(); }
         }
     }
     internal Action<Transform3D>? PoseWristDevice { get; set; }
@@ -147,7 +147,8 @@ internal sealed partial class NativeXrRig : Node3D
             }
         }
         var left = LeftGrip.GetHasTrackingData(); var right = RightGrip.GetHasTrackingData();
-        if (!right) _rightInputReady = false;
+        var aimTracked = RightAim.GetHasTrackingData();
+        if (!right || !aimTracked) { _player?.XrReleaseGrab(); _rightInputReady = false; }
         else if (RightGrip.GetFloat(NativeXrActions.Fire) < _configuration.Xr.ActionThreshold && !RightGrip.IsButtonPressed(NativeXrActions.Reload) && !RightGrip.IsButtonPressed(NativeXrActions.Grab))
             _rightInputReady = true;
         if (Edge("menu", LeftGrip.IsButtonPressed(NativeXrActions.Menu) || RightGrip.IsButtonPressed(NativeXrActions.Menu)))
@@ -158,6 +159,7 @@ internal sealed partial class NativeXrRig : Node3D
         }
         AdvanceCombatWheels(tracked, left, right, delta);
         var modal = Modal?.Invoke() ?? _player is null;
+        if (modal) _player?.XrReleaseGrab();
         var stick = left ? LeftGrip.GetVector2(NativeXrActions.Move) : Vector2.Zero;
         Movement = tracked && _calibrated && !modal && stick.Length() >= _configuration.Xr.MovementDeadzone ? stick.LimitLength() : Vector2.Zero;
         Sprint = left && LeftGrip.IsButtonPressed(NativeXrActions.Sprint);
@@ -173,7 +175,8 @@ internal sealed partial class NativeXrRig : Node3D
         {
             if (WorldPointer) _player?.XrActivate();
         }
-        if (Edge("activate", right && _rightInputReady && RightGrip.IsButtonPressed(NativeXrActions.Grab)) && !modal && PointAtPipBoy is null) _player?.XrActivate();
+        if (Edge("grab", right && aimTracked && _rightInputReady && RightGrip.IsButtonPressed(NativeXrActions.Grab)) &&
+            !modal && PointAtPipBoy is null) _player?.XrToggleGrab();
         var reload = right && _rightInputReady && RightGrip.IsButtonPressed(NativeXrActions.Reload);
         if (_buttons.GetValueOrDefault("reload") != reload && PointAtPipBoy is null && !modal) _player?.XrReload(reload);
         _buttons["reload"] = reload;

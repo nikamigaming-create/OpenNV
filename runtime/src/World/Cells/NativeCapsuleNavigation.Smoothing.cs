@@ -19,8 +19,10 @@ internal static partial class NativeCapsuleNavigation
                 // Preserve every height transition. A flat shortcut must not
                 // turn stairs, a lower floor or a bridge into a direct segment.
                 var origin = points[anchor];
-                if (Enumerable.Range(anchor + 1, candidate - anchor)
-                    .Any(index => Math.Abs(points[index].Y - origin.Y) > heightTolerance))
+                var heightTransition = false;
+                for (var index = anchor + 1; index <= candidate; index++)
+                    if (Math.Abs(points[index].Y - origin.Y) > heightTolerance) { heightTransition = true; break; }
+                if (heightTransition)
                 {
                     yield return null;
                     continue;

@@ -12,6 +12,18 @@ public partial class NativeLocomotionAudit : Node3D
             GD.Print($"OPENNV_NATIVE_NAVIGATION_OWNER_BUILD ownerBuild={typeof(NativeCapsuleNavigation).Module.ModuleVersionId} " +
                 "fixture=selected-by-arguments gameplay=separate parity=unverified");
             var arguments = OS.GetCmdlineUserArgs();
+            if (arguments is ["--airborne-contact"])
+            {
+                await CheckAirborneContact(); GetTree().Quit(); return;
+            }
+            if (arguments is ["--extended-detour"])
+            {
+                await CheckExtendedDetour(); GetTree().Quit(); return;
+            }
+            if (arguments is ["--partial-floor"])
+            {
+                await CheckNavigation(); GetTree().Quit(); return;
+            }
             if (arguments is ["--step-query-resources"])
             {
                 await CheckReusableStepQueries(); GetTree().Quit(); return;
@@ -124,6 +136,20 @@ public partial class NativeLocomotionAudit : Node3D
 
     private async Task CheckNavigation(bool lowCeiling = false)
     {
+        Vector3[] prior = [new(0, 0, 2), new(0, -1, 4)];
+        if (!OpenNV.Runtime.RuntimeCoordinator.NativeBotOnPartialPath(new(0, -.5f, 3), Vector3.Zero, prior) ||
+            OpenNV.Runtime.RuntimeCoordinator.NativeBotOnPartialPath(new(0, 2, 3), Vector3.Zero, prior) ||
+            OpenNV.Runtime.RuntimeCoordinator.NativeBotOnPartialPath(new(.7f, 0, 1), Vector3.Zero, prior) ||
+            OpenNV.Runtime.RuntimeCoordinator.NativeBotOnPartialPath(new(0, 0, .1f), Vector3.Zero, prior) ||
+            !OpenNV.Runtime.RuntimeCoordinator.NativeBotOnPartialPath(new(0, 0, .1f), Vector3.Zero, prior, allowStart: true) ||
+            OpenNV.Runtime.RuntimeCoordinator.NativeBotOnPartialPath(new(0, 2, .1f), Vector3.Zero, prior, allowStart: true))
+            throw new InvalidOperationException("Partial-route continuation lost its observed path, floor or movement boundary.");
+        if (OpenNV.Runtime.RuntimeCoordinator.NativeBotPartialFloorEligible(Vector3.Zero, new(5, 0, 0), new(2, -4, 0)) ||
+            !OpenNV.Runtime.RuntimeCoordinator.NativeBotPartialFloorEligible(Vector3.Zero, new(5, -4, 0), new(2, -2, 0)) ||
+            OpenNV.Runtime.RuntimeCoordinator.NativeBotPartialFloorEligible(Vector3.Zero, new(5, -4, 0), new(2, 1, 0)) ||
+            !OpenNV.Runtime.RuntimeCoordinator.NativeBotPartialFloorEligible(Vector3.Zero, new(5, 0, 0), new(1, -.5f, 0)) ||
+            OpenNV.Runtime.RuntimeCoordinator.NativeBotPartialFloorEligible(Vector3.Zero, new(5, 0, 0), new(2, -1, 0)))
+            throw new InvalidOperationException("Partial-route floor selection lost wrong-floor refusal or genuine descending progress.");
         var scene = new Node3D(); AddChild(scene);
         void Box(Vector3 position, Vector3 size)
         {
@@ -184,6 +210,24 @@ public partial class NativeLocomotionAudit : Node3D
                     if (!rangeRefused) throw new InvalidOperationException("Approach radius admitted an occupied or different-floor destination.");
                 }
                 GD.Print("OPENNV_NATIVE_APPROACH_REGION_PASS targetCollision=true supportedEndpoint=true queryBodyUnmoved=true insufficientRangeRefused=true differentFloorRefused=true");
+                var partial = false;
+                IReadOnlyList<Vector3>? frontier = null;
+                foreach (var result in NativeCapsuleNavigation.Search(body, body.GlobalPosition, target, .4f, .32f,
+                    _ => true, 200, partialResult: () => partial = true))
+                    if (result is not null) { frontier = result; break; }
+                if (!partial || frontier is null || frontier.Count == 0 || !regionPlacement.CanStand(frontier[^1]) ||
+                    frontier[^1].DistanceTo(target) >= body.GlobalPosition.DistanceTo(target) - 1 ||
+                    regionPlacement.CanStand(target) || body.GlobalTransform != initial)
+                    throw new InvalidOperationException("Partial native search invented target arrival or lost supported progress.");
+                var acceptedForbiddenFloor = false;
+                try
+                {
+                    foreach (var _ in NativeCapsuleNavigation.Search(body, body.GlobalPosition, target, .4f, .32f,
+                        _ => true, 200, partialResult: () => acceptedForbiddenFloor = true, partialCandidate: _ => false)) { }
+                }
+                catch (InvalidOperationException) { }
+                if (acceptedForbiddenFloor) throw new InvalidOperationException("Partial search admitted a refused floor.");
+                GD.Print("OPENNV_NATIVE_PARTIAL_ROUTE_PASS supportedProgress=true occupiedTargetNotReached=true queryBodyUnmoved=true");
             }
             var path = NativeCapsuleNavigation.Find(body, body.GlobalPosition, new(0, 0, -5), .4f, .64f, _ => true);
             if (body.GlobalTransform != initial || !lowCeiling && !path.Any(point => Math.Abs(point.X) > 2.3f))
@@ -235,12 +279,13 @@ public partial class NativeLocomotionAudit : Node3D
         var body = new CharacterBody3D { FloorSnapLength = radius, FloorMaxAngle = FloorAngle, Position = new(0, .1f, 0) };
         body.AddChild(new CollisionShape3D { Position = new(0, bodyHeight / 2, 0), Shape = new CapsuleShape3D { Height = bodyHeight, Radius = radius } });
         scene.AddChild(body);
+        using var stepQueries = new NativeCharacterStep.QueryResources(body);
         try
         {
-            if (NativeCharacterStep.TryStep(body, new(0, 0, -.06f), .4f)) throw new InvalidOperationException("Airborne controller climbed a step.");
+            if (NativeCharacterStep.TryStep(body, new(0, 0, -.06f), .4f, out _, stepQueries)) throw new InvalidOperationException("Airborne controller climbed a step.");
             await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
             body.Position = new(0, 1, -.7f);
-            if (NativeCharacterStep.TryStep(body, new(0, 0, -.06f), .4f))
+            if (NativeCharacterStep.TryStep(body, new(0, 0, -.06f), .4f, out _, stepQueries))
                 throw new InvalidOperationException("Unsupported descending capsule climbed a step.");
             body.Position = new(0, .1f, 0);
             var steps = 0;
@@ -248,7 +293,7 @@ public partial class NativeLocomotionAudit : Node3D
             {
                 await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
                 body.Velocity = new(0, -.2f, -stride * 60);
-                if (NativeCharacterStep.TryStep(body, new(0, 0, -stride), .4f))
+                if (NativeCharacterStep.TryStep(body, new(0, 0, -stride), .4f, out _, stepQueries))
                 { ++steps; body.Velocity = Vector3.Down * .01f; }
                 body.MoveAndSlide();
             }

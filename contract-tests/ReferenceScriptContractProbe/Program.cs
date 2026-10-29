@@ -2,7 +2,450 @@ using System.Buffers.Binary;
 using System.Text;
 using System.Text.Json;
 using OpenNV.Runtime.Content;
+using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.World.Cells;
+
+if (args is ["--owned-actor-food-acquisition", var actorFoodAcquisitionRoot])
+{
+    RuntimeLiveContentSource.Configure(actorFoodAcquisitionRoot, RuntimeLiveContentSource.FalloutNewVegasGame);
+    using var content = RuntimeLiveContentSource.Current!;
+    using var records = FalloutPluginStack.Load(content.PluginSources);
+    using var world = new FalloutReferenceWorld(records);
+    var actor = new FalloutFormKey("FalloutNV.esm", 0x16518b);
+    if (!world.IsEnabled(actor)) throw new InvalidDataException("Owned Find actor is not source-enabled in this fixture.");
+    var globals = FalloutGlobalState.Read(records);
+    var inventory = world.Inventory(actor, 1, globals).Contents;
+    FalloutActorFoodAcquisition? acquisition = null;
+    var inspected = 0;
+    foreach (var reference in records.EffectiveRecords("REFR").Where(value => !value.IsDeleted))
+    {
+        var names = reference.ReadSubrecords().Where(field => field.Signature == "NAME").ToArray();
+        if (names.Length != 1 || names[0].Data.Length != 4) continue;
+        var item = reference.Plugin.AdjustFormId(BinaryPrimitives.ReadUInt32LittleEndian(names[0].Data.Span));
+        FalloutPluginRecord definition;
+        try { definition = records.GetEffective(item); }
+        catch (KeyNotFoundException) { continue; }
+        if (definition.Signature is not ("ALCH" or "INGR")) continue;
+        inspected++;
+        try
+        {
+            if (!world.IsActorFood(item) || !world.ActorMayEatWorldFood(actor, reference.FormKey)) continue;
+            acquisition = world.PrepareActorFoodAcquisition(actor, reference.FormKey, int.MaxValue, 1, globals);
+            break;
+        }
+        catch (Exception error) when (error is InvalidDataException or NotSupportedException or InvalidOperationException or KeyNotFoundException) { }
+    }
+    if (acquisition is null) throw new NotSupportedException($"No eligible owned placed food found among {inspected} ingestible references.");
+    var before = inventory.Item(acquisition.Item)?.Count ?? 0;
+    acquisition.Commit();
+    if (!world.Get(acquisition.Reference).Taken || inventory.Item(acquisition.Item)?.Count != before + acquisition.Count)
+        throw new InvalidDataException("Owned actor food pickup did not publish its exact inventory and source stack.");
+    using var cold = new FalloutReferenceWorld(records);
+    cold.Restore(world.Capture());
+    if (!cold.Get(acquisition.Reference).Taken || cold.Inventory(actor, 1, globals).Contents.Item(acquisition.Item)?.Count != before + acquisition.Count)
+        throw new InvalidDataException("Owned actor food pickup did not survive cold restoration.");
+    Console.WriteLine($"OPENNV_OWNED_ACTOR_FOOD_ACQUISITION_PASS inspected={inspected} count={acquisition.Count} cold=true interactionRange=unverified targetSelection=unverified retail=unverified");
+    FalloutActorFoodAcquisition? transfer = null;
+    var inspectedHolders = 0;
+    foreach (var reference in records.EffectiveRecords("REFR").Where(value => !value.IsDeleted))
+    {
+        var names = reference.ReadSubrecords().Where(field => field.Signature == "NAME").ToArray();
+        if (names.Length != 1 || names[0].Data.Length != 4) continue;
+        var baseForm = reference.Plugin.AdjustFormId(BinaryPrimitives.ReadUInt32LittleEndian(names[0].Data.Span));
+        FalloutPluginRecord container;
+        try { container = records.GetEffective(baseForm); }
+        catch (KeyNotFoundException) { continue; }
+        if (container.Signature != "CONT") continue;
+        try
+        {
+            var directFood = container.ReadSubrecords().Where(field => field.Signature == "CNTO" && field.Data.Length == 8)
+                .Select(field => container.Plugin.AdjustFormId(BinaryPrimitives.ReadUInt32LittleEndian(field.Data.Span)))
+                .Any(item => world.IsActorFood(item));
+            if (!directFood || !world.CanActivate(reference.FormKey)) continue;
+            inspectedHolders++;
+            var contents = world.Inventory(reference.FormKey, 1, globals).Contents;
+            foreach (var item in contents.Items.Where(value => value.Count > 0 && world.IsActorFood(value.FormKey)))
+            {
+                var variants = item.Variants ?? [new FalloutItemVariant(item.Count)];
+                for (var index = 0; index < variants.Count; index++)
+                {
+                    try { transfer = world.PrepareActorFoodTransfer(actor, reference.FormKey, item.FormKey, index, 1, 1, globals); }
+                    catch (Exception error) when (error is InvalidDataException or NotSupportedException or InvalidOperationException) { continue; }
+                    break;
+                }
+                if (transfer is not null) break;
+            }
+            if (transfer is not null) break;
+        }
+        catch (Exception error) when (error is InvalidDataException or NotSupportedException or InvalidOperationException or KeyNotFoundException) { }
+    }
+    if (transfer is null) throw new NotSupportedException($"No accessible owned container food found among {inspectedHolders} inspected holders.");
+    var sourceInventory = world.Inventory(transfer.Reference, 1, globals).Contents;
+    var sourceBefore = sourceInventory.Item(transfer.Item)!.Count;
+    var destinationBefore = inventory.Item(transfer.Item)?.Count ?? 0;
+    transfer.Commit();
+    if ((sourceInventory.Item(transfer.Item)?.Count ?? 0) != sourceBefore - transfer.Count ||
+        inventory.Item(transfer.Item)?.Count != destinationBefore + transfer.Count)
+        throw new InvalidDataException("Owned actor food transfer lost source or destination inventory.");
+    using var transferCold = new FalloutReferenceWorld(records);
+    transferCold.Restore(world.Capture());
+    if ((transferCold.Inventory(transfer.Reference, 1, globals).Contents.Item(transfer.Item)?.Count ?? 0) != sourceBefore - transfer.Count ||
+        transferCold.Inventory(actor, 1, globals).Contents.Item(transfer.Item)?.Count != destinationBefore + transfer.Count)
+        throw new InvalidDataException("Owned actor food transfer did not survive cold restoration.");
+    Console.WriteLine($"OPENNV_OWNED_ACTOR_FOOD_TRANSFER_PASS inspected={inspectedHolders} count={transfer.Count} cold=true interactionRange=unverified targetSelection=unverified retail=unverified");
+    return;
+}
+
+if (args is ["--owned-ingredient-use", var ingredientUseRoot])
+{
+    RuntimeLiveContentSource.Configure(ingredientUseRoot, RuntimeLiveContentSource.FalloutNewVegasGame);
+    using var content = RuntimeLiveContentSource.Current!;
+    using var records = FalloutPluginStack.Load(content.PluginSources);
+    var body = FalloutBodyPartData.Read(records.GetEffective(records.RuntimeFormKey(0x1d)));
+    var rows = new List<object>();
+    foreach (var ingredient in records.EffectiveRecords("INGR").Where(record => !record.IsDeleted))
+    {
+        try
+        {
+            var source = FalloutIngestible.Read(records, ingredient.FormKey);
+            var inventory = new FalloutPlayerInventory(12);
+            inventory.Add(records, ingredient.FormKey, 1, 1, true);
+            var vitals = new FalloutPlayerVitals(records, records.RuntimeFormKey(7), new(5, 5, 5, 5, 5, 5, 5));
+            vitals.Damage(50);
+            var owner = new FalloutPlayerIngestibles(records, inventory, vitals, body, _ => 50, _ => false, () => false);
+            var use = owner.Prepare(ingredient.FormKey);
+            use.Commit();
+            rows.Add(new { source = ingredient.FormKey.ToString(), outcome = "committed", effects = source.Effects.Count,
+                sourceSound = source.Sound?.ToString(), remaining = inventory.Item(ingredient.FormKey)?.Count ?? 0 });
+        }
+        catch (Exception error) when (error is InvalidDataException or NotSupportedException or InvalidOperationException or IOException)
+        { rows.Add(new { source = ingredient.FormKey.ToString(), outcome = "refused", error = error.Message }); }
+    }
+    Console.WriteLine(JsonSerializer.Serialize(new { rows,
+        boundary = "Owned ingredient offline preparation and commit only; sound delivery, menu, ordinary gameplay and retail behavior are unverified." }));
+    return;
+}
+
+if (args is ["--owned-ingredient-inventory", var ingredientRoot])
+{
+    RuntimeLiveContentSource.Configure(ingredientRoot, RuntimeLiveContentSource.FalloutNewVegasGame);
+    using var content = RuntimeLiveContentSource.Current!;
+    using var records = FalloutPluginStack.Load(content.PluginSources);
+    var admitted = 0;
+    var failures = new List<object>();
+    var ingredients = records.EffectiveRecords("INGR").Where(record => !record.IsDeleted).ToArray();
+    foreach (var ingredient in ingredients)
+    {
+        try
+        {
+            var fields = ingredient.ReadSubrecords().ToArray();
+            var weight = BinaryPrimitives.ReadSingleLittleEndian(fields.Single(field => field.Signature == "DATA").Data.Span);
+            var value = BinaryPrimitives.ReadInt32LittleEndian(fields.Single(field => field.Signature == "ENIT").Data.Span);
+            var source = new FalloutPlayerInventory(123);
+            var destination = new FalloutPlayerInventory(456);
+            source.Add(records, ingredient.FormKey, 2, 1, true);
+            source.TransferTo(destination, ingredient.FormKey, 1);
+            var cold = new FalloutReferenceInventory();
+            var saved = new FalloutReferenceInventory(destination).Capture();
+            cold.Restore(JsonSerializer.Deserialize<FalloutReferenceInventorySnapshot>(JsonSerializer.Serialize(saved))!, records);
+            if (cold.Contents.Item(ingredient.FormKey) is not { Count: 1 } item || item.RecordType != "INGR" ||
+                item.Value != value || item.Weight != weight || source.Item(ingredient.FormKey)?.Count != 1)
+                throw new InvalidDataException("Ingredient transfer or cold inventory changed its source economics or count.");
+            admitted++;
+        }
+        catch (Exception error) when (error is InvalidDataException or NotSupportedException or InvalidOperationException or IOException)
+        { failures.Add(new { source = ingredient.FormKey.ToString(), error = error.Message }); }
+    }
+    Console.WriteLine(JsonSerializer.Serialize(new { discovered = ingredients.Length, admitted, failures,
+        boundary = "Inventory transfer and cold source economics only; ingredient consumption and retail behavior remain unverified." }));
+    if (failures.Count != 0) Environment.ExitCode = 1;
+    return;
+}
+
+if (args is ["--owned-find-food-population", var foodRoot])
+{
+    RuntimeLiveContentSource.Configure(foodRoot, RuntimeLiveContentSource.FalloutNewVegasGame);
+    using var content = RuntimeLiveContentSource.Current!;
+    using var records = FalloutPluginStack.Load(content.PluginSources);
+    var actor = new FalloutFormKey("FalloutNV.esm", 0x16518b);
+    var cell = FalloutCellSceneReader.Read(records, FalloutCellSceneReader.ParentCell(records.GetEffective(actor))!.Value);
+    var actorReference = cell.References.Single(reference => reference.FormKey == actor);
+    var sourceWorld = FalloutCellSceneReader.ParentWorldspace(records.GetEffective(actorReference.Cell)) ??
+        throw new InvalidDataException("Find source actor has no exterior worldspace.");
+    var grid = new FalloutExteriorGrid(records);
+    var neighborhood = grid.Resolve(sourceWorld, grid.PersistentCell(sourceWorld),
+        actorReference.Position[0], actorReference.Position[1], 3);
+    cell = neighborhood.Scene;
+    var kinds = cell.References.GroupBy(reference => cell.BaseObjects.TryGetValue(reference.Base, out var basis) ? basis.Signature : "unresolved")
+        .OrderBy(group => group.Key).Select(group => new { kind = group.Key, count = group.Count() }).ToArray();
+    var inventoryBases = cell.References.Where(reference => cell.BaseObjects.TryGetValue(reference.Base, out var basis) && basis.Signature is "CREA" or "NPC_" or "CONT")
+        .Select(reference => reference.Base).Distinct().ToArray();
+    var foodSources = new List<object>();
+    var unresolvedSources = new List<object>();
+    var directFoodBases = new HashSet<FalloutFormKey>();
+    var unresolvedFoodBases = new HashSet<FalloutFormKey>();
+    foreach (var baseKey in inventoryBases)
+    {
+        try
+        {
+            var basis = records.GetEffective(baseKey);
+            var owner = basis.Signature is "NPC_" or "CREA" ? FalloutActorTemplateOwner.Resolve(records, basis, 256) : basis;
+            foreach (var field in owner.ReadSubrecords().Where(field => field.Signature == "CNTO"))
+            {
+                if (field.Data.Length != 8) throw new InvalidDataException("Source inventory has an invalid CNTO.");
+                var form = owner.Plugin.AdjustFormId(BinaryPrimitives.ReadUInt32LittleEndian(field.Data.Span));
+                var source = records.GetEffective(form);
+                var count = BinaryPrimitives.ReadInt32LittleEndian(field.Data.Span[4..]);
+                if (count <= 0) throw new InvalidDataException("Source inventory has a nonpositive source count.");
+                if (source.Signature == "LVLI")
+                {
+                    unresolvedFoodBases.Add(baseKey);
+                    unresolvedSources.Add(new { actor = baseKey.ToString(), item = form.ToString(), reason = "leveled inventory requires a persistent roll" });
+                }
+                else if (FalloutActorFood.IsFood(records, form))
+                {
+                    directFoodBases.Add(baseKey);
+                    foodSources.Add(new { actor = baseKey.ToString(), owner = owner.FormKey.ToString(), item = form.ToString(), count });
+                }
+            }
+        }
+        catch (Exception error) when (error is InvalidDataException or NotSupportedException or KeyNotFoundException or IOException)
+        { unresolvedFoodBases.Add(baseKey); unresolvedSources.Add(new { actor = baseKey.ToString(), item = (string?)null, reason = error.Message }); }
+    }
+    var declaration = FalloutScriptPackage.Read(records.GetEffective(new FalloutFormKey("FalloutNV.esm", 0x1651b1)));
+    if (declaration.LocationType != 2 || declaration.LocationRadius < 0 || actorReference.Position.Length != 3 ||
+        actorReference.Position.Any(value => !float.IsFinite(value)))
+        throw new InvalidDataException("Find source fixture has no finite current-location center and radius.");
+    var spatialCandidates = cell.References.Where(reference => reference.Position.Length == 3 &&
+        reference.Position.All(float.IsFinite) && Enumerable.Range(0, 3).Sum(index =>
+            Math.Pow((double)reference.Position[index] - actorReference.Position[index], 2)) <=
+        (double)declaration.LocationRadius * declaration.LocationRadius).ToArray();
+    var nearby = spatialCandidates.Where(reference => reference.Cell == actorReference.Cell).ToArray();
+    var otherCells = spatialCandidates.Where(reference => reference.Cell != actorReference.Cell).ToArray();
+    var nearbyInventories = nearby.Where(reference => cell.BaseObjects.TryGetValue(reference.Base, out var basis) && basis.Signature is "CREA" or "NPC_" or "CONT").ToArray();
+    var worldFood = new List<object>();
+    var worldFoodFailures = new List<object>();
+    foreach (var reference in spatialCandidates.Where(reference => cell.BaseObjects.TryGetValue(reference.Base, out var basis) && basis.Signature is "INGR" or "ALCH"))
+    {
+        try
+        {
+            if (FalloutActorFood.IsFood(records, reference.Base))
+                worldFood.Add(new { reference = reference.FormKey.ToString(), basis = reference.Base.ToString(), cell = reference.Cell.ToString() });
+        }
+        catch (Exception error) when (error is InvalidDataException or NotSupportedException or KeyNotFoundException or IOException)
+        { worldFoodFailures.Add(new { reference = reference.FormKey.ToString(), basis = reference.Base.ToString(), error = error.Message }); }
+    }
+    var spatialSource = new
+    {
+        center = actorReference.Position, radius = declaration.LocationRadius, cell = actorReference.Cell.ToString(),
+        loadedGridCells = neighborhood.Cells.Count,
+        discoveredReferences = cell.References.Count, finiteSameCellWithinRadius = nearby.Length,
+        finiteOtherCellsWithinRadius = otherCells.Length,
+        invalidPositions = cell.References.Count(reference => reference.Position.Length != 3 || reference.Position.Any(value => !float.IsFinite(value))),
+        worldFood, worldFoodFailures,
+        nearbyInventoryReferences = nearbyInventories.Length,
+        directFoodHolders = nearbyInventories.Where(reference => directFoodBases.Contains(reference.Base))
+            .Select(reference => new { reference = reference.FormKey.ToString(), basis = reference.Base.ToString() }).ToArray(),
+        unresolvedInventoryHolders = nearbyInventories.Where(reference => unresolvedFoodBases.Contains(reference.Base))
+            .Select(reference => new { reference = reference.FormKey.ToString(), basis = reference.Base.ToString() }).ToArray(),
+        otherCellInventoryReferences = otherCells.Count(reference => cell.BaseObjects.TryGetValue(reference.Base, out var basis) && basis.Signature is "CREA" or "NPC_" or "CONT"),
+        otherCellDirectFoodHolders = otherCells.Where(reference => directFoodBases.Contains(reference.Base))
+            .Select(reference => new { reference = reference.FormKey.ToString(), basis = reference.Base.ToString(), cell = reference.Cell.ToString() }).ToArray(),
+        otherCellUnresolvedInventoryHolders = otherCells.Where(reference => unresolvedFoodBases.Contains(reference.Base))
+            .Select(reference => new { reference = reference.FormKey.ToString(), basis = reference.Base.ToString(), cell = reference.Cell.ToString() }).ToArray(),
+    };
+    var ingredients = records.EffectiveRecords("INGR").Select(record => new { source = record.FormKey.ToString(), deleted = record.IsDeleted }).ToArray();
+    Console.WriteLine(JsonSerializer.Serialize(new { actor = actor.ToString(), cell = cell.Cell.FormKey.ToString(),
+        sourceReferences = cell.References.Count, winningIngredientRecords = ingredients, kinds,
+        inventoryBases = inventoryBases.Length, foodSources, unresolvedSources, spatialSource,
+        boundary = "Authored exterior 3x3 grid and direct actor/container inventory declarations only; persistent-reference spatial residency, live movement, availability, leveled rolls, Find eligibility and retail selection unverified." }));
+    return;
+}
+
+if (args is ["--owned-current-sandbox", var currentSandboxRoot])
+{
+    RuntimeLiveContentSource.Configure(currentSandboxRoot, RuntimeLiveContentSource.FalloutNewVegasGame);
+    using var content = RuntimeLiveContentSource.Current!;
+    using var records = FalloutPluginStack.Load(content.PluginSources);
+    using var world = new FalloutReferenceWorld(records);
+    var actor = new FalloutFormKey("FalloutNV.esm", 0x16aefd);
+    var package = FalloutSandboxPackage.Read(records.GetEffective(new FalloutFormKey("FalloutNV.esm", 0x0410af)));
+    if (package.LocationType != 2 || package.Radius != 512) throw new InvalidDataException("Owned Sandbox source changed.");
+    var placement = world.Placement(actor);
+    world.SetActorPackageStartLocation(actor, new(placement.Cell, placement.Position));
+    var location = package.Location(records, world, actor);
+    if (location.Cell != placement.Cell || !location.Location.SequenceEqual(placement.Position))
+        throw new InvalidDataException("Owned current-location Sandbox did not retain its actor source point.");
+    using var restored = new FalloutReferenceWorld(records);
+    restored.Restore(world.Capture());
+    if (!package.Location(records, restored, actor).Location.SequenceEqual(placement.Position))
+        throw new InvalidDataException("Owned current-location Sandbox did not restore its actor source point.");
+    Console.WriteLine("OPENNV_OWNED_CURRENT_SANDBOX_PASS source=true actor=true start=true cold=true gameplay=unverified");
+    return;
+}
+
+if (args is ["--owned-find-target", var findTargetRoot])
+{
+    RuntimeLiveContentSource.Configure(findTargetRoot, RuntimeLiveContentSource.FalloutNewVegasGame);
+    using var content = RuntimeLiveContentSource.Current!;
+    using var records = FalloutPluginStack.Load(content.PluginSources);
+    var source = records.GetEffective(new FalloutFormKey("FalloutNV.esm", 0x1651b1));
+    var find = FalloutFindPackage.Read(source);
+    var package = find.Source;
+    var target = find.Target;
+    if (package.Procedure != 0 || package.LocationType != 2 || package.LocationRadius != 2048 ||
+        target is not { Type: 2, RawTarget: 18, Form: null, CountOrDistance: 2 } || !find.AllowKilling || !find.AllowFalls)
+        throw new InvalidDataException("Owned creature Find target or search location differs from its source declaration.");
+    using var findWorld = new FalloutReferenceWorld(records);
+    var findActor = new FalloutFormKey("FalloutNV.esm", 0x16518b);
+    var sourcePlacement = findWorld.Placement(findActor);
+    var findWorldspace = FalloutCellSceneReader.ParentWorldspace(records.GetEffective(sourcePlacement.Cell)) ??
+        throw new InvalidDataException("Owned Find actor has no exterior worldspace.");
+    var findGrid = new FalloutExteriorGrid(records);
+    var findScene = findGrid.Resolve(findWorldspace, findGrid.PersistentCell(findWorldspace),
+        sourcePlacement.Position[0], sourcePlacement.Position[1], 3);
+    findWorld.LoadCell(findScene.Scene);
+    findWorld.SetActorPackageStartLocation(findActor, new(sourcePlacement.Cell, sourcePlacement.Position));
+    var findLocation = find.Location(records, findWorld, findActor);
+    if (findLocation.Cell != sourcePlacement.Cell || !findLocation.Position.SequenceEqual(sourcePlacement.Position))
+        throw new InvalidDataException("Owned creature Find lost its retained actor start point.");
+    var sources = findWorld.FindFoodSources(findActor, find, 1);
+    if (sources.UninitializedInventories.Any(reference => findWorld.Get(reference).Inventory is not null))
+        throw new InvalidDataException("Owned Find source collection initialized another actor's inventory.");
+    using var restoredFindWorld = new FalloutReferenceWorld(records);
+    restoredFindWorld.Restore(findWorld.Capture());
+    if (!find.Location(records, restoredFindWorld, findActor).Position.SequenceEqual(sourcePlacement.Position))
+        throw new InvalidDataException("Owned creature Find lost its retained start point during cold restoration.");
+    Console.WriteLine($"OPENNV_OWNED_FIND_TARGET_PASS procedure=find location=current radius=2048 objectType=18 count=2 allowKilling=true allowFalls=true coldLocation=true residentSources={sources.Sources.Count} uninitializedInventories={sources.UninitializedInventories.Count} execution=unverified");
+    return;
+}
+
+if (args is ["--owned-creature-sound-inheritance", var creatureSoundRoot])
+{
+    RuntimeLiveContentSource.Configure(creatureSoundRoot, RuntimeLiveContentSource.FalloutNewVegasGame);
+    using var content = RuntimeLiveContentSource.Current!;
+    using var records = FalloutPluginStack.Load(content.PluginSources);
+    var creature = new FalloutFormKey("FalloutNV.esm", 0x103dfd);
+    var declaration = FalloutCreatureAnimationSounds.ReadSingleSound(records, creature, "Auxiliary1");
+    if (declaration.Creature != creature || declaration.Sound != new FalloutFormKey("FalloutNV.esm", 0x14d3f9) || declaration.Chance != 5)
+        throw new InvalidDataException("Owned creature sound did not resolve the source CSCR candidate and chance.");
+    var draws = 0;
+    var selection = declaration.Select(bound => { draws++; return bound - 1; });
+    if (draws != 1 || selection.Kind != FalloutCreatureAnimationSounds.SelectionKind.ChanceMiss)
+        throw new InvalidDataException("Owned inherited sound did not retain its shared chance gate.");
+    Console.WriteLine("OPENNV_OWNED_CREATURE_SOUND_INHERITANCE_PASS source=true templateCandidate=true chance=true actualAudioAndRetail=unverified");
+    return;
+}
+
+if (args is ["--owned-npc-topic-cache", var topicCacheRoot])
+{
+    RuntimeLiveContentSource.Configure(topicCacheRoot, RuntimeLiveContentSource.FalloutNewVegasGame);
+    using var content = RuntimeLiveContentSource.Current!;
+    using var records = FalloutPluginStack.Load(content.PluginSources);
+    var cache = new FalloutDialogueTopicCache(records);
+    var count = 0;
+    foreach (var raw in new uint[] { 0xd2, 0xd4 })
+    {
+        var form = records.RuntimeFormKey(raw);
+        var direct = FalloutDialogueTopic.Read(records, form);
+        var retained = cache.Read(form);
+        if (!ReferenceEquals(retained, cache.Read(form)) || direct.Infos.Count != retained.Infos.Count)
+            throw new InvalidDataException("Owned NPC topic cache lost reuse or source INFO count.");
+        for (var index = 0; index < direct.Infos.Count; index++)
+        {
+            var first = direct.Infos[index]; var second = retained.Infos[index];
+            if (first.Record.FormKey != second.Record.FormKey || first.Quest != second.Quest ||
+                first.Flags != second.Flags || first.Flags2 != second.Flags2 || first.Type != second.Type ||
+                first.BeginScript != second.BeginScript || first.EndScript != second.EndScript ||
+                !first.Choices.SequenceEqual(second.Choices) || first.Conditions.Count != second.Conditions.Count ||
+                !first.Conditions.Zip(second.Conditions).All(pair => pair.First.AsSpan().SequenceEqual(pair.Second)) ||
+                !first.Responses.Select(response => response.Number).SequenceEqual(second.Responses.Select(response => response.Number)))
+                throw new InvalidDataException("Owned NPC topic cache differs from the direct source declaration.");
+            count++;
+        }
+    }
+    Console.WriteLine($"OPENNV_OWNED_NPC_TOPIC_CACHE_PASS topics=2 infos={count} ordered=true selectedSourceFields=true repeatedIdentity=true selectionAndGameplay=unverified");
+    return;
+}
+
+if (args is ["--caravan-source-contracts"])
+{
+    CaravanSourceContracts.Run();
+    return;
+}
+if (args is ["--owned-caravan-command", var caravanExecutable])
+{
+    var parameters = FalloutExecutableStringTable.ReadCaravanCommandParameters(caravanExecutable);
+    var notice = FalloutExecutableStringTable.ReadCaravanMinimumNotice(caravanExecutable);
+    Console.WriteLine($"OPENNV_CARAVAN_COMMAND_DECLARATION_PASS count={parameters.Count} deck=true aiType=true betPercentage=true noticeSetting={notice.Setting} noticeSeconds={notice.Seconds:R} sourceIcon=true sound={notice.SoundEditorId} execution=unverified");
+    return;
+}
+if (args is ["--owned-caravan-legacy-save", var caravanGame, var caravanSave])
+{
+    OwnedCaravanSaveProbe.Run(caravanGame, caravanSave);
+    return;
+}
+if (args is ["--owned-caravan-item-event", var caravanItemGame])
+{
+    OwnedCaravanItemEventProbe.Run(caravanItemGame);
+    return;
+}
+if (args is ["--owned-caravan-notice", var caravanNoticeGame])
+{
+    OwnedCaravanNoticeProbe.Run(caravanNoticeGame);
+    return;
+}
+if (args is ["--owned-caravan-match-restore", var caravanMatchGame])
+{
+    OwnedCaravanMatchRestoreProbe.Run(caravanMatchGame);
+    return;
+}
+if (args is ["--owned-caravan-placed-pickup", var caravanPlacedGame])
+{
+    OwnedCaravanPlacedPickupProbe.Run(caravanPlacedGame);
+    return;
+}
+if (args is ["--stage-inventory-contracts"])
+{
+    StageAndInventoryContracts.Run();
+    return;
+}
+
+if (args is ["--owned-info-script", var infoRoot, var infoId])
+{
+    RuntimeLiveContentSource.Configure(infoRoot, RuntimeLiveContentSource.FalloutNewVegasGame);
+    using var content = RuntimeLiveContentSource.Current!;
+    using var records = FalloutPluginStack.Load(content.PluginSources);
+    var form = new FalloutFormKey("FalloutNV.esm", Convert.ToUInt32(infoId, 16));
+    var info = FalloutDialogueTopic.Decode(records.GetEffective(form));
+    Console.WriteLine($"INFO={form} QUEST={info.Quest} FLAGS={info.Flags} FLAGS2={info.Flags2}");
+    Console.WriteLine("BEGIN:\n" + info.BeginScript + "\nEND:\n" + info.EndScript);
+    return;
+}
+
+if (args is ["--owned-idle-static-object", var idleObjectRoot])
+{
+    AnimationResourceContracts.RunOwnedIdleStaticObject(idleObjectRoot);
+    return;
+}
+
+if (args is ["--owned-actor-food-source", var actorFoodRoot])
+{
+    OwnedIngestibleProbe.RunActorInventory(actorFoodRoot);
+    return;
+}
+
+if (args is ["--owned-missing-sandbox-base", var missingBaseRoot])
+{
+    OwnedScriptCombatProbe.FindMissingBases(missingBaseRoot);
+    return;
+}
+
+if (args is ["--owned-script-combat", var combatRoot])
+{
+    OwnedScriptCombatProbe.Run(combatRoot);
+    return;
+}
 
 if (args is ["--destruction-contracts"])
 {
@@ -739,6 +1182,11 @@ if (args is ["--travel-contracts"])
 if (args is ["--audit-current-location-travel", var currentLocationData])
 {
     TravelContracts.RunOwnedCurrentLocation(currentLocationData);
+    return;
+}
+if (args is ["--audit-editor-travel-portal", var editorPortalData])
+{
+    TravelContracts.RunOwnedEditorPortal(editorPortalData);
     return;
 }
 if (args is ["--audit-dialogue-editor-region", var dialogueEditorData])

@@ -23,6 +23,8 @@ internal static class IngestibleContracts
                     Field("NAM4", new byte[4]), Field("DNAM", Enumerable.Repeat((byte)50, 28).ToArray())),
                 Record("CREA", 0x20, Field("ACBS", actor), Field("DATA", creatureStats),
                     Field("NAM4", new byte[4]), Field("PNAM", BitConverter.GetBytes(0x1du))),
+                Record("CONT", 0x21, Field("CNTO", Join(BitConverter.GetBytes(6u), BitConverter.GetBytes(3))),
+                    Field("COED", Join(new byte[8], BitConverter.GetBytes(.75f)))),
                 Idle(0x30, "Test/IdleAnims", 0, 0x87, Predicate(143, 10)),
                 Idle(0x31, "Test/IdleAnims/Meal.kf", 0x30, 7, Predicate(246, 1, 6)),
                 Idle(0x32, "Test2/IdleAnims", 0, 0x87, Predicate(159, 3)),
@@ -31,7 +33,11 @@ internal static class IngestibleContracts
                 Item(1, Effect(10, 20, 0)), Item(2, Effect(11, 4, 6, true)),
                 Item(3, Effect(10, 20, 0), Effect(12, 1, 0)),
                 Item(4, Effect(13, 20, 99)), Item(5, Effect(11, 0, 0), Effect(14, 50, 0)),
+                Spell(0x40, Effect(11, 2, 5), Effect(12, 1, 0, true)), Spell(0x41, Effect(15, 1, 8, actorValue: 7)),
                 Food(6, Effect(11, 4, 5), Effect(15, 1, 8, actorValue: 7)),
+                Ingredient(8, Effect(11, 4, 5)),
+                Record("INGR", 9, Field("EDID", Text("UnknownIngredientFlags")), Field("DATA", BitConverter.GetBytes(1f)),
+                    Field("ENIT", [0, 0, 0, 0, 4, 0, 0, 0]), Effect(11, 4, 5)),
                 Modifier(15, 0, 0x76, 7), Modifier(10, 34, 0x70), Modifier(11, 0, 0x70), Modifier(12, 1, 0x70), Modifier(13, 0, 0xf0), Modifier(14, 0, 0x1000075, 54, 20),
                 Setting(100, "fMagicMedicineSkillBase", 1), Setting(101, "fMagicMedicineSkillMult", 2),
                 Setting(110, "fMagicSurvivalSkillBase", 1), Setting(111, "fMagicSurvivalSkillMult", 2),
@@ -45,10 +51,43 @@ internal static class IngestibleContracts
                 Record("BPTD", 0x1d, Field("BPNN", Text("Root")), Field("BPND", new byte[84])), Record("CELL", 0x80, Field("DATA", [1])),
                 ReferenceGroup(Record("ACHR", 0x91, Field("NAME", BitConverter.GetBytes(7u)), Field("DATA", new byte[24])),
                     Record("REFR", 0x92, Field("NAME", BitConverter.GetBytes(6u)), Field("DATA", new byte[24])),
+                    Record("REFR", 0x95, Field("NAME", BitConverter.GetBytes(6u)), Field("DATA", new byte[24]), Field("XCNT", BitConverter.GetBytes(2))),
+                    Record("REFR", 0x96, Field("NAME", BitConverter.GetBytes(0x21u)), Field("DATA", new byte[24])),
                     Record("ACRE", 0x94, Field("NAME", BitConverter.GetBytes(0x20u)), Field("DATA", new byte[24]))));
             File.WriteAllBytes(path, bytes);
             using var records = FalloutPluginStack.Load(directory, ["Test.esm"]);
             FalloutFormKey Key(uint id) => new("Test.esm", id);
+            using (var foodWorld = new FalloutReferenceWorld(records))
+            {
+                Check(foodWorld.IsActorFood(Key(6)) && !foodWorld.IsActorFood(Key(1)),
+                    "Cached actor-food classification changed the winning source declarations.");
+                var beforeFoodReads = GC.GetAllocatedBytesForCurrentThread();
+                for (var index = 0; index < 8192; index++)
+                    if (!foodWorld.IsActorFood(Key(6)) || foodWorld.IsActorFood(Key(1)))
+                        throw new InvalidDataException("Cached actor-food classification changed during repeated reads.");
+                Check(GC.GetAllocatedBytesForCurrentThread() == beforeFoodReads,
+                    "Warmed actor-food classification allocated or decoded source records again.");
+                for (var attempt = 0; attempt < 2; attempt++)
+                {
+                    try { _ = foodWorld.IsActorFood(Key(0xffff)); }
+                    catch (KeyNotFoundException) { continue; }
+                    throw new InvalidOperationException("Missing actor-food source was cached as a valid result.");
+                }
+            }
+            using (var freshWorld = new FalloutReferenceWorld(records))
+            {
+                var freshActor = freshWorld.Get(Key(0x91));
+                freshActor.Animation.Bind("meshes/test/idle.kf", new string('a', 64));
+                Check(freshActor.MayInitializeLaunchProcess(false) && !freshActor.MayInitializeLaunchProcess(true),
+                    "A first native process was confused with unloaded source animation or an existing native owner.");
+                using var restoredWorld = new FalloutReferenceWorld(records);
+                restoredWorld.Restore(freshWorld.Capture());
+                var restoredActor = restoredWorld.Get(Key(0x91));
+                Check(restoredActor.HasRestoredSnapshot && !restoredActor.MayInitializeLaunchProcess(false),
+                    "A restored actor with unknown launch history was silently reset.");
+                freshActor.ProjectileLaunch = new(0, 0);
+                Check(!freshActor.MayInitializeLaunchProcess(false), "An existing launch process was initialized twice.");
+            }
             var idles = new FalloutFurnitureIdleTree(records, "meshes/Test/skeleton.nif");
             Check(idles.SelectProcedure(10, condition => condition.Function == 143 ? 10 : 0) is null,
                 "A source-authorized no-file selection fabricated an animation.");
@@ -69,6 +108,113 @@ internal static class IngestibleContracts
             var hardcore = false;
             FalloutPlayerIngestibles Owner(FalloutPlayerVitals health) => new(records, inventory, health, parts, _ => 50, _ => false, () => hardcore);
             var owner = Owner(vitals);
+            var ingredientInventory = new FalloutPlayerInventory(44);
+            ingredientInventory.Add(records, Key(9), 1, 1, true);
+            Reject(() => FalloutIngestible.Read(records, Key(9)));
+            ingredientInventory.Add(records, Key(8), 2, 1, true);
+            var ingredientVitals = Vitals(initial);
+            var ingredientOwner = new FalloutPlayerIngestibles(records, ingredientInventory, ingredientVitals, parts, _ => 50, _ => false, () => false);
+            var ingredientUse = ingredientOwner.Prepare(Key(8));
+            Check(ingredientUse.Sound is null && ingredientInventory.Item(Key(8))!.Count == 2,
+                "Ingredient preparation invented source sound or consumed early.");
+            ingredientUse.Commit(); ingredientOwner.Advance(2);
+            var ingredientColdVitals = Vitals(ingredientVitals.State);
+            var ingredientCold = new FalloutPlayerIngestibles(records, ingredientInventory, ingredientColdVitals, parts, _ => 50, _ => false, () => false);
+            ingredientCold.Restore(JsonSerializer.Deserialize<FalloutIngestiblesSnapshot>(JsonSerializer.Serialize(ingredientOwner.Capture()))!);
+            ingredientOwner.Advance(3); ingredientCold.Advance(3);
+            Check(ingredientInventory.Item(Key(8))!.Count == 1 && ingredientVitals.State.ExactHitPoints == 140 &&
+                ingredientColdVitals.State.ExactHitPoints == ingredientVitals.State.ExactHitPoints && ingredientOwner.Capture().Effects.Count == 0,
+                "Ingredient use lost consumption, source scaling or its cold timed effect.");
+            using (var ingredientWorld = new FalloutReferenceWorld(records))
+            {
+                var eater = ingredientWorld.Get(Key(0x91)); _ = ingredientWorld.Health(eater.Reference);
+                eater.ActorValues["health"] = eater.ActorValues["health"] with { Damage = -60 };
+                var carried = ingredientWorld.Inventory(eater.Reference, 1).Contents;
+                carried.Add(records, Key(8), 1, 1, true);
+                ingredientWorld.PrepareActorIngestible(eater.Reference, Key(8), 1, null, false).Commit();
+                ingredientWorld.AdvanceActorIngestibles(2);
+                using var coldIngredientWorld = new FalloutReferenceWorld(records);
+                coldIngredientWorld.Restore(ingredientWorld.Capture());
+                ingredientWorld.AdvanceActorIngestibles(3); coldIngredientWorld.AdvanceActorIngestibles(3);
+                Check(carried.Item(Key(8)) is null && ingredientWorld.Health(eater.Reference).Current == coldIngredientWorld.Health(eater.Reference).Current,
+                    "Actor ingredient use lost inventory ownership or its cold timed remainder.");
+            }
+            using (var acquisitionWorld = new FalloutReferenceWorld(records))
+            {
+                var eater = acquisitionWorld.Get(Key(0x91));
+                var carried = acquisitionWorld.Inventory(eater.Reference, 1).Contents;
+                Reject(() => acquisitionWorld.PrepareActorFoodAcquisition(eater.Reference, Key(0x95), 1, 1, null));
+                var staleFood = acquisitionWorld.PrepareActorFoodAcquisition(eater.Reference, Key(0x95), 2, 1, null);
+                acquisitionWorld.Get(Key(0x95)).Taken = true;
+                Reject(() => staleFood.Commit());
+                Check(carried.Item(Key(6)) is null, "Stale actor pickup published food inventory.");
+                acquisitionWorld.Get(Key(0x95)).Taken = false;
+                var staleOwner = acquisitionWorld.PrepareActorFoodAcquisition(eater.Reference, Key(0x95), 2, 1, null);
+                acquisitionWorld.SetOwnership(Key(0x95), Key(7));
+                Reject(() => staleOwner.Commit());
+                Check(carried.Item(Key(6)) is null && !acquisitionWorld.Get(Key(0x95)).Taken,
+                    "Changed ownership published a stale actor food pickup.");
+                acquisitionWorld.Get(Key(0x95)).OwnershipOverride = null;
+                var rollbackFood = acquisitionWorld.PrepareActorFoodAcquisition(eater.Reference, Key(0x95), 2, 1, null);
+                carried.PrepareChange = (_, _) => new(() => throw new InvalidOperationException("fixture publication failure"), () => { });
+                Reject(() => rollbackFood.Commit());
+                carried.PrepareChange = null;
+                Check(carried.Item(Key(6)) is null && !acquisitionWorld.Get(Key(0x95)).Taken,
+                    "Failed actor pickup partially published its inventory or placed stack.");
+                var interleavedFood = acquisitionWorld.PrepareActorFoodAcquisition(eater.Reference, Key(0x95), 2, 1, null);
+                carried.PrepareChange = (_, _) => new(() => acquisitionWorld.Get(Key(0x95)).Taken = true,
+                    () => acquisitionWorld.Get(Key(0x95)).Taken = false);
+                Reject(() => interleavedFood.Commit());
+                carried.PrepareChange = null;
+                Check(carried.Item(Key(6)) is null && !acquisitionWorld.Get(Key(0x95)).Taken,
+                    "Interleaved source retirement escaped actor pickup rollback.");
+                var takeFood = acquisitionWorld.PrepareActorFoodAcquisition(eater.Reference, Key(0x95), 2, 1, null);
+                takeFood.Commit(); Reject(() => takeFood.Commit());
+                Check(takeFood.Count == 2 && carried.Item(Key(6))?.Count == 2 && acquisitionWorld.Get(Key(0x95)).Taken,
+                    "Actor pickup lost its real stack, duplicated it or did not retire the source.");
+                var holder = acquisitionWorld.Inventory(Key(0x96), 1).Contents;
+                var staleTransfer = acquisitionWorld.PrepareActorFoodTransfer(eater.Reference, Key(0x96), Key(6), 0, 2, 1, null);
+                holder.Remove(Key(6), 1, true);
+                Reject(() => staleTransfer.Commit());
+                Check(holder.Item(Key(6))?.Count == 2 && carried.Item(Key(6))?.Count == 2,
+                    "Stale food transfer changed either inventory.");
+                var rollbackTransfer = acquisitionWorld.PrepareActorFoodTransfer(eater.Reference, Key(0x96), Key(6), 0, 2, 1, null);
+                carried.PrepareChange = (_, _) => new(() => throw new InvalidOperationException("fixture transfer failure"), () => { });
+                Reject(() => rollbackTransfer.Commit());
+                carried.PrepareChange = null;
+                Check(holder.Item(Key(6))?.Count == 2 && carried.Item(Key(6))?.Count == 2,
+                    "Failed actor food transfer did not roll back both inventories.");
+                var interleavedTransfer = acquisitionWorld.PrepareActorFoodTransfer(eater.Reference, Key(0x96), Key(6), 0, 2, 1, null);
+                var oldHolderOwnership = acquisitionWorld.Get(Key(0x96)).OwnershipOverride;
+                holder.PrepareChange = (_, _) => new(() => acquisitionWorld.SetOwnership(Key(0x96), Key(7)),
+                    () => acquisitionWorld.Get(Key(0x96)).OwnershipOverride = oldHolderOwnership);
+                Reject(() => interleavedTransfer.Commit());
+                holder.PrepareChange = null;
+                Check(holder.Item(Key(6))?.Count == 2 && carried.Item(Key(6))?.Count == 2 &&
+                    acquisitionWorld.Ownership(Key(0x96)).Owner is null,
+                    "Interleaved holder access escaped actor food transfer rollback.");
+                var livingHolder = acquisitionWorld.Inventory(Key(0x94), 1).Contents;
+                livingHolder.Add(records, Key(6), 1, 1, true);
+                Reject(() => acquisitionWorld.PrepareActorFoodTransfer(eater.Reference, Key(0x94), Key(6), 0, 1, 1, null));
+                Check(acquisitionWorld.KillActor(Key(0x94), eater.Reference, 1), "Fixture creature did not enter its source death transition.");
+                Reject(() => acquisitionWorld.PrepareActorFoodTransfer(eater.Reference, Key(0x94), Key(6), 0, 1, 1, null));
+                Check(acquisitionWorld.AdvanceDeathEvent(Key(0x94), 0, 0, false), "Fixture death event did not become ready.");
+                var corpseTransfer = acquisitionWorld.PrepareActorFoodTransfer(eater.Reference, Key(0x94), Key(6), 0, 1, 1, null);
+                corpseTransfer.Commit();
+                Check(livingHolder.Item(Key(6)) is null && carried.Item(Key(6))?.Count == 3,
+                    "Dead actor food transfer did not retain the actual corpse inventory.");
+                var transfer = acquisitionWorld.PrepareActorFoodTransfer(eater.Reference, Key(0x96), Key(6), 0, 2, 1, null);
+                transfer.Commit(); Reject(() => transfer.Commit());
+                Check(holder.Item(Key(6)) is null && carried.Item(Key(6))?.Count == 5 &&
+                    carried.Item(Key(6))!.Variants!.Any(value => value.Count == 2 && value.Condition == .75f),
+                    "Actor food transfer lost the selected variant or duplicated the stack.");
+                using var coldAcquisition = new FalloutReferenceWorld(records);
+                coldAcquisition.Restore(acquisitionWorld.Capture());
+                Check(coldAcquisition.Get(Key(0x95)).Taken && coldAcquisition.Inventory(eater.Reference, 1).Contents.Item(Key(6)) is { Count: 5 } coldFood &&
+                    coldFood.Variants!.Any(value => value.Count == 2 && value.Condition == .75f) &&
+                    coldAcquisition.Inventory(Key(0x96), 1).Contents.Item(Key(6)) is null,
+                    "Actor food pickup or transfer lost ownership during cold restoration.");
+            }
             var use = owner.Prepare(Key(1));
             Check(vitals.State == initial && inventory.Item(Key(1))!.Count == 3, "Aid preparation mutated state.");
             var result = use.Commit();
@@ -104,6 +250,29 @@ internal static class IngestibleContracts
             Reject(() => Owner(Vitals(initial)).Restore(saved with { Effects = [saved.Effects[0] with { ItemHash = new string('0', 64) }] }));
             Reject(() => Owner(Vitals(initial)).Restore(saved with { Effects = [saved.Effects[0] with { Magnitude = -1 }] }));
             Check(inventory.Item(Key(2))!.Count == 2, "Timed healing consumed more than one inventory item.");
+            var spellVitals = Vitals(initial);
+            hardcore = false;
+            var spellOwner = Owner(spellVitals);
+            var preparedSpell = spellOwner.PrepareActorEffect(Key(0x40));
+            Check(!preparedSpell.Commit().Consumed && inventory.Item(Key(0x40)) is null,
+                "Actor effect incorrectly consumed an inventory item.");
+            spellOwner.Advance(2);
+            var spellColdVitals = Vitals(spellVitals.State);
+            var spellCold = Owner(spellColdVitals);
+            spellCold.Restore(JsonSerializer.Deserialize<FalloutIngestiblesSnapshot>(JsonSerializer.Serialize(spellOwner.Capture()))!);
+            spellOwner.Advance(3); spellCold.Advance(3);
+            Check(spellVitals.State.ExactHitPoints == 110 && spellColdVitals.State.ExactHitPoints == 110 &&
+                spellOwner.Capture().Effects.Count == 0, "Actor effect lost its source timing or cold remainder.");
+            hardcore = true;
+            var spellBefore = spellVitals.State;
+            Reject(() => spellOwner.PrepareActorEffect(Key(0x40)));
+            Check(spellVitals.State == spellBefore && spellOwner.Capture().Effects.Count == 0,
+                "Unsupported selected actor effect partially applied its preceding effect.");
+            hardcore = false;
+            var staleSpell = spellOwner.PrepareActorEffect(Key(0x40));
+            spellOwner.PrepareActorEffect(Key(0x40)).Commit();
+            Reject(() => staleSpell.Commit());
+            Check(spellOwner.Capture().Effects.Count == 1, "A stale effect delivery overwrote the live timer set.");
             var deadVitals = Vitals(initial.Damage(1000));
             var dead = Owner(deadVitals); var retainedCount = inventory.Item(Key(1))!.Count;
             Reject(() => dead.Prepare(Key(1)));
@@ -143,6 +312,12 @@ internal static class IngestibleContracts
             Check(pools.ReadCurrent(7) == 5 && inventory.Item(Key(6))!.Count == rollbackCount &&
                 foodOwner.Capture().Effects.Count == 0 && foodVitals.State.ExactHitPoints == 140,
                 "Failed native modifier publication partially consumed or retained effects.");
+            failModifier = true;
+            pools.Changed += RefuseModifier;
+            Reject(() => foodOwner.PrepareActorEffect(Key(0x41)).Commit());
+            pools.Changed -= RefuseModifier;
+            Check(pools.ReadCurrent(7) == 5 && foodOwner.Capture().Effects.Count == 0 && foodVitals.State.ExactHitPoints == 140,
+                "Failed actor-effect publication retained a modifier or timer.");
 
             var world = new FalloutReferenceWorld(records);
             var consumer = world.Get(Key(0x91));
@@ -194,6 +369,22 @@ internal static class IngestibleContracts
                 Consumed: true, NoIdle: true).Validate();
             Reject(() => new FalloutActorEatProgress(Key(6), FalloutIngestible.Read(records, Key(6)).Hash, null,
                 Consumed: false, NoIdle: true).Validate());
+            var pendingSandbox = FalloutActorPendingSandboxStart.CaptureBlocker;
+            creature.ProcedureCaptureBlocker = pendingSandbox;
+            Reject(() => creature.ObserveInitialSandboxMotion(Key(0x80)));
+            creature.PackageMotion = new(Key(0x80), new string('a', 64), "test/idle.kf", new string('b', 64),
+                1, false, [0, 0, 0], [0, 0, 0, 1]);
+            Reject(() => creature.ObserveInitialSandboxMotion(Key(0x80)));
+            creature.PackageMotion = creature.PackageMotion with
+            { Sandbox = new(FalloutSandboxActivity.Eat, 1, 1, new byte[7]) };
+            Reject(() => creature.ObserveInitialSandboxMotion(Key(0x81)));
+            creature.ObserveInitialSandboxMotion(Key(0x80));
+            Check(creature.ProcedureCaptureBlocker is null && creature.PackageMotion.Sandbox is not null,
+                "A published Eat motion did not retire only its matching initial Sandbox blocker.");
+            creature.ProcedureCaptureBlocker = FalloutSandboxPackage.CaptureBlockerPrefix + "independent failure";
+            creature.ObserveInitialSandboxMotion(Key(0x80));
+            Check(creature.ProcedureCaptureBlocker.EndsWith("independent failure", StringComparison.Ordinal),
+                "An Eat motion erased a different Sandbox failure.");
             Console.WriteLine("OPENNV_FOOD_RADIATION_CONTRACT_PASS playerResistance=true actorResistance=true separatePools=true creatureSkill=true noIdleReceipt=true");
             Console.WriteLine("OPENNV_ACTOR_INGESTIBLE_CONTRACT_PASS ownInventory=true worldContention=true reversible=true cold=true");
             Console.WriteLine("OPENNV_INGESTIBLE_CONTRACT_PASS sourceMagnitude=true limbs=true atomic=true staleInput=true duration=true finalRemainder=true noDuration=true cold=true driftRejected=true");
@@ -206,6 +397,8 @@ internal static class IngestibleContracts
         var header = new byte[20]; header[0] = 20; header[4] = 5;
         return Record("ALCH", id, Field("EDID", Text("Aid" + id)), Field("DATA", BitConverter.GetBytes(1f)), Field("ENIT", header), Join(effects));
     }
+    private static byte[] Spell(uint id, params byte[][] effects) =>
+        Record("SPEL", id, Field("SPIT", new byte[16]), Join(effects));
     private static byte[] Predicate(ushort function, float comparison, uint argument = 0)
     {
         var bytes = new byte[28]; BitConverter.GetBytes(comparison).CopyTo(bytes, 4);
@@ -221,6 +414,11 @@ internal static class IngestibleContracts
     {
         var header = new byte[20]; header[4] = 3;
         return Record("ALCH", id, Field("EDID", Text("Food" + id)), Field("DATA", BitConverter.GetBytes(1f)), Field("ENIT", header), Join(effects));
+    }
+    private static byte[] Ingredient(uint id, params byte[][] effects)
+    {
+        var header = new byte[8]; header[4] = 3;
+        return Record("INGR", id, Field("EDID", Text("Ingredient" + id)), Field("DATA", BitConverter.GetBytes(1f)), Field("ENIT", header), Join(effects));
     }
     private static byte[] ReferenceGroup(params byte[][] references)
     {

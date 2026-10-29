@@ -145,6 +145,7 @@ internal sealed partial class FalloutReferenceWorld
             throw new InvalidDataException("Replacement residency changed source reference identity.");
         var oldKeys = previous.Select(instance => instance.Reference).ToHashSet();
         var newKeys = next.Select(instance => instance.Reference).ToHashSet();
+        _residentSnapshot = null;
         foreach (var key in oldKeys.Except(newKeys))
         {
             var remaining = _residentReferences[key] - 1;
@@ -158,5 +159,6 @@ internal sealed partial class FalloutReferenceWorld
         }
         foreach (var key in newKeys.Except(oldKeys)) _residentReferences[key] = _residentReferences.GetValueOrDefault(key) + 1;
         _residentCells[scene.Cell.FormKey] = next;
+        _residentSnapshot = null;
     }
 }

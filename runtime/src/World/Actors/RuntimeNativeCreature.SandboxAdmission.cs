@@ -28,6 +28,7 @@ internal sealed partial class RuntimeNativeCreature
 
     internal void RequireSourcePublication()
     {
+        PublishPendingSandboxStartSource();
         if (_sandboxAdmissionStaging is not { } staging) return;
         try
         {

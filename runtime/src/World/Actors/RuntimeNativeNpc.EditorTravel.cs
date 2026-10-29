@@ -25,12 +25,27 @@ internal partial class RuntimeNativeNpc
         var world = _aiWorld ?? throw new NotSupportedException("Editor travel has no shared reference owner.");
         var source = FalloutEditorTravelPackage.Read(package);
         var actor = Appearance.Reference!.Value;
-        var restored = initializing && world.Get(actor).PackageMotion?.Package == package.FormKey
-            ? world.Get(actor).PackageMotion!.EditorTravel : null;
+        var retained = initializing && world.Get(actor).PackageMotion?.Package == package.FormKey
+            ? world.Get(actor).PackageMotion : null;
+        if (retained?.Travel is not null)
+        {
+            RequireEditorPortalFlags(source);
+            BeginMarkerTravel(package, initializing);
+            return;
+        }
+        var restored = retained?.EditorTravel;
         var progress = restored ?? source.Start(world, actor);
         source.Validate(world, actor, progress);
         if (!world.SameTravelRegion(progress.Cell, _aiCell!.Cell.FormKey))
-            throw new NotSupportedException("Editor travel destination requires its other-region route owner.");
+        {
+            // Legacy editor continuations do not retain a directed portal leg
+            // or route cursor. Never turn one into a fresh package start.
+            if (restored is not null)
+                throw new NotSupportedException("Saved editor travel lacks its other-region portal continuation.");
+            RequireEditorPortalFlags(source);
+            BeginMarkerTravel(package, initializing);
+            return;
+        }
         _editorTravel = source; _editorTravelProgress = progress; _editorTravelDestination = null;
         _editorTravelStatus = restored is null ? "pending-native-observation" : "restored";
         _aiPackage = package; _travelProgress?.Cancel();
@@ -38,6 +53,15 @@ internal partial class RuntimeNativeNpc
             ? "Editor travel has started but its native motion snapshot is not initialized." : null;
         if (restored is null) _packageEvents!.Change(_packageIdleSource);
         else _packageEvents!.Restore(_packageIdleSource!, restored.Complete);
+    }
+
+    private static void RequireEditorPortalFlags(FalloutEditorTravelPackage source)
+    {
+        // The existing editor owner does not assign the marker owner's
+        // retention semantics to flag 2. Preserve that boundary until the
+        // editor procedure's reevaluation behavior is established.
+        if ((source.Flags & 2) != 0)
+            throw new NotSupportedException("Editor travel flag 2 needs its cross-region reevaluation owner.");
     }
 
     private void AdvanceEditorTravel(double delta)

@@ -32,6 +32,7 @@ internal sealed partial class NativeOwnedHudMessages : Control
     private string? _displayIcon;
     private FalloutChallengeHudDeclaration? _challengeDeclaration;
     private FalloutRadioHudDeclaration? _radioDeclaration;
+    private FalloutCaravanMinimumNotice? _caravanMinimumNotice;
     internal string? Error { get; private set; }
     internal object State => new
     {
@@ -270,6 +271,15 @@ internal sealed partial class NativeOwnedHudMessages : Control
             var source = RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("Radio HUD has no owned source.");
             _radioDeclaration ??= FalloutExecutableStringTable.ReadRadioHudDeclaration(source.FalloutExecutablePath);
             result = (Format(FalloutGameSettingStrings.Read(_records, "sRadioStationDiscovered"), [name]), _radioDeclaration.Icon, _radioDeclaration.Seconds);
+        }
+        else if (value.Kind == FalloutHudEventKind.ExecutableNotice)
+        {
+            var source = RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("Executable notice source is absent.");
+            _caravanMinimumNotice ??= FalloutExecutableStringTable.ReadCaravanMinimumNotice(source.FalloutExecutablePath);
+            if (value.Text != _caravanMinimumNotice.Setting)
+                throw new NotSupportedException($"Executable notice {value.Text} has no declaration owner.");
+            result = (FalloutMessageControlTokens.Resolve(FalloutGameSettingStrings.Read(_records, value.Text), ControlLabel),
+                _caravanMinimumNotice.Icon, _caravanMinimumNotice.Seconds);
         }
         else if (IsObjective(value))
             result = (_quests.ObjectiveText(value.Source, value.ObjectiveIndex!.Value), null, _questFadeIn + _questHold + _questFadeOut);

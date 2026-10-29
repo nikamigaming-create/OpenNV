@@ -8,6 +8,9 @@ internal static class BotCombatIntegrationContracts
     internal static void Run()
     {
         PreservedNavigationGoal();
+        SuspendedCombatReacquiresGoal();
+        PlayerThreatRequiresReposition();
+        SceneTransitionReacquiresCombat();
         StopAndFailureProtection();
         PersistenceFailureReleasesInput();
         OptionalCombatLimits();
@@ -17,6 +20,78 @@ internal static class BotCombatIntegrationContracts
         CombatLimitFaultPrecedence();
         CombatLimitPersistenceOrdering();
         Console.WriteLine("Reference bot combat integration: navigation resumption, ordinary combat receipts, optional direct-physics health/time stops, fault precedence, safe pause, human yield and input release before evidence persistence PASS.");
+    }
+
+    private static void SceneTransitionReacquiresCombat()
+    {
+        var combat = Observation() with { Forward = Vector3.UnitX, AimedReference = null };
+        var library = new VerifiedBotSkillLibrary();
+        var bot = new ReactiveReferenceBot(_ => Goal(combat), (_, end, _) => new([end], end, end, true),
+            (_, _) => { }, skills: library);
+        bot.Start("Fixture.esm:000501", "travel", 1);
+        bot.Tick(.016f);
+        combat = combat with { Sample = 2, Scene = "neighbor-cell" };
+        bot.Tick(.016f);
+        Require(Active(bot) && Phase(bot) == "replanning-after-combat-scene-change" &&
+            library.Feedback.Single() is { Success: false, FailureKind: "cancelled" },
+            "A settled cell transition did not suspend and retain its non-success feedback.");
+        combat = combat with { Sample = 3 };
+        bot.Tick(.016f);
+        Require(Phase(bot)?.StartsWith("combat-", StringComparison.Ordinal) == true,
+            "Combat did not reacquire its source threat in the new cell.");
+        bot.Stop();
+
+        combat = Observation();
+        bot.Start("Fixture.esm:000501", "travel", 1);
+        bot.Tick(.016f); // Ordinary fire is now awaiting its source receipt.
+        combat = combat with { Sample = 2, Scene = "neighbor-cell" };
+        bot.Tick(.016f);
+        Require(!Active(bot) && Phase(bot) == "blocked", "A cell transition silently discarded a pending shot receipt.");
+    }
+
+    private static void PlayerThreatRequiresReposition()
+    {
+        var combat = Observation() with { Forward = Vector3.UnitX, AimedReference = null };
+        var position = Vector3.Zero;
+        var routes = 0;
+        var bot = new ReactiveReferenceBot(identity => identity == ReactiveReferenceBot.CombatObservationIdentity
+                ? Goal(combat) with { Position = position, Target = Vector3.Zero, Aim = Vector3.Zero }
+                : Goal(combat) with { Position = position },
+            (_, end, _) => { routes++; return new([end], end, end, true); }, (_, _) => { });
+        bot.Start("Fixture.esm:000501", "travel", 1);
+        bot.Tick(.016f);
+        combat = combat with { Sample = 2, Targets = [combat.Targets[0] with { BodyPoint = new(0, 1, 40) }] };
+        bot.Tick(.016f);
+        Require(Active(bot) && Phase(bot) == "combat-suspended", "Player-targeting threat did not suspend the refused combat attempt.");
+        combat = combat with { Sample = 3, Targets = [combat.Targets[0] with { BodyPoint = new(0, 1, 10) }] };
+        bot.Tick(.016f);
+        Require(routes == 1 && Phase(bot) == "approaching", "The same threat immediately retook input before ordinary repositioning.");
+        position = new(0, 0, 2);
+        combat = combat with { Sample = 4 };
+        bot.Tick(.016f);
+        Require(Phase(bot)?.StartsWith("combat-", StringComparison.Ordinal) == true, "Observed repositioning did not permit combat to resume.");
+        bot.Stop();
+    }
+
+    private static void SuspendedCombatReacquiresGoal()
+    {
+        var combat = Observation() with { Forward = Vector3.UnitX, AimedReference = null,
+            Targets = [Observation().Targets[0] with { TargetsPlayer = false, ProtectedTarget = "protected-actor" }] };
+        var routes = new List<Vector3>();
+        var bot = new ReactiveReferenceBot(identity => identity == ReactiveReferenceBot.CombatObservationIdentity
+                ? Goal(combat) with { Target = Vector3.Zero, Aim = Vector3.Zero } : Goal(combat),
+            (_, end, _) => { routes.Add(end); return new([end], end, end, true); }, (_, _) => { });
+        bot.Start("Fixture.esm:000501", "travel", 1);
+        bot.Tick(.016f);
+        combat = combat with { Sample = 2, Targets = [combat.Targets[0] with { BodyPoint = new(0, 1, 40) }] };
+        bot.Tick(.016f);
+        Require(Active(bot) && routes.Count == 0 && Phase(bot) == "combat-suspended",
+            "Combat-only observation was reused for navigation during a suspended takeover.");
+        combat = combat with { Sample = 3, Targets = [combat.Targets[0] with { BodyPoint = new(0, 1, 10) }] };
+        bot.Tick(.016f);
+        Require(routes.Count == 1 && routes[0].Z > 1,
+            "Suspended takeover did not reacquire the actual travel target before routing.");
+        bot.Stop();
     }
 
     private static BotObservation Goal(BotCombatObservation combat) => new(combat.Scene, Vector3.Zero,

@@ -9,33 +9,59 @@ internal sealed partial class RuntimeNifParticleSystem
     private bool _configured;
     private bool _retired;
 
+    private ShaderMaterial? _pendingShader;
+
     internal void Configure(FalloutNifFile file, FalloutNifParticleSystem source,
         IReadOnlyDictionary<int, Node3D> nodes, Material material, float units)
     {
-        if (_configured || _retired) throw new InvalidOperationException("Particle instance already owns a source lifetime.");
+        BeginConfigure(file, source, nodes, material, units);
+        FinishConfigure();
+    }
+
+    internal void BeginConfigure(FalloutNifFile file, FalloutNifParticleSystem source,
+        IReadOnlyDictionary<int, Node3D> nodes, Material material, float units)
+    {
+        if (_configured || _retired || _sourceFile is not null)
+            throw new InvalidOperationException("Particle instance already owns a source lifetime.");
         if (!float.IsFinite(units) || units <= 0) throw new InvalidDataException("Particle source units must be finite and positive.");
         if (!ReferenceEquals(file.ReadObject(source.Block.Index), source))
             throw new InvalidDataException("Particle declaration is not owned by its selected NIF reader.");
         try
         {
             _sourceFile = file;
-            ConfigureSource(file, source, nodes, material, units);
-            _configured = true;
+            _pendingShader = ConfigureSource(file, source, nodes, material, units);
         }
-        catch
+        catch { AbortConfiguration(); throw; }
+    }
+
+    internal void FinishConfigure()
+    {
+        var shader = _pendingShader ?? throw new InvalidOperationException("Particle source preparation is incomplete.");
+        try
         {
-            // Construction may fail before this node enters a tree. Dispose
-            // only our generated draw/noise owners; the supplied material,
-            // source and sibling transform nodes belong to their callers.
-            ReleaseParticleDraw(freeVisual: true);
-            _turbulence?.Dispose(); _turbulence = null;
-            _active.Clear(); _rates.Clear(); _speeds.Clear(); _lifespans.Clear(); _gravityStrengths.Clear(); _remainders.Clear();
-            _meshes.Clear(); _colliders.Clear(); _keyColors.Clear(); _spawnOwners.Clear(); _particleIndices.Clear(); _stepTransforms.Clear();
-            _particles = []; _drawBuffer = []; _drawOrder = []; _modifiers = []; _drawModifiers = []; _activeDrawModifiers = []; _colliderPoses = [];
-            _source = null!; _data = null!; _nodes = null!;
-            _sourceFile = null;
-            throw;
+            var observer = ConfigureObserver;
+            var started = observer is null ? 0 : System.Diagnostics.Stopwatch.GetTimestamp();
+            shader.SetShaderParameter("source_particle_atlas", _data.HasTextureIndices);
+            ConfigureParticleDraw(shader);
+            SetMeta("opennv_particle_source_capacity", _data.Maximum);
+            SetMeta("opennv_particle_owner", "direct-nif-instance-simulation");
+            _pendingShader = null;
+            _configured = true;
+            observer?.Invoke("native-draw-allocation", System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds);
         }
+        catch { AbortConfiguration(); throw; }
+    }
+
+    private void AbortConfiguration()
+    {
+        // Only generated owners belong here; material, source and siblings remain external.
+        ReleaseParticleDraw(freeVisual: true);
+        _turbulence?.Dispose(); _turbulence = null;
+        _active.Clear(); _rates.Clear(); _speeds.Clear(); _lifespans.Clear(); _gravityStrengths.Clear(); _remainders.Clear();
+        _meshes.Clear(); _colliders.Clear(); _keyColors.Clear(); _spawnOwners.Clear(); _particleIndices.Clear(); _stepTransforms.Clear();
+        _particles = []; _drawBuffer = []; _drawOrder = []; _modifiers = []; _drawModifiers = []; _activeDrawModifiers = []; _colliderPoses = [];
+        _source = null!; _data = null!; _nodes = null!;
+        _pendingShader = null; _sourceFile = null; _configured = false;
     }
 
     private void RequireConfigured()
@@ -124,7 +150,7 @@ internal sealed partial class RuntimeNifParticleSystem
             _meshes.Clear(); _colliders.Clear(); _keyColors.Clear(); _spawnOwners.Clear(); _stepTransforms.Clear();
             _particles = []; _drawBuffer = []; _drawOrder = []; _modifiers = []; _colliderPoses = [];
             _nodes = null!; LifecycleEvent = null; _configured = false;
-            _sourceFile = null;
+            _sourceFile = null; _pendingShader = null;
         }
         if (callbackFailure is not null) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(callbackFailure).Throw();
     }

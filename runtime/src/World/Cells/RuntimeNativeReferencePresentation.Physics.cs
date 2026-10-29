@@ -1,8 +1,6 @@
 using Godot;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Formats.Gamebryo;
-using OpenNV.Runtime.SceneGraph;
-using OpenNV.Runtime.World.Actors;
 
 namespace OpenNV.Runtime.World.Cells;
 
@@ -20,10 +18,8 @@ internal partial class RuntimeNativeReferencePresentation
         }
     }
 
-    private void BindObjectPhysics(FalloutFormKey key, Node3D node)
+    private void BindObjectPhysics(FalloutFormKey key, RuntimeNifRigidBody[] bodies)
     {
-        if (node is RuntimeNativeNpc or RuntimeNativeCreature) return;
-        var bodies = NodeTraversal.SelfAndDescendants<RuntimeNifRigidBody>(node).Where(body => !body.Freeze).ToArray();
         var instance = _world.Get(key);
         var saved = instance.CaptureObjectPhysics?.Invoke() ?? instance.ObjectPhysics;
         if (bodies.GroupBy(body => (body.SourceSha256, body.SourceBody)).Any(group => group.Count() != 1))

@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using Godot;
 using OpenNV.Runtime.Content;
+using OpenNV.Runtime.Gameplay.State;
 
 namespace OpenNV.Runtime.Presentation.Ui;
 
@@ -26,10 +27,11 @@ internal sealed partial class NativeGamebryoMovie : CanvasLayer
     private bool _ready;
     private bool _started;
     private bool _finished;
-    private bool _pausedBeforeMovie;
-    private bool _pauseOwned;
+    private readonly RuntimeMoviePause _worldPause = new();
     private bool _failed;
     internal string? Error { get; private set; }
+    internal bool OwnsWorldPause => _worldPause.Active;
+    internal bool RebaseLoadingPause(bool pausedAfterLoading) => _worldPause.RebaseLoadingPause(pausedAfterLoading);
 
     internal void Configure(FalloutMovieCommand command, Action<bool> completed)
     {
@@ -53,7 +55,7 @@ internal sealed partial class NativeGamebryoMovie : CanvasLayer
         };
         _picture.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
         background.AddChild(_picture);
-        _pausedBeforeMovie = GetTree().Paused;
+        _worldPause.Acquire(GetTree().Paused);
         _disable3DBeforeMovie = GetViewport().Disable3D;
         GetViewport().Disable3D = true;
         foreach (var node in GetTree().Root.FindChildren("*", "", true, false)
@@ -67,7 +69,6 @@ internal sealed partial class NativeGamebryoMovie : CanvasLayer
                 node.ProcessMode = ProcessModeEnum.Always;
         }
         GetTree().Paused = true;
-        _pauseOwned = true;
         try
         {
             var source = RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("Owned movie source is absent.");
@@ -256,10 +257,9 @@ internal sealed partial class NativeGamebryoMovie : CanvasLayer
 
     private void RestoreWorld()
     {
-        if (!_pauseOwned)
+        if (_worldPause.Release() is not { } pausedBefore)
             return;
-        _pauseOwned = false;
-        GetTree().Paused = _pausedBeforeMovie;
+        GetTree().Paused = pausedBefore;
         GetViewport().Disable3D = _disable3DBeforeMovie;
         foreach (var owner in _audioOwners.Where(owner => IsInstanceValid(owner.Node)))
         {

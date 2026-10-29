@@ -38,6 +38,9 @@ internal partial class RuntimeNativeExteriorLod : Node3D
     private long _residentBytes;
     private int _detailRadius;
     private bool _completeTerrainCover, _completeObjectCover;
+    private double _detailImageMilliseconds, _detailTextureMilliseconds, _detailBindingMilliseconds;
+    private int _detailBoundMaterials;
+    private bool _detailTextureReused;
     internal const long CacheBudgetBytes = 512L * 1024 * 1024;
     internal float ViewDistanceMeters => _catalog.LoadDistance * _units;
     internal object State => new
@@ -48,6 +51,14 @@ internal partial class RuntimeNativeExteriorLod : Node3D
         failedBlocks = _failed.Count,
         completeTerrainCover = _completeTerrainCover,
         completeObjectCover = _completeObjectCover,
+        detailGrid = new
+        {
+            imageMilliseconds = _detailImageMilliseconds,
+            textureMilliseconds = _detailTextureMilliseconds,
+            bindingMilliseconds = _detailBindingMilliseconds,
+            boundMaterials = _detailBoundMaterials,
+            textureReused = _detailTextureReused
+        },
         residentBytes = _residentBytes,
         cacheBudgetBytes = CacheBudgetBytes,
         loading = _read is not null || _uploads is not null,
@@ -87,6 +98,7 @@ internal partial class RuntimeNativeExteriorLod : Node3D
 
     internal void SetDetailGrid(FalloutExteriorGridScene grid)
     {
+        var started = Stopwatch.GetTimestamp();
         _detailRadius = grid.Radius;
         var cells = grid.Cells.Select(cell => cell.Coordinates ?? throw new InvalidDataException("LOD near grid is not spatial.")).ToArray();
         var minX = cells.Min(cell => cell.X); var maxX = cells.Max(cell => cell.X);
@@ -94,10 +106,20 @@ internal partial class RuntimeNativeExteriorLod : Node3D
         using var image = Image.CreateEmpty(maxX - minX + 1, maxY - minY + 1, false, Image.Format.R8);
         image.Fill(Colors.Black);
         foreach (var cell in cells) image.SetPixel(cell.X - minX, maxY - cell.Y, Colors.White);
-        _mask = ImageTexture.CreateFromImage(image);
+        var imageFinished = Stopwatch.GetTimestamp();
+        var reuse = _mask is not null && GodotObject.IsInstanceValid(_mask) &&
+            _mask.GetWidth() == image.GetWidth() && _mask.GetHeight() == image.GetHeight();
+        if (reuse) _mask!.Update(image);
+        else _mask = ImageTexture.CreateFromImage(image);
+        var textureFinished = Stopwatch.GetTimestamp();
         _detailBounds = new(minX * 4096 * _units, -(maxY + 1) * 4096 * _units,
             (maxX + 1) * 4096 * _units, -minY * 4096 * _units);
-        foreach (var resident in _cache.Values) BindDetail(resident.Materials);
+        foreach (var resident in _cache.Values) BindDetail(resident.Materials, bindTexture: !reuse);
+        _detailImageMilliseconds = Stopwatch.GetElapsedTime(started, imageFinished).TotalMilliseconds;
+        _detailTextureMilliseconds = Stopwatch.GetElapsedTime(imageFinished, textureFinished).TotalMilliseconds;
+        _detailBindingMilliseconds = Stopwatch.GetElapsedTime(textureFinished).TotalMilliseconds;
+        _detailBoundMaterials = _cache.Values.Sum(resident => resident.Materials.Length);
+        _detailTextureReused = reuse;
     }
 
     internal async Task PrepareInitialSelection(Vector3 viewPosition)
@@ -338,13 +360,13 @@ internal partial class RuntimeNativeExteriorLod : Node3D
     private static string UploadSource(Payload payload) =>
         $"LOD:{payload.Block.Level}:{payload.Block.X}:{payload.Block.Y}:{payload.Terrain.Path}|{payload.Objects.Path}";
 
-    private void BindDetail(IEnumerable<ShaderMaterial> materials)
+    private void BindDetail(IEnumerable<ShaderMaterial> materials, bool bindTexture = true)
     {
         foreach (var material in materials)
         {
-            material.SetShaderParameter("detail_mask", _mask);
+            if (bindTexture) material.SetShaderParameter("detail_mask", _mask);
             material.SetShaderParameter("detail_bounds", _detailBounds);
-            material.SetShaderParameter("detail_mask_enabled", true);
+            if (bindTexture) material.SetShaderParameter("detail_mask_enabled", true);
         }
     }
 

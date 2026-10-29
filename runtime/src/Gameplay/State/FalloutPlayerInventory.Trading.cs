@@ -104,7 +104,10 @@ internal sealed partial class FalloutPlayerInventory
         targetItems[transfer.Form] = source with
         {
             Count = checked((previous?.Count ?? 0) + transfer.Count),
-            Variants = variants
+            Variants = variants,
+            // A transferred stack cannot replace the destination's existing
+            // equipped-instance lock. The source's lock was refused above.
+            UnequipLocked = previous?.UnequipLocked ?? false
         };
     }
 

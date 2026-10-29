@@ -10,12 +10,22 @@ if (args is ["classic-fo1-start", var fo1StartInstall]) return ClassicFo1StartPr
 if (args.Length >= 3 && args[0] == "classic-interactions") return ClassicInteractionProbe.Run(args[1], args[2], args[3..]);
 if (args.Length >= 3 && args[0] == "classic-audio") return ClassicAudioProbe.Run(args[1], args[2], args[3..]);
 if (args.Length >= 3 && args[0] == "classic-modules") return ClassicModuleProbe.Run(args[1], args[2], args[3..]);
+if (args is ["script-capability-map", var scriptAudit]) return ScriptCapabilityMap.Run(scriptAudit, Directory.GetCurrentDirectory());
+if (args is ["script-capability-map", var scriptAuditPath, var scriptRepository]) return ScriptCapabilityMap.Run(scriptAuditPath, scriptRepository);
+if (args.Length >= 2 && args[0] == "actor-package-graph")
+{
+    var actorGraphOptions = new Dictionary<string, string>(StringComparer.Ordinal);
+    for (var index = 2; index < args.Length; index++) DevelopmentLabSource.ReadOption(args, ref index, actorGraphOptions);
+    using var actorGraphContent = DevelopmentLabSource.Open(args[1], DevelopmentLabSource.ReadSelection(actorGraphOptions));
+    using var actorRecords = FalloutPluginStack.Load(actorGraphContent.PluginSources);
+    return ActorPackageGraph.Run(actorRecords);
+}
 if (args is ["cell-review", var reviewSource, var reviewSnapshot]) return CellReview.Run(reviewSource, reviewSnapshot);
 if (args.Length >= 5 && args[0] == "weapon-loadout") return WeaponLoadout.Run(args[1], args[2], args[3], args[4..]);
 if (args.Length >= 1 && args[0] == "cell-graph") return CellGraphAudit.RunCommand(args[1..]);
 if (args.Length >= 1 && args[0] == "corpus") return CorpusInventory.RunCommand(args[1..]);
 
-if (args.Length < 2 || args.Length < 3 && args[0] != "classic-movement" || args[0] is not ("route" or "classic-items" or "classic-campaign-start" or "classic-script" or "classic-item-systems" or "classic-inventory" or "classic-resource" or "classic-frm" or "classic-assets" or "classic-scenery" or "classic-movement" or "classic-player" or "cells" or "exterior" or "actors" or "script" or "record" or "settings" or "dialogue" or "replay" or "lifecycle" or "corpus" or "quest-graph" or "resources" or "resource" or "nif" or "menu"))
+if (args.Length < 2 || args.Length < 3 && args[0] is not ("classic-movement" or "caravan-source" or "creature-sound-graph" or "find-target-graph" or "sandbox-capability-graph" or "light-graph" or "item-events" or "menu-audit" or "menu-graph") || args[0] is not ("route" or "classic-items" or "classic-campaign-start" or "classic-script" or "classic-item-systems" or "classic-inventory" or "classic-resource" or "classic-frm" or "classic-assets" or "classic-scenery" or "classic-movement" or "classic-player" or "cells" or "exterior" or "actors" or "script" or "record" or "record-find" or "record-layout" or "caravan-source" or "creature-sound-graph" or "find-target-graph" or "sandbox-capability-graph" or "light-graph" or "item-events" or "menu-audit" or "menu-graph" or "menu-source-events" or "settings" or "dialogue" or "dialogue-voice-topic" or "replay" or "lifecycle" or "corpus" or "quest-graph" or "resources" or "resource" or "nif" or "menu"))
 {
     Console.Error.WriteLine("Development only; reads owned files in place.\n" +
         "cells <installation-or-source-stack> <CELL editor ID or name fragment> [...]\n" +
@@ -44,10 +54,15 @@ if (args.Length < 2 || args.Length < 3 && args[0] != "classic-movement" || args[
         "record <installation-or-source-stack> <signature> <editor ID or runtime hex ID> [...] (or --contains <EDID text>)\n" +
         "settings <installation-or-source-stack> <setting name fragment> [...]\n" +
         "dialogue <installation-or-source-stack> <quest editor ID>\n" +
+        "dialogue-voice-topic <installation-or-source-stack> <topic runtime hex ID> <actor base runtime hex ID>\n" +
         "replay <installation-or-source-stack> <scenario.json>\n" +
         "lifecycle <installation-or-source-stack> <CELL editor ID> [...] (or --all)\n" +
         "corpus <installation-or-source-stack> <fresh-output-directory> [--selection-variants] [source options]\n" +
         "quest-graph <installation-or-source-stack> <fresh-output-directory> [source options]\n" +
+        "item-events <installation-or-source-stack> [source options]\n" +
+        "menu-audit <installation-or-source-stack> [source options]\n" +
+        "menu-graph <installation-or-source-stack> [source options]\n" +
+        "menu-source-events <installation-or-source-stack> <logical-path> [source options]\n" +
         "resources <installation-or-source-stack> <logical-directory>\n" +
         "resource <installation-or-source-stack> <logical-path> [private-output-file]\n" +
         "nif <installation-or-source-stack> <logical-path>\n" +
@@ -174,6 +189,28 @@ DevelopmentLabSource.Configure(args[1], sourceCommand.Selection);
 using var content = RuntimeLiveContentSource.Current!;
 using var records = FalloutPluginStack.Load(content.PluginSources);
 var json = new JsonSerializerOptions { WriteIndented = true };
+if (args[0] == "dialogue-voice-topic")
+{
+    if (args.Length != 4) throw new ArgumentException("Dialogue voice topic audit requires topic and actor base IDs.");
+    return DialogueVoiceTopicAudit.Run(records, content, args[2], args[3]);
+}
+if (args[0] == "menu-audit") return MenuSourceAudit.Run(content);
+if (args[0] == "menu-graph") return MenuIncludeGraph.Run(content);
+if (args[0] == "menu-source-events")
+{
+    var events = FalloutMenuSourceProgram.Read(args[2], path => content.TryRead(path, null, out var bytes, out _)
+        ? bytes : throw new FileNotFoundException("Included menu resource is missing.", path));
+    Console.WriteLine(JsonSerializer.Serialize(new
+    {
+        schema = "opennv-menu-source-events/v1", root = args[2],
+        sourceEntries = events.Count(value => value.Kind == FalloutMenuSourceEventKind.EnterSource),
+        tokens = events.Count(value => value.Kind == FalloutMenuSourceEventKind.Token),
+        sources = events.Where(value => value.Kind == FalloutMenuSourceEventKind.EnterSource)
+            .GroupBy(value => value.Source, StringComparer.OrdinalIgnoreCase).Select(group => new { path = group.Key, entries = group.Count() }),
+        boundary = "Candidate source-qualified include sequence only; retail timing and tile construction are unverified."
+    }));
+    return 0;
+}
 if (args[0] is "resource" or "nif")
 {
     if (!content.TryRead(args[2], null, out var bytes, out var identity)) throw new FileNotFoundException(args[2]);
@@ -253,9 +290,53 @@ if (args[0] == "settings")
         .Where(field => field.Signature == "EDID").Select(field => FalloutDialogueTopic.Text(field.Data.Span))))
         .Where(name => (name.StartsWith('f') || name.StartsWith('i') || name.StartsWith('s')) && args[2..].Any(part => name.Contains(part, StringComparison.OrdinalIgnoreCase)))
         .Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase);
-    foreach (var name in names) Console.WriteLine(JsonSerializer.Serialize(new { name,
-        value = name.StartsWith('s') ? (object)FalloutGameSettingStrings.Read(records, name) :
-            name.StartsWith('i') ? (double)FalloutGameSettingIntegers.Read(records, name) : FalloutGameSettingFloats.Read(records, name) }, json));
+    var settingFailures = 0;
+    foreach (var name in names)
+    {
+        try
+        {
+            object value = name.StartsWith('s') ? FalloutGameSettingStrings.Read(records, name) :
+                name.StartsWith('i') ? (double)FalloutGameSettingIntegers.Read(records, name) : FalloutGameSettingFloats.Read(records, name);
+            Console.WriteLine(JsonSerializer.Serialize(new { name, value, error = (string?)null }, json));
+        }
+        catch (Exception error) when (error is InvalidDataException or NotSupportedException or KeyNotFoundException)
+        {
+            ++settingFailures;
+            Console.WriteLine(JsonSerializer.Serialize(new { name, value = (object?)null, error = error.Message }, json));
+        }
+    }
+    return settingFailures == 0 ? 0 : 1;
+}
+if (args[0] == "caravan-source") return CaravanSourceAudit.Run(records);
+if (args[0] == "creature-sound-graph") return CreatureSoundGraph.Run(records);
+if (args[0] == "find-target-graph") return FindTargetGraph.Run(records);
+if (args[0] == "sandbox-capability-graph") return SandboxCapabilityGraph.Run(records);
+if (args[0] == "light-graph") return LightSourceGraph.Run(records);
+if (args[0] == "item-events") return ItemEventAudit.Run(records);
+if (args[0] == "record-layout")
+{
+    var layouts = new Dictionary<string, (int Count, FalloutFormKey First)>();
+    var selected = records.EffectiveRecords(args[2]);
+    foreach (var record in selected)
+    {
+        var key = string.Join(" ", record.ReadSubrecords().Select(field => field.Signature + ":" + field.Data.Length));
+        layouts[key] = layouts.TryGetValue(key, out var prior) ? (prior.Count + 1, prior.First) : (1, record.FormKey);
+    }
+    Console.WriteLine(JsonSerializer.Serialize(new { signature = args[2], records = selected.Count,
+        layouts = layouts.OrderByDescending(pair => pair.Value.Count).Select(pair => new { fields = pair.Key, pair.Value.Count, pair.Value.First }),
+        boundary = "source-layout-only; no semantic or runtime acceptance" }));
+    return 0;
+}
+if (args[0] == "record-find")
+{
+    foreach (var record in records.EffectiveRecords())
+    {
+        var id = record.ReadSubrecords().Where(field => field.Signature == "EDID").ToArray();
+        if (id.Length != 1) continue;
+        var name = FalloutDialogueTopic.Text(id[0].Data.Span);
+        if (!name.Contains(args[2], StringComparison.OrdinalIgnoreCase)) continue;
+        Console.WriteLine(JsonSerializer.Serialize(new { record.FormKey, record.Signature, editorId = name }));
+    }
     return 0;
 }
 if (args[0] == "record")
@@ -273,6 +354,7 @@ if (args[0] == "record")
         {
             record.FormKey,
             record.Signature,
+            groups = record.Groups.Select(group => new { group.Type, group.LabelAsUInt32 }).ToArray(),
             fields = record.ReadSubrecords().Select(field => new
             {
                 field.Signature,

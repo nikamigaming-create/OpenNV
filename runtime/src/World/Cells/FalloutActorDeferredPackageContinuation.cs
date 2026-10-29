@@ -51,7 +51,7 @@ internal sealed record FalloutActorDeferredPackageContinuation(FalloutFormKey Re
             actor.FurnitureContinuation is not null || actor.DialogueContinuation is not null ||
             actor.Engagement is not null || actor.Ragdoll is not null || actor.HitReaction is not null ||
             actor.HeadTracking is not null || actor.CorpseEquipment is not null || actor.ObjectAnimations is not null || actor.KnockedDown || actor.Injury?.Dead == true ||
-            actor.SandboxAdmissionFailure is not null || actor.SandboxMotionFailure is not null || actor.CreatureScriptIdle is not null ||
+            actor.SandboxAdmissionFailure is not null || actor.InterruptedSandboxAdmission is not null || actor.SandboxMotionFailure is not null || actor.CreatureScriptIdle is not null ||
             RetainedAssignment is null && actor.AnimationSoundEvents is not null || actor.HitReactionFaults is not null)
             throw new InvalidDataException("Deferred package has a foreign assignment or already-started native continuation.");
     }
@@ -83,13 +83,13 @@ internal sealed record FalloutActorDeferredPackageContinuation(FalloutFormKey Re
     private static bool HasNoProcedureOwners(FalloutReferenceInstance actor) =>
         actor.CapturePackageAssignment is null && actor.QueryCurrentPackage is null &&
         actor.CaptureHeadTracking is null && actor.CaptureEngagement is null && actor.CaptureRagdoll is null &&
-        actor.CaptureCorpseEquipment is null && actor.CaptureObjectAnimations is null && actor.ObjectAnimations is null &&
+        actor.CaptureCorpseEquipment is null && actor.CaptureCorpseEquipmentForFiniteWait is null && actor.CaptureObjectAnimations is null && actor.ObjectAnimations is null &&
         actor.PackageIdle is null && actor.PackageBindingFailure is null &&
         actor.SelectionFailure is null && actor.PendingPackageSelection is null && actor.FurnitureContinuation is null &&
         actor.DialogueContinuation is null && actor.Engagement is null && actor.Ragdoll is null && actor.HitReaction is null &&
         actor.HeadTracking is null && !actor.HeadTrackingRequired && actor.CorpseEquipment is null &&
         !actor.KnockedDown && actor.Injury?.Dead != true && !actor.HasHitReactionHistory &&
-        actor.SandboxAdmissionFailure is null && actor.SandboxMotionFailure is null && actor.CreatureScriptIdle is null;
+        actor.SandboxAdmissionFailure is null && actor.InterruptedSandboxAdmission is null && actor.SandboxMotionFailure is null && actor.CreatureScriptIdle is null;
 
     internal void BindNative(FalloutPluginStack records, FalloutReferenceInstance actor, FalloutPackageEvents events)
     {

@@ -79,15 +79,24 @@ public partial class RuntimeCoordinator
                     var enabled = world.IsEnabled(key);
                     var targetsPlayer = !state.Unconscious && !state.Restrained &&
                         world.HasSelectedCombatTarget(key, playerKey);
-                    if (!targetsPlayer && !_botCombatObservedThreats.Contains(key)) continue;
-                    if (targetsPlayer) _botCombatObservedThreats.Add(key);
+                    var protectedTarget = !targetsPlayer && !state.Unconscious && !state.Restrained
+                        ? NativeBotProtectedCombatTarget(world, state, playerKey) : null;
+                    // A quest's own actor script can identify a hostile
+                    // participant even before it acquires the player. This
+                    // only chooses ordinary bot input; source scripts still
+                    // decide whether the objective progresses.
+                    var questThreat = !targetsPlayer && protectedTarget is null && !state.Unconscious && !state.Restrained &&
+                        state.Script?.ReferencedForms.Any(_botCombatQuestObjectives.Contains) == true &&
+                        NativeBotHostileToPlayer(world, state, playerKey);
+                    if (!targetsPlayer && protectedTarget is null && !questThreat && !_botCombatObservedThreats.Contains(key)) continue;
+                    if (targetsPlayer || protectedTarget is not null || questThreat) _botCombatObservedThreats.Add(key);
                     var resident = node.IsVisibleInTree() && enabled && NativeCollisionResident(node.GlobalPosition);
                     var sourceFault = state.ScriptError ?? state.SelectionFailure?.Error ?? state.PackageBindingFailure?.Error;
                     if (RuntimeNativeActorCombat.Find(node) is not { } owner)
                     {
                         targets.Add(new(key.ToString(), Vector3ToNumeric(node.GlobalPosition), null, null, resident,
                             enabled, targetsPlayer, state.Injury?.Dead == true, null, null, null, null,
-                            "Resident source threat has no native combat owner.", sourceFault));
+                            "Resident source threat has no native combat owner.", sourceFault, protectedTarget?.ToString(), questThreat));
                         continue;
                     }
                     var observation = JsonSerializer.SerializeToElement(owner.Observation, BotCombatJson);
@@ -115,23 +124,54 @@ public partial class RuntimeCoordinator
                     }
                     targets.Add(new(key.ToString(), Vector3ToNumeric(node.GlobalPosition), point,
                         BotCombatTelemetry.Text(body, "owner"), resident, enabled, targetsPlayer, dead, health,
-                        bodyReference, muzzleReference, obstruction, error, sourceFault));
+                        bodyReference, muzzleReference, obstruction, error, sourceFault, protectedTarget?.ToString(), questThreat));
                 }
             }
             catch (Exception error) when (error is InvalidOperationException or NotSupportedException or InvalidDataException or ArgumentException or KeyNotFoundException or JsonException)
             { fault ??= "Native combat observation owner is unavailable: " + error.Message; }
         }
         string? aimed = null;
-        if (!loading && !defeated && weapon is { RangeMeters: > 0 })
+        if (!loading && !defeated && weapon is { RangeMeters: > 0 } && float.IsFinite(weapon.RangeMeters))
         {
             var origin = binding.InputMode == "flat" ? camera : muzzle;
             var direction = binding.InputMode == "flat" ? forward : muzzleForward;
-            aimed = NativeBotCombatRay(player, origin, origin + direction * Math.Min(weapon.RangeMeters, ReactiveCombatSkill.MaximumRangeMeters + 1)).Reference;
+            aimed = NativeBotCombatRay(player, origin, origin + direction * weapon.RangeMeters).Reference;
         }
         return new(checked((long)Engine.GetPhysicsFrames()), scene, binding, Vector3ToNumeric(camera), Vector3ToNumeric(forward),
             Vector3ToNumeric(muzzle), Vector3ToNumeric(muzzleForward), aimed, GetTree().Paused, loading, defeated, player.ModalInput,
             controls.Looking, controls.Fighting, player.CollisionResident, vitals?.ExactHitPoints ?? float.NaN,
             vitals?.MaximumHitPoints ?? float.NaN, bindings, weapon, firing, targets, fault);
+    }
+
+    // An actual hostile engagement can threaten a neutral or allied resident
+    // before it ever selects the player. This is an input-driver policy, not
+    // a change to the actors' combat or quest state.
+    private FalloutFormKey? NativeBotProtectedCombatTarget(FalloutReferenceWorld world,
+        FalloutReferenceInstance attacker, FalloutFormKey player)
+    {
+        if (attacker.Engagement?.Target is not { } victim || victim == player || victim == attacker.Reference ||
+            !world.IsResident(victim) || !world.IsEnabled(victim) || world.IsDead(victim)) return null;
+        var target = world.Get(victim);
+        if (_nativePluginStack!.GetEffective(target.Base).Signature is not ("NPC_" or "CREA")) return null;
+        if (!NativeBotHostileToPlayer(world, attacker, player)) return null;
+        var victimRelation = world.ActorRelation(victim, player);
+        if (NativeBotHostile(world, target, victimRelation)) return null;
+        return victim;
+    }
+
+    private bool NativeBotHostileToPlayer(FalloutReferenceWorld world, FalloutReferenceInstance actor, FalloutFormKey player)
+    {
+        var relation = world.ActorRelation(actor.Reference, player);
+        return relation < 2 && NativeBotHostile(world, actor, relation);
+    }
+
+    private bool NativeBotHostile(FalloutReferenceWorld world, FalloutReferenceInstance actor, uint relation)
+    {
+        var aggression = world.ActorValue(actor.Reference, "aggression");
+        if (!float.IsFinite(aggression) || aggression != MathF.Truncate(aggression) || aggression is < 0 or > 3)
+            throw new InvalidDataException("Combat observation has an invalid source aggression value.");
+        var source = FalloutActorThreat.Read(_nativePluginStack!, actor.Base, actor.Templates);
+        return (source with { Aggression = (byte)aggression }).Hostile(relation);
     }
 
     private BotCombatWeapon? ObserveNativeBotWeapon(RuntimeNativePlayer player, JsonElement presentation, JsonElement handling,

@@ -39,6 +39,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
     private FalloutPlayerTagSkills _tagSkills = null!;
     private IReadOnlyList<FalloutNativeTraitIdentity> _traits = [];
     private RuntimeNativePlayerNameEntry? _nameEntry;
+    private bool _presentationActive;
     private RuntimeNativeRaceSexEntry? _raceSexEntry;
     private FalloutRaceMenuDevices? _raceMenuDevices;
     private string? _raceMenuDefaultModel;
@@ -313,7 +314,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
     public override void _Process(double delta)
     {
         using var frameWork = OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Measure(OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Owner.Opening);
-        if (BlockingExecutionError is not null) return;
+        if (!_presentationActive || BlockingExecutionError is not null) return;
         try
         {
             _playerAbilities.Synchronize();
@@ -378,7 +379,6 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         AddChild(_speech);
         ConfigureConversation();
         ConfigureDetectionAndFinishedSpeech();
-        ApplyEnteredActorCommands();
     }
 
     private Func<FalloutCondition, float> SpeechConditionContext() => condition =>
@@ -398,6 +398,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
 
     private void Synchronize()
     {
+        if (!_presentationActive) return;
         ApplyEnteredActorCommands();
         if (BlockingExecutionError is not null) return;
         _player.ApplySourceControls(PlayerControls);
@@ -419,6 +420,13 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         {
             _saveRequested = true;
         }
+    }
+
+    internal void ActivatePresentation()
+    {
+        if (!IsInsideTree()) throw new InvalidOperationException("Opening presentation requires its live scene tree.");
+        _presentationActive = true;
+        Synchronize();
     }
 
     private void ApplyEnteredActorCommands()

@@ -48,9 +48,12 @@ public partial class NativeActorPerformanceAudit
             var complete = false;
             while (!complete)
             {
+                var stage = assembly.NextStage;
                 started = Stopwatch.GetTimestamp();
                 complete = assembly.Advance();
-                phases.Add(Stopwatch.GetElapsedTime(started).TotalMilliseconds);
+                var milliseconds = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+                phases.Add(milliseconds);
+                if (milliseconds > 16.667) GD.Print($"OPENNV_NPC_ASSEMBLY_SLOW stage={stage} milliseconds={milliseconds:F3}");
             }
             var actor = assembly.Take();
             actor.BindSourceBehavior(records, selection);
@@ -61,6 +64,7 @@ public partial class NativeActorPerformanceAudit
                 if (actor.Parts.Count != actor.Appearance.Models.Count ||
                     actor.Parts.Sum(part => part.Surfaces) == 0)
                     throw new InvalidDataException("Source NPC assembly omitted a selected body part.");
+                VerifyActorPartAssembly(prepared, actor, content, records);
                 GD.Print($"OPENNV_NPC_ASSEMBLY_PASS reference={key} parts={actor.Parts.Count} ownedMaterials=true runtimeInventory=true finalPixels=unverified");
             }
             finally { actor.Free(); }

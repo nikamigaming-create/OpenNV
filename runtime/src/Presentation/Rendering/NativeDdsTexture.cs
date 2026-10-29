@@ -11,6 +11,7 @@ internal static class NativeDdsTexture
     private static readonly ConditionalWeakTable<RuntimeLiveContentSource, NativeDdsTextureCache> Caches = new();
     internal static Action<Image.Format, int, int, double, double>? UploadObserver { get; set; }
     internal static Action<string, bool, int, bool, double>? LoadObserver { get; set; }
+    internal static Action<string, double>? ResolveObserver { get; set; }
 
     internal static Texture2D Load(byte[] payload, string source, bool normal = false)
         => LoadCore(payload, source, normal, out _);

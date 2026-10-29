@@ -38,7 +38,37 @@ internal sealed class FalloutActorAnimationResources
         var candidates = Candidates(requested, includeExact: false);
         if (candidates.Count > 1)
             throw new NotSupportedException($"Source animation group {requested} has ambiguous variants: {string.Join(", ", candidates)}.");
-        return _resolved[requested] = candidates.SingleOrDefault();
+        return _resolved[requested] = candidates.Count == 1 ? candidates[0] : FindExportedMovement(requested);
+    }
+
+    private string? FindExportedMovement(string requested)
+    {
+        var split = requested.LastIndexOf('/');
+        var folder = requested[..split];
+        var stem = requested[(split + 1)..^3];
+        // Movement groups use the MT filename family and an exported action
+        // name without that prefix. Search only the same locomotion folder;
+        // never borrow a weapon family, variant suffix or nested directory.
+        if (!folder.EndsWith("/locomotion", StringComparison.OrdinalIgnoreCase) ||
+            !stem.StartsWith("mt", StringComparison.OrdinalIgnoreCase) || stem.Contains('_')) return null;
+        var action = stem[2..];
+        if (action.Length == 0) return null;
+        var matches = new List<(string Path, string Group)>();
+        foreach (var path in _directories[folder])
+        {
+            if (!_exportedGroups.TryGetValue(path, out var names))
+                _exportedGroups.Add(path, names = _groups(path).ToArray());
+            foreach (var name in names.Where(name => name.Equals(action, StringComparison.OrdinalIgnoreCase)))
+                matches.Add((path, name));
+        }
+        if (matches.Count > 1)
+            throw new NotSupportedException($"Source movement group {requested} has ambiguous exported matches: {string.Join(", ", matches.Select(match => match.Path))}.");
+        if (matches.Count == 0) return null;
+        var selected = matches[0];
+        if (_selectedGroups.TryGetValue(selected.Path, out var prior) && !prior.Equals(selected.Group, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException($"Source animation {selected.Path} resolves to incompatible exported groups.");
+        _selectedGroups[selected.Path] = selected.Group;
+        return selected.Path;
     }
 
     // This catalog does not choose a sequence. Callers need an explicit action

@@ -195,7 +195,16 @@ internal static partial class RuntimeNativeNifMeshBuilder
     {
         if (!float.IsFinite(unitsToMetres) || unitsToMetres <= 0.0f)
             throw new ArgumentOutOfRangeException(nameof(unitsToMetres));
-        return new RuntimeNativeNifSkeleton(FalloutNifFile.Read(payload), unitsToMetres);
+        return BuildActorSkeleton(FalloutNifFile.Read(payload), unitsToMetres);
+    }
+
+    internal static RuntimeNativeNifSkeleton BuildActorSkeleton(
+        FalloutNifFile source, float unitsToMetres)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        if (!float.IsFinite(unitsToMetres) || unitsToMetres <= 0.0f)
+            throw new ArgumentOutOfRangeException(nameof(unitsToMetres));
+        return new RuntimeNativeNifSkeleton(source, unitsToMetres);
     }
 
     internal static MeshInstance3D BuildSkeletonAttachment(RuntimeNativeNifSkeleton skeleton, FalloutNifGeometry geometry,
@@ -340,6 +349,7 @@ internal static partial class RuntimeNativeNifMeshBuilder
     {
         internal IReadOnlySet<string>? ExternalTransformTargets { get; init; }
         internal IReadOnlySet<int>? ExternalControllerBlocks { get; init; }
+        internal IReadOnlyDictionary<int, IReadOnlyList<FalloutNifHardwareSkinPartition>>? PreparedHardwarePartitions { get; init; }
         internal Transform3D? RigidFaceBind { get; set; }
         internal string? SelectedGeometryName { get; init; }
         internal Action<FalloutNifGeometry>? UnboundPropertyFreeLod { get; init; }
@@ -405,13 +415,31 @@ internal static partial class RuntimeNativeNifMeshBuilder
         internal int CollisionShapeCount { get; private set; }
         internal int CollisionTriangleCount { get; private set; }
 
+        private sealed class DeferredSkinPartition : IDisposable
+        {
+            internal Skin? Skin;
+            internal ArrayMesh? Mesh;
+            internal Godot.Collections.Array? Arrays;
+            internal int TriangleCount;
+
+            public void Dispose()
+            {
+                Arrays?.Dispose(); Arrays = null;
+                Mesh?.Dispose(); Mesh = null;
+                Skin?.Dispose(); Skin = null;
+            }
+        }
+
         internal void BuildHardwareSkinTree(
             int blockIndex,
             Transform3D parent,
             bool visible,
             Node3D output,
             RuntimeNativeNifSkeleton skeleton,
-            HashSet<int> visited)
+            HashSet<int> visited,
+            Action<int, Transform3D, bool>? deferChild = null,
+            Action<string, Action>? deferPartition = null,
+            Action<IDisposable>? retainPartition = null)
         {
             if (!visited.Add(blockIndex))
                 throw new InvalidDataException("Actor part has a cycle or multiply owned source node.");
@@ -422,9 +450,13 @@ internal static partial class RuntimeNativeNifMeshBuilder
                     throw new NotSupportedException($"Actor part source node {blockIndex} has unbound dynamic effects.");
                 _ = ValidateExtraData(node.Block, node.ExtraData, collisionContract: false);
                 var transform = parent * ConvertTransform(node.Transform);
-                foreach (var child in node.Children.Where(child => child >= 0))
-                    BuildHardwareSkinTree(child, transform,
-                        visible && (node.Flags & HiddenFlag) == 0, output, skeleton, visited);
+                var childVisible = visible && (node.Flags & HiddenFlag) == 0;
+                var children = node.Children.Where(child => child >= 0);
+                if (deferChild is null)
+                    foreach (var child in children)
+                        BuildHardwareSkinTree(child, transform, childVisible, output, skeleton, visited);
+                else
+                    foreach (var child in children.Reverse()) deferChild(child, transform, childVisible);
                 return;
             }
             if (_source.ReadObject(blockIndex) is not FalloutNifGeometry geometry || geometry.SkinInstance < 0)
@@ -448,55 +480,202 @@ internal static partial class RuntimeNativeNifMeshBuilder
                 if (skeleton.Node.GetBoneParent(rootBone) != -1)
                     throw new NotSupportedException("Actor skin root is not a root of the external source skeleton.");
             }
-            var partitions = FalloutNifHardwareSkin.Read(instance, skinData, partitionData, data.Vertices.Length, data.Triangles);
-            var material = BuildMaterial(geometry);
-            foreach (var partition in partitions)
+            var partitions = PreparedHardwarePartitions is not null && PreparedHardwarePartitions.TryGetValue(blockIndex, out var prepared)
+                ? prepared : FalloutNifHardwareSkin.Read(instance, skinData, partitionData, data.Vertices.Length, data.Triangles);
+            void PrepareMaterialAndPartitions()
             {
-                var skin = new Skin();
-                skin.SetBindCount(partition.BonePalette.Length);
-                for (var bind = 0; bind < partition.BonePalette.Length; bind++)
+                var material = BuildMaterial(geometry);
+                void PublishPartition(FalloutNifHardwareSkinPartition partition)
                 {
-                    var sourceBone = partition.BonePalette[bind];
-                    var boneName = _source.ReadNode(instance.Bones[sourceBone]).Name;
-                    skin.SetBindBone(bind, skeleton.BoneIndex(boneName));
-                    skin.SetBindName(bind, boneName);
-                    skin.SetBindPose(bind, ConvertTransform(skinData.Bones[sourceBone].SkinTransform));
+                    var skin = new Skin();
+                    skin.SetBindCount(partition.BonePalette.Length);
+                    for (var bind = 0; bind < partition.BonePalette.Length; bind++)
+                    {
+                        var sourceBone = partition.BonePalette[bind];
+                        var boneName = _source.ReadNode(instance.Bones[sourceBone]).Name;
+                        skin.SetBindBone(bind, skeleton.BoneIndex(boneName));
+                        skin.SetBindName(bind, boneName);
+                        skin.SetBindPose(bind, ConvertTransform(skinData.Bones[sourceBone].SkinTransform));
+                    }
+                    var mesh = new ArrayMesh();
+                    var arrays = BuildHardwareSkinArrays(geometry, data, partition);
+                    var morphs = BuildMorphArrays(mesh, geometry, data, arrays, partition.VertexMap.Select(value => (int)value).ToArray());
+                    var format = partition.InfluencesPerVertex == 8 ? Mesh.ArrayFormat.FlagUse8BoneWeights : 0;
+                    mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays, morphs, flags: format);
+                    mesh.SurfaceSetMaterial(0, material);
+                    var rendered = new MeshInstance3D
+                    {
+                        Name = $"{SourceName(geometry.Name, blockIndex)}_Partition{partition.PartitionIndex}",
+                        // NiSkinData maps the skeleton frame back into geometry space.
+                        // Its product with the authored geometry placement is retained.
+                        Transform = parent * ConvertTransform(geometry.Transform) * ConvertTransform(skinData.SkinTransform),
+                        Visible = visible && (geometry.Flags & HiddenFlag) == 0 &&
+                            FalloutNifHardwareSkin.VisibleOnIntactBody(partition.BodyPart),
+                        Mesh = mesh,
+                        Skin = skin,
+                        Skeleton = new NodePath("../.."),
+                    };
+                    rendered.SetMeta("opennv_nif_geometry_block", blockIndex);
+                    rendered.SetMeta("opennv_nif_source_name", geometry.Name);
+                    PreserveExtraDataMetadata(rendered, geometry.ExtraData);
+                    rendered.SetMeta("opennv_nif_skin_instance", instance.Block.Index);
+                    rendered.SetMeta("opennv_nif_skin_partition", partition.PartitionIndex);
+                    rendered.SetMeta("opennv_nif_skin_vertex_map", partition.VertexMap.Select(value => (int)value).ToArray());
+                    rendered.SetMeta("opennv_nif_authored_visible", visible && (geometry.Flags & HiddenFlag) == 0);
+                    if (partition.BodyPart is { } bodyPart)
+                    {
+                        rendered.SetMeta("opennv_nif_body_part", bodyPart.BodyPart);
+                        rendered.SetMeta("opennv_nif_body_part_flags", bodyPart.Flags);
+                    }
+                    output.AddChild(rendered);
+                    NodeCount++;
+                    SurfaceCount++;
+                    VertexCount += partition.VertexMap.Length;
+                    TriangleCount += arrays[(int)Mesh.ArrayType.Index].AsInt32Array().Length / 3;
                 }
-                var mesh = new ArrayMesh();
-                var arrays = BuildHardwareSkinArrays(geometry, data, partition);
-                var morphs = BuildMorphArrays(mesh, geometry, data, arrays, partition.VertexMap.Select(value => (int)value).ToArray());
-                var format = partition.InfluencesPerVertex == 8 ? Mesh.ArrayFormat.FlagUse8BoneWeights : 0;
-                mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays, morphs, flags: format);
-                mesh.SurfaceSetMaterial(0, material);
-                var rendered = new MeshInstance3D
+
+                void SchedulePartition(FalloutNifHardwareSkinPartition partition)
                 {
-                    Name = $"{SourceName(geometry.Name, blockIndex)}_Partition{partition.PartitionIndex}",
-                    // NiSkinData maps the skeleton frame back into geometry space.
-                    // Its product with the authored geometry placement is retained.
-                    Transform = parent * ConvertTransform(geometry.Transform) * ConvertTransform(skinData.SkinTransform),
-                    Visible = visible && (geometry.Flags & HiddenFlag) == 0 &&
-                        FalloutNifHardwareSkin.VisibleOnIntactBody(partition.BodyPart),
-                    Mesh = mesh,
-                    Skin = skin,
-                    Skeleton = new NodePath("../.."),
-                };
-                rendered.SetMeta("opennv_nif_geometry_block", blockIndex);
-                rendered.SetMeta("opennv_nif_source_name", geometry.Name);
-                PreserveExtraDataMetadata(rendered, geometry.ExtraData);
-                rendered.SetMeta("opennv_nif_skin_instance", instance.Block.Index);
-                rendered.SetMeta("opennv_nif_skin_partition", partition.PartitionIndex);
-                rendered.SetMeta("opennv_nif_skin_vertex_map", partition.VertexMap.Select(value => (int)value).ToArray());
-                rendered.SetMeta("opennv_nif_authored_visible", visible && (geometry.Flags & HiddenFlag) == 0);
-                if (partition.BodyPart is { } bodyPart)
-                {
-                    rendered.SetMeta("opennv_nif_body_part", bodyPart.BodyPart);
-                    rendered.SetMeta("opennv_nif_body_part_flags", bodyPart.Flags);
+                    var resources = new DeferredSkinPartition();
+                    retainPartition!(resources);
+                    void Prepare()
+                    {
+                        resources.Skin = new Skin();
+                        var skin = resources.Skin;
+                        skin.SetBindCount(partition.BonePalette.Length);
+                        for (var bind = 0; bind < partition.BonePalette.Length; bind++)
+                        {
+                            var sourceBone = partition.BonePalette[bind];
+                            var boneName = _source.ReadNode(instance.Bones[sourceBone]).Name;
+                            skin.SetBindBone(bind, skeleton.BoneIndex(boneName));
+                            skin.SetBindName(bind, boneName);
+                            skin.SetBindPose(bind, ConvertTransform(skinData.Bones[sourceBone].SkinTransform));
+                        }
+                        resources.Arrays = BuildHardwareSkinArrays(geometry, data, partition);
+                        resources.TriangleCount = resources.Arrays[(int)Mesh.ArrayType.Index].AsInt32Array().Length / 3;
+                    }
+                    void Upload()
+                    {
+                        resources.Mesh = new ArrayMesh();
+                        var mesh = resources.Mesh;
+                        var arrays = resources.Arrays ?? throw new InvalidOperationException("Partition arrays were not prepared.");
+                        var morphs = BuildMorphArrays(mesh, geometry, data, arrays, partition.VertexMap.Select(value => (int)value).ToArray());
+                        var format = partition.InfluencesPerVertex == 8 ? Mesh.ArrayFormat.FlagUse8BoneWeights : 0;
+                        mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays, morphs, flags: format);
+                        mesh.SurfaceSetMaterial(0, material);
+                        resources.Arrays.Dispose();
+                        resources.Arrays = null;
+                    }
+                    void Publish()
+                    {
+                        var skin = resources.Skin ?? throw new InvalidOperationException("Partition skin was not prepared.");
+                        var mesh = resources.Mesh ?? throw new InvalidOperationException("Partition mesh was not uploaded.");
+                        var rendered = new MeshInstance3D
+                        {
+                            Name = $"{SourceName(geometry.Name, blockIndex)}_Partition{partition.PartitionIndex}",
+                            // NiSkinData maps the skeleton frame back into geometry space.
+                            // Its product with the authored geometry placement is retained.
+                            Transform = parent * ConvertTransform(geometry.Transform) * ConvertTransform(skinData.SkinTransform),
+                            Visible = visible && (geometry.Flags & HiddenFlag) == 0 &&
+                                FalloutNifHardwareSkin.VisibleOnIntactBody(partition.BodyPart),
+                            Mesh = mesh,
+                            Skin = skin,
+                            Skeleton = new NodePath("../.."),
+                        };
+                        rendered.SetMeta("opennv_nif_geometry_block", blockIndex);
+                        rendered.SetMeta("opennv_nif_source_name", geometry.Name);
+                        PreserveExtraDataMetadata(rendered, geometry.ExtraData);
+                        rendered.SetMeta("opennv_nif_skin_instance", instance.Block.Index);
+                        rendered.SetMeta("opennv_nif_skin_partition", partition.PartitionIndex);
+                        rendered.SetMeta("opennv_nif_skin_vertex_map", partition.VertexMap.Select(value => (int)value).ToArray());
+                        rendered.SetMeta("opennv_nif_authored_visible", visible && (geometry.Flags & HiddenFlag) == 0);
+                        if (partition.BodyPart is { } bodyPart)
+                        {
+                            rendered.SetMeta("opennv_nif_body_part", bodyPart.BodyPart);
+                            rendered.SetMeta("opennv_nif_body_part_flags", bodyPart.Flags);
+                        }
+                        try { output.AddChild(rendered); }
+                        catch { if (GodotObject.IsInstanceValid(rendered) && rendered.GetParent() is null) rendered.Free(); throw; }
+                        resources.Skin = null; resources.Mesh = null;
+                        NodeCount++;
+                        SurfaceCount++;
+                        VertexCount += partition.VertexMap.Length;
+                        TriangleCount += resources.TriangleCount;
+                    }
+                    // The queue is LIFO; retain source partition order.
+                    deferPartition!("partition-publish", Publish);
+                    deferPartition("partition-upload", Upload);
+                    deferPartition("partition-prepare", Prepare);
                 }
-                output.AddChild(rendered);
-                NodeCount++;
-                SurfaceCount++;
-                VertexCount += partition.VertexMap.Length;
-                TriangleCount += arrays[(int)Mesh.ArrayType.Index].AsInt32Array().Length / 3;
+                if (deferPartition is null)
+                    foreach (var partition in partitions) PublishPartition(partition);
+                else if (PreparedHardwarePartitions is not null && retainPartition is not null)
+                    foreach (var partition in partitions.Reverse()) SchedulePartition(partition);
+                else
+                    foreach (var partition in partitions.Reverse())
+                        deferPartition("partition", () => PublishPartition(partition));
+            }
+            if (deferPartition is null) PrepareMaterialAndPartitions();
+            else
+            {
+                deferPartition("material", PrepareMaterialAndPartitions);
+                // A creature's source texture payloads have already been read
+                // by its worker. Publish each ordinary 2D texture in its own
+                // scene-thread slice; the real material still validates and
+                // resolves every source input, including any failed warm-up.
+                if (PreparedHardwarePartitions is not null && _materialOverride is null)
+                {
+                    var warm = new List<(string Path, bool Normal, int Slot)>();
+                    try
+                    {
+                        var shaders = geometry.Properties.Where(index => index >= 0).Select(_source.ReadObject)
+                            .OfType<FalloutNifShaderProperty>().ToArray();
+                        if (shaders.Length == 1 && shaders[0].TextureSet >= 0 &&
+                            _source.ReadObject(shaders[0].TextureSet) is FalloutNifShaderTextureSet textures &&
+                            textures.Textures.Length == FalloutTextureSlots)
+                            for (var slot = DiffuseTextureSlot; slot <= EmissiveTextureSlot; slot++)
+                                if (!string.IsNullOrEmpty(textures.Textures[slot]))
+                                    warm.Add((textures.Textures[slot], slot == NormalTextureSlot, slot));
+                    }
+                    catch (Exception error) when (error is IOException or InvalidDataException or NotSupportedException)
+                    {
+                        // Preserve the real material owner's source-specific refusal.
+                    }
+                    // Shader code/resource creation is a separate scene-thread slice.
+                    // The material owner still validates all properties and inputs.
+                    deferPartition("lighting-shader", () =>
+                    {
+                        try
+                        {
+                            var properties = geometry.Properties.Where(index => index >= 0).Select(_source.ReadObject).ToArray();
+                            var shaders = properties.OfType<FalloutNifShaderProperty>().ToArray();
+                            var alphas = properties.OfType<FalloutNifAlphaProperty>().ToArray();
+                            var stencils = properties.OfType<FalloutNifStencilProperty>().ToArray();
+                            if (shaders.Length != 1 || alphas.Length > 1 || stencils.Length > 1 ||
+                                (shaders[0].ShaderFlags & NativeNifRefractionMaterial.Flags) != 0) return;
+                            using var material = new StandardMaterial3D
+                            {
+                                TextureRepeat = FalloutNifTextureAddressing.RepeatForGodot(shaders[0].TextureClampMode),
+                            };
+                            ApplyStencil(material, stencils.SingleOrDefault());
+                            NativeNifLightingMaterial.WarmShader(shaders[0], alphas.SingleOrDefault(),
+                                material.CullMode, material.TextureRepeat);
+                        }
+                        catch (Exception error) when (error is IOException or InvalidDataException or NotSupportedException)
+                        {
+                            // The normal material build retries and reports its own source error.
+                        }
+                    });
+                    foreach (var texture in warm.AsEnumerable().Reverse())
+                        deferPartition($"texture:{texture.Slot}", () =>
+                        {
+                            try { _ = LoadTexture(texture.Path, texture.Normal); }
+                            catch (Exception error) when (error is IOException or InvalidDataException or NotSupportedException)
+                            {
+                                // Failed speculative warming is retried by BuildMaterial.
+                            }
+                        });
+                }
             }
         }
 
@@ -1021,9 +1200,9 @@ internal static partial class RuntimeNativeNifMeshBuilder
                 CollectNodeDescendants(child, descendants);
         }
 
-        internal void BuildControllerPlayers(Node3D root)
+        internal void BuildControllerPlayers(Node3D root, bool particlesAlreadyConfigured = false)
         {
-            ConfigureParticleSystems();
+            if (!particlesAlreadyConfigured) ConfigureParticleSystems();
             foreach (var manager in _controllerManagers)
             {
                 var palette = (FalloutNifDefaultAvObjectPalette)_source.ReadObject(manager.ObjectPalette);
@@ -1407,8 +1586,18 @@ internal static partial class RuntimeNativeNifMeshBuilder
                 var partition = _source.ReadObject(instance.SkinPartition) as FalloutNifSkinPartition ??
                     throw new InvalidDataException(
                         $"NIF skin {instance.Block.Index} has an invalid skin-partition block.");
-                skinBinding = FalloutNifOneBoneSkin.Validate(
-                    instance, skinData, partition, data.Vertices.Length);
+                try
+                {
+                    skinBinding = FalloutNifOneBoneSkin.Validate(
+                        instance, skinData, partition, data.Vertices.Length);
+                }
+                catch (NotSupportedException)
+                {
+                    // One source bone does not imply the specialized head
+                    // layout. Use the same partition and live-bone owner as
+                    // other embedded skins; malformed data still fails there.
+                    return BuildEmbeddedSkin(source, data, instance, collision);
+                }
                 var skeletonRoot = _source.ReadNode(skinBinding.SkeletonRoot);
                 skinBone = _source.ReadNode(skinBinding.Bone);
                 if (!skeletonRoot.Children.Contains(source.Block.Index) ||
@@ -2415,7 +2604,11 @@ internal static partial class RuntimeNativeNifMeshBuilder
             var owned = _contentSource ?? RuntimeLiveContentSource.Current ??
                 throw new InvalidOperationException(
                     $"Native NIF texture resolution is not configured: {logicalPath}");
-            if (!owned.TryRead(FalloutNifSurfaceInputs.TexturePath(logicalPath), _preferredTextureArchive, out var payload, out var source))
+            var observer = NativeDdsTexture.ResolveObserver;
+            var started = observer is null ? 0 : System.Diagnostics.Stopwatch.GetTimestamp();
+            var found = owned.TryRead(FalloutNifSurfaceInputs.TexturePath(logicalPath), _preferredTextureArchive, out var payload, out var source);
+            observer?.Invoke(logicalPath, System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds);
+            if (!found)
                 throw new FileNotFoundException($"Native NIF texture is missing: {logicalPath}");
             return (payload, source);
         }
@@ -2534,15 +2727,20 @@ internal sealed class RuntimeNativeNifPrototype
     private readonly float _unitsToMetres;
     private readonly bool _requiresFreshOwners;
     internal RuntimeNativeNifScene Scene { get; }
+    internal bool RequiresFreshOwners => _requiresFreshOwners;
+    internal FalloutNifFile Source => _source;
 
     internal RuntimeNativeNifPrototype(ReadOnlyMemory<byte> payload, float unitsToMetres)
         : this(FalloutNifFile.Read(payload), unitsToMetres) { }
 
     internal RuntimeNativeNifPrototype(FalloutNifFile source, float unitsToMetres)
+        : this(source, unitsToMetres, RuntimeNativeNifMeshBuilder.Build(source, unitsToMetres)) { }
+
+    internal RuntimeNativeNifPrototype(FalloutNifFile source, float unitsToMetres, RuntimeNativeNifScene scene)
     {
         _source = source;
         _unitsToMetres = unitsToMetres;
-        Scene = RuntimeNativeNifMeshBuilder.Build(_source, unitsToMetres);
+        Scene = scene;
         _requiresFreshOwners = Scene.Root.FindChildren("*", "", true, false).Any(node => node is RuntimeNifControllerPlayer or RuntimeNifParticleSystem or NativeNifBillboard or RuntimeNifHingeJoint);
     }
 
@@ -2560,13 +2758,21 @@ internal sealed class RuntimeNativeNifPrototype
 
     internal Node3D InstantiatePlaced(Transform3D placement)
     {
+        if (_source.Roots.Count != 1)
+            throw new NotSupportedException("Placed multi-root NIF ownership has not been established.");
+        return PlaceOwnedRoot(Instantiate(), _source, placement);
+    }
+
+    // Transfer a fully assembled, independently owned tree into one placed
+    // reference without duplicating its configured controller owners.
+    internal static Node3D PlaceOwnedRoot(Node3D instance, FalloutNifFile source, Transform3D placement)
+    {
         // A placed TES reference owns the loaded scene root's complete local
         // transform. Native placement replaces the exported root transform;
         // composing both rotates/translates whole room modules a second time.
         // Descendant transforms and standalone/menu model assembly are intact.
-        if (_source.Roots.Count != 1)
+        if (source.Roots.Count != 1)
             throw new NotSupportedException("Placed multi-root NIF ownership has not been established.");
-        var instance = Instantiate();
         var modelRoot = instance.GetChild<Node3D>(0);
         modelRoot.SetMeta("opennv_nif_authored_root_transform", modelRoot.Transform);
         modelRoot.SetMeta("opennv_nif_root_transform_owner", "placed-reference");
@@ -2586,6 +2792,10 @@ internal static class NativeNifMeshBuilder
     internal static RuntimeNativeNifSkeleton BuildActorSkeleton(
         ReadOnlyMemory<byte> payload, float unitsToMetres) =>
         RuntimeNativeNifMeshBuilder.BuildActorSkeleton(payload, unitsToMetres);
+
+    internal static RuntimeNativeNifSkeleton BuildActorSkeleton(
+        FalloutNifFile source, float unitsToMetres) =>
+        RuntimeNativeNifMeshBuilder.BuildActorSkeleton(source, unitsToMetres);
 
     internal static RuntimeNativeNifScene AddActorPart(
         ReadOnlyMemory<byte> payload,

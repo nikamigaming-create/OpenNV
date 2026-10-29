@@ -4,6 +4,18 @@ namespace OpenNV.Runtime.Gameplay.State;
 
 internal enum RuntimeManualSaveOrigin { PlayerInput, SessionMenu }
 internal enum RuntimeManualSavePreparationPhase { DrainingFiniteNativeAudio, Capturing, Completed, Failed, Cancelled, Writing }
+internal static class RuntimeManualSaveAdmissionWait
+{
+    // Actor initialization needs the running world to advance. Do not defer
+    // unsupported states or wait behind an already paused session menu.
+    internal static bool ShouldWait(RuntimeManualSaveAdmission admission, bool paused, ulong started, ulong now)
+    {
+        admission.Validate();
+        if (now < started) throw new InvalidDataException("Manual save admission clock regressed.");
+        return !paused && admission.Kind == RuntimeManualSaveAdmissionKind.Refused &&
+            admission.Blocker == "actor-procedure-initialization" && now - started < 2000;
+    }
+}
 internal sealed record RuntimeManualSavePreparationReceipt(ulong StartedPhase, ulong StartedMilliseconds,
     ulong MaximumWaitMilliseconds, RuntimeManualSavePreparationPhase Phase,
     IReadOnlyList<FalloutFiniteSoundVoice> Voices, IReadOnlyList<FalloutFiniteSoundVoice> RemainingVoices);
@@ -90,6 +102,8 @@ internal static class RuntimeManualSaveFeedback
         {
             "pending" when receipt.Preparation?.Phase == RuntimeManualSavePreparationPhase.Writing =>
                 "Finishing save... Gameplay will resume when the save completes.",
+            "pending" when receipt.Preparation is null =>
+                "Saving... Waiting for actor initialization. Gameplay is still running; no new save exists yet.",
             "pending" => receipt.Preparation is { RemainingVoices.Count: > 0 } preparation
                 ? $"Saving... Waiting for {preparation.RemainingVoices.Count} original finite sound(s) to report native Finished. Gameplay is paused. Cancel leaves the previous Continue save intact."
                 : "Saving... Preparing a complete checkpoint. Gameplay is paused; no new save exists yet.",

@@ -9,6 +9,7 @@ internal sealed partial class ReactiveReferenceBot
     private BotCombatObservation? _combatObservation;
     private bool _combatTakeover, _pauseAfter, _combatFeedbackPublished;
     private int _combatCount;
+    private System.Numerics.Vector3? _combatRetryPosition;
     private string? _phaseBeforeCombat, _failureKind;
     private float? _minimumCombatHitPoints, _maximumCombatSimulationSeconds;
     private float _combatSimulationSeconds;
@@ -57,21 +58,37 @@ internal sealed partial class ReactiveReferenceBot
             _controlWaitSeconds = 0;
             if (combat.Binding.InputMode is not ("flat" or "simulator"))
             { Fail("Physical headset bot control is unbound; desktop input is never injected into XR.", "input-adapter"); return true; }
-            var target = ReactiveCombatSkill.SelectThreat(combat, _mode == "combat" ? _goalReference : null);
+            var target = ReactiveCombatSkill.SelectThreat(combat, _mode == "combat" ? _goalReference : null,
+                requireClearSight: _mode != "combat");
+            if (_mode != "combat" && _combatRetryPosition is { } retryPosition)
+            {
+                if (FlatDistance(retryPosition, observation.Position) >= 1.5f)
+                { _combatRetryPosition = null; _combatCount = 0; }
+                else return false;
+            }
             if (target is null)
             {
                 if (_mode == "combat")
-                { Fail("No eligible resident source threat targets the player; no victory is inferred.", "safety-stop"); return true; }
+                { Fail("No eligible resident source threat targets the player or a protected actor; no victory is inferred.", "safety-stop"); return true; }
                 return false;
             }
-            if (++_combatCount > 3)
-            { Fail("Combat takeover reached its three-target goal bound; ordinary review is required.", "bot-policy"); return true; }
             CancelRoute(); _path = null; _steering.Reset();
             _input(default, false);
             _phaseBeforeCombat = _phase;
             _combat = new(_combatSkills); _combat.Start(combat, target); _combatFeedbackPublished = false;
             _combatSessionBinding ??= combat.Binding; _combatSessionScene ??= combat.Scene;
             _motionPosition = observation.Position; _motionlessSeconds = _stalled = 0;
+        }
+        if (_mode != "combat" && _combat!.CanSuspendForSceneChange(combat))
+        {
+            _input(default, false);
+            _combat.Cancel("Scene changed; reacquire the source goal and threat before resuming.");
+            PublishCombatFeedback();
+            _combat = null;
+            if (_phaseBeforeCombat is "awaiting-interaction" or "awaiting-route-door")
+                _phase = _phaseBeforeCombat;
+            else Replan("replanning-after-combat-scene-change");
+            return true;
         }
         if (StopAtCombatLimit(combat)) return true;
         var step = _combat.Tick(combat, seconds);
@@ -83,15 +100,22 @@ internal sealed partial class ReactiveReferenceBot
             if (_mode != "combat" && (feedback.FailureKind == "safety-stop" || feedback.Error?.Contains("repositioning") == true))
             {
                 PublishCombatFeedback();
+                if (++_combatCount > 3)
+                { Fail("Combat takeover repeatedly failed to make progress; ordinary review is required.", "bot-policy"); return true; }
+                _combatRetryPosition = observation.Position;
                 _combat = null;
                 if (_phaseBeforeCombat is "awaiting-interaction" or "awaiting-route-door")
                     _phase = _phaseBeforeCombat;
                 else Replan("combat-suspended");
-                return false;
+                // This tick observed only combat state. The original goal's
+                // position and residency must be reacquired on the next tick.
+                return true;
             }
             Fail(feedback.Error ?? "Combat stopped without attributable gameplay receipts.", feedback.FailureKind ?? "bot-policy");
             return true;
         }
+        _combatCount = 0;
+        _combatRetryPosition = null;
         if (_mode == "combat")
         {
             Complete(feedback.Success ? "combat-observed" : "combat-cancelled");

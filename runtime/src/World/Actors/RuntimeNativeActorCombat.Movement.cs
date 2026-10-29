@@ -9,6 +9,7 @@ namespace OpenNV.Runtime.World.Actors;
 internal sealed partial class RuntimeNativeActorCombat
 {
     private CharacterBody3D? _mover;
+    private NativeCharacterStep.QueryResources? _stepQueries;
     private CollisionShape3D? _movementEnvelope;
     private float _movementSkeletonScale, _movementActorScale;
     private Vector3 _movementWorldScale;
@@ -131,8 +132,10 @@ internal sealed partial class RuntimeNativeActorCombat
         var destination = Basis.LookingAt(direction.Normalized(), Vector3.Up).GetRotationQuaternion();
         var current = _actor.GlobalBasis.Orthonormalized().GetRotationQuaternion();
         var angle = current.AngleTo(destination);
-        var turnSpeed = _creatureTurnDegrees is { } authored
-            ? Mathf.DegToRad(FalloutCreatureTurnSpeed.ResolveDegrees(_records, authored)) : _turnSpeed;
+        // A nonzero authored rate is immutable for this prepared appearance.
+        // Zero instead follows the live game setting and must be resolved again.
+        var turnSpeed = _creatureTurnDegrees is 0
+            ? Mathf.DegToRad(FalloutCreatureTurnSpeed.ResolveDegrees(_records, 0)) : _turnSpeed;
         _actor.GlobalBasis = new Basis(current.Slerp(destination, angle <= .00001f ? 1 :
             Math.Min(1, turnSpeed * (float)delta / angle)).Normalized()).Scaled(_movementWorldScale);
     }
@@ -154,7 +157,8 @@ internal sealed partial class RuntimeNativeActorCombat
         var velocity = delta > 0 ? motion / (float)delta : Vector3.Zero;
         velocity.Y = body.IsOnFloor() ? Math.Min(body.Velocity.Y, 0) : body.Velocity.Y - _context.Gravity * (float)delta;
         body.Velocity = velocity;
-        if (NativeCharacterStep.TryStep(body, motion, _context.StepHeight, out _stepBlock))
+        if (NativeCharacterStep.TryStep(body, motion, _context.StepHeight, out _stepBlock,
+                _stepQueries ??= new(body)))
         { body.Velocity = Vector3.Down * .01f; body.MoveAndSlide(); }
         else body.MoveAndSlide();
         _movementBlock = null;

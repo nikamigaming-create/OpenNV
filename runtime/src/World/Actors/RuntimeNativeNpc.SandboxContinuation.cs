@@ -167,6 +167,9 @@ internal partial class RuntimeNativeNpc
         if (_aiReferenceState is not { } state) return;
         if (_sandboxAdmissionCapture is null || !ReferenceEquals(state.CaptureSandboxAdmissionFailure, _sandboxAdmissionCapture) ||
             !ReferenceEquals(state.CanCaptureSandboxAdmissionFailure, _sandboxAdmissionReady)) return;
+        if (FalloutActorSandboxAdmissionFailure.RetainInterrupted(_aiStack!, state, state.SandboxAdmissionFailure,
+            _failedPackage, _aiError, _packageEvents, Combat is { Dead: true, StoppedAiPoseCaptureReady: true }))
+            return;
         // A previous cold receipt cannot stand in for a refused current pose.
         // Invalidate before capture too: a capture exception must not leave a
         // stale fallback available after these callbacks are released.

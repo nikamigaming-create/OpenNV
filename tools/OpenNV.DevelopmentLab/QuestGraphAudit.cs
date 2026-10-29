@@ -194,7 +194,9 @@ internal static partial class QuestGraphAudit
                         var declaredSize = BinaryPrimitives.ReadUInt32LittleEndian(field.Data.Span[8..]);
                         var declaredRefs = BinaryPrimitives.ReadUInt32LittleEndian(field.Data.Span[4..]);
                         if (compiled.Length > 1 || sources.Length > 1 || declaredSize != compiledBytes || declaredRefs != bodyReferences.Length)
-                            throw new InvalidDataException("Compiled body/reference extent or source multiplicity differs from SCHR.");
+                            throw new InvalidDataException($"SCHR extent mismatch: declared compiled bytes={declaredSize}, " +
+                                $"observed compiled bytes={compiledBytes}, compiled fields={compiled.Length}, " +
+                                $"declared references={declaredRefs}, observed references={bodyReferences.Length}, source fields={sources.Length}.");
                     }
                     catch (Exception error)
                     {

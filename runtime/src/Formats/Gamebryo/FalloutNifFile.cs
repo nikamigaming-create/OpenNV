@@ -629,22 +629,25 @@ internal sealed partial class FalloutNifFile
         InvalidDataException? lastError = null;
         for (byte uvSets = 0; uvSets <= 1; ++uvSets)
         {
+            FalloutNifMeshData parsed;
+            var candidate = start;
             try
             {
-                var candidate = start;
                 var candidatePrefix = ReadMeshPrefix(ref candidate);
-                var parsed = ReadMeshTail(block, ref candidate, candidatePrefix, uvSets, strips);
+                parsed = ReadMeshTail(block, ref candidate, candidatePrefix, uvSets, strips);
                 candidate.RequireEnd();
-                if (match is not null)
-                    throw new InvalidDataException(
-                        $"NIF block {block.Index} UV-set recovery is ambiguous.");
-                match = parsed;
-                cursor = candidate;
             }
             catch (InvalidDataException error)
             {
                 lastError = error;
+                continue;
             }
+            // Ambiguity is a property of two valid decodes, not a failed
+            // candidate. Do not swallow it in the candidate-error handler.
+            if (match is not null)
+                throw new InvalidDataException($"NIF block {block.Index} UV-set recovery is ambiguous.");
+            match = parsed;
+            cursor = candidate;
         }
         return match ?? throw new InvalidDataException(
             $"NIF block {block.Index} UV-set recovery has no exact layout: {lastError?.Message}", lastError);

@@ -117,8 +117,11 @@ internal sealed class RuntimeNativeNifAnimation
             _transforms.Count == 0 || Sequence.Weight != 1)
             throw new NotSupportedException("Snapshot transition requires complete transform-only source bindings on one skeleton.");
         foreach (var (bone, priority, _) in _transforms)
-            if (background._transforms.Any(value => value.Bone == bone && value.Priority >= priority))
-                throw new NotSupportedException("Snapshot transition requires incoming transform priority above the background slot.");
+            foreach (var (backgroundBone, backgroundPriority, _) in background._transforms)
+                if (backgroundBone == bone && backgroundPriority >= priority)
+                    throw new NotSupportedException("Snapshot transition requires incoming transform priority above the background slot: " +
+                        $"bone={_skeleton.Node.GetBoneName(bone)} incoming={Sequence.Name}/{Source.Sha256}/{priority} " +
+                        $"background={background.Sequence.Name}/{background.Source.Sha256}/{backgroundPriority}.");
     }
 
     // Snapshot and incoming links share the incoming source priorities. No

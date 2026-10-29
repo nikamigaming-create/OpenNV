@@ -79,6 +79,7 @@ internal static class ActorSourceContracts
                     Field("SCRO", BitConverter.GetBytes(0x14u)),
                     Field("SCTX", Text("begin OnActivate\nif GetActionRef == Player && player.GetIsID 7 == 1 && GetIsID 0x845 == 1\nShowMap SourceMapMarker\nif SourceMapMarker.GetMapMarkerVisible == 1\nShowMap SourceMapMarker 1\nendif\nendif\nend"))),
                 Record("SCPT", 0x892, Field("SCRO", BitConverter.GetBytes(0x900u)),
+                    Field("SCRO", BitConverter.GetBytes(0x14u)),
                     Field("SCTX", Text("begin OnActivate\nSetTalkingActivatorActor BoundCreature\nend"))),
                 Record("VTYP", 0x850, Field("EDID", Text("TestVoice"))),
                 Record("PACK", 0x8f3, Field("EDID", Text("FirstActorPackage"))),
