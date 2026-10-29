@@ -1,13 +1,15 @@
 namespace OpenNV.Runtime.Formats.Gamebryo;
 
-internal enum FalloutNifScalarKind { FloatExtraData, MorphWeight }
+internal enum FalloutNifScalarKind { FloatExtraData, MorphWeight, Visibility }
+internal interface IFalloutNifScalarSampler { float Sample(float sourceTime); }
 internal readonly record struct FalloutNifScalarTarget(FalloutNifScalarKind Kind, string Node, string Name);
 internal sealed record FalloutNifSnapshotScalar(FalloutNifScalarTarget Target, byte Priority, float Value)
 {
     internal void Validate()
     {
-        if (Target.Kind is not (FalloutNifScalarKind.FloatExtraData or FalloutNifScalarKind.MorphWeight) ||
-            string.IsNullOrWhiteSpace(Target.Node) || string.IsNullOrWhiteSpace(Target.Name) || !float.IsFinite(Value))
+        if (Target.Kind is not (FalloutNifScalarKind.FloatExtraData or FalloutNifScalarKind.MorphWeight or FalloutNifScalarKind.Visibility) ||
+            string.IsNullOrWhiteSpace(Target.Node) || string.IsNullOrWhiteSpace(Target.Name) || !float.IsFinite(Value) ||
+            Target.Kind == FalloutNifScalarKind.Visibility && Value is not (0 or 1))
             throw new InvalidDataException("Snapshot scalar has an invalid typed target or value.");
     }
 }
@@ -15,20 +17,39 @@ internal sealed record FalloutNifSnapshotScalar(FalloutNifScalarTarget Target, b
 // The sampler and current-value access refer to the same declared controller
 // target. Snapshot constants never resample the outgoing clip at a guessed time.
 internal sealed record RuntimeNifScalarBinding(FalloutNifScalarTarget Target, byte Priority,
-    FalloutNifFloatAnimation Sampler, Func<float> Read, Action<float> Publish, Func<float, float>? Effective = null)
+    IFalloutNifScalarSampler Sampler, Func<float> Read, Action<float> Publish, Func<float, float>? Effective = null)
 {
     internal float Sample(float time) => Normalize(Sampler.Sample(time));
     internal float Normalize(float value) => Effective?.Invoke(value) ?? value;
+
+    internal static RuntimeNifScalarBinding Visibility(FalloutNifFile source, FalloutNifControllerLink link,
+        Func<bool> read, Action<bool> publish)
+    {
+        if (link.ControllerType != "NiVisController" || link.PropertyType.Length != 0 ||
+            link.Variable1.Length != 0 || link.Variable2.Length != 0)
+            throw new InvalidDataException("Visibility binding differs from its source controller.");
+        return new(new(FalloutNifScalarKind.Visibility, link.NodeName, link.ControllerType), link.Priority,
+            new VisibilitySampler(source, link.Interpolator), () => FalloutNifBoolAnimation.Encode(read()),
+            value => publish(FalloutNifBoolAnimation.BlendedValue(value)));
+    }
+
+    private sealed class VisibilitySampler(FalloutNifFile source, int interpolator) : IFalloutNifScalarSampler
+    {
+        private readonly FalloutNifBoolAnimation _source = new(source, interpolator);
+        public float Sample(float sourceTime) => FalloutNifBoolAnimation.Encode(_source.Sample(sourceTime));
+    }
 }
 
 /// <summary>Source scalar interpolation and declared NiFloatExtraData targets.</summary>
-internal sealed class FalloutNifFloatAnimation
+internal sealed class FalloutNifFloatAnimation : IFalloutNifScalarSampler
 {
     private readonly float _constant;
     private readonly FalloutNifScalarKey[] _keys = [];
     private readonly FalloutNifSplineFloatInterpolator? _spline;
     private readonly FalloutNifSplineData? _points;
     private readonly int _count;
+
+    float IFalloutNifScalarSampler.Sample(float sourceTime) => Sample(sourceTime);
 
     internal FalloutNifFloatAnimation(FalloutNifFile source, int interpolator)
     {

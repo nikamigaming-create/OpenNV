@@ -69,6 +69,12 @@ internal sealed class FalloutNifMorphGeometry
 
 internal sealed class FalloutNifBoolAnimation
 {
+    internal static float Encode(bool value) => value ? 1 : 0;
+    // Native bool blending votes with normalized numeric boolean weights;
+    // the equal half-weight case is visible. Snapshot constants retain the
+    // current local flag, independently of parent visibility and source time.
+    internal static bool BlendedValue(float value) => float.IsFinite(value) ? value >= .5f :
+        throw new InvalidDataException("Visibility blend has no finite weighted value.");
     private readonly bool _constant;
     private readonly FalloutNifBoolKey[] _keys;
     internal IReadOnlyList<float> BoundaryTimes => _keys.Select(key => key.Time).Distinct().ToArray();

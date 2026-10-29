@@ -32,11 +32,14 @@ rather than a successful SetEssential command with missing lifecycle behavior.
 SCDA instruction execution and general runtime reference identity/allocation/
 lifetime/persistence remain absent; source parsing is not a VM.
 
-Packaged Continue restored the fresh stage80 checkpoint and native player couch
-entry completed. Doc's automatic greeting exposed an authored null faction query;
-shared dispatch now preserves its no-membership/rank sentinel. Focused and actual
-owned greeting selection checks pass; ordinary progression on the corrected
-candidate remains pending. The blocked video-only take is retained privately.
+Packaged build 49bf9ba6 continued fresh stage 80 through physical couch entry,
+Doc's word-association/inkblot conversations and tag/trait menus to stage 110.
+Ordinary F5 committed a new healthy source slot; the 621.5-second continuous
+3840x2124 take remains private and video-only. The shared null-faction correction
+therefore has actual conversation execution. The next handoff exposed untyped
+animation-object visibility. Its shared typed correction passes Debug, synthetic,
+cold and owned ANIO checks, including local flags, half-weight ties and recreated
+bindings. Actual corrected handoff and the final publication gate remain pending.
 
 The merged batch adds source-bound Sleep using existing travel/portal/bed
 owners, exact outgoing package-query retirement, sole marker history restoration,
@@ -121,7 +124,7 @@ See [implementation-plan.md](implementation-plan.md) for the active delivery pla
 | Traversal | Cross-cell NPC/creature route owners, authored floor destinations and the prior Cheyenne saloon portal remain open. |
 | Fast travel | Earlier bounded flat/XR travel worked. Final population and saving after travel remain unaccepted. |
 | Performance | Native 3840x2160 travel measured rolling median 21.2512 ms, p95 31.2714 ms and p99 38.2948 ms, failing 4K60. Retained attribution identifies creature Sandbox movement, package pursuit and capsule sweeps; nested totals must not be added. Physical 144 Hz, loading/save stalls and headset acceptance remain open. |
-| Builds | Baseline PR #333 passed the full required gate, selected owned audits, bounded fresh-game smoke and all five hosted checks. The next mutable-script-state batch is active on its fresh feature branch. |
+| Builds | Baseline PR #334 passed the full required gate, selected owned audits and all five hosted checks. The experimental package/proof branch has focused fixes; its final required gate remains pending. |
 | Content | Official ESM selection logged; installed loose/resource winners still need provenance review. Native extensions disabled; pristine vanilla is not established by plugin selection alone. |
 | FO3 | Earlier rendered New Game reached birth stage 22. No accepted standalone FO3 VR release. |
 | Mods/TTW | Deferred until standalone games work. |

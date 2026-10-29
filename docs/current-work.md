@@ -15,22 +15,26 @@ codex/experimental-playtest-release. Eighteen
 unrelated classic import EOL changes remain preserved and excluded.
 No game is active. Recording and render trace are off.
 
-The packaged proof run on commit3719d55c restored fresh stage80, then ordinary
-movement/E physically seated the player on Ruined Couch103e55. Automatic Doc
-conversation failed because owned GREETING INFO140eb4 authors a null GetInFaction
-argument and shared dispatch incorrectly looked up FormID0 as FACT. No F5 changed
-the fresh checkpoint. The game closed normally and source owners were disposed.
-The retained471.033-second3840x2124 take is video-only; it does not verify audio
-or completion of the planned route. Original MKV and MP4 are in
-local/playtest-proof-20261029.
+Packaged build 49bf9ba6 restored fresh stage 80. Ordinary movement/E completed
+physical couch entry, Doc's word-association and inkblot conversations, tag-skill
+and optional-trait menus, then couch exit. VCG01 reached stage 110 and ordinary
+F5 committed slot c536f90fd4b54d15aef0714e995c9616, SHA256
+9FC82049EAE9AFEAEE63C1142FC73FFBB0C5CD6973197BC4EAB46D882A13D8E1.
+This is the next Continue point; do not replay the questionnaire. The game closed
+normally and source owners were disposed. The retained 621.5-second 3840x2124
+continuous take is video-only and does not verify audio, Sunny's route or combat.
+Requested footage and selected images remain in local/playtest-proof-20261029.
 
-The focused correction implements qualified null faction membership0/rank-1,
-preserves bound script forms and malformed nonzero rejection, and retains the
-original exception chain in local conversation diagnostics. Shared contracts pass;
-owned selection asserts VCG01 INFO107223 and speaking phase with result scripts
-explicitly unexecuted. Next: rebuild/pin the corrected package, Continue fresh80
-and advance the recorded route. Final full gate remains required before pushing
-this new runtime delta; the merged baseline's gate is already green.
+The shared null-faction correction has actual conversation execution as well as
+focused/owned selection proof. Doc's next INFO 1057e4 handoff reached the missing
+typed visibility owner on the real GivePipBoy animation object. The current
+correction captures local visibility as canonical boolean snapshot constants and
+uses the shared source-priority/weight reducer with native discrete publication.
+Debug build, synthetic vote/tie/priority checks, cold contracts and the actual
+owned ANIO audit pass, including hidden-parent/local-visible distinction and
+recreated external bindings. Actual corrected handoff remains unverified.
+Next: pin the corrected package, Continue stage 110 and advance the recorded route.
+The final full gate remains required before pushing these runtime changes.
 
 ## Merged shared state systems
 
