@@ -1,10 +1,13 @@
 using Godot;
+using OpenNV.Runtime.World.Actors;
 using OpenNV.Runtime.World.Cells;
+using System.Text.Json;
 
 public partial class NativeLocomotionAudit
 {
     private async Task CheckNativeTerminalArrivalRegion()
     {
+        await CheckNativePackageRouteArrival();
         var scene = new Node3D(); AddChild(scene);
         StaticBody3D Box(Vector3 position, Vector3 size)
         {
@@ -104,6 +107,87 @@ public partial class NativeLocomotionAudit
                 "portalThenRegion=true originalRadius=true exactGoalRefused=true mismatchedGoalRefused=true occupiedRegionRefused=true blockedPrefixRefused=true " +
                 "otherFloorPrefixRefused=true unknownGeometryRefused=true controllerBothDirections=true geometryUnchanged=true queryBodyUnmoved=true " +
                 "maxNodesPerSearch=512 fixture=synthetic gameplay=separate parity=unverified");
+        }
+        finally { scene.Free(); }
+    }
+
+    private async Task CheckNativePackageRouteArrival()
+    {
+        var scene = new Node3D(); AddChild(scene);
+        var floor = new StaticBody3D { Position = new(0, -.5f, 0) };
+        floor.AddChild(new CollisionShape3D { Shape = new BoxShape3D { Size = new(16, 1, 16) } });
+        scene.AddChild(floor);
+        var body = new CharacterBody3D { Position = new(-2, .05f, 0), FloorSnapLength = .33f, FloorMaxAngle = FloorAngle };
+        var envelope = new CapsuleShape3D { Radius = .33f, Height = 1.9f };
+        body.AddChild(new CollisionShape3D { Position = Vector3.Up * .95f, Shape = envelope });
+        scene.AddChild(body);
+        try
+        {
+            await SettleCorridorBody(body);
+            using var json = JsonDocument.Parse("""
+                {"schema":"opennv-owned-cell-navigation/v1","navmeshes":[
+                  {"formId":"floor","cellFormId":"cell","version":11,
+                   "verticesGameUnits":[[-8,-8,-0.3],[8,-8,-0.3],[8,8,-0.3],[-8,8,-0.3]],
+                   "triangles":[{"vertexIndices":[0,1,2],"adjacentTriangles":[-1,-1,1],"flags":0},
+                                {"vertexIndices":[0,2,3],"adjacentTriangles":[0,-1,-1],"flags":0}],
+                   "externalConnections":[]}]}
+                """);
+            var graph = CellNavigationGraph.Load(json.RootElement, new HashSet<string> { "cell" });
+            Vector3 Source(Vector3 point) => new(point.X, -point.Z, point.Y);
+            Vector3 World(Vector3 point) => new(point.X, point.Z, -point.Y);
+            var sourcePath = graph.FindPath(Source(body.GlobalPosition), Source(new(2, -.3f, 0)), out var sourcePrefix);
+            var points = sourcePath.Select(World).ToArray();
+            Func<Vector3, bool> Prefix(Vector3 point, int index)
+            {
+                var predicate = sourcePrefix(Source(point), index, .01f, NativeCapsuleNavigation.SourceHeightTolerance);
+                return current => predicate(Source(current));
+            }
+            var source = new NativeActorNavigationRoute(points, SourceSha256: graph.SourceSha256,
+                TerminalFloor: NativeActorNavigationRoute.ReadTerminalFloor(points, Prefix));
+            // Preserve the distinct requested point. Its terminal projection's
+            // tiny round-trip difference cannot bypass the walked prefix.
+            var target = points[^1] + Vector3.Right * .00001f;
+            const float radius = .0714375f;
+            var intent = NativeCapsuleNavigation.Intent(body.GlobalPosition, points, target, radius);
+            if (intent.ReferenceApproach || intent.Resume != points.Length)
+                throw new InvalidOperationException("Package fixture did not retain its complete terminal source prefix.");
+            var pose = body.GlobalTransform;
+            var query = NativeCapsuleNavigation.FindRefined(body, pose.Origin, intent.Target, .4f, .66f, .165f,
+                _ => true, 512, corridor: intent.Corridor);
+            var path = query.Path.ToArray();
+            var identity = new NativePackageRouteIdentity(new("fixture.esm", 1), target, radius, graph.SourceSha256,
+                NativeNavigationContracts.PackageReceiptContext(), body.GetRid().Id, body.GetWorld3D().GetInstanceId(), envelope, body.GlobalBasis.Scale);
+            var request = new NativePackageRouteRequest(identity, source, intent, points.Length);
+            var prefix = new NativePackageRouteReceipt(request, path);
+            if (body.GlobalTransform != pose || path.Length == 0 ||
+                prefix.Approach(identity, path, body.GlobalPosition, body.IsOnFloor(), 0) is not null)
+                throw new InvalidOperationException("Package query moved its body, omitted its landing or consumed an unwalked prefix.");
+            await WalkTerminalArrivalRoute(body, path);
+            var approach = prefix.Approach(identity, path, body.GlobalPosition, body.IsOnFloor(), path.Length) ??
+                throw new InvalidOperationException("Walked terminal native prefix did not admit its separate reference query.");
+            if (prefix.Arrived(identity, path, body.GlobalPosition, body.IsOnFloor(), path.Length) ||
+                body.GlobalPosition.DistanceTo(target) <= radius)
+                throw new InvalidOperationException("Package fixture lost the source/native floor distinction or treated its prefix as arrival.");
+            pose = body.GlobalTransform;
+            var finalQuery = NativeCapsuleNavigation.FindRefined(body, pose.Origin, approach.Target, .4f, .66f, .165f,
+                _ => true, 512, targetRadius: approach.ArrivalRadius, corridor: approach.Corridor);
+            var finalPath = finalQuery.Path.ToArray();
+            if (body.GlobalTransform != pose || finalPath.Length == 0)
+                throw new InvalidOperationException("Final package query moved its controller or discarded its supported stationary endpoint.");
+            var stationary = NativeCapsuleNavigation.FindRefined(body, finalPath[^1], finalPath[^1], .4f, .66f, .165f,
+                _ => true, 512, corridor: [finalPath[^1]]);
+            if (body.GlobalTransform != pose || stationary.Path.Count == 0 ||
+                stationary.Path[^1].DistanceTo(finalPath[^1]) > radius)
+                throw new InvalidOperationException("A supported stationary query lost its actual endpoint or moved the query body.");
+            var final = new NativePackageRouteReceipt(request with { Intent = approach }, finalPath);
+            await WalkTerminalArrivalRoute(body, finalPath);
+            if (!final.Arrived(identity, finalPath, body.GlobalPosition, body.IsOnFloor(), finalPath.Length) ||
+                final.Arrived(identity, path, body.GlobalPosition, body.IsOnFloor(), finalPath.Length) ||
+                final.Arrived(identity, finalPath, body.GlobalPosition + Vector3.Up, true, finalPath.Length))
+                throw new InvalidOperationException("Final native package arrival lost its physical endpoint, exact query or floor.");
+            GD.Print("OPENNV_NATIVE_PACKAGE_ARRIVAL_PASS sourceFloorOffset=.3 originalRadius=.0714375 " +
+                "walkedTerminalPrefix=true separateFinalQuery=true originalRequestedPoint=true groundedNativeArrival=true " +
+                "prefixCannotArrive=true wrongFloorRefused=true stationaryEndpointRetained=true queryBodyUnmoved=true fixture=synthetic gameplay=separate parity=unverified");
         }
         finally { scene.Free(); }
     }

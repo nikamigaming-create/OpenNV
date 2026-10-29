@@ -24,9 +24,9 @@ them in the integrated product. Continue until the target works.
 
 ## Current implementation boundary
 
-The merged baseline is `8dd40535` (PR #327), with required local gate, selected
-owned checkpoint audit and all five hosted checks passed. Local main equals
-origin/main; current branch `codex/goodsprings-continuation` starts there.
+The merged baseline is `2559a404` (PR #328), with required local gate, selected
+owned speech audit, diff check and all five hosted checks passed. Local main
+equals origin/main; current branch `codex/native-arrival-continuation` starts there.
 Complete campaign, retail
 presentation, sustained 4K60 and physical XR acceptance remain unmet.
 
@@ -48,18 +48,33 @@ match remain untested. Active SayTo saving lacks a structured channel continuati
 background creature Find/Food remains unbound. Do not substitute waiting, a
 Sandbox Eat activity, or inventory-only acquisition for those missing owners.
 
-The continuation branch adds source-text timing for audio/LIP-absent responses,
+PR #328 adds source-text timing for audio/LIP-absent responses,
 authored furniture endpoint approach and qualified Sandbox occupied/reselection
 exit procedure codes. ExportRelease bb459162 continued tutorial 50, completed the
 next well encounters and Sunny dialogue, marked tutorial 10a214 completed and
 entered gathering quest 15d912 stage 10. F5 command157 completed at 07:36:11.819
 UTC with save/cleanup errors null and no blocked capture owners; this forward
-save is now canonical. The minimal exit-phase extension no longer blocks actual
+save advanced the canonical profile. The minimal exit-phase extension no longer blocks actual
 floor activity reselection/re-entry and saving. The game closed normally. Both
-ingredients remain needed; this checkpoint's next Continue is unverified.
-The full mandatory gate, selected owned speech audit and diff check pass;
-publish this bounded repair through one checked PR before the next work block.
-After saving, inspect the actual crafting objectives/ingredients and campfire
+ingredients remained needed at that point. Ordinary Continue163 restored it
+successfully; directed travel/activation then added BrocFlower 1. F5 command171
+saved that ingredient at 08:04:32.395 UTC without error. Ordinary travel/combat and
+activation then added Xander Root; F5 command175 saved both ingredients at
+08:13:25.160 UTC, HP 99, no save/cleanup error. Objective10 is complete and
+objective20 displayed; the next interaction is Sunny at the campfire.
+The latest save explicitly retains newly streamed raven 17390a's failed source
+locomotion group binding. The next block owns that reached source failure and a
+separate measured terminal physical-arrival mismatch, under coordinator file
+allocation. The full mandatory gate, selected owned speech audit, diff check and
+all five hosted checks passed; PR #328 completed this publication boundary.
+The frozen arrival candidate 8c2a5baf passes selected native contracts and owned
+Wander source checks. Actual Continue and native receipt retirement/new goals
+were observed, then Sunny's instructions and F5 command 189 saved both ingredients
+at 08:40:14.460 UTC with HP 99/errors null. The latest checkpoint has objectives 10/20
+complete and 30 displayed. Its next Continue and actual cooking remain open; the
+full publication gate and diff check pass; coordinator review and checked
+publication remain pending for this candidate.
+Continue the actual crafting objectives/ingredients and campfire
 interaction; do not follow an unrelated bot-selected quest as crafting evidence.
 Native 3840x2160 travel median 21.2512 ms also fails the 4K60 target; shared
 movement costs are retained for the next performance block after saving works.

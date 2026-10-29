@@ -38,6 +38,19 @@ internal sealed partial class RuntimeNativeActorCombat
         velocity = _mover is { } body ? new float[] { body.Velocity.X, body.Velocity.Y, body.Velocity.Z } : null,
         routeError = _routeError,
         routeRequests = _routeRequests,
+        packageNativeArrivals = _packageRouteArrivals,
+        packageRouteReceipt = _packageRouteReceipt is { } receipt && ReferenceEquals(receipt.Path, _pursuitPath) ? new
+        {
+            package = receipt.Request.Identity.Package.ToString(),
+            sourceSha256 = receipt.Request.Identity.SourceSha256,
+            stage = receipt.Request.Intent.ReferenceApproach ? "reference-query-complete" : "source-prefix-query-complete",
+            requested = new[] { receipt.Request.Identity.Target.X, receipt.Request.Identity.Target.Y, receipt.Request.Identity.Target.Z },
+            tolerance = receipt.Request.Identity.Radius,
+            endpoint = new[] { receipt.Path[^1].X, receipt.Path[^1].Y, receipt.Path[^1].Z },
+            actualDistance = _actor.GlobalPosition.DistanceTo(receipt.Path[^1]),
+            receipt.Request.SourcePoints,
+            receipt.Request.Intent.Resume
+        } : null,
         routePlanning = _routeSearch is not null,
         routeWork = NativeCapsuleNavigation.Work(_routeSearch) ?? _routeWork,
         routeFailures = _routeFailures,

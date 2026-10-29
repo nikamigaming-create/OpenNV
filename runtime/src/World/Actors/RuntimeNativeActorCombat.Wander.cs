@@ -210,11 +210,11 @@ internal sealed partial class RuntimeNativeActorCombat
         var actor = _actor as CharacterBody3D ??
             throw new NotSupportedException("Wandering has no native actor capsule.");
         var tolerance = 5 * _skeleton.UnitsToMetres;
-        AdvancePackageMotion(package, destination, tolerance, running, delta, weaponDrawn,
-            requireArrivalHeight: true);
+        var nativeArrival = AdvancePackageMotion(package, destination, tolerance, running, delta, weaponDrawn,
+            requireArrivalHeight: true, navigationSha256: progress.NavigationSha256);
         progress = progress with
         {
-            Arrived = actor.IsOnFloor() && _actor.GlobalPosition.DistanceTo(destination) <= tolerance
+            Arrived = nativeArrival || actor.IsOnFloor() && _actor.GlobalPosition.DistanceTo(destination) <= tolerance
         };
         if (_state.PackageMotion is not { } motion || motion.Package != package.FormKey)
             throw new InvalidOperationException("Wandering has no matching native motion observation.");

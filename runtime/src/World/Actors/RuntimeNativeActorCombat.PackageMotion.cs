@@ -139,6 +139,7 @@ internal sealed partial class RuntimeNativeActorCombat
 
     internal void StopPackageMotion()
     {
+        if (OwnsPose) InvalidatePackageRouteReceipt();
         _eatObjects?.SetVisible(false);
         PackageOwnsPose = false;
         PackageMoving = false;
@@ -216,14 +217,16 @@ internal sealed partial class RuntimeNativeActorCombat
             new(motion.Position[0], motion.Position[1], motion.Position[2]));
     }
 
-    internal void AdvancePackageMotion(FalloutPluginRecord package, Vector3 target, float distance,
-        bool running, double delta, bool weaponDrawn = false, bool requireArrivalHeight = false, bool sneaking = false)
+    internal bool AdvancePackageMotion(FalloutPluginRecord package, Vector3 target, float distance,
+        bool running, double delta, bool weaponDrawn = false, bool requireArrivalHeight = false, bool sneaking = false,
+        string? navigationSha256 = null)
     {
         var deferred = _state.DeferredPackageContinuation?.RetainedAssignment is not null
             ? _state.DeferredPackageContinuation : null;
         try
         {
-            AdvancePackageMotionCore(package, target, distance, running, delta, weaponDrawn, requireArrivalHeight, sneaking, deferred);
+            return AdvancePackageMotionCore(package, target, distance, running, delta, weaponDrawn, requireArrivalHeight,
+                sneaking, deferred, navigationSha256);
         }
         catch (Exception error) when (deferred is not null)
         {
@@ -237,9 +240,9 @@ internal sealed partial class RuntimeNativeActorCombat
         }
     }
 
-    private void AdvancePackageMotionCore(FalloutPluginRecord package, Vector3 target, float distance,
+    private bool AdvancePackageMotionCore(FalloutPluginRecord package, Vector3 target, float distance,
         bool running, double delta, bool weaponDrawn, bool requireArrivalHeight, bool sneaking,
-        FalloutActorDeferredPackageContinuation? deferred)
+        FalloutActorDeferredPackageContinuation? deferred, string? navigationSha256)
     {
         if (deferred is not null)
         {
@@ -249,8 +252,9 @@ internal sealed partial class RuntimeNativeActorCombat
                 throw new InvalidOperationException("Deferred native motion has no matching active source assignment.");
         }
         StopPackageMotion();
-        if (OwnsPose || !PackageMovementReady) return;
+        if (OwnsPose || !PackageMovementReady) return false;
         PrepareMovement();
+        ValidatePackageRouteContinuity(package.FormKey, target, distance, navigationSha256);
         if (!_packageHashes.TryGetValue(package.FormKey, out var hash))
             _packageHashes.Add(package.FormKey, hash = Convert.ToHexString(SHA256.HashData(package.ReadData())));
         var offset = target - _actor.GlobalPosition;
@@ -258,7 +262,7 @@ internal sealed partial class RuntimeNativeActorCombat
         var movementRequested = moving;
         Vector3? destination;
         using (OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Measure(OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Owner.PackagePursuit))
-            destination = moving ? PursuitTarget(target, delta, distance) : null;
+            destination = moving ? PursuitTarget(target, delta, distance, package.FormKey, navigationSha256) : null;
         moving &= destination.HasValue;
         // A pending route or observed arrival needs only an idle. Missing
         // locomotion must not prevent that real observation, nor leave an
@@ -278,6 +282,14 @@ internal sealed partial class RuntimeNativeActorCombat
         if (destination is { } waypoint) TurnToward(waypoint, delta);
         Activity.SetMovement(running && moving, sneaking);
         MoveActor(moving ? clip.RootDisplacement(seconds, next) : Vector3.Zero, delta, destination);
+        var nativeArrival = false;
+        if (navigationSha256 is { } sourceHash && _routeSearch is null && _routeDoor is null && _routeError is null)
+        {
+            ConsumeReachedPursuitWaypoints();
+            nativeArrival = _packageRouteReceipt?.Arrived(PackageRouteIdentity(package.FormKey, target, distance, sourceHash),
+                _pursuitPath, _actor.GlobalPosition, _mover!.IsOnFloor(), _pursuitCursor) == true;
+            if (nativeArrival) ++_packageRouteArrivals;
+        }
         foreach (var key in clip.Events.Crossed(seconds, next, includeStart)) _packageSounds!.Dispatch(key);
         using (OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Measure(OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Owner.PackagePose))
             if (!_headless)
@@ -309,8 +321,9 @@ internal sealed partial class RuntimeNativeActorCombat
                 _state.ProcedureCaptureBlocker = null;
         }
         _packageDestination = target;
-        _packageDestinationActive = movementRequested;
+        _packageDestinationActive = movementRequested && !nativeArrival;
         PackageOwnsPose = true;
+        return nativeArrival;
     }
 
     private NativeActorCombatAnimation SelectPackageMotionClip(bool moving, bool running, bool sneaking)

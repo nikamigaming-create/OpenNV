@@ -1,96 +1,94 @@
 # Current work
 
-## Active owner: Goodsprings speech, furniture and idle continuation
+## Active owner: native arrival review and reached actor/crafting failures
 
-The coordinator plans/reviews; user-authorized GPT-6.1 Sol High implementers share
-one checkout and feature branch. The central executor alone owns builds, game
-input and Git. Follow [implementation-plan.md](implementation-plan.md).
+The coordinator plans, reviews and allocates files. User-authorized GPT-6.1 Sol
+High implementers share one checkout; the central executor alone owns builds,
+game input and Git. Follow [implementation-plan.md](implementation-plan.md).
 
-Acceptance requires retail systems/presentation through Goodsprings to the Strip,
-sustained native 3840x2160 at 60 FPS indoors/outdoors, and separate physical XR
-acceptance including 144 Hz. Historical save compatibility is expendable;
-current-build saving remains a gameplay feature. Recording and trace are off.
+PR #328 merged at `2559a4047da452098936d9fef57618cc4639d2bc` with required local
+and hosted checks passing. Local main equals origin/main. The current branch is
+`codex/native-arrival-continuation`; its arrival patch is uncommitted and awaits
+coordinator review. Eighteen unrelated generated classic import EOL changes are
+preserved and excluded. Recording and trace are off. No interactive game runs.
 
-Merged PR #327 at `8dd4053544f75e139533a9e0ee317524112bba94` passed its local
-mandatory gate, selected owned NPC checkpoint audit and all five hosted checks.
-Local main equals origin/main. Current branch `codex/goodsprings-continuation`
-starts from that baseline. Eighteen unrelated
-generated classic import EOL changes remain preserved and excluded.
+## Current candidate and canonical progress
 
-## Current verified result
+Arrival candidate ExportRelease MVID `8c2a5baf-0d1a-4845-811e-fb0abf85e3cd`, DLL
+SHA256 `E9CA1B06319261FACAB270830BC9843DE93D80C5059260EFFA8E58D5B59D738F`,
+passes its Debug/Release builds, full mandatory gate, selected native navigation/
+terminal-region contracts, selected owned Wander source audit and diff check.
 
-Current ExportRelease MVID `bb459162-42f6-440b-bd8f-d297aaa9560b` has a clean
-Debug solution build and release export. Selected retained speech source/clock,
-reference identity and furniture placement checks pass. Its full mandatory gate
-and diff check pass; checked PR publication remains pending.
+Ordinary Continue restored both gathered ingredients. Actual native arrival
+telemetry in detailed state 185 records 80 arrivals across four creature owners;
+previously unarrived destinations changed naturally to new source goals with no
+AI error. Other completed queries correctly remained unarrived when the physical
+endpoint was outside the original radius. This is bounded gameplay evidence,
+not complete movement, parity or performance acceptance.
 
-Ordinary Continue restored tutorial 50 from the canonical profile at
-`local/integrated-baseline-20261028/gameplay`. Native 3840x2160 play then killed
-the next hostile geckos, completed Sunny's three-response dialogue and marked
-quest 10a214 completed (stored stage 50, objectives through 60 complete). Gathering
-quest 15d912 entered stage 10 with objective 10 displayed and incomplete. Both
-ingredients still need gathering in the current checkpoint. Player HP remained
-100. Cooking and a complete Caravan match remain untested. Another actor's
-legitimate target kill was accepted through source quest progress; the runner's
-missing player-attribution receipt was not counted as a player kill.
+Sunny's three-response campfire instructions completed. F5 command 189 generation
+1 saved at 08:40:14.460 UTC, cell 0e19cd, HP 99, save/cleanup errors null and no
+blocked capture owners. The written checkpoint retains XanderRoot 1/BrocFlower 1;
+VCG03 stage 10 has objectives 10/20 complete and 30 displayed/incomplete. Tutorial
+10a214 is completed (stored stage 50, objectives through 60 complete). Actual
+cooking remains untested. This checkpoint's next Continue is unverified.
 
-F5 command157 generation 1 completed at 07:36:11.819 UTC with save and cleanup
-errors null, cell 0e19c5, HP 100 and no blocked capture owners. The save retains
-NPC 1629a8 occupied on floor-sitting marker 17 and NPC 1629a9 approaching the
-lawn-chair marker 14. Floor activity reselection/re-entry no longer produced its
-former procedure failure; physical lawn-chair entry remains unverified. Detailed
-current-build state is private. The game closed through normal Quit/Yes and
-confirmed source-owner disposal; no interactive game is running.
+Canonical file: `local/integrated-baseline-20261028/gameplay/checkpoint.json`,
+SHA256 `F4F251D502294CDB33BB41264AB1B74CDDD8F4BA0876F848996CCA803A81B78B`.
+Normal Quit 193/Yes 194 disposed source owners and freed 350 prototypes. Preserve
+this progress; do not replay the opening or questionnaire.
 
-This successful forward save is now canonical, SHA256
-`4A610F8232E585A124A177FF4CEC421887148B765E3C5B4914032B07C13D88CB`.
-Its next normal Continue has not yet run. Do not replay the opening or overwrite
-healthy progress while capture owners fail.
+## Frozen patch and next action
 
-## Current patch and next owner
+The patch carries ephemeral native path/package/body/world/content receipts into
+semantic Wander arrival. A physically walked terminal prefix admits a separate
+final reference query; a partial prefix never completes the request. Existing
+floor, collision and arrival limits remain in force. Saved semantic motion stays
+the persistence owner; a new process must earn new native receipts.
 
-- Speech source resolution retains the saved LVLN 101c8f choice 101c8d and its
-  VTYP 00002d. An authored response lacking both audio and LIP now has an explicit
-  source-text-byte-count timer through live fAIDefaultSpeechMult, then ordinary
-  next-tick completion/results/exchange ownership. INFO 17af3d has three source
-  bytes and the installed multiplier 0.15, producing 0.45000002 seconds. The
-  selected owned-data and synthetic checks pass; this INFO was not encountered
-  again in the integrated run, so its live completion remains unverified.
-  Ambiguous media, explicit SOUN and audio-absent LIP timing remain strict.
-- Furniture approach retains the NAVM corridor, then reaches the authored entry
-  root through the native capsule route. It does not replace the root with its
-  projected endpoint or weaken support checks. The compact placement regression
-  passes; both reached actors physically occupied floor sitting in actual play.
-- Occupied Sandbox furniture reports its native chair/sleep procedure. Actual
-  play exposed the next owner: normal activity reselection/GetUp must report
-  Sandbox phase 1 (public procedure 21), distinguished from parent-package exit
-  by the retained exit reason. That extension passes the affected contracts and
-  actual forward saving without the former blocker. Other unqualified entry or
-  exit phases still refuse a guessed procedure.
+The required gate is green and the draft PR description is private at
+`local/integrated-baseline-20261028/native-arrival-pr-body.md`. Coordinator review
+and checked publication remain pending. Runtime writers are frozen; no new
+behavior or optimization is being added to this batch.
 
-Publish one checked PR. Next normal Continue
-should resume gathering quest 15d912: Broc Flower 15d981 and Xander Root 15d982,
-then Sunny and campfire 0cdb95. Do not follow unrelated quest 0842dd as crafting
-evidence. No broad feature expansion or optimization in this batch.
+## Reached owners still open
 
-## Remaining boundaries
+- Raven reference 17390a (CREA 140db0) reached a missing `mtforward` locomotion
+  group. Source flight/locomotion needs qualification. Existing structured
+  SandboxMotionFailure capture was verified in an ingredient save: it retained
+  the exact error, source hashes, consumed activity/wander prefix, pose, clock,
+  RNG and authoritative disabled/delete-pending flags. Saving did not erase the
+  failure or establish raven support.
+- Ambient NPC 1629a7 queried GetSitting for actor 10a72b without its physical
+  furniture owner. Detailed state 177 lists that enabled actor as missing from
+  active-cell presentation; canonical reference state has no binding/selection
+  fault and no furniture continuation. Qualify admission/streaming or logical
+  off-cell ownership before changing the query. Never infer standing to hide a
+  missing actor. This failure did not recur in the latest candidate; it is open.
+- Campfire 0cdb95 approach exhausted a bounded 1200-node native capsule query,
+  nearest endpoint 2.943 m, with source rock floor/slope/step-clearance refusals.
+  Detailed state 180 is private. This is a query refusal, not proof that the route
+  is impassable. No recipe UI or cooking result has been accepted. Next ordinary
+  objective is the campfire interaction from the saved Sunny instructions.
 
-Active non-radio speech saving still lacks serialized channel continuation;
-waiting for a line to finish is not that capability. Background creature Find/
-Food 1651b1 remains unbound; its qualified native sequence is Travel -> Acquire
--> Wander -> Done, not Sandbox Eat. Candidate selection/rights are still open.
-Repair/Mod, broader magazine use, cooking and a complete Caravan match need
-ordinary coverage. VATS has earlier selection/cancel/two-miss evidence; hit/damage,
-cinematic and matched retail behavior remain unverified.
+Source-only edits can run against a fixed standalone export after allocation;
+its PCK/managed assemblies have no source-project or editor dependency. Keep one
+build and input owner. Freeze writers and close normally before any integrated
+build/export; no hot reload or export overwrite during gameplay or measurement.
 
-Native 4K60 is unmet. The rolling 512 travel draw intervals measured median
-21.2512 ms, p95 31.2714 ms and p99 38.2948 ms. Retained owner attribution over
-16,692 draws identifies CreatureSandbox about 104 s (nested SandboxMovement
-100 s), PackagePursuit about 65 s and capsule sweeps about 60 s. Do not add nested
-totals. These shared movement costs are the next measured performance owners
-after saving works; no optimization has been implemented in this batch.
+## Acceptance boundaries
 
-Full retail pixels, FaceGen, audio, crime/factions, merchant/crafting coverage,
-other creature procedures and physical XR hands/render/session acceptance remain
-open. No campaign, parity or performance completion is claimed. Keep detailed
-design in [runtime-repair-design.md](runtime-repair-design.md).
+Native 4K60 remains unmet. The latest rolling 512 travel window measured median
+22.2976 ms, p95 37.9877 ms and p99 46.5521 ms. Earlier samples differ in gameplay
+state and cannot establish matched savings. Prior attribution over 16,692 draws
+identified CreatureSandbox about 104 s (nested SandboxMovement 100 s), pursuit
+about 65 s and capsule sweeps about 60 s. Never add nested totals or attribute all
+route requests to one destination. Existing topology reuse is already present.
+
+Merged unrecorded INFO 17af3d timing has owned-source/synthetic proof; its actual
+line and matched retail timing remain unverified. Physical lawn-chair entry,
+active non-radio speech saving, background creature Find/Food, complete Caravan,
+broader inventory/VATS/crafting/quest/faction/merchant systems, full retail
+pixels/audio and physical XR hands/render/session acceptance remain open. Native
+3840x2160 at 60 FPS and physical 144 Hz are required. No campaign, parity or
+performance completion is claimed. See [runtime-repair-design.md](runtime-repair-design.md).
