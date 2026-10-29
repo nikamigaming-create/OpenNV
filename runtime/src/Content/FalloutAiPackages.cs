@@ -5,6 +5,19 @@ namespace OpenNV.Runtime.Content;
 
 internal static class FalloutAiPackages
 {
+    internal static float Sleeping(FalloutPluginStack records, FalloutCondition condition,
+        FalloutFormKey caller, Func<FalloutFormKey, int> query, FalloutFormKey? target = null)
+    {
+        if (condition.Function != 49 || condition.Argument1 != 0 || condition.Argument2 != 0)
+            throw new InvalidDataException("Sleeping condition differs from the source GetSleeping declaration.");
+        var subject = ConditionSubject(condition, caller, target);
+        if (records.GetEffective(subject).Signature is not ("ACHR" or "ACRE"))
+            throw new InvalidDataException("GetSleeping condition subject is not a placed actor.");
+        var phase = query(subject);
+        return phase is >= 0 and <= 4 ? phase :
+            throw new InvalidDataException("GetSleeping condition owner returned an invalid physical phase.");
+    }
+
     internal static float Sitting(FalloutPluginStack records, FalloutCondition condition,
         FalloutFormKey caller, Func<FalloutFormKey, int>? query, FalloutFormKey? target = null)
     {

@@ -49,6 +49,7 @@ internal sealed partial class FalloutPlayerInventory
 
         _items.Clear();
         foreach (var item in staged) _items.Add(item.Key, item.Value);
+        NormalizeMagazineAmmunition();
         ++Revision;
     }
 }

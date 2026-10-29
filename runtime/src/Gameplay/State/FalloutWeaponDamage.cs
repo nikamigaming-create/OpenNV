@@ -32,6 +32,7 @@ internal sealed class FalloutWeaponDamageResolver(FalloutPluginStack records, Fa
         var limb = FalloutProjectile.Number(data, 116);
         var item = inventory.Item(form) ?? throw new InvalidOperationException("Used weapon is absent from inventory.");
         var condition = FalloutWeaponCondition.SelectedCondition(item);
+        baseDamage = FalloutWeaponModifications.Damage(records, form, inventory.WeaponModMask(form), baseDamage);
         var damage = baseDamage * WeaponScale * (SkillBase + SkillScale * skill / 100) * NewVegasConditionMultiplier(condition);
         foreach (var effect in ammoEffects.Where(effect => effect.Type == FalloutAmmoEffect.Damage))
             damage = Math.Max(0, effect.Apply(damage));

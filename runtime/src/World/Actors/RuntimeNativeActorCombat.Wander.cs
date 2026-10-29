@@ -5,6 +5,14 @@ using OpenNV.Runtime.World.Cells;
 
 namespace OpenNV.Runtime.World.Actors;
 
+internal interface INativeSandboxActivityOwner
+{
+    bool Supports(FalloutSandboxActivity activity);
+    bool ReleaseForReselection(FalloutSandboxActivityProgress activity);
+    void Advance(FalloutPluginRecord package, FalloutSandboxPackage source,
+        FalloutSandboxActivityProgress activity, double delta);
+}
+
 internal sealed partial class RuntimeNativeActorCombat
 {
     private long _ambientAttempts, _ambientStarted;
@@ -12,26 +20,45 @@ internal sealed partial class RuntimeNativeActorCombat
     internal object SandboxObservation => new { attempts = _ambientAttempts, started = _ambientStarted };
 
     internal FalloutWanderProgress? AdvanceSandboxWander(FalloutPluginRecord package, FalloutSandboxPackage source,
-        FalloutWanderProgress? progress, double delta)
+        FalloutWanderProgress? progress, double delta, INativeSandboxActivityOwner? physical = null)
     {
         if (OwnsPose || !PackageMovementReady) return progress;
         var context = _context ?? throw new NotSupportedException("Sandbox has no gameplay context.");
         var busy = context.DialogueBusy ?? throw new NotSupportedException("Sandbox has no dialogue participant owner.");
         if (busy(_state.Reference)) { StopPackageMotion(); return progress; }
-        var hour = context.Globals.Get((_sandboxTimeBindings ??= FalloutGameTimeBindings.Read(_records)).Hour);
+        var time = _sandboxTimeBindings ??= FalloutGameTimeBindings.Read(_records);
+        var hour = context.Globals.Get(time.Hour);
+        var day = SandboxDay(context);
+        _state.SandboxDailyWindow = FalloutSandboxDailyWindow.Refresh(_state.SandboxDailyWindow,
+            day, hour, _records.NumericSettings,
+            (minimum, maximum) => minimum + (maximum - minimum) * _state.SoundRandom.NextUnitFloat());
         var activity = _state.PackageMotion?.Package == package.FormKey ? _state.PackageMotion.Sandbox : null;
+        var scheduled = activity is null ? null : _state.SandboxDailyWindow.EligibleActivity(day, hour,
+            activity.DailyFoodAvailable, activity.DailyBedAvailable);
+        var dailyChanged = activity is not null && scheduled != activity.ScheduledActivity;
         var randomBeforeSelection = _state.SoundRandom.State;
-        var selectedActivity = activity is null || activity.Expired(hour);
+        var selectedActivity = activity is null || (activity.Expired(hour) || dailyChanged) &&
+            (physical?.Supports(activity.Activity) != true || physical.ReleaseForReselection(activity));
         if (selectedActivity)
         {
             using (OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Measure(OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Owner.SandboxActivitySelection))
-                activity = SelectSandboxActivity(source, activity, hour, delta, context);
+                activity = SelectSandboxActivity(source, activity, hour, delta, context, physical);
             progress = null;
             if (_state.PackageMotion is { } previousMotion && previousMotion.Package == package.FormKey &&
                 _state.DeferredPackageContinuation?.RetainedAssignment is null)
                 _state.PackageMotion = previousMotion with { Eat = null };
         }
         if (activity is null) throw new InvalidOperationException("Sandbox has no selected activity.");
+        if (physical?.Supports(activity.Activity) == true)
+        {
+            if (_state.PackageMotion?.Package != package.FormKey || _state.PackageMotion.Sandbox != activity)
+                HoldSandboxActivity(package, source, activity, 0);
+            physical.Advance(package, source, activity, delta);
+            _state.PackageMotion = (_state.PackageMotion ?? throw new InvalidOperationException("Physical Sandbox activity lost its motion owner."))
+                with
+            { Sandbox = activity, Wander = null };
+            return null;
+        }
         if (activity.Activity == FalloutSandboxActivity.Eat)
         {
             using var scope = OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Measure(OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Owner.SandboxEat);
@@ -55,7 +82,7 @@ internal sealed partial class RuntimeNativeActorCombat
             {
                 ++_ambientStarted;
                 using (OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Measure(OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Owner.SandboxActivitySelection))
-                    activity = SelectSandboxActivity(source, activity, hour, delta, context);
+                    activity = SelectSandboxActivity(source, activity, hour, delta, context, physical);
                 _state.PackageMotion = _state.PackageMotion! with { Sandbox = activity, Wander = null };
                 StopPackageMotion();
             }
@@ -93,7 +120,8 @@ internal sealed partial class RuntimeNativeActorCombat
     }
 
     private FalloutSandboxActivityProgress SelectSandboxActivity(FalloutSandboxPackage source,
-        FalloutSandboxActivityProgress? previous, float hour, double delta, NativeActorCombatContext context)
+        FalloutSandboxActivityProgress? previous, float hour, double delta, NativeActorCombatContext context,
+        INativeSandboxActivityOwner? physical)
     {
         var busy = context.DialogueBusy ?? throw new NotSupportedException("Sandbox has no dialogue participant owner.");
         var candidates = _world.SandboxCandidateSources(_state.Reference, source,
@@ -102,15 +130,25 @@ internal sealed partial class RuntimeNativeActorCombat
         foreach (var candidate in candidates)
         {
             if (candidate.Activity == FalloutSandboxActivity.Wander) { admitted.Add(candidate); continue; }
+            if (candidate.Activity == FalloutSandboxActivity.IdleMarker)
+            {
+                if (!_world.IdleMarkerAvailable(candidate.Reference ??
+                    throw new InvalidDataException("Idle marker candidate has no source reference."), 0,
+                    _state.Reference, _world.IdleMarkerOccupied)) continue;
+                admitted.Add(candidate); continue;
+            }
+            if (candidate.Activity is FalloutSandboxActivity.Furniture or FalloutSandboxActivity.Sleep)
+            {
+                if (!_world.ActorMayUseFurniture(_state.Reference, candidate.Reference ??
+                        throw new InvalidDataException("Furniture candidate has no source reference."))) continue;
+                admitted.Add(candidate); continue;
+            }
             if (candidate.Activity == FalloutSandboxActivity.Eat)
             {
                 if (candidate.Reference is { } food && !_world.ActorMayEatWorldFood(_state.Reference, food)) continue;
                 admitted.Add(candidate); continue;
             }
-            if (candidate.Activity != FalloutSandboxActivity.Dialogue)
-                throw new FalloutSandboxAdmissionException(source.Form,
-                    $"{FalloutActorSandboxAdmissionFailure.AdmissionErrorPrefix}{candidate.Activity} " +
-                    $"reference={candidate.Reference} base={candidate.Base} inventory={candidate.Inventory}");
+            if (candidate.Activity != FalloutSandboxActivity.Dialogue) { admitted.Add(candidate); continue; }
             if (_state.ConversationSuppressionSeconds is > 0 || busy(_state.Reference) || _world.BlocksAmbientConversation(_state.Reference)) continue;
             var target = candidate.Reference ?? throw new InvalidDataException("Sandbox dialogue candidate has no reference.");
             if (busy(target) || _world.BlocksAmbientConversationTarget(target) ||
@@ -120,14 +158,31 @@ internal sealed partial class RuntimeNativeActorCombat
         }
         var preferences = previous is null ? new FalloutSandboxPreferences() : new FalloutSandboxPreferences(previous.Preferences);
         var foodAvailable = admitted.Any(candidate => candidate.Activity == FalloutSandboxActivity.Eat);
-        var categories = preferences.ActivityWeights(null, foodAvailable, false, _state.ConversationSuppressionSeconds is > 0);
+        var furnitureAvailable = admitted.Any(candidate => candidate.Activity == FalloutSandboxActivity.Furniture);
+        var bedAvailable = admitted.Any(candidate => candidate.Activity == FalloutSandboxActivity.Sleep);
+        var scheduled = (_state.SandboxDailyWindow ?? throw new InvalidOperationException("Sandbox has no retained daily window."))
+            .EligibleActivity(SandboxDay(context), hour, foodAvailable, bedAvailable);
+        var categories = preferences.ActivityWeights(scheduled, foodAvailable, furnitureAvailable, _state.ConversationSuppressionSeconds is > 0);
         var weights = admitted.Select(candidate => FalloutSandboxPreferences.CandidateWeight(1, categories[(int)candidate.Activity])).ToArray();
         var total = weights.Aggregate(0, (sum, weight) => checked(sum + weight));
         if (total == 0) throw new NotSupportedException("Sandbox has no admitted activity; its retry owner is unbound.");
         var selected = admitted[FalloutSandboxPreferences.Choose(weights, _state.SoundRandom.NextUInt32() % (uint)total)];
+        if (selected.Activity is not (FalloutSandboxActivity.Wander or FalloutSandboxActivity.Eat or FalloutSandboxActivity.Dialogue) &&
+            physical?.Supports(selected.Activity) != true)
+            throw new NotSupportedException($"Sandbox selected activity requires its execution owner: {selected.Activity} " +
+                $"reference={selected.Reference} base={selected.Base} inventory={selected.Inventory}");
         var threat = FalloutActorThreat.Read(_records, _state.Base, _state.Templates);
         return FalloutSandboxActivityProgress.Select(_records.NumericSettings, threat.Energy,
-            selected.Activity, hour, preferences, _state.SoundRandom.NextUnitFloat, selected.Reference);
+            selected.Activity, hour, preferences, _state.SoundRandom.NextUnitFloat, selected.Reference) with
+        { ScheduledActivity = scheduled, DailyFoodAvailable = foodAvailable, DailyBedAvailable = bedAvailable };
+    }
+
+    private uint SandboxDay(NativeActorCombatContext context)
+    {
+        var days = context.Globals.Get((_sandboxTimeBindings ??= FalloutGameTimeBindings.Read(_records)).DaysPassed);
+        if (!float.IsFinite(days) || days < 0 || (double)days > uint.MaxValue)
+            throw new InvalidDataException("Sandbox daily scheduling has an invalid game-day clock.");
+        return (uint)days;
     }
 
     private void HoldSandboxActivity(FalloutPluginRecord package, FalloutSandboxPackage source,

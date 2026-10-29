@@ -31,7 +31,7 @@ internal sealed partial class FalloutPlayerInventory
         var otherItems = new Dictionary<FalloutFormKey, FalloutCampaignItem>(other._items);
         var thisEquipped = new HashSet<uint>(_equipped);
         var otherEquipped = new HashSet<uint>(other._equipped);
-        foreach (var transfer in transfers)
+        foreach (var transfer in PlanLoadedRoundBatch(other, transfers))
         {
             if (transfer is null || transfer.Form.ObjectId == 0 || transfer.Count <= 0)
                 throw new InvalidDataException("Trade transfer has an invalid item or quantity.");
@@ -65,10 +65,11 @@ internal sealed partial class FalloutPlayerInventory
         if (source.UnequipLocked) throw new InvalidOperationException("Locked equipped items cannot be traded.");
         if (sourceEquipped.Contains(source.RuntimeFormId))
         {
-            if (transfer.Count != source.Count)
+            if (transfer.Count != source.Count && source.RecordType != "WEAP")
                 throw new NotSupportedException("Partial transfer of an equipped stack needs item-instance selection.");
-            sourceEquipped.Remove(source.RuntimeFormId);
         }
+        var wornInstance = source.RecordType == "WEAP" && sourceEquipped.Contains(source.RuntimeFormId)
+            ? (source.Variants ?? [new(source.Count)])[0].Instance : null;
 
         var remaining = (source.Variants ?? [new(source.Count)]).ToList();
         var selected = new List<FalloutItemVariant>();
@@ -76,11 +77,13 @@ internal sealed partial class FalloutPlayerInventory
         for (var index = 0; index < remaining.Count && pending > 0; index++)
         {
             var count = Math.Min(pending, remaining[index].Count);
-            selected.Add(remaining[index] with { Count = count });
+            selected.Add(remaining[index] with { Count = count, Hotkey = null });
             remaining[index] = remaining[index] with { Count = remaining[index].Count - count };
             pending -= count;
         }
         if (pending != 0) throw new InvalidDataException("Trade item variants differ from the inventory count.");
+        if (transfer.Count == source.Count || wornInstance is not null && selected.Any(extra => extra.Instance == wornInstance))
+            sourceEquipped.Remove(source.RuntimeFormId);
 
         var left = source.Count - transfer.Count;
         if (left == 0) sourceItems.Remove(transfer.Form);
@@ -97,7 +100,7 @@ internal sealed partial class FalloutPlayerInventory
         var variants = (previous?.Variants ?? (previous is null ? [] : [new(previous.Count)])).ToList();
         foreach (var moved in selected)
         {
-            var index = variants.FindIndex(value => value with { Count = 1 } == moved with { Count = 1 });
+            var index = variants.FindIndex(value => value.Instance is null && moved.Instance is null && value.Hotkey is null && value.SameItem(moved));
             if (index < 0) variants.Add(moved);
             else variants[index] = variants[index] with { Count = checked(variants[index].Count + moved.Count) };
         }
@@ -109,6 +112,8 @@ internal sealed partial class FalloutPlayerInventory
             // equipped-instance lock. The source's lock was refused above.
             UnequipLocked = previous?.UnequipLocked ?? false
         };
+        foreach (var rounds in LoadedRoundTransfers(selected))
+            Move(sourceItems, targetItems, sourceEquipped, new(rounds.Ammunition, rounds.Loaded, transfer.FromThisInventory));
     }
 
     private static void Validate(IEnumerable<FalloutCampaignItem> items)

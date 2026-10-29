@@ -8,9 +8,10 @@ internal sealed record GameplayVitals(
     int MaximumActionPoints,
     int ExperiencePoints,
     int NextLevelExperiencePoints, float HitPointFraction = 0,
-    IReadOnlyDictionary<byte, float>? LimbDamage = null, float RadiationRads = 0)
+    IReadOnlyDictionary<byte, float>? LimbDamage = null, float RadiationRads = 0, float ActionPointFraction = 0)
 {
     internal float ExactHitPoints => HitPoints - HitPointFraction;
+    internal float ExactActionPoints => ActionPoints - ActionPointFraction;
 
     // A derived maximum is not a healing command. Preserve the authoritative
     // damage/AP deficits and the independent injury/radiation owners.
@@ -19,11 +20,14 @@ internal sealed record GameplayVitals(
         ArgumentNullException.ThrowIfNull(derived);
         var health = Math.Clamp(derived.MaximumHitPoints - (MaximumHitPoints - ExactHitPoints), 0, derived.MaximumHitPoints);
         var displayed = checked((int)MathF.Ceiling(health));
+        var actionPoints = Math.Clamp(derived.MaximumActionPoints - (MaximumActionPoints - ExactActionPoints), 0, derived.MaximumActionPoints);
+        var displayedActionPoints = checked((int)MathF.Ceiling(actionPoints));
         var result = derived with
         {
             HitPoints = displayed,
             HitPointFraction = displayed - health,
-            ActionPoints = Math.Clamp(derived.MaximumActionPoints - (MaximumActionPoints - ActionPoints), 0, derived.MaximumActionPoints),
+            ActionPoints = displayedActionPoints,
+            ActionPointFraction = displayedActionPoints - actionPoints,
             LimbDamage = LimbDamage is null ? null : new Dictionary<byte, float>(LimbDamage),
             RadiationRads = RadiationRads
         };
@@ -70,6 +74,7 @@ internal sealed record GameplayVitals(
         if (Level <= 0 || MaximumHitPoints <= 0 || HitPoints < 0 ||
             HitPoints > MaximumHitPoints || MaximumActionPoints <= 0 ||
             ActionPoints < 0 || ActionPoints > MaximumActionPoints ||
+            !float.IsFinite(ActionPointFraction) || ActionPointFraction is < 0 or >= 1 || ExactActionPoints < 0 ||
             ExperiencePoints < 0 || NextLevelExperiencePoints <= 0 ||
             !float.IsFinite(HitPointFraction) || HitPointFraction is < 0 or >= 1 || ExactHitPoints < 0 ||
             !float.IsFinite(RadiationRads) || RadiationRads < 0 ||

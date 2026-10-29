@@ -229,6 +229,7 @@ public partial class RuntimeCoordinator
         if (_nativeSessionTransitioning) return;
         CancelNativeManualSave("Native session transition started before the pending manual save could commit.");
         _nativeSessionTransitioning = true;
+        _nativePlayer?.XrReleaseGrab();
         try
         {
             BeginLoadingScreen(continueSave ? "Preparing saved game" : "Returning to the main menu");
@@ -296,6 +297,7 @@ public partial class RuntimeCoordinator
         if (_nativeSessionTransitioning) return;
         CancelNativeManualSave("Native session transition started before the pending manual save could commit.");
         _nativeSessionTransitioning = true;
+        _nativePlayer?.XrReleaseGrab();
         try
         {
             await DrainNativeSourceReaders();

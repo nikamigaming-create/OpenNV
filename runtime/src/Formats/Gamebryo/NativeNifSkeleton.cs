@@ -5,6 +5,7 @@ namespace OpenNV.Runtime.Formats.Gamebryo;
 internal sealed class RuntimeNativeNifSkeleton
 {
     private readonly Dictionary<string, int> _boneIndices = new(StringComparer.Ordinal);
+    private readonly List<float> _sourceBoneScales = [];
     private readonly List<(int ParentBone, FalloutNifGeometry Geometry)> _geometryAttachments = [];
     private sealed record Attachment(int ParentBone, FalloutNifGeometry Source, MeshInstance3D Mesh,
         BoneAttachment3D Parent, FalloutNifMorphGeometry? Morph);
@@ -38,7 +39,7 @@ internal sealed class RuntimeNativeNifSkeleton
 
     private void FinishConstruction()
     {
-        Node.ResetBonePoses();
+        ResetSourceBonePoses();
         BuildAttachments();
         Node.SetMeta("opennv_nif_source_bones", _boneIndices.Count);
         Node.SetMeta("opennv_nif_controller_owner", "external-gameplay-animation");
@@ -107,6 +108,17 @@ internal sealed class RuntimeNativeNifSkeleton
     internal FalloutNifFloatExtraDataState FloatExtraData { get; } = new();
     internal RuntimeNativeNifMaterialChannels MaterialChannels { get; } = new();
     internal IReadOnlyList<(int ParentBone, FalloutNifGeometry Geometry)> GeometryAttachments => _geometryAttachments;
+
+    internal void ResetSourceBonePoses()
+    {
+        Node.ResetBonePoses();
+        // NiTransform stores scale separately from its Float32 rotation matrix.
+        // Godot decomposes each rest-matrix column length on reset; rounding in
+        // the authored rotation must not invent three different local scales.
+        // Apply this only at an explicit source reset, never over a live pose.
+        for (var index = 0; index < _sourceBoneScales.Count; ++index)
+            Node.SetBonePoseScale(index, Vector3.One * _sourceBoneScales[index]);
+    }
 
     internal void BindSoundSource(Node3D actor)
     {
@@ -258,6 +270,7 @@ internal sealed class RuntimeNativeNifSkeleton
         if (string.IsNullOrWhiteSpace(source.Name) || !_boneIndices.TryAdd(source.Name, _boneIndices.Count))
             throw new InvalidDataException("NIF skeleton has an unnamed or duplicate bone identity.");
         var index = Node.AddBone(source.Name);
+        _sourceBoneScales.Add(source.Transform.Scale);
         _visibility.Add(source.Name, (source.Flags & 1) == 0);
         if (parentIndex >= 0)
             Node.SetBoneParent(index, parentIndex);

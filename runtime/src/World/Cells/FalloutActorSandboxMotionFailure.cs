@@ -170,6 +170,8 @@ internal sealed record FalloutActorSandboxMotionFailure(FalloutFormKey Reference
             (left.Sandbox is null ? right.Sandbox is null : right.Sandbox is { } sandbox &&
                 left.Sandbox.Activity == sandbox.Activity && left.Sandbox.StartedHour == sandbox.StartedHour &&
                 left.Sandbox.Duration == sandbox.Duration && left.Sandbox.Target == sandbox.Target &&
+                left.Sandbox.ScheduledActivity == sandbox.ScheduledActivity &&
+                left.Sandbox.DailyFoodAvailable == sandbox.DailyFoodAvailable && left.Sandbox.DailyBedAvailable == sandbox.DailyBedAvailable &&
                 left.Sandbox.Preferences.SequenceEqual(sandbox.Preferences));
     }
 

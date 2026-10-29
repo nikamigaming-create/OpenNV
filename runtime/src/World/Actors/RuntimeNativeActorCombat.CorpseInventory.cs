@@ -47,7 +47,8 @@ internal sealed partial class RuntimeNativeActorCombat
         else if (change.After.WeaponHandling is { } retained && !FalloutActorCorpseEquipment.SameHandling(equipment.WeaponHandling, retained))
         {
             reconciled = new(_state.Inventory!.Contents, nativeNpc: true);
-            reconciled.Restore(retained, key => FalloutWeaponPresentation.Read(_records, key, false));
+            reconciled.Restore(retained, key => FalloutWeaponPresentation.Read(_records, key, false),
+                (key, mods) => FalloutWeaponPresentation.Read(_records, key, false, mods));
         }
         var muzzleParent = muzzle?.GetParent(); var muzzleIndex = muzzle?.GetIndex() ?? 0;
         return new(() =>

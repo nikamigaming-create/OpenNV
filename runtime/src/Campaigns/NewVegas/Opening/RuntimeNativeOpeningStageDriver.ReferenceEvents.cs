@@ -153,7 +153,7 @@ internal partial class RuntimeNativeOpeningStageDriver
             actor => _scripts.References!.ActorFactions(actor), () => _character.Female,
             actor => _scripts.References!.ActorRace(actor), _scripts.ScriptValues.RandomBounded, CurrentActorPackage,
             _scripts.ActorQueries.GetVampire, InventoryCommands.ItemCount, ReferenceDistance, ReferenceInZone, ActorSitting,
-            _scripts.References!.GetDeadCount, DialogueActorDead, _scripts.AddedTopics);
+            _scripts.References!.GetDeadCount, DialogueActorDead, _scripts.AddedTopics, _scripts.References!.GetSleeping);
         AddChild(_conversation);
     }
 

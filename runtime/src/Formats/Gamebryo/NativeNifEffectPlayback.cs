@@ -1,4 +1,5 @@
 using Godot;
+using OpenNV.Runtime.Content;
 
 namespace OpenNV.Runtime.Formats.Gamebryo;
 
@@ -11,14 +12,22 @@ internal sealed class NativeNifEffectPlayback
     internal RuntimeNifParticleSystem[] Particles { get; }
     private readonly (Node3D Node, bool Visible)[] _surfaces;
     private readonly double _duration;
+    private readonly NativeOwnedAnimationSoundPlayer? _sounds;
+    private readonly (Node3D Source, FalloutFormKey Sound)[] _addonSounds;
+    private readonly Func<Node3D, Node3D>? _soundEmitter;
+    private readonly HashSet<Node3D> _resolvedSoundEmitters = [];
     private double _elapsed;
     internal bool Active { get; private set; }
+    internal int AddonSoundCount => _addonSounds.Length;
+    internal string? AudioError { get; private set; }
     internal double Remaining => Math.Max(0, _duration - _elapsed);
 
-    internal NativeNifEffectPlayback(Node3D root, double duration, bool encoded)
+    internal NativeNifEffectPlayback(Node3D root, double duration, bool encoded,
+        NativeOwnedAnimationSoundPlayer? sounds = null, Func<Node3D, Node3D>? soundEmitter = null)
     {
         if (!double.IsFinite(duration) || duration < 0) throw new InvalidDataException("Effect duration is invalid.");
         _root = root; _duration = duration;
+        _sounds = sounds; _soundEmitter = soundEmitter;
         var nodes = root.FindChildren("*", "", true, false);
         _controllers = nodes.OfType<RuntimeNifControllerPlayer>().ToArray();
         Particles = nodes.OfType<RuntimeNifParticleSystem>().ToArray();
@@ -31,6 +40,21 @@ internal sealed class NativeNifEffectPlayback
         foreach (var particle in Particles) { particle.EmissionEnabled = false; particle.SetProcess(false); particle.SetOutputEncoding(encoded); }
         // Addon smoke continues after the muzzle mesh's source duration.
         var addons = nodes.Where(node => node.HasMeta("opennv_addon_form")).ToArray();
+        _addonSounds = addons.OfType<Node3D>().Where(node => node.HasMeta("opennv_addon_sound_plugin"))
+            .Select(node => (node, new FalloutFormKey(node.GetMeta("opennv_addon_sound_plugin").AsString(),
+                node.GetMeta("opennv_addon_sound_object").AsUInt32()))).ToArray();
+        if (sounds is not null)
+            foreach (var (node, sound) in _addonSounds)
+            {
+                try
+                {
+                    sounds.PrepareSound(sound);
+                    node.RemoveMeta("opennv_addon_audio_unbound");
+                    node.SetMeta("opennv_addon_audio_owner", "source-effect-activation");
+                }
+                catch (Exception error) when (error is IOException or InvalidDataException or NotSupportedException)
+                { AudioError = error.Message; }
+            }
         _surfaces = nodes.OfType<MeshInstance3D>().Where(mesh => !addons.Any(addon => addon.IsAncestorOf(mesh)))
             .Select(mesh => ((Node3D)mesh, mesh.Visible)).ToArray();
         foreach (var mesh in nodes.OfType<MeshInstance3D>())
@@ -42,6 +66,28 @@ internal sealed class NativeNifEffectPlayback
 
     internal void Start()
     {
+        AudioError = null;
+        RetireSounds();
+        _resolvedSoundEmitters.Clear();
+        foreach (var (source, sound) in _addonSounds)
+        {
+            try
+            {
+                var sounds = _sounds ?? throw new NotSupportedException("ADDN sound has no gameplay effect audio owner.");
+                var emitter = _soundEmitter?.Invoke(source) ?? source;
+                if (!GodotObject.IsInstanceValid(emitter) || !emitter.IsInsideTree())
+                    throw new NotSupportedException("ADDN sound emitter is no longer resident.");
+                _resolvedSoundEmitters.Add(emitter);
+                sounds.StopEmitterLoops(emitter);
+                if (sounds.DispatchSound(sound, emitter) == "unbound-source-sound")
+                    throw new NotSupportedException($"ADDN sound {sound} could not start its source voice.");
+            }
+            catch (Exception error) when (error is IOException or InvalidDataException or NotSupportedException)
+            {
+                AudioError = error.Message;
+                GD.PushError($"OPENNV_ADDON_AUDIO_FAILED sound={sound}: {error.Message}");
+            }
+        }
         foreach (var controller in _controllers)
         {
             controller.PlaySourceSequence(controller.ActiveSequence ?? controller.SequenceNames.Single());
@@ -57,6 +103,17 @@ internal sealed class NativeNifEffectPlayback
         if (Active) throw new InvalidOperationException("An active effect cannot be recycled.");
         foreach (var particle in Particles) particle.ResetCompleted();
         Start();
+    }
+
+    internal void RetireSounds()
+    {
+        // Resolution belongs to activation. A replacement view or muzzle can
+        // already exist during retirement; never resolve an old path into it.
+        // Own authored nodes also retire voices emitted through another view.
+        foreach (var emitter in _resolvedSoundEmitters.Concat(_addonSounds.Select(sound => sound.Source)).Distinct())
+        {
+            if (GodotObject.IsInstanceValid(emitter)) _sounds?.StopEmitterLoops(emitter);
+        }
     }
 
     internal void Advance(double delta)
@@ -84,6 +141,7 @@ internal sealed class NativeNifEffectPlayback
         if (_elapsed < _duration) return;
         foreach (var (node, _) in _surfaces) node.Visible = false;
         if (Particles.Any(particle => particle.ActiveCount != 0)) return;
+        RetireSounds();
         Active = false; _root.Visible = false;
     }
 }

@@ -8,7 +8,7 @@ internal sealed record FalloutActorPackageIdleAnimation(FalloutFormKey Idle, str
     string Resource, string Sha256, FalloutIdleAnimationPlaybackSnapshot Clock, long Revision,
     FalloutActorResidualPose? ResidualPose = null, IReadOnlyList<FalloutActorIdleObjectBinding>? Objects = null)
 {
-    internal void Validate()
+    internal void Validate(bool allowCompleted = false)
     {
         if (!FalloutActorFurnitureContinuation.ValidKey(Idle) || !FalloutActorFurnitureContinuation.ValidHash(IdleSha256) ||
             !FalloutActorFurnitureContinuation.ValidHash(Sha256) || string.IsNullOrWhiteSpace(Resource) ||
@@ -23,7 +23,7 @@ internal sealed record FalloutActorPackageIdleAnimation(FalloutFormKey Idle, str
                 throw new InvalidDataException("Saved idle animation objects repeat a source owner.");
         }
         (ResidualPose ?? throw new InvalidDataException("Saved collection animation is missing its residual pose.")).Validate();
-        if (Clock.Complete) throw new InvalidDataException("Saved collection animation has already released its pose.");
+        if (Clock.Complete && !allowCompleted) throw new InvalidDataException("Saved collection animation has already released its pose.");
     }
 
     internal void Validate(FalloutPluginStack records, FalloutFormKey package) =>
@@ -38,9 +38,9 @@ internal sealed record FalloutActorPackageIdleAnimation(FalloutFormKey Idle, str
             throw new InvalidDataException("Saved collection animation is absent from its expected source collection.");
     }
 
-    internal void ValidateSource(FalloutPluginStack records)
+    internal void ValidateSource(FalloutPluginStack records, bool allowCompleted = false)
     {
-        Validate();
+        Validate(allowCompleted);
         var record = records.GetEffective(Idle);
         if (record.Signature != "IDLE" || FalloutActorFurnitureContinuation.RecordHash(record) != IdleSha256)
             throw new InvalidDataException("Saved collection animation differs from its winning IDLE.");

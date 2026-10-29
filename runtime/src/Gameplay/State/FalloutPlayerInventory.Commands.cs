@@ -42,27 +42,14 @@ internal sealed partial class FalloutPlayerInventory
         // Prepare the whole transaction before publishing either inventory.
         var source = Copy();
         var target = destination?.Copy();
-        var removed = Items.Where(item => Removable(records, records.GetEffective(item.FormKey), player)).ToArray();
-        foreach (var item in removed)
+        var removed = Items.Where(item => Removable(records, records.GetEffective(item.FormKey), player))
+            .OrderBy(item => item.RecordType == "WEAP" ? 0 : 1).ToArray();
+        foreach (var original in removed)
         {
+            if (source.Item(original.FormKey) is not { } item) continue;
             if (target is not null)
             {
-                source.TransferToCore(target, item.FormKey, item.Count, null, force: true);
-                if (!retainOwnership)
-                {
-                    // TransferTo merges equal variants; clear ownership only on
-                    // the moved entries, never on previously owned target items.
-                    var before = destination!.Item(item.FormKey);
-                    var variants = (before?.Variants ?? (before is null ? [] : [new(before.Count)])).ToList();
-                    foreach (var variant in item.Variants ?? [new(item.Count)])
-                    {
-                        var moved = variant with { Owner = null, Global = null, FactionRank = null };
-                        var index = variants.FindIndex(value => value with { Count = 1 } == moved with { Count = 1 });
-                        if (index < 0) variants.Add(moved);
-                        else variants[index] = variants[index] with { Count = checked(variants[index].Count + moved.Count) };
-                    }
-                    target._items[item.FormKey] = target.Item(item.FormKey)! with { Variants = variants };
-                }
+                source.TransferToCore(target, item.FormKey, item.Count, null, force: true, retainOwnership);
                 target._items[item.FormKey] = target.Item(item.FormKey)! with { UnequipLocked = destination!.Item(item.FormKey)?.UnequipLocked ?? false };
             }
             else source.RemoveCore(item.FormKey, item.Count, silent: true);

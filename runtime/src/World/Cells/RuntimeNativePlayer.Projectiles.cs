@@ -89,6 +89,7 @@ internal partial class RuntimeNativePlayer
                 direction,
                 medianSpreadDegrees,
                 _weaponHandling!.NextShotRandomUnit);
+            pelletDirection = VatsMissDirection(origin, pelletDirection);
             var end = origin + pelletDirection * (shot.Projectile.Range * UnitsToMeters);
             if (!shot.Projectile.PassesThroughActors && !shot.Projectile.PassesThroughSmallTransparent)
             {
@@ -170,6 +171,7 @@ internal partial class RuntimeNativePlayer
             {
                 var projectileDirection = FalloutWeaponSpread.Deviate(
                     direction, medianSpreadDegrees, _weaponHandling!.NextShotRandomUnit);
+                projectileDirection = VatsMissDirection(origin, projectileDirection);
                 var flight = effects.PrepareProjectile(shot.Projectile,
                     _configuration.Simulation.GravityMetersPerSecondSquared,
                     origin, projectileDirection, CollisionMask | CollisionLayer, SelfQueryBodies);

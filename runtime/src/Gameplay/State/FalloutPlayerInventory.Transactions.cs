@@ -21,10 +21,11 @@ internal sealed partial class FalloutPlayerInventory
         if (transfers.Count == 0) return;
         ApplyRemovalTransaction(target, (source, destination) =>
         {
-            foreach (var transfer in transfers)
+            if (transfers.Any(transfer => transfer is null)) throw new InvalidDataException("Inventory transfer is absent.");
+            foreach (var transfer in source.PlanLoadedRoundBatch(destination!, transfers.Select(value =>
+                new FalloutTradeTransfer(value.Item, value.Count, true)).ToArray()))
             {
-                if (transfer is null) throw new InvalidDataException("Inventory transfer is absent.");
-                source.TransferToCore(destination!, transfer.Item, transfer.Count, null, false);
+                source.TransferToCore(destination!, transfer.Form, transfer.Count, null, false);
             }
         });
     }
@@ -85,6 +86,9 @@ internal sealed partial class FalloutPlayerInventory
             var before = Copy(); var beforeOther = other?.Copy();
             var staged = Copy(); var stagedOther = other?.Copy();
             plan(staged, stagedOther);
+            staged.NormalizeMagazineAmmunition(); stagedOther?.NormalizeMagazineAmmunition();
+            ValidateWeaponInstances(staged.Items);
+            if (stagedOther is not null) ValidateWeaponInstances(stagedOther.Items);
             var after = staged.Capture(); var afterOther = stagedOther?.Capture();
             var changed = !SameSnapshot(before.Capture(), after);
             var otherChanged = other is not null && !SameSnapshot(beforeOther!.Capture(), afterOther!);

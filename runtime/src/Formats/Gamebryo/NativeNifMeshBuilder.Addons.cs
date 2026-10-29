@@ -26,8 +26,9 @@ internal static partial class RuntimeNativeNifMeshBuilder
                 node.SetMeta("opennv_addon_particle_cap", addon.ParticleCap);
                 if (addon.Sound is { } sound)
                 {
+                    node.SetMeta("opennv_addon_sound_plugin", sound.OwnerPlugin);
+                    node.SetMeta("opennv_addon_sound_object", sound.ObjectId);
                     node.SetMeta("opennv_addon_audio_unbound", sound.ToString());
-                    GD.PushWarning($"OPENNV_ADDON_AUDIO_UNBOUND addon={addon.Form} sound={sound}");
                 }
                 NodeCount += scene.Nodes; SurfaceCount += scene.Surfaces; VertexCount += scene.Vertices; TriangleCount += scene.Triangles;
                 CollisionBodyCount += scene.CollisionBodies; CollisionShapeCount += scene.CollisionShapes; CollisionTriangleCount += scene.CollisionTriangles;

@@ -6,13 +6,24 @@ internal static class FalloutPlayerPerkNumericEffects
 {
     internal static float Apply(byte entryPoint, float operand, IReadOnlyList<FalloutPerkEntry> entries,
         Func<FalloutCondition, float> conditions)
-    {
-        if (!float.IsFinite(operand)) throw new InvalidDataException("Player perk entry operand is not finite.");
-        var active = entries.Where(entry => entry.Entry == entryPoint).Where(entry =>
+        => ApplyCore(entryPoint, operand, entries, entry =>
         {
             entry.RequireActorConditionScope();
             return FalloutCondition.AllPass(entry.Conditions, conditions, evaluateRunOn: true);
-        }).ToArray();
+        });
+
+    internal static float ApplyContext(byte entryPoint, float operand, IReadOnlyList<FalloutPerkEntry> entries,
+        Func<byte, FalloutCondition, float> conditions) => ApplyCore(entryPoint, operand, entries, entry =>
+    {
+        var groups = entry.ConditionGroups ?? new Dictionary<byte, IReadOnlyList<FalloutCondition>> { [0] = entry.Conditions };
+        return groups.All(group => FalloutCondition.AllPass(group.Value, value => conditions(group.Key, value), evaluateRunOn: true));
+    });
+
+    private static float ApplyCore(byte entryPoint, float operand, IReadOnlyList<FalloutPerkEntry> entries,
+        Func<FalloutPerkEntry, bool> activeEntry)
+    {
+        if (!float.IsFinite(operand)) throw new InvalidDataException("Player perk entry operand is not finite.");
+        var active = entries.Where(entry => entry.Entry == entryPoint).Where(activeEntry).ToArray();
         if (active.Length > 1)
             throw new NotSupportedException($"Player perk entry {entryPoint} requires the acquired entry ordering owner.");
         if (active.Length == 0) return operand;

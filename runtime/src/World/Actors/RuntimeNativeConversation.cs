@@ -40,6 +40,7 @@ internal partial class RuntimeNativeConversation : Node
     private Func<FalloutFormKey, FalloutFormKey, float>? _referenceDistance;
     private Func<FalloutFormKey, FalloutFormKey, bool>? _referenceInZone;
     private Func<FalloutFormKey, int>? _sitting;
+    private Func<FalloutFormKey, int>? _sleeping;
     private Func<FalloutFormKey, int>? _deadCount;
     private Func<FalloutFormKey, bool>? _isDead;
     private FalloutQuestState _quests = null!;
@@ -78,7 +79,7 @@ internal partial class RuntimeNativeConversation : Node
         Func<FalloutFormKey, FalloutFormKey, float>? referenceDistance = null,
         Func<FalloutFormKey, FalloutFormKey, bool>? referenceInZone = null, Func<FalloutFormKey, int>? sitting = null,
         Func<FalloutFormKey, int>? deadCount = null, Func<FalloutFormKey, bool>? isDead = null,
-        HashSet<FalloutFormKey>? addedTopics = null)
+        HashSet<FalloutFormKey>? addedTopics = null, Func<FalloutFormKey, int>? sleeping = null)
     {
         _records = records; _quests = quests; _player = player; _speech = speech; _runtimeConditions = evaluate;
         // Publish focus after the ordinary player camera and animated actors.
@@ -98,6 +99,7 @@ internal partial class RuntimeNativeConversation : Node
         _referenceDistance = referenceDistance;
         _referenceInZone = referenceInZone;
         _sitting = sitting;
+        _sleeping = sleeping;
         _deadCount = deadCount;
         _isDead = isDead;
         _conversation = new(records, quests, condition => _conditions!.Evaluate(condition), (info, begin) => results(info, _dialogueSubject, begin), saidInfos, dialogueRandom, addedTopics);
@@ -131,7 +133,7 @@ internal partial class RuntimeNativeConversation : Node
             _conditions = new(_records, _quests, _dialogueSubject, identity,
                 _runtimeConditions, currentCell, _healthPercentage, _actorValue, _talkedToPlayer, _factions, _playerFemale, _actorRace,
                 currentPackage: _currentPackage, vampireQuery: _vampireQuery, itemCount: _itemCount, referenceDistance: _referenceDistance,
-                referenceInZone: _referenceInZone, sitting: _sitting, deadCount: _deadCount, isDead: _isDead);
+                referenceInZone: _referenceInZone, sitting: _sitting, deadCount: _deadCount, isDead: _isDead, sleeping: _sleeping);
             _speakerName = FalloutDialogueTopic.Text(npc.ReadSubrecords().Single(field => field.Signature == "FULL").Data.Span);
             _speech.BeginPlayerDialogue(_speaker);
             _layer = new CanvasLayer { Layer = 95 }; AddChild(_layer);

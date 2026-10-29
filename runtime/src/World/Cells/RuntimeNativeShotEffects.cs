@@ -205,7 +205,7 @@ internal sealed partial class RuntimeNativeShotEffects : Node3D
             var x = helper.Cross(y).Normalized();
             root.Transform = follow?.Invoke() ?? new(new Basis(x, y, x.Cross(y)), point);
             if (!reused) AddChild(root);
-            var playback = effect?.Playback ?? (source.Model is null ? null : new NativeNifEffectPlayback(root, source.Duration, encoded: false));
+            var playback = effect?.Playback ?? (source.Model is null ? null : new NativeNifEffectPlayback(root, source.Duration, encoded: false, _sounds));
             if (reused) playback!.RestartCompleted();
             else playback?.Start();
             if (effect is null)

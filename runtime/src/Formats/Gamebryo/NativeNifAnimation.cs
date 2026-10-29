@@ -3,6 +3,7 @@ using Godot;
 namespace OpenNV.Runtime.Formats.Gamebryo;
 
 internal sealed record RuntimeNifUnboundAnimationChannel(FalloutNifControllerLink Source, string Reason);
+internal sealed record RuntimeNifSnapshotTransform(string Target, byte Priority, FalloutNifAnimationSample Local);
 
 internal sealed class RuntimeNativeNifAnimation
 {
@@ -12,6 +13,9 @@ internal sealed class RuntimeNativeNifAnimation
     private readonly List<Action<float>> _otherChannels = [];
     private readonly List<RuntimeNifUnboundAnimationChannel> _unbound = [];
     private readonly List<FalloutNifControllerLink> _absentTargets = [];
+    private readonly Dictionary<FalloutNifControllerLink, Action<float>> _snapshotCandidateActions = [];
+    private readonly Dictionary<string, (Node3D Node, byte Priority, FalloutNifAnimationSampler Sampler)> _snapshotTargets = new(StringComparer.Ordinal);
+    private readonly Dictionary<Node3D, NativeNifAnimationBlend.Bone> _snapshotBlendScratch = [];
 
     // The caller selects the source sequence and owns its clock. Construction
     // never starts playback, resets poses, or chooses a locomotion/idle package.
@@ -23,8 +27,8 @@ internal sealed class RuntimeNativeNifAnimation
         Action<FalloutNifAnimationSample>? accumulationRoot = null,
         IReadOnlySet<string>? externalObjectTargets = null)
     {
-        if (sequence.Weight != 1.0f)
-            throw new NotSupportedException("Applying a weighted source sequence requires an animation blend owner.");
+        if (!float.IsFinite(sequence.Weight) || sequence.Weight < 0)
+            throw new InvalidDataException("Source animation sequence weight is invalid.");
         source.RequireNoActiveAnimationNotes(sequence);
         Source = source;
         Sequence = sequence;
@@ -63,7 +67,10 @@ internal sealed class RuntimeNativeNifAnimation
                     if (!skeleton.TryBoneIndex(link.NodeName, out var bone))
                     {
                         if (bindOtherChannel?.Invoke(link) is { } applyObject)
+                        {
                             _otherChannels.Add(applyObject);
+                            _snapshotCandidateActions.Add(link, applyObject);
+                        }
                         else
                             _unbound.Add(new(link, "The source transform target has no skeleton or animation-object owner."));
                         continue;
@@ -111,38 +118,54 @@ internal sealed class RuntimeNativeNifAnimation
     internal IReadOnlyList<FalloutNifControllerLink> AbsentSourceTargets => _absentTargets;
     internal int TransformChannelCount => _transforms.Count;
 
-    internal void RequireSnapshotTransitionOver(RuntimeNativeNifAnimation background)
+    internal void RegisterSnapshotTransformTarget(FalloutNifControllerLink link, Node3D target)
     {
-        if (_skeleton != background._skeleton || background._unbound.Count != 0 || _unbound.Count != 0 || _otherChannels.Count != 0 ||
-            _transforms.Count == 0 || Sequence.Weight != 1)
-            throw new NotSupportedException("Snapshot transition requires complete transform-only source bindings on one skeleton.");
-        foreach (var (bone, priority, _) in _transforms)
-            foreach (var (backgroundBone, backgroundPriority, _) in background._transforms)
-                if (backgroundBone == bone && backgroundPriority >= priority)
-                    throw new NotSupportedException("Snapshot transition requires incoming transform priority above the background slot: " +
-                        $"bone={_skeleton.Node.GetBoneName(bone)} incoming={Sequence.Name}/{Source.Sha256}/{priority} " +
-                        $"background={background.Sequence.Name}/{background.Source.Sha256}/{backgroundPriority}.");
+        if (!GodotObject.IsInstanceValid(target) || target.IsQueuedForDeletion() ||
+            !_snapshotCandidateActions.TryGetValue(link, out var action) || _snapshotTargets.ContainsKey(link.NodeName))
+            throw new InvalidOperationException("Snapshot transform target has no unique live source binding.");
+        var sampler = new FalloutNifAnimationSampler(Source, link.Interpolator);
+        _snapshotTargets.Add(link.NodeName, (target, link.Priority, sampler));
+        _otherChannels.Remove(action); _snapshotCandidateActions.Remove(link);
     }
 
-    // Snapshot and incoming links share the incoming source priorities. No
-    // arbitrary mixed-priority easing is inferred by this finite owner.
+    internal IReadOnlyList<RuntimeNifSnapshotTransform> CaptureSnapshotTransforms() => _snapshotTargets
+        .OrderBy(pair => pair.Key, StringComparer.Ordinal).Select(pair =>
+        {
+            var (node, priority, _) = pair.Value;
+            if (!GodotObject.IsInstanceValid(node) || node.IsQueuedForDeletion())
+                throw new InvalidOperationException("Snapshot transform target was retired.");
+            var p = node.Position; var q = node.Quaternion; var s = node.Scale;
+            if (s.X != s.Y || s.X != s.Z || !s.IsFinite() || s.X <= 0)
+                throw new NotSupportedException("Snapshot target requires uniform positive local scale.");
+            var units = _skeleton.UnitsToMetres;
+            return new RuntimeNifSnapshotTransform(pair.Key, priority,
+                new(new(p.X / units, -p.Z / units, p.Y / units), new(q.W, q.X, -q.Z, q.Y), s.X));
+        }).ToArray();
+
+    internal void RequireSnapshotTransitionOver(RuntimeNativeNifAnimation? background)
+    {
+        if (background is not null && (_skeleton != background._skeleton || background._unbound.Count != 0) ||
+            _unbound.Count != 0 || _otherChannels.Count != 0 || _transforms.Count + _snapshotTargets.Count == 0)
+            throw new NotSupportedException("Snapshot transition requires complete typed transform bindings on one skeleton.");
+    }
+
     internal void ApplySnapshotTransition(float sourceTime, IReadOnlyList<FalloutNifAnimationSample> snapshot,
-        float snapshotWeight, float incomingWeight)
+        float snapshotWeight, float incomingWeight, RuntimeNativeNifAnimation? background = null, float backgroundTime = 0,
+        IReadOnlyList<RuntimeNifSnapshotTransform>? external = null)
     {
         if (_unbound.Count != 0 || _otherChannels.Count != 0 || snapshot.Count != _skeleton.Node.GetBoneCount() ||
             !float.IsFinite(snapshotWeight) || !float.IsFinite(incomingWeight) || snapshotWeight < 0 || incomingWeight < 0 ||
             snapshotWeight + incomingWeight <= 0 || !float.IsFinite(sourceTime) || sourceTime < Sequence.StartTime || sourceTime > Sequence.StopTime)
             throw new InvalidDataException("Snapshot transition has invalid weights, phase or source bindings.");
-        var blend = _skeleton.AnimationBlend;
-        blend.Clear();
-        foreach (var (bone, priority, sampler) in _transforms)
-        {
-            ref var current = ref blend.Bones[bone];
-            current.Active = true; current.Priority = priority;
-            if (snapshotWeight > 0) current.Add(snapshot[bone], snapshotWeight);
-            if (incomingWeight > 0) current.Add(sampler.Sample(sourceTime), Sequence.Weight * incomingWeight);
-        }
-        blend.Publish(_skeleton);
+        external ??= [];
+        if (external.Count != _snapshotTargets.Count || external.Select(value => value.Target).Distinct(StringComparer.Ordinal).Count() != external.Count ||
+            external.Any(value => !_snapshotTargets.TryGetValue(value.Target, out var target) || target.Priority != value.Priority))
+            throw new InvalidDataException("Snapshot external transform bindings differ from their source.");
+        var layers = _skeleton.AnimationBlend.LayerScratch(background is null ? 1 : 2);
+        if (background is null) layers[0] = (this, sourceTime, 1);
+        else { layers[0] = (background, backgroundTime, 1); layers[1] = (this, sourceTime, 1); }
+        try { ApplyWeightedLayers(layers, this, snapshot, external, snapshotWeight, incomingWeight); }
+        finally { layers.Clear(); }
     }
 
     // The same whole-bone priority selection used by ApplyLayers determines
@@ -199,6 +222,15 @@ internal sealed class RuntimeNativeNifAnimation
                 _skeleton.Node.SetBonePoseScale(bone, Vector3.One * scale);
             }
         }
+        foreach (var (_, target) in _snapshotTargets)
+        {
+            var sample = target.Sampler.Sample(sourceTime);
+            if (sample.Translation is { } translation)
+                target.Node.Position = GamebryoCoordinate.ConvertVector(new(translation.X, translation.Y, translation.Z)) * _skeleton.UnitsToMetres;
+            if (sample.Rotation is { } rotation)
+                target.Node.Quaternion = new Quaternion(rotation.X, rotation.Z, -rotation.Y, rotation.W).Normalized();
+            if (sample.Scale is { } scale) target.Node.Scale = Vector3.One * scale;
+        }
     }
 
     internal static void ApplyLayers(params (RuntimeNativeNifAnimation Animation, float Time)[] layers)
@@ -207,34 +239,121 @@ internal sealed class RuntimeNativeNifAnimation
     internal static void ApplyLayers(ReadOnlySpan<(RuntimeNativeNifAnimation Animation, float Time)> layers)
     {
         if (layers.Length == 0) return;
+        var scratch = layers[0].Animation._skeleton.AnimationBlend.LayerScratch(layers.Length);
+        for (var index = 0; index < layers.Length; index++) scratch[index] = (layers[index].Animation, layers[index].Time, 1);
+        try { ApplyWeightedLayers(scratch); }
+        finally { scratch.Clear(); }
+    }
+
+    // Ease is transient controller state; it scales, never replaces, the
+    // authored sequence weight. Attachment priority survives zero contribution.
+    internal static void ApplyWeightedLayers(ReadOnlySpan<(RuntimeNativeNifAnimation Animation, float Time, float Ease)> layers)
+        => ApplyWeightedLayers(layers, null, null, null, 0, 1);
+
+    private static void ApplyWeightedLayers(ReadOnlySpan<(RuntimeNativeNifAnimation Animation, float Time, float Ease)> layers,
+        RuntimeNativeNifAnimation? snapshotOwner, IReadOnlyList<FalloutNifAnimationSample>? snapshot,
+        IReadOnlyList<RuntimeNifSnapshotTransform>? external, float snapshotWeight, float incomingWeight)
+    {
+        if (layers.Length == 0) return;
         var skeleton = layers[0].Animation._skeleton;
         var blend = skeleton.AnimationBlend;
         blend.Clear();
-        foreach (var (animation, time) in layers)
+        var nodes = layers[0].Animation._snapshotBlendScratch;
+        nodes.Clear();
+        float SequenceWeight(RuntimeNativeNifAnimation animation) => animation.Sequence.Weight *
+            (ReferenceEquals(animation, snapshotOwner) ? incomingWeight : 1);
+        foreach (var (animation, time, ease) in layers)
         {
             if (animation._skeleton != skeleton || animation.UnboundChannels.Count != 0)
-                throw new NotSupportedException("Animation layers require the same skeleton and complete source channel bindings.");
-            if (!float.IsFinite(time) || time < animation.Sequence.StartTime || time > animation.Sequence.StopTime)
-                throw new ArgumentOutOfRangeException(nameof(layers));
+                throw new NotSupportedException("Animation layers require one skeleton and complete source bindings.");
+            if (!float.IsFinite(ease) || ease < 0 || ease > 1 || !float.IsFinite(animation.Sequence.Weight) || animation.Sequence.Weight < 0 ||
+                !float.IsFinite(time) || time < animation.Sequence.StartTime || time > animation.Sequence.StopTime)
+                throw new InvalidDataException("Animation layer has an invalid ease, source weight or clock.");
             foreach (var (bone, priority, _) in animation._transforms)
             {
                 ref var current = ref blend.Bones[bone];
-                if (!current.Active || priority > current.Priority) current.Priority = priority;
+                current.Weights.Attach(priority);
                 current.Active = true;
             }
+            foreach (var (_, target) in animation._snapshotTargets)
+            {
+                if (!GodotObject.IsInstanceValid(target.Node) || target.Node.IsQueuedForDeletion())
+                    throw new InvalidOperationException("Animated external transform target was retired.");
+                nodes.TryGetValue(target.Node, out var current);
+                current.Weights.Attach(target.Priority); nodes[target.Node] = current;
+            }
         }
-        foreach (var (animation, time) in layers)
+        if (snapshotOwner is not null)
+        {
+            foreach (var (bone, priority, _) in snapshotOwner._transforms) blend.Bones[bone].Weights.Attach(priority);
+            foreach (var value in external!)
+            {
+                var node = snapshotOwner._snapshotTargets[value.Target].Node;
+                var current = nodes[node]; current.Weights.Attach(value.Priority); nodes[node] = current;
+            }
+        }
+        foreach (var (animation, time, ease) in layers)
+        {
+            foreach (var (bone, priority, _) in animation._transforms)
+                blend.Bones[bone].Weights.Gather(priority, SequenceWeight(animation), ease);
+            foreach (var (_, target) in animation._snapshotTargets)
+            {
+                var current = nodes[target.Node]; current.Weights.Gather(target.Priority, SequenceWeight(animation), ease);
+                nodes[target.Node] = current;
+            }
+        }
+        if (snapshotOwner is not null)
+        {
+            foreach (var (bone, priority, _) in snapshotOwner._transforms) blend.Bones[bone].Weights.Gather(priority, snapshotWeight, 1);
+            foreach (var value in external!)
+            {
+                var node = snapshotOwner._snapshotTargets[value.Target].Node;
+                var current = nodes[node]; current.Weights.Gather(value.Priority, snapshotWeight, 1); nodes[node] = current;
+            }
+        }
+        foreach (var (animation, time, ease) in layers)
+        {
             foreach (var (bone, priority, sampler) in animation._transforms)
             {
                 ref var current = ref blend.Bones[bone];
-                if (priority != current.Priority) continue;
-                var weight = animation.Sequence.Weight;
-                if (!float.IsFinite(weight) || weight < 0) throw new InvalidDataException("Animation layer has an invalid source weight.");
-                if (weight == 0) continue;
-                current.Add(sampler.Sample(time), weight);
+                var weight = current.Weights.Normalize(priority, SequenceWeight(animation), ease);
+                if (weight > 0) current.Add(sampler.Sample(time), weight);
             }
+            foreach (var (_, target) in animation._snapshotTargets)
+            {
+                var current = nodes[target.Node];
+                var weight = current.Weights.Normalize(target.Priority, SequenceWeight(animation), ease);
+                if (weight > 0) current.Add(target.Sampler.Sample(time), weight);
+                nodes[target.Node] = current;
+            }
+        }
+        if (snapshotOwner is not null)
+        {
+            foreach (var (bone, priority, _) in snapshotOwner._transforms)
+            {
+                ref var current = ref blend.Bones[bone];
+                var weight = current.Weights.Normalize(priority, snapshotWeight, 1);
+                if (weight > 0) current.Add(snapshot![bone], weight);
+            }
+            foreach (var value in external!)
+            {
+                var node = snapshotOwner._snapshotTargets[value.Target].Node;
+                var current = nodes[node]; var weight = current.Weights.Normalize(value.Priority, snapshotWeight, 1);
+                if (weight > 0) current.Add(value.Local, weight);
+                nodes[node] = current;
+            }
+        }
         blend.Publish(skeleton);
-        foreach (var (animation, time) in layers)
-            foreach (var apply in animation._otherChannels) apply(time);
+        foreach (var (node, current) in nodes)
+        {
+            if (current.PositionWeight > 0) node.Position = current.Position / current.PositionWeight * skeleton.UnitsToMetres;
+            if (current.Hemisphere is not null)
+                node.Quaternion = new Quaternion(current.Rotation.X, current.Rotation.Y, current.Rotation.Z, current.Rotation.W).Normalized();
+            if (current.ScaleWeight > 0) node.Scale = Vector3.One * (current.Scale / current.ScaleWeight);
+        }
+        nodes.Clear();
+        foreach (var (animation, time, ease) in layers)
+            if (ease > 0 && animation.Sequence.Weight > 0)
+                foreach (var apply in animation._otherChannels) apply(time);
     }
 }

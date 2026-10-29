@@ -22,6 +22,7 @@ internal partial class RuntimeNativeNpc
     private FalloutReferenceInstance? _aiReferenceState;
     private Func<FalloutFormKey?>? _currentPackageQuery;
     private Func<int>? _sittingQuery;
+    private Func<int>? _sleepingQuery;
     private Func<FalloutActorPackageAssignment?>? _packageAssignmentCapture;
     internal void UpdateResidentScene(FalloutCellScene cell) => _aiCell = cell;
     private Func<FalloutPlacedReference, Transform3D>? _referenceTransform;
@@ -48,7 +49,9 @@ internal partial class RuntimeNativeNpc
     internal string? PackageIdleError => _packageIdleError;
     internal string? PackageEventError => _packageEvents?.Error;
     internal string? AiError => _aiError;
-    internal int SittingState => _sitting == 1 ? 3 : _sitting;
+    private int FurniturePhase => _sitting == 1 ? 3 : _sitting;
+    internal int SittingState => _seat?.Sleeping == true ? 0 : FurniturePhase;
+    internal int SleepingState => _seat?.Sleeping == true ? FurniturePhase : 0;
     internal FalloutFormKey? CurrentFurniture => _sitting is 1 or 2 or 4 ? _furnitureReference : null;
     internal bool Traveling => _travelActive || (_furnitureApproaching || _escortPackage is not null || _editorTravel is not null || _dialogueNativeMovement) && Combat?.PackageMoving == true;
     internal FalloutFormKey? CurrentPackage => _sourceSelectionKnown ? _selectedSourcePackage : _aiPackage?.FormKey;
@@ -89,6 +92,8 @@ internal partial class RuntimeNativeNpc
         furniture = _furnitureReference?.ToString(),
         marker = _seat?.MarkerId,
         sitting = SittingState,
+        sleeping = SleepingState,
+        dailyWindow = _aiReferenceState?.SandboxDailyWindow,
         furniturePhase = _furnitureApproaching ? "approaching" : _sitting switch
         {
             1 => "occupied",
@@ -209,12 +214,14 @@ internal partial class RuntimeNativeNpc
         {
             world.InitializeSourceCorpse(Appearance.Reference!.Value);
             _aiReferenceState = world.Get(Appearance.Reference!.Value);
+            _restoringIdleRequests = _aiReferenceState.IdleRequests is not null;
             if (_aiReferenceState.SandboxAdmissionFailure is not null)
                 _sandboxAdmissionStaging = new(_aiReferenceState);
             world.BindActorAlert(Appearance.Reference!.Value, Activity);
             _baseClock = PreparePendingSandboxStartClock() ?? _sandboxAdmissionStaging?.Clock ?? _aiReferenceState.Animation;
             _aiReferenceState.QueryCurrentPackage = _currentPackageQuery = () => CurrentPackage;
             _aiReferenceState.QuerySitting = _sittingQuery = () => SittingState;
+            _aiReferenceState.QuerySleeping = _sleepingQuery = () => SleepingState;
         }
         _referenceTransform = referenceTransform;
         _packageEvents = new(DispatchPackageEvent);
@@ -236,6 +243,8 @@ internal partial class RuntimeNativeNpc
         BindPendingSelectionCapture();
         BindPendingSandboxStartCapture();
         BindFurnitureCapture();
+        BindIdleRequestCapture();
+        BindSandboxMarkerCapture();
         BindDialogueCapture();
         var bindingFailure = _aiReferenceState?.PackageBindingFailure;
         if (bindingFailure is not null) RestoreBindingFailure(bindingFailure);
@@ -262,6 +271,11 @@ internal partial class RuntimeNativeNpc
             PlayLocomotion(false);
             RestoreSelectionFailure(selectionFailure);
         }
+        else if (_aiReferenceState?.SandboxMarker is { } marker)
+        {
+            PlayLocomotion(false);
+            RestoreSandboxMarker(marker);
+        }
         else if (_aiReferenceState?.FurnitureContinuation is { } furniture) RestoreFurnitureContinuation(furniture);
         else if (_aiReferenceState?.DialogueContinuation is { } dialogue)
         {
@@ -281,8 +295,14 @@ internal partial class RuntimeNativeNpc
         _bindingInitialBase = false;
         _baseClock.Bind(_baseResource, _baseHash);
         ResumeBaseClock();
-        if (bindingFailure?.IndependentIdle is { } independentIdle) RestoreStoppedIndependentIdle(independentIdle);
-        if (_animation is { } overlay && _baseAnimation is { } baseAnimation)
+        _restoringIdleRequests = false;
+        if (_aiReferenceState?.IdleRequests is { } idleRequests) RestoreIdleRequestContinuation(idleRequests);
+        else if (bindingFailure?.IndependentIdle is { } independentIdle) RestoreStoppedIndependentIdle(independentIdle);
+        foreach (var input in _deferredIdleInputs.ToArray())
+            PlayIdle(input.Stack, input.Form, input.Owner, input.Saved, input.CompletePose);
+        _deferredIdleInputs.Clear();
+        if (_outgoingIdles.Count != 0 || _idleEaseIn is not null) PublishIdleRequestLayers();
+        else if (_animation is { } overlay && _baseAnimation is { } baseAnimation)
             RuntimeNativeNifAnimation.ApplyLayers((baseAnimation, _baseAnimationSeconds), (overlay, _animationSeconds));
         if (bindingFailure is not null) PublishFace();
         BindHeadTrackingPersistence();
@@ -386,20 +406,24 @@ internal partial class RuntimeNativeNpc
         if (Combat?.Dead == true || _aiWorld?.IsDead(Appearance.Reference!.Value) == true) return;
         if (NpcDialogueActive?.Invoke() == true) return;
         _aiPollRemaining -= delta;
+        if (_furniturePendingSelection is not null && _sitting is 2 or 4 && _requestedSelection is null) return;
+        if (_sandboxMarkerPendingSelection is not null && _requestedSelection is null) return;
         var scheduleTime = _aiClock?.ScheduleTime();
         if (scheduleTime is { } moment) scheduleTime = moment with { Hour = MathF.Floor(moment.Hour) };
-        if (_requestedSelection is null && _aiQuestRevision == _questState.ProgressRevision && _aiActivityRevision == Activity.Revision &&
+        if (_requestedSelection is null && _furniturePendingSelection is null && _aiQuestRevision == _questState.ProgressRevision && _aiActivityRevision == Activity.Revision &&
             _aiScheduleTime == scheduleTime && _aiPollRemaining > 0) return;
         _aiQuestRevision = _questState.ProgressRevision;
         _aiActivityRevision = Activity.Revision;
         _aiScheduleTime = scheduleTime;
         _aiPollRemaining = 10;
         FalloutPluginRecord? selected = null;
-        var forced = _requestedSelection is not null;
+        var acceptedSelection = _requestedSelection ?? _furniturePendingSelection;
+        var forced = acceptedSelection?.Forced == true;
         try
         {
-            var selection = _requestedSelection ?? SelectSourcePackage();
+            var selection = acceptedSelection ?? SelectSourcePackage();
             _requestedSelection = null;
+            _furniturePendingSelection = null;
             if (_aiReferenceState is { } requestedState) requestedState.PendingPackageSelection = null;
             selected = selection.Record;
             _selectedSourcePackage = selected?.FormKey; _sourceSelectionKnown = true;
@@ -419,6 +443,7 @@ internal partial class RuntimeNativeNpc
             // errors retain their separate exactly-once failure latch.
             _aiError = null; _failedPackage = null;
             if (_aiPackage?.FormKey == selected?.FormKey) return;
+            if (BeginSandboxMarkerPackageExit(selection with { Forced = forced })) return;
             if (_nativeMarkerTravel is { } markerTravel && _nativeMarkerTravelProgress is { } markerProgress &&
                 markerTravel.RetainsSelection(markerProgress.Complete,
                     !forced && !markerProgress.Complete && !markerTravel.MustReach && markerTravel.ContinueIfPlayerNear && Combat!.PackagePlayerInSameCell(), forced) &&
@@ -429,14 +454,25 @@ internal partial class RuntimeNativeNpc
             }
             if (!forced && _editorTravel is { MustComplete: true } && _editorTravelProgress?.Complete != true)
                 throw new NotSupportedException("Incomplete editor travel needs its must-complete package reevaluation owner.");
-            if (_sitting is 2 or 4) { _pendingPackage = selected; return; }
+            if (_sitting is 2 or 4)
+            {
+                _pendingPackage = selected;
+                if (_furnitureSandboxActivity)
+                {
+                    _furniturePendingSelection = selection with { Forced = forced };
+                    if (_sitting == 4) _sandboxFurniturePackageExit = true;
+                }
+                return;
+            }
             if (_sitting == 1 && selected is not null && RetainFurniturePackage(selected)) return;
             if (_aiPackage is not null)
             {
                 if (_seat is not null && !_furnitureApproaching)
                 {
                     _pendingPackage = selected;
+                    if (_furnitureSandboxActivity) _furniturePendingSelection = selection with { Forced = forced };
                     CancelIdle();
+                    _sandboxFurniturePackageExit = _furnitureSandboxActivity;
                     _furnitureOccupied = Transform;
                     _sitting = 4;
                     StartFurnitureAnimation();
@@ -444,6 +480,7 @@ internal partial class RuntimeNativeNpc
                 }
                 CancelIdle();
                 _packageEvents!.Change(null);
+                ClearSandboxMarker();
                 ClearPendingSandboxStart(clearBlocker: true);
                 _aiPackage = null;
                 _packageIdleSource = null;
@@ -520,6 +557,7 @@ internal partial class RuntimeNativeNpc
         }
         catch (Exception error) when (error is InvalidDataException or NotSupportedException or FileNotFoundException or InvalidOperationException)
         {
+            InterruptSandboxFurniture();
             var changed = _aiError != error.Message;
             _aiError = error.Message;
             _failedPackage = selected?.FormKey;
@@ -544,6 +582,9 @@ internal partial class RuntimeNativeNpc
         if (condition.Function == 159)
             return FalloutAiPackages.Sitting(_aiStack ?? throw new NotSupportedException("AI sitting query has no source owner."),
                 condition, Appearance.Reference!.Value, PackageSitting);
+        if (condition.Function == 49)
+            return FalloutAiPackages.Sleeping(_aiStack ?? throw new NotSupportedException("AI sleeping query has no source owner."),
+                condition, Appearance.Reference!.Value, reference => _aiWorld!.GetSleeping(reference));
         if (condition.Function == 47)
             return OpenNV.Runtime.Gameplay.State.FalloutActorInventoryConditions.ItemCount(
                 condition, Appearance.Reference!.Value, _aiItemCount);

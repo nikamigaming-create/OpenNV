@@ -21,7 +21,7 @@ internal sealed record FalloutActorProjectileLaunch(float LegacySpreadFactor, fl
         var next = (float)(AimChaseRadians - delta * AimChaseRadians * chaseMultiplier * animationMultiplier);
         if (!float.IsFinite(next)) throw new InvalidDataException("Actor aim-chase advancement overflowed.");
         if (AimChaseRadians > 0 && next <= 0 || AimChaseRadians < 0 && next >= 0 ||
-            next > -1e-6f && next < 1e-6f) next = 0;
+            next >= -1e-6f && next <= 1e-6f) next = 0;
         return this with { AimChaseRadians = next };
     }
 }

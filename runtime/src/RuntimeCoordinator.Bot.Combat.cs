@@ -184,7 +184,8 @@ public partial class RuntimeCoordinator
         var source = _botCombatWeaponIdentity?.Weapon == reference && _botCombatWeaponSource is { } cached
             ? cached : FalloutWeaponPresentation.Read(_nativePluginStack!, reference);
         var snapshot = player.CaptureWeaponHandling() ?? throw new InvalidOperationException("Native weapon handling owner is absent.");
-        var magazine = snapshot.Magazines.SingleOrDefault(value => value.Weapon == reference);
+        var selectedInstance = _nativeInventory.SelectedWeapon(reference).Extra.Instance;
+        var magazine = snapshot.Magazines.SingleOrDefault(value => value.Weapon == reference && value.Instance == selectedInstance);
         var ammo = magazine is { } current
             ? current.Ammunition : source.Ammunition.Where(value => (_nativeInventory.Item(value)?.Count ?? 0) > 0)
                 .Select(value => (FalloutFormKey?)value).FirstOrDefault();

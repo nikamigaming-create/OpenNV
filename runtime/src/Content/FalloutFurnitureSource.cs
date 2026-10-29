@@ -4,7 +4,7 @@ using OpenNV.Runtime.Formats.Gamebryo;
 namespace OpenNV.Runtime.Content;
 
 internal sealed record FalloutFurnitureSeat(FalloutFormKey Furniture, int Index, int MarkerId,
-    FalloutNifFurniturePosition Marker, float[] PlacementOffset, float HeadingDelta);
+    FalloutNifFurniturePosition Marker, float[] PlacementOffset, float HeadingDelta, bool Sleeping = false);
 
 internal static class FalloutFurnitureSource
 {
@@ -22,8 +22,9 @@ internal static class FalloutFurnitureSource
         var data = furniture.ReadSubrecords().Single(field => field.Signature == "MNAM").Data;
         if (data.Length != 4) throw new InvalidDataException("Furniture marker flags have an invalid extent.");
         var flags = BinaryPrimitives.ReadUInt32LittleEndian(data.Span);
-        if ((flags & 0xc0000000u) != 0x40000000u)
-            throw new NotSupportedException("Furniture requires its sleep/non-sitting procedure owner.");
+        var kind = flags & 0xc0000000u;
+        if (kind is not (0x40000000u or 0x80000000u))
+            throw new NotSupportedException("Furniture has an ambiguous sitting/sleeping procedure declaration.");
         var tables = nif.Blocks.Where(block => block.TypeName == "BSFurnitureMarker")
             .Select(block => (FalloutNifFurnitureMarker)nif.ReadObject(block.Index)).ToArray();
         if (tables.Length != 1) throw new NotSupportedException("Furniture marker table is absent or ambiguous.");
@@ -39,7 +40,7 @@ internal static class FalloutFurnitureSource
                 throw new NotSupportedException("Furniture marker references require distinct entry/exit ownership.");
             var prefix = $"fFurnitureMarker{marker.PositionReference1:00}";
             return new(furniture.FormKey, selected, marker.PositionReference1, marker,
-                [Setting("DeltaX"), Setting("DeltaY"), Setting("DeltaZ")], Setting("HeadingDelta"));
+                [Setting("DeltaX"), Setting("DeltaY"), Setting("DeltaZ")], Setting("HeadingDelta"), kind == 0x80000000u);
 
             float Setting(string suffix)
             {

@@ -716,6 +716,10 @@ internal sealed partial class FalloutQuestScripts
                     .GetSitting(caller?.FormKey(_records) ?? (parts.Length == 1 ? instance.Quest.FormKey : instance.Bindings.Reference(parts[0])),
                         host?.Sitting))
                 { ReadOnly = true };
+            if (parts.Length <= 2 && operation == "getsleeping")
+                return new([], _ => (References ?? throw new NotSupportedException("GetSleeping has no reference owner."))
+                    .GetSleeping(caller?.FormKey(_records) ?? (parts.Length == 1 ? instance.Quest.FormKey : instance.Bindings.Reference(parts[0]))))
+                { ReadOnly = true };
             if (parts.Length <= 2 && operation == "gettalkedtopc")
                 return new([], _ => (References ?? throw new NotSupportedException("Talked-to-player query has no reference owner."))
                     .GetTalkedToPlayer(caller?.FormKey(_records) ?? (parts.Length == 1 ? instance.Quest.FormKey : instance.Bindings.Reference(parts[0])))

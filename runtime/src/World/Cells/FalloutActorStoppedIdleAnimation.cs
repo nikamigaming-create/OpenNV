@@ -32,7 +32,8 @@ internal sealed record FalloutActorStoppedIdleAnimation(string Owner, FalloutAct
 }
 
 internal sealed record FalloutActorIdleSnapshotTransition(FalloutIdleTransition.Snapshot Phase,
-    FalloutIdleTransition.Settings Settings, FalloutActorResidualPose Pose)
+    FalloutIdleTransition.Settings Settings, FalloutActorResidualPose Pose,
+    IReadOnlyList<FalloutActorIdleSnapshotTarget>? Targets = null)
 {
     internal void Validate()
     {
@@ -45,7 +46,29 @@ internal sealed record FalloutActorIdleSnapshotTransition(FalloutIdleTransition.
             !float.IsFinite(Settings.AnimationMultiplier) || Settings.AnimationMultiplier <= 0)
             throw new InvalidDataException("Saved script idle snapshot transition is invalid.");
         Pose.Validate();
+        if (Targets is not null)
+        {
+            var names = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var target in Targets)
+            {
+                if (target is null || !names.Add(target.Name)) throw new InvalidDataException("Idle snapshot targets are duplicated or absent.");
+                target.Validate();
+            }
+        }
     }
 
-    internal FalloutActorIdleSnapshotTransition Copy() => this with { Pose = Pose.Copy() };
+    internal FalloutActorIdleSnapshotTransition Copy() => this with { Pose = Pose.Copy(), Targets = Targets?.Select(value => value.Copy()).ToArray() };
+}
+
+internal sealed record FalloutActorIdleSnapshotTarget(string Name, byte Priority, IReadOnlyList<float> Position,
+    IReadOnlyList<float> Rotation, float Scale)
+{
+    internal void Validate()
+    {
+        if (string.IsNullOrWhiteSpace(Name) || Position is null || Position.Count != 3 || Position.Any(value => !float.IsFinite(value)) ||
+            Rotation is null || Rotation.Count != 4 || Rotation.Any(value => !float.IsFinite(value)) ||
+            Math.Abs(Rotation.Sum(value => value * value) - 1) > .001f || !float.IsFinite(Scale) || Scale <= 0)
+            throw new InvalidDataException("Idle snapshot external transform is invalid.");
+    }
+    internal FalloutActorIdleSnapshotTarget Copy() => this with { Position = Position.ToArray(), Rotation = Rotation.ToArray() };
 }

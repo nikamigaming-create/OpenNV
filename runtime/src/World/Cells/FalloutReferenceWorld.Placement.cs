@@ -56,6 +56,15 @@ internal sealed partial class FalloutReferenceWorld
         return new(instance.Cell, (float[])source.Position.Clone(), (float[])source.RotationRadians.Clone());
     }
 
+    internal (FalloutPlacedReference Reference, FalloutBaseObjectDefinition BaseObject) PlacedSource(FalloutFormKey reference)
+    {
+        var instance = Get(reference);
+        var source = PlacementSourceReference(instance);
+        var placement = Placement(reference);
+        return (source with { Position = placement.Position, RotationRadians = placement.RotationRadians },
+            PlacementSource(instance).BaseObjects[source.Base]);
+    }
+
     internal void MoveTo(FalloutFormKey reference, FalloutFormKey destination, float x = 0, float y = 0, float z = 0)
     {
         var instance = Get(reference);

@@ -238,7 +238,8 @@ internal sealed record FalloutActorCorpseEquipment(IReadOnlyList<float> RootPose
                 weapon.Model is not null && !Attachments.Any(attachment => attachment.Owner == "combat"))
                 throw new InvalidDataException("Corpse weapon handling differs from its actual embedded or equipped owner.");
             new FalloutWeaponHandling(inventory, nativeNpc: true).Restore(WeaponHandling!,
-                key => FalloutWeaponPresentation.Read(records, key, false));
+                key => FalloutWeaponPresentation.Read(records, key, false),
+                (key, mods) => FalloutWeaponPresentation.Read(records, key, false, mods));
         }
         if (RouteRetirement?.Door is { } door)
         {

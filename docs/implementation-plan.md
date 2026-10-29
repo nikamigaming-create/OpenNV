@@ -8,10 +8,10 @@ second work queue.
 
 Latest user override: this is a greenfield project. Old saves, historical-state
 restoration, backward compatibility and existing implementations are expendable.
-Start a fresh game on the current product build. Replace or simplify broken
-systems when that delivers working gameplay; do not preserve old machinery for
-its own sake. Current-build saving remains a game feature, not a commitment to
-load historical checkpoints. This overrides preservation-oriented instructions
+Use the current product build and meaningful current-build checkpoints. Replace
+or simplify broken systems when that delivers working gameplay; do not preserve
+old machinery for its own sake. Current-build saving remains a game feature,
+not a commitment to load historical checkpoints. This overrides preservation-oriented instructions
 in the retained notes and the initial coordination objective.
 
 Current explicit acceptance target: sustained native 3840x2160 at 60 FPS both
@@ -22,30 +22,51 @@ successful route do not establish coverage. Measure movement, streaming,
 interactions and combat without concurrent builds; keep misses visible and fix
 them in the integrated product. Continue until the target works.
 
-## Honest starting point
+## Current implementation boundary
 
-OpenNV has working portions of New Vegas, not an accepted complete game. The
-latest retained session crafted Healing Powder, closed the recipe menu, continued
-Sunny's conversation and saved. Campaign completion, dependable population and
-combat, complete presentation and physical XR acceptance remain open. Caravan
-match input/execution and VATS still lack complete runtime integration. The
-current integrated changes have not passed the full repository gate.
+The merged baseline is `a8c6b154` (PR #325), with its required gate and hosted
+checks passed. Branch `codex/sandbox-activity-execution` is unpublished and has
+passed its fresh required gate and selected owned NPC furniture/checkpoint audit.
+Hosted checks await publication. OpenNV has working portions of New
+Vegas; complete campaign, retail presentation, sustained 4K60 and physical XR
+acceptance remain unmet.
 
-The inspected baseline is b94d8e8d. Existing uncommitted work spans gameplay,
-save schemas, navigation, rendering, streaming, tests and diagnostics. Its
-breadth and inconsistent build validation make regressions difficult to isolate.
-Numerous successful component checks have not established sustained gameplay.
-Performance optimization has also continued without a controlled integrated
-gameplay result. These are delivery problems as well as unfinished engine work.
+Candidate `06d9e517-0d91-4e53-b0ee-c3fa50bb1c7f` passes canonical stage-200
+exterior Continue. Both reached NPCs, 104f03 and 104f0a, complete LooseRaking
+through End and return to marker selection or Wander without AI/animation
+errors. Ordinary F5 command 103, generation 1, succeeded; the 21:56:13 checkpoint
+retains two marker continuations and their idle request graphs. Continue from
+this progress for the next gameplay check; cold restoration of the new marker
+checkpoint remains unverified. The held-phase combat interruption guard is fixed
+in source after this candidate and passes the publication gate.
+
+Ordinary play then reached Sunny in the saloon and completed F5 generation 2.
+Her next conversation stops at Cheyenne script idle 0c1991: finite creature
+completion/return is unimplemented. The saved saloon state precedes that failure;
+this is the next runtime owner after the current integration is merged.
+
+An earlier integrated candidate passed actual Stimpak Drop/Take, 9 -> 8 -> 9,
+through a settled physical body and E activation. Doc's real bed approach
+supports saving; bed entry/exit remains unverified. Caravan and VATS runtime,
+input and menus compile together, but an ordinary match/engagement is untested.
+Per-instance magazines and Take All changes compile; targeted regression cases
+passed the central publication gate. Repair/Mod and broader inventory use also
+need ordinary gameplay coverage.
+
+The interruption correction, final required gate and selected owned audit pass.
+Next publish this coherent integration through a checked PR. Continue
+connected play through the available inventory, combat, crafting, trading,
+Caravan and VATS interactions. A passing local feature check does not close
+campaign, presentation or performance acceptance.
 
 ## One implementation and one build
 
 - Use the shared checkout and one active `codex/` feature branch based on current
   `origin/main`. No parallel worktrees or alternative implementations.
-- The coordinator owns priorities, adversarial review and integration decisions.
-  One Sol High executor owns code changes, builds and gameplay runs. Additional
-  robots, if needed, must use the same model/effort and get nonconflicting work;
-  they must not create another build or branch.
+- The coordinator owns priorities, review and integration decisions.
+  User-authorized GPT-6.1 Sol High workers implement nonconflicting files in
+  parallel. One executor alone owns integrated builds, game input and Git
+  publication; workers must not create another build or branch.
 - Review and replace existing code as needed. Publish coherent integrated
   changes; do not accumulate recovery snapshots or retain obsolete code merely
   because it predates this work. Owned retail inputs remain read-only.
@@ -56,11 +77,12 @@ gameplay result. These are delivery problems as well as unfinished engine work.
 
 ## Ordered delivery blocks
 
-1. **Recover the integrated build.** Resolve actual
-   build/analyzer/contract failures and establish which assembly is launched.
-   Launch the actual Release executable and start a fresh game. Exit: rendered
-   New Game works and the required gate is green. A gate
-   failure keeps this block open. A green build alone is not playable acceptance.
+1. **Publish a checked integration.** Finish the reached lifecycle correction,
+   resolve actual build/analyzer/contract failures and establish which assembly
+   is launched. Preserve the meaningful current-build checkpoint. Exit: the
+   required gate is green, current-build continuation works, and the reviewed
+   PR is merged. The current unpublished branch still needs this exit. A green
+   build alone is not playable acceptance.
 2. **Finish a dependable Goodsprings session.** Play from New Game through Doc,
    the tutorial interactions and quest
    consequences, fight, loot, use inventory and crafting, enter/exit buildings,
@@ -104,10 +126,11 @@ materials, lighting, camera, animation, UI, sound and behavior. Use existing
 trustworthy private references where they match; acquire missing references
 through the authorized retail observation/input bridge. Keep unmatched or
 different details open. Successful gameplay and component checks cannot close
-retail appearance or behavior. Start with the reported Vigor Tester and
-Reflectron textures/colors, then continue through the connected game.
+retail appearance or behavior. The Vigor Tester and Reflectron still require
+matched retail acceptance; continue the current connected gameplay session
+without replaying the opening after each repair.
 
-Use one fresh gameplay profile and one current build. Run ordinary input until a
+Use one gameplay profile and one current build. Run ordinary input until a
 new failure occurs or a meaningful section completes. Identify whether it is a
 game defect, automation defect, source-integrity problem or unmet performance
 target. Implement a complete repair at the appropriate owner, replacing it if

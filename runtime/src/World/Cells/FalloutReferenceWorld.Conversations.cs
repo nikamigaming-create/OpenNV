@@ -50,7 +50,7 @@ internal sealed partial class FalloutReferenceWorld
     {
         var actor = Actor(reference);
         return !IsEnabled(reference) || actor.Deleted || actor.DeletePending ||
-            actor.Injury?.Dead == true || actor.KnockedDown ||
+            actor.Injury?.Dead == true || actor.KnockedDown || GetSleeping(reference) != 0 ||
             IsInCombat(reference, PlayerInCombat);
     }
 

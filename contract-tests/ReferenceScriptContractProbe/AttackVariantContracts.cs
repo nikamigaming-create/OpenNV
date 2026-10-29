@@ -28,7 +28,7 @@ internal static class AttackVariantContracts
         Require(draws == before, "Malformed or changed source catalog consumed random state.");
         var start = new FalloutActorEngagement(new("Synthetic.esm", 1), "attack",
             Position: [1, 2, 3], Rotation: [0, 0, 0, 1],
-            WeaponHandling: new(true, [new(new("Synthetic.esm", 2), new("Synthetic.esm", 3), 4)], 19, 23),
+            WeaponHandling: new(true, [new(new("Synthetic.esm", 2), new("Synthetic.esm", 3), 4, Instance: new Guid("11111111-1111-1111-1111-111111111111"))], 19, 23),
             AttackRandomState: 17);
         string Hash(string path) => new(path == paths[0] ? 'A' : 'B', 64);
         var active = FalloutAttackAnimationSelection.Bind(start, paths, Hash);

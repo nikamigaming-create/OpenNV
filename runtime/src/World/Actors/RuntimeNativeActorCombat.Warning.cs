@@ -44,7 +44,7 @@ internal sealed partial class RuntimeNativeActorCombat
         Activity.SetAlerted(true); Activity.SetCombat(false); Activity.SetMovement(false, false);
         TurnToward(target.GlobalPosition, delta);
         MoveActor(Vector3.Zero, delta);
-        _skeleton.Node.ResetBonePoses();
+        _skeleton.ResetSourceBonePoses();
         _skeleton.Node.SetBonePose(_skeleton.BoneIndex(_warningIdle.Animation.Sequence.TargetName), Transform3D.Identity);
         RuntimeNativeNifAnimation.ApplyLayers([(_warningIdle.Animation, _warningIdle.Time(next.Seconds))]);
         _warningSounds ??= new(_records, _content, _actor, _skeleton.UnitsToMetres, _state.SoundRandom, _state.AnimationSoundEvents);

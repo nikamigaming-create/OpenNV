@@ -112,7 +112,10 @@ internal partial class RuntimeNativePlayer
             }
             var ammunition = _weaponHandling.Ammunition(weapon);
             if (_shot?.Weapon != weapon.Form || _shot.Ammunition != ammunition)
+            {
                 _shot = FalloutWeaponShot.Read(_presentationRecords!, weapon.Form, ammunition, weapon.HasAmmunitionSource);
+                _shot = FalloutWeaponModifications.Apply(_presentationRecords!, _shot, _presentationInventory!.WeaponModMask(weapon.Form));
+            }
             _shot.RequireRuntimeAttackOwner();
             var definitionDone = System.Diagnostics.Stopwatch.GetTimestamp();
             EnsureWeaponSounds();
@@ -194,7 +197,7 @@ internal partial class RuntimeNativePlayer
 
                 var aimOrigin = _xr is null ? _camera.GlobalPosition : from;
                 var aimDirection = _xr is null ? -_camera.GlobalBasis.Z.Normalized() : direction;
-                var aimPoint = ResolveShotAimPoint(aimOrigin, aimDirection, shotRange, autoAimRange, autoAimMaxDeg);
+                var aimPoint = VatsAimPoint() ?? ResolveShotAimPoint(aimOrigin, aimDirection, shotRange, autoAimRange, autoAimMaxDeg);
                 if (aimPoint is { } target)
                     direction = (target - from).Normalized();
                 else if (_xr is null)
@@ -233,6 +236,7 @@ internal partial class RuntimeNativePlayer
                 actor.FlashMuzzle();
                 var audioDone = System.Diagnostics.Stopwatch.GetTimestamp();
                 var damage = isInstantRay ? ApplyProjectileTraces(traces) : new PlayerProjectileDamageSummary(0, 0, 0, 0, 0, null);
+                if (isInstantRay) PublishVatsShot();
                 var damageDone = System.Diagnostics.Stopwatch.GetTimestamp();
                 if (_shot.Projectile.Type == 4)
                     foreach (var trace in traces)
@@ -246,7 +250,8 @@ internal partial class RuntimeNativePlayer
                     });
                 var casingDone = System.Diagnostics.Stopwatch.GetTimestamp();
                 var impactCount = damage.ImpactRequests;
-                foreach (var flight in preparedFlights) _shotEffects!.LaunchProjectile(flight);
+                foreach (var flight in preparedFlights)
+                { _shotEffects!.LaunchProjectile(flight); PublishVatsShot(); }
                 var impactDone = System.Diagnostics.Stopwatch.GetTimestamp();
                 var lastTrace = traces.LastOrDefault(trace => trace.Collider is not null) ?? traces.LastOrDefault();
                 _lastShot = new
@@ -307,6 +312,7 @@ internal partial class RuntimeNativePlayer
             catch (Exception error)
             {
                 _weaponActionError = error.Message; _firePreparationError = error.Message;
+                FailVatsFiring(error);
                 GD.PushError("OPENNV_WEAPON_SHOT_UNBOUND " + error.Message);
                 return;
             }

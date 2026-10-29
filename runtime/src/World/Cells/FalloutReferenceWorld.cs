@@ -47,7 +47,11 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
     FalloutActorPendingSandboxStart? PendingSandboxStart = null,
     FalloutActorProjectileLaunch? ProjectileLaunch = null, FalloutActorIngestiblesSnapshot? Ingestibles = null,
     FalloutActorSandboxAdmissionFailure? InterruptedSandboxAdmission = null,
-    FalloutActorPackageStartLocation? PackageStartLocation = null)
+    FalloutActorPackageStartLocation? PackageStartLocation = null,
+    FalloutSandboxDailyWindow? SandboxDailyWindow = null, uint? IdleMarkerUsedMask = null,
+    FalloutActorIdleRequestsSnapshot? IdleRequests = null,
+    FalloutActorSandboxMarkerContinuation? SandboxMarker = null,
+    FalloutSandboxIdleSelectionSnapshot? SandboxIdleSelection = null)
 {
     internal static void Validate(IReadOnlyList<FalloutReferenceSnapshot> snapshots)
     {
@@ -72,6 +76,12 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
                 throw new InvalidDataException("Saved conversation suppression is not finite.");
             snapshot.ConversationHistory?.Validate();
             snapshot.PackageStartLocation?.Validate();
+            snapshot.SandboxDailyWindow?.Validate();
+            snapshot.IdleRequests?.Validate();
+            snapshot.SandboxMarker?.Validate();
+            snapshot.SandboxIdleSelection?.Validate();
+            if (snapshot.IdleMarkerUsedMask is > 1)
+                throw new InvalidDataException("Saved idle marker used mask exceeds source slot zero.");
             if (snapshot.Ingestibles is { } ingestibles) FalloutActorIngestiblesSnapshot.Validate(ingestibles);
             if (snapshot.Animation is { } animation) FalloutActorAnimationState.Validate(animation);
             snapshot.GrabEvents?.Validate(snapshot.Reference);
@@ -217,6 +227,17 @@ internal sealed partial class FalloutReferenceInstance
     internal FalloutActorTemplateSelection? Templates { get; set; }
     internal float? ConversationSuppressionSeconds { get; set; }
     internal FalloutConversationHistory? ConversationHistory { get; set; }
+    internal FalloutSandboxDailyWindow? SandboxDailyWindow { get; set; }
+    internal uint IdleMarkerUsedMask { get; set; }
+    internal FalloutActorIdleRequestsSnapshot? IdleRequests { get; set; }
+    internal Func<bool>? CanCaptureIdleRequests { get; set; }
+    internal Func<FalloutActorIdleRequestsSnapshot?>? CaptureIdleRequests { get; set; }
+    internal bool IdleRequestsCaptureReady => CanCaptureIdleRequests?.Invoke() ?? true;
+    internal FalloutActorSandboxMarkerContinuation? SandboxMarker { get; set; }
+    internal FalloutSandboxIdleSelectionSnapshot? SandboxIdleSelection { get; set; }
+    internal Func<bool>? CanCaptureSandboxMarker { get; set; }
+    internal Func<FalloutActorSandboxMarkerContinuation?>? CaptureSandboxMarker { get; set; }
+    internal bool SandboxMarkerCaptureReady => CanCaptureSandboxMarker?.Invoke() ?? SandboxMarker is not null;
     internal Dictionary<uint, double> Variables { get; }
     internal string? ScriptError { get; set; }
     internal FalloutReferenceScriptStoppedFrame? ScriptStoppedFrame { get; set; }
@@ -456,6 +477,7 @@ internal sealed partial class FalloutReferenceInstance
 
     internal Func<FalloutFormKey?>? QueryCurrentPackage { get; set; }
     internal Func<int>? QuerySitting { get; set; }
+    internal Func<int>? QuerySleeping { get; set; }
     internal Func<FalloutReferencePlacement>? QuerySpatialPlacement { get; set; }
 
     internal void Write(uint index, double value)
@@ -497,12 +519,14 @@ internal sealed partial class FalloutReferenceInstance
         if (HitReactionFaultCaptureBlocker is { } hitFault)
             throw new NotSupportedException($"Reference {Reference} cannot save its hit reaction: {hitFault}");
         var soundEvents = nonaudioRetirement ? null : _animationSoundEvents?.Capture();
+        if (!IdleRequestsCaptureReady)
+            throw new NotSupportedException($"Reference {Reference} cannot save its idle requests: active source bindings or objects are unowned.");
         var hitReactionFaults = _hitReactionFaults?.Capture();
         if (!CreatureScriptIdleCaptureReady)
             throw new NotSupportedException($"Reference {Reference} cannot save its active creature script idle.");
         var failureReady = bindingOverride is not null || PackageBindingFailureCaptureReady;
         var selectionReady = selectionOverride is not null || SelectionFailureCaptureReady;
-        if (ProcedureCaptureBlocker is { } blocker && !failureReady && !FurnitureCaptureReady && !selectionReady && !DialogueCaptureReady && !PendingPackageSelectionCaptureReady && !SandboxAdmissionFailureCaptureReady && !InterruptedSandboxAdmissionCaptureReady && !SandboxMotionFailureCaptureReady && !PendingSandboxStartCaptureReady &&
+        if (ProcedureCaptureBlocker is { } blocker && !failureReady && !FurnitureCaptureReady && !SandboxMarkerCaptureReady && !selectionReady && !DialogueCaptureReady && !PendingPackageSelectionCaptureReady && !SandboxAdmissionFailureCaptureReady && !InterruptedSandboxAdmissionCaptureReady && !SandboxMotionFailureCaptureReady && !PendingSandboxStartCaptureReady &&
             DeferredPackageContinuation?.CanCapture(this) != true)
             throw new NotSupportedException($"Reference {Reference} cannot save: {blocker}");
         var bindingFailure = bindingOverride?.Copy() ?? (failureReady ? CapturePackageBindingFailure is { } captureFailure
@@ -543,7 +567,11 @@ internal sealed partial class FalloutReferenceInstance
                 ? captureSandboxStart() : PendingSandboxStart?.Copy() : null,
             ProjectileLaunch: ProjectileLaunch, Ingestibles: Ingestibles?.Copy(),
             InterruptedSandboxAdmission: InterruptedSandboxAdmissionCaptureReady ? InterruptedSandboxAdmission?.Copy() : null,
-            PackageStartLocation: PackageStartLocation?.Copy());
+            PackageStartLocation: PackageStartLocation?.Copy(), SandboxDailyWindow: SandboxDailyWindow,
+            IdleMarkerUsedMask: IdleMarkerUsedMask == 0 ? null : IdleMarkerUsedMask,
+            IdleRequests: CaptureIdleRequests is { } captureIdles ? captureIdles() : IdleRequests?.Copy(),
+            SandboxMarker: CaptureSandboxMarker is { } captureMarker ? captureMarker() : SandboxMarker?.Copy(),
+            SandboxIdleSelection: SandboxIdleSelection);
     }
 }
 
@@ -747,7 +775,7 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
     }
 
     private bool PendingProcedureCapture(FalloutReferenceInstance instance) =>
-        !instance.CreatureScriptIdleCaptureReady || instance.ProcedureCaptureBlocker is not null && !instance.PackageBindingFailureCaptureReady && !instance.FurnitureCaptureReady &&
+        !instance.IdleRequestsCaptureReady || !instance.CreatureScriptIdleCaptureReady || instance.ProcedureCaptureBlocker is not null && !instance.PackageBindingFailureCaptureReady && !instance.FurnitureCaptureReady && !instance.SandboxMarkerCaptureReady &&
         !instance.SelectionFailureCaptureReady && !instance.DialogueCaptureReady && !instance.PendingPackageSelectionCaptureReady && !instance.SandboxAdmissionFailureCaptureReady && !instance.InterruptedSandboxAdmissionCaptureReady && !instance.SandboxMotionFailureCaptureReady && !instance.PendingSandboxStartCaptureReady &&
         (IsResident(instance.Reference) || instance.DeferredPackageContinuation?.CanCapture(instance) != true);
     internal int PendingProcedureCaptureCount => _instances.Values.Count(PendingProcedureCapture);
@@ -767,7 +795,7 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
             reference = instance.Reference.ToString(),
             assignment = instance.PackageAssignment?.Package.ToString(),
             motion = instance.PackageMotion?.Package.ToString(),
-            blocker = instance.ProcedureCaptureBlocker,
+            blocker = !instance.IdleRequestsCaptureReady ? "Idle request/sequence continuation." : instance.ProcedureCaptureBlocker,
             bindingCapture = instance.PackageBindingCaptureDiagnostic,
             selectionCapture = instance.SelectionCaptureDiagnostic,
             stoppedRetirement = instance.StoppedRetirement?.State,
@@ -962,6 +990,25 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
                 _ = validated.Actor(snapshot.Reference);
                 instance.ConversationSuppressionSeconds = suppression;
             }
+            if (snapshot.SandboxDailyWindow is { } dailyWindow)
+            {
+                _ = validated.Actor(snapshot.Reference);
+                instance.SandboxDailyWindow = dailyWindow;
+            }
+            if (snapshot.IdleRequests is { } idleRequests)
+            {
+                if (records.GetEffective(instance.Base).Signature != "NPC_")
+                    throw new InvalidDataException("Saved native idle requests have no NPC source owner.");
+                idleRequests.Validate(records);
+                instance.IdleRequests = idleRequests.Copy();
+            }
+            instance.SandboxIdleSelection = snapshot.SandboxIdleSelection;
+            if (snapshot.IdleMarkerUsedMask is { } usedMask)
+            {
+                if (records.GetEffective(instance.Base).Signature != "IDLM")
+                    throw new InvalidDataException("Saved idle marker used mask has no winning IDLM source.");
+                instance.IdleMarkerUsedMask = usedMask;
+            }
             if (snapshot.ConversationHistory is { } history)
             {
                 _ = validated.Actor(snapshot.Reference);
@@ -1130,6 +1177,14 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
                     !validated._furnitureSeats.TryAdd((seatReference, furniture.Seat!.Index), snapshot.Reference))
                     throw new InvalidDataException("Saved furniture reservation is shared by competing actors.");
             }
+            if (snapshot.SandboxMarker is { } marker)
+            {
+                var actor = validated.Get(snapshot.Reference);
+                marker.Validate(records, validated, actor);
+                actor.SandboxMarker = marker.Copy();
+                actor.ProcedureCaptureBlocker = FalloutActorSandboxMarkerContinuation.CaptureBlocker;
+                validated.RestoreIdleMarkerReservation(marker.Marker, snapshot.Reference);
+            }
             if (snapshot.PackageMotion is { } staleMotion && snapshot.PackageAssignment is { } assignment &&
                 assignment.Package != staleMotion.Package) continue;
             if (snapshot.PackageMotion?.Travel is { } travel)
@@ -1181,6 +1236,8 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
         _residentSnapshot = null;
         _furnitureSeats.Clear();
         _idleMarkerReservations.Clear();
+        _droppedCaptures.Clear();
+        _droppedItems.Clear();
         _instances.Clear();
         _enableWork.Clear();
         _activationWork.Clear();

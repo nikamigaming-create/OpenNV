@@ -150,7 +150,7 @@ internal sealed partial class RuntimeNativeActorCombat
     {
         if (_state.SandboxAdmissionFailure is not null) return;
         if (_state.Engagement is not null) return;
-        if (_state.FurnitureContinuation is not null) return;
+        if (_state.FurnitureContinuation is { Phase: not 1 }) return;
         if (_state.SelectionFailure is not null) return;
         if (_state.PendingPackageSelection is not null) return;
         if (_state.PendingSandboxStart is not null) return;
@@ -282,7 +282,7 @@ internal sealed partial class RuntimeNativeActorCombat
         using (OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Measure(OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Owner.PackagePose))
             if (!_headless)
             {
-                _skeleton.Node.ResetBonePoses();
+                _skeleton.ResetSourceBonePoses();
                 var root = _skeleton.BoneIndex(clip.Animation.Sequence.TargetName);
                 if (root >= 0) _skeleton.Node.SetBonePose(root, Transform3D.Identity);
                 clip.Animation.ApplySourceTime(clip.Time(next));

@@ -45,7 +45,7 @@ internal sealed record FalloutActorPackageMotion(FalloutFormKey Package, string 
         Eat?.Validate();
         if (Eat is not null && (Sandbox?.Activity != FalloutSandboxActivity.Eat || Wander is not null || Sandbox.Target != Eat.WorldReference))
             throw new InvalidDataException("Eat continuation conflicts with its selected Sandbox activity.");
-        if (Sandbox is not null && (Sandbox.Activity is not (FalloutSandboxActivity.Wander or FalloutSandboxActivity.Dialogue or FalloutSandboxActivity.Eat) ||
+        if (Sandbox is not null && (Sandbox.Activity is not (FalloutSandboxActivity.Wander or FalloutSandboxActivity.Dialogue or FalloutSandboxActivity.Eat or FalloutSandboxActivity.Furniture or FalloutSandboxActivity.Sleep or FalloutSandboxActivity.IdleMarker) ||
             Wander is not null && Sandbox.Activity != FalloutSandboxActivity.Wander ||
             new object?[] { Patrol, Escort, EditorTravel, Travel, Guard, AccompanyPortal }.Any(value => value is not null) || DialogueCompleted))
             throw new InvalidDataException("Saved Sandbox activity conflicts with its procedure continuation.");

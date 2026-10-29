@@ -13,6 +13,7 @@ internal sealed class NativeNifAnimationBlend(int boneCount)
         internal Vector4 Rotation;
         internal Quaternion? Hemisphere;
         internal float PositionWeight, Scale, ScaleWeight;
+        internal FalloutNifBlendWeights Weights;
 
         internal void Add(FalloutNifAnimationSample sample, float weight)
         {
@@ -33,6 +34,12 @@ internal sealed class NativeNifAnimationBlend(int boneCount)
     }
 
     internal Bone[] Bones { get; } = new Bone[boneCount];
+    private (RuntimeNativeNifAnimation Animation, float Time, float Ease)[] _layers = [];
+    internal Span<(RuntimeNativeNifAnimation Animation, float Time, float Ease)> LayerScratch(int count)
+    {
+        if (_layers.Length < count) Array.Resize(ref _layers, Math.Max(count, _layers.Length * 2));
+        return _layers.AsSpan(0, count);
+    }
     internal void Clear() => Array.Clear(Bones);
     internal void Publish(RuntimeNativeNifSkeleton skeleton)
     {

@@ -127,6 +127,8 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         if (_traitEntry is not null) yield return 1084;
         if (_recipeMenu is not null) yield return 1077;
         if (_barterMenu is not null) yield return 1053;
+        if (_caravanMenu is not null) yield return _caravanMenu.MenuId;
+        if (_player.VatsMenuActive) yield return NativeVatsMenu.MenuId;
         if (_terminalMenus.Values.Any(menu => menu.Active)) yield return FalloutTerminal.MenuId;
     }
 
@@ -161,6 +163,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
             throw new InvalidOperationException("Native opening stage driver was already configured.");
         _configured = true;
         _player = player ?? throw new ArgumentNullException(nameof(player));
+        _player.UseInventoryHotkey = UseInventoryHotkey;
         _raceSexContract = raceSexContract ?? throw new ArgumentNullException(nameof(raceSexContract));
         _vigorContract = vigorContract;
         _tagSkillContract = tagSkillContract;
@@ -249,6 +252,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         _playerActorValues.BindConstantModifiers(_playerSkills.Modifiers);
         _playerAbilities.Synchronize();
         _vitals = FalloutPlayerVitals.FromActorValues(pluginStack, _playerActorValues, restore?.State.Vitals);
+        _player.ConfigureVats(_vitals, EvaluateTargetCondition, restore?.State.PlayerProjectileLaunch);
         _playerSkills.HealthPercentage = () => _vitals.State.MaximumHitPoints <= 0 ? 1f :
             Math.Clamp((float)(_vitals.State.ExactHitPoints / _vitals.State.MaximumHitPoints), 0f, 1f);
         _experience = new(pluginStack, _vitals, () => _playerSkills.PerkEntries);
@@ -337,7 +341,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
             return;
         }
         if (_machine is not null && !_moviePlaying && _nameEntry is null && _raceSexEntry is null && _vigorEntry is null && _specialBookEntry is null &&
-            _tagSkillEntry is null && _traitEntry is null && _recipeMenu is null && _barterMenu is null && _levelUpMenu is null)
+            _tagSkillEntry is null && _traitEntry is null && _recipeMenu is null && _barterMenu is null && _caravanMenu is null && _levelUpMenu is null)
         {
             try { _scripts.AdvanceClaimed(_controls.Stage(QuestEditorId, Stage).Quest, delta, _scriptHost); }
             catch (Exception error) when (error is InvalidDataException or NotSupportedException or InvalidOperationException or KeyNotFoundException or OverflowException)

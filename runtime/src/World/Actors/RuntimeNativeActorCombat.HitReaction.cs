@@ -131,7 +131,7 @@ internal sealed partial class RuntimeNativeActorCombat
         14 when condition.Argument1 is >= 25 and <= 31 => _world.BodyParts(_state.Reference)
             .LimbCondition((int)condition.Argument1, _world.Health(_state.Reference).Base, _state.Injury?.LimbDamage),
         25 => Activity.Running || _actor is RuntimeNativeNpc { Traveling: true } ? 1 : 0,
-        49 => 0, // No sleeping procedure is currently owned by a resident actor.
+        49 => _world.GetSleeping(_state.Reference),
         72 => _state.Base == condition.FormArgument1 ? 1 : 0,
         77 => _state.HitReactionRandom.NextBounded(100),
         107 => _state.KnockedDown ? 2 : 0,
@@ -174,7 +174,7 @@ internal sealed partial class RuntimeNativeActorCombat
             MoveActor(clip.RootDisplacement(from, next), delta);
             foreach (var key in clip.Events.Crossed(from, next, state.Animation.StartPending))
                 _hitReactionSounds.Dispatch(key);
-            _skeleton.Node.ResetBonePoses();
+            _skeleton.ResetSourceBonePoses();
             _skeleton.Node.SetBonePose(_skeleton.BoneIndex(clip.Animation.Sequence.TargetName), Transform3D.Identity);
             clip.Animation.ApplySourceTime(clip.Time(next));
             var p = _actor.GlobalPosition; var q = _actor.GlobalBasis.Orthonormalized().GetRotationQuaternion();

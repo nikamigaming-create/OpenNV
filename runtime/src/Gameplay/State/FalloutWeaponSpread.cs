@@ -96,6 +96,12 @@ internal sealed class FalloutWeaponSpread
         return playerSpread;
     }
 
+    internal float PlayerVatsWobbleDegrees(FalloutWeaponShot shot, float skill, float strength,
+        bool leftArmCrippled, bool rightArmCrippled, IReadOnlyList<FalloutPerkEntry> perks,
+        Func<FalloutCondition, float> evaluateCondition) => ActorPenalty(shot, skill, strength,
+        aiming: true, moving: false, running: false, sneaking: false, leftArmCrippled, rightArmCrippled,
+        perks, evaluateCondition) * NpcMaximumGunWobbleAngle();
+
     internal float NpcLaunchExtentRadians(FalloutWeaponShot shot, float skill, float strength,
         bool moving, bool running, bool sneaking, bool leftArmCrippled, bool rightArmCrippled,
         FalloutActorProjectileLaunch process, IReadOnlyList<FalloutPerkEntry> perks)

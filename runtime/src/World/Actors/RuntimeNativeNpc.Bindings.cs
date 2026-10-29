@@ -8,6 +8,11 @@ internal partial class RuntimeNativeNpc
         ReleasePendingSandboxStartBindings();
         if (ReferenceEquals(state.QueryCurrentPackage, _currentPackageQuery)) state.QueryCurrentPackage = null;
         if (ReferenceEquals(state.QuerySitting, _sittingQuery)) state.QuerySitting = null;
+        if (ReferenceEquals(state.QuerySleeping, _sleepingQuery)) state.QuerySleeping = null;
+        if (ReferenceEquals(state.CanCaptureIdleRequests, _idleRequestsReady)) state.CanCaptureIdleRequests = null;
+        if (ReferenceEquals(state.CaptureIdleRequests, _idleRequestsCapture)) state.CaptureIdleRequests = null;
+        if (ReferenceEquals(state.CanCaptureSandboxMarker, _sandboxMarkerReady)) state.CanCaptureSandboxMarker = null;
+        if (ReferenceEquals(state.CaptureSandboxMarker, _sandboxMarkerCapture)) state.CaptureSandboxMarker = null;
         if (ReferenceEquals(state.CapturePackageAssignment, _packageAssignmentCapture)) state.CapturePackageAssignment = null;
         if (ReferenceEquals(state.CanCapturePendingPackageSelection, _pendingSelectionReady)) state.CanCapturePendingPackageSelection = null;
         if (ReferenceEquals(state.CapturePendingPackageSelection, _pendingSelectionCapture)) state.CapturePendingPackageSelection = null;
@@ -37,6 +42,11 @@ internal partial class RuntimeNativeNpc
             throw new NotSupportedException("Previous native actor cannot restore its source furniture reservation.");
         state.QueryCurrentPackage ??= _currentPackageQuery;
         state.QuerySitting ??= _sittingQuery;
+        state.QuerySleeping ??= _sleepingQuery;
+        state.CanCaptureIdleRequests ??= _idleRequestsReady;
+        state.CaptureIdleRequests ??= _idleRequestsCapture;
+        state.CanCaptureSandboxMarker ??= _sandboxMarkerReady;
+        state.CaptureSandboxMarker ??= _sandboxMarkerCapture;
         state.CapturePackageAssignment ??= _packageAssignmentCapture;
         RebindPendingSandboxStartBindings();
         state.CanCapturePendingPackageSelection ??= _pendingSelectionReady;

@@ -32,7 +32,7 @@ internal partial class RuntimeNativePlayer
                 !weapon.HasAmmunitionSource) return null;
             var ammo = _weaponHandling.Ammunition(weapon);
             var loaded = _weaponHandling.Loaded(weapon.Form);
-            return new(loaded, Math.Max(0, (ammo is { } form ? _presentationInventory!.Item(form)?.Count ?? 0 : 0) - loaded));
+            return new(loaded, ammo is { } form ? Math.Max(0, (_presentationInventory!.Item(form)?.Count ?? 0) - _presentationInventory.LoadedInventoryRounds(form)) : 0);
         }
     }
     internal string? WeaponActionNotice => _weaponActionError is null ? null :
@@ -181,7 +181,7 @@ internal partial class RuntimeNativePlayer
                 foreach (var text in key.Text.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries).Select(value => value.Trim()))
                 {
                     if (FalloutWeaponAnimationTimeline.DischargesWeapon(text) && attack &&
-                        (!weapon.Automatic || _weaponTriggerHeld && !_automaticFireStopped))
+                        (!weapon.Automatic || _weaponTriggerHeld && !_automaticFireStopped || VatsBurstActive && !_automaticFireStopped))
                         _pendingShotCount++;
                     else if (text.StartsWith("Sound:", StringComparison.OrdinalIgnoreCase)) _weaponSounds!.Dispatch(key with { Text = text });
                     else if (text.StartsWith("Enum:", StringComparison.OrdinalIgnoreCase) &&
@@ -238,6 +238,7 @@ internal partial class RuntimeNativePlayer
         ArgumentNullException.ThrowIfNull(owner);
         if (_weaponSounds is not null) throw new InvalidOperationException("Active weapon audio cannot change its campaign owner.");
         _weaponSoundOwner = owner;
+        _muzzleOwner = 0;
     }
 
     private void EnsureWeaponSounds() => _weaponSounds ??= (_weaponSoundOwner ??

@@ -6,6 +6,16 @@ internal sealed partial class FalloutReferenceWorld
 {
     private readonly Dictionary<(FalloutFormKey Reference, int Index), FalloutFormKey> _idleMarkerReservations = [];
 
+    // The runtime used mask starts clear and is independent of reservations.
+    // Ordinary IDLM approach/playback is not a producer of this source state.
+    internal bool IdleMarkerOccupied(FalloutFormKey marker, int index)
+    {
+        var instance = Get(marker);
+        if (index != 0 || records.GetEffective(instance.Base).Signature != "IDLM")
+            throw new InvalidDataException("Idle marker occupancy requires source IDLM slot zero.");
+        return (instance.IdleMarkerUsedMask & 1) != 0;
+    }
+
     // Reservation and physical occupancy are distinct source states. The caller
     // must supply the actual occupancy owner; absence is not an empty marker.
     internal bool IdleMarkerAvailable(FalloutFormKey marker, int index, FalloutFormKey actor,
@@ -39,6 +49,15 @@ internal sealed partial class FalloutReferenceWorld
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         return _idleMarkerReservations.TryGetValue((marker, index), out var owner) && owner == actor;
+    }
+
+    internal void RestoreIdleMarkerReservation(FalloutFormKey marker, FalloutFormKey actor)
+    {
+        // Restoring an existing claim is not fresh availability admission.
+        if (!IdleMarkerAdmission(marker, 0, actor) ||
+            _idleMarkerReservations.TryGetValue((marker, 0), out var previous) && previous != actor)
+            throw new InvalidDataException("Saved idle marker reservation conflicts with its source or another actor.");
+        _idleMarkerReservations[(marker, 0)] = actor;
     }
 
     private bool IdleMarkerAdmission(FalloutFormKey marker, int index, FalloutFormKey actor)

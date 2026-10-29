@@ -63,7 +63,7 @@ internal sealed partial class RuntimeNativeShotEffects
             var built = System.Diagnostics.Stopwatch.GetTimestamp();
             var controllers = root.FindChildren("*", "", true, false).OfType<RuntimeNifControllerPlayer>().ToArray();
             var duration = controllers.Select(controller => controller.FiniteEffectDuration).DefaultIfEmpty(0).Max();
-            var playback = source.Model is null ? null : new NativeNifEffectPlayback(root, duration, encoded: false);
+            var playback = source.Model is null ? null : new NativeNifEffectPlayback(root, duration, encoded: false, _sounds);
             return new(this, source, root, duration, playback, started, built);
         }
         catch { root.Free(); throw; }

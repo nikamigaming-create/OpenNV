@@ -240,9 +240,28 @@ internal static class StoppedPoseContracts
             new(1, 20, 0, FalloutNifTransformComponents.All), new(1, 20, 1, FalloutNifTransformComponents.Rotation),
             new(2, 10, 1, FalloutNifTransformComponents.Rotation), new(2, 10, 1, FalloutNifTransformComponents.Translation),
         ]);
-        Require(coverage.SequenceEqual(new[] { FalloutNifTransformComponents.None, FalloutNifTransformComponents.Rotation,
+        // Two attached entries take the native early path: full higher-priority
+        // ease selects that entry even when its authored sequence weight is zero.
+        Require(coverage.SequenceEqual(new[] { FalloutNifTransformComponents.All, FalloutNifTransformComponents.Rotation,
             FalloutNifTransformComponents.Rotation | FalloutNifTransformComponents.Translation }),
-            "Winning zero weight revived a lower-priority channel or erased a same-priority published component.");
+            "Two-entry priority normalization or same-priority component coverage differs from the source contract.");
+        var mixed = new FalloutNifBlendWeights();
+        mixed.Attach(20); mixed.Attach(10);
+        mixed.Gather(20, 1, .5f); mixed.Gather(10, 1, 1);
+        Require(Math.Abs(mixed.Normalize(20, 1, .5f) - 1f / 3) < .000001f &&
+            Math.Abs(mixed.Normalize(10, 1, 1) - 2f / 3) < .000001f,
+            "Mixed-priority easing lost the higher/next priority normalized contributions.");
+        var three = new FalloutNifBlendWeights();
+        three.Attach(20); three.Attach(20); three.Attach(10);
+        three.Gather(20, 1, .25f); three.Gather(20, 1, .75f); three.Gather(10, 1, 1);
+        Require(three.Normalize(20, 1, .25f) == .1875f && three.Normalize(20, 1, .75f) == .5625f &&
+            three.Normalize(10, 1, 1) == .25f,
+            "Three-entry normalization did not preserve separate sequence-weight and ease factors.");
+        var signed = new FalloutNifBlendWeights();
+        signed.Attach(255); signed.Attach(0);
+        signed.Gather(255, 1, 1); signed.Gather(0, 1, 1);
+        Require(signed.Normalize(255, 1, 1) == 0 && signed.Normalize(0, 1, 1) == 1,
+            "Source priority byte 255 must sort as signed -1 below zero.");
         Reject(() => FalloutNifTransformCoverage.Resolve(1, [new(1, 0, 1, FalloutNifTransformComponents.All)]));
         Reject(() => FalloutNifTransformCoverage.Resolve(1, [new(0, 0, float.NaN, FalloutNifTransformComponents.All)]));
         Reject(() => FalloutNifTransformCoverage.Resolve(1, [new(0, 0, -1, FalloutNifTransformComponents.All)]));

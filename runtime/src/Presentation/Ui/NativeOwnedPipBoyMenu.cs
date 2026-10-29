@@ -51,6 +51,7 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
     internal Func<string>? DateTimeText { get; init; }
     internal Action<FalloutNote>? PlayNote { get; init; }
     private FalloutCampaignItem? _selectedItem;
+    private int _selectedVariant;
     private int _selectedAttribute;
     private FalloutFormKey? _selectedDetail;
     private FalloutBodyPartData? _playerBodyParts;
@@ -79,7 +80,7 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
         refreshMilliseconds = _lastRefreshMilliseconds,
         maximumRefreshMilliseconds = _maximumRefreshMilliseconds,
         selectedNote = _state.SelectedNote?.ToString(),
-        unbound = "limb-movement-and-effect-rules,skill-advancement,constant-ability-effect-list,complete-general-statistics,radio-broadcast-playback,fast-travel-time-and-followers,scripted-and-addictive-aid-effects,item-drop-and-repair,note-removal-console-output"
+        unbound = "limb-movement-and-effect-rules,skill-advancement,constant-ability-effect-list,complete-general-statistics,radio-broadcast-playback,fast-travel-time-and-followers,scripted-and-addictive-aid-effects,note-removal-console-output"
     };
 
     internal NativeOwnedPipBoyMenu(FalloutPluginStack records, FalloutPipBoyState state, FalloutPlayerInventory inventory,
@@ -132,7 +133,7 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
     internal void Select(FalloutPipBoyPage page, int index)
     {
         ActionError = null; RemoveMeta("opennv_pipboy_action_error");
-        _state.Select(page, index); _offset = 0; _textOffset = 0; _selectedItem = null; _travelTarget = null; Refresh(); PageChanged?.Invoke();
+        _state.Select(page, index); _offset = 0; _textOffset = 0; _selectedItem = null; _selectedVariant = 0; _inventoryAction = null; _travelTarget = null; Refresh(); PageChanged?.Invoke();
     }
     private void Refresh()
     {
@@ -421,10 +422,12 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
         var vitals = _vitals();
         _tiles.BindText(Tile("IM_Headline_PlayerHPInfo"), "_Value", $"{vitals.HitPoints}/{vitals.MaximumHitPoints}");
         _displayedHealth = (vitals.HitPoints, vitals.MaximumHitPoints);
-        _tiles.BindText(Tile("IM_Headline_PlayerWGInfo"), "_Value", $"{_state.Items.Sum(item => (item.Weight ?? 0) * item.Count):0.0}");
+        _tiles.BindText(Tile("IM_Headline_PlayerWGInfo"), "_Value", $"{_state.Items.Sum(item => _inventory.Instances(item.FormKey).Sum(instance =>
+            (item.RecordType == "WEAP" ? FalloutWeaponModifications.Weight(_records, item.FormKey, instance.Extra.WeaponMods, item.Weight ?? 0) : item.Weight ?? 0) * instance.Extra.Count)):0.0}");
         Text("IM_Headline_PlayerDRInfo", ""); Text("IM_Headline_PlayerDTInfo", "");
         var caps = _state.Items.Where(item => item.EditorId.Equals("Caps001", StringComparison.OrdinalIgnoreCase)).Sum(item => item.Count);
         _tiles.BindText(Tile("IM_Headline_PlayerCapsInfo"), "_Value", caps.ToString(CultureInfo.InvariantCulture));
+        if (BuildInventoryActionList()) return;
         var items = _state.Items.Where(item => _records.QuestObjects.IsQuestObject(item.FormKey) ||
                 FalloutInventoryAccess.CanTransfer(_records, _records.GetEffective(item.FormKey), false))
             .Where(item => _state.Selection switch
@@ -437,14 +440,15 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
             })
             .OrderBy(item => NameOf(item.FormKey), StringComparer.CurrentCultureIgnoreCase).ToArray();
         _selectedItem = items.FirstOrDefault(item => item.FormKey == _selectedItem?.FormKey) ?? items.FirstOrDefault();
-        ListRows(Tile("IM_InventoryList"), "IM_InventoryListTemplate", items.Select(item =>
-            (NameOf(item.FormKey) + (item.Count > 1 ? $" ({item.Count})" : ""), (Action)(() =>
+        if (_selectedItem is { } chosen) _selectedVariant = Math.Clamp(_selectedVariant, 0, _inventory.Instances(chosen.FormKey).Count - 1);
+        ListRows(Tile("IM_InventoryList"), "IM_InventoryListTemplate", items.SelectMany(item => _inventory.Instances(item.FormKey).Select(instance =>
+            (InventoryInstanceLabel(item, instance.Extra), (Action)(() =>
             {
                 _selectedItem = item;
-                if (item.RecordType is "ARMO" or "WEAP") ToggleEquipment(item);
+                _selectedVariant = instance.Variant;
                 Refresh();
             }),
-                _inventory.Equipped.Contains(item.RuntimeFormId))).ToArray());
+                _inventory.Equipped.Contains(item.RuntimeFormId) && instance.Variant == 0))).ToArray());
         var equip = Tile("IM_EquipButton");
         _tiles.Bind(equip, "visible", _selectedItem?.RecordType is "ARMO" or "WEAP" or "ALCH" or "INGR" ? 1 : 0);
         if (_selectedItem is { } selected)
@@ -459,7 +463,7 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
                 new(470, 440), new(400, 160));
             if (_records.QuestObjects.IsQuestObject(selected.FormKey))
                 AddText("Quest item", new(470, 605), new(400, 40));
-            var equipped = _inventory.Equipped.Contains(selected.RuntimeFormId);
+            var equipped = _inventory.Equipped.Contains(selected.RuntimeFormId) && _selectedVariant == 0;
             var aid = selected.RecordType is "ALCH" or "INGR";
             _tiles.Text[equip] = Setting(aid ? "sInventoryUse" : equipped ? "sInventoryUnequip" : "sInventoryEquip");
             Target(equip, aid ? "Use" : equipped ? "Unequip" : "Equip", () =>
@@ -468,6 +472,7 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
                 else ToggleEquipment(selected);
                 Refresh();
             });
+            BindInventoryActions(selected);
         }
     }
 
@@ -497,8 +502,13 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
 
     private void ToggleEquipment(FalloutCampaignItem item)
     {
-        if (_inventory.Equipped.Contains(item.RuntimeFormId)) _inventory.Unequip(_records, item.FormKey);
-        else _inventory.Equip(_records, item.FormKey);
+        if (_inventory.Equipped.Contains(item.RuntimeFormId) && _selectedVariant == 0) _inventory.Unequip(_records, item.FormKey);
+        else
+        {
+            _inventory.SelectInstance(item.FormKey, _selectedVariant, _inventory.Revision);
+            _selectedVariant = 0;
+            _inventory.Equip(_records, item.FormKey);
+        }
     }
     private void BuildData()
     {

@@ -44,6 +44,12 @@ public partial class RuntimeCoordinator
         {
             _nativePlayer.ResolveXrTarget = collider =>
             {
+                if (_nativeDroppedItems?.Aimed(collider) is { } dropped)
+                {
+                    var item = _nativePluginStack!.GetEffective(dropped.Item.Base);
+                    var label = item.ReadSubrecords().SingleOrDefault(field => field.Signature == "FULL").Data;
+                    return new(dropped.Root, label.IsEmpty ? dropped.Item.Base.ToString() : FalloutDialogueTopic.Text(label.Span), true);
+                }
                 if (_nativeReferenceEvents?.AimedReference(collider) is not { } reference ||
                     _nativeReferenceEvents.AimedPresentation(collider) is not { } root) return null;
                 var record = _nativePluginStack!.GetEffective(reference.Base);
@@ -103,6 +109,7 @@ public partial class RuntimeCoordinator
             MathF.Atan2(-player.GlobalBasis.Z.Z, -player.GlobalBasis.Z.X), driver.PlayerSkillValue, driver.UseAid, driver.Radio)
         {
             FastTravel = RequestNativeFastTravel,
+            DropItem = DropNativeInventoryItem,
             LocalMap = color => new NativeOwnedLocalMap(player.GetWorld3D(), player.GlobalPosition,
                 _nativeActiveCell!.Cell.Worldspace is null, color, MathF.Atan2(-player.GlobalBasis.Z.Z, -player.GlobalBasis.Z.X)),
             ActiveEffects = () => driver.IngestibleState,
@@ -115,7 +122,15 @@ public partial class RuntimeCoordinator
 
     private NativeHudTarget? NativeAimedTarget()
     {
-        if (_nativePlayer?.AimedObject() is not { } collider || _nativeReferenceEvents?.AimedReference(collider) is not { } reference) return null;
+        if (_nativePlayer?.AimedObject() is not { } collider) return null;
+        if (_nativeDroppedItems?.Aimed(collider) is { } dropped)
+        {
+            var item = _nativePluginStack!.GetEffective(dropped.Item.Base);
+            var label = item.ReadSubrecords().SingleOrDefault(field => field.Signature == "FULL").Data;
+            return new(FalloutGameSettingStrings.Read(_nativePluginStack, "sTargetTypeTake"),
+                label.IsEmpty ? dropped.Item.Base.ToString() : FalloutDialogueTopic.Text(label.Span), null);
+        }
+        if (_nativeReferenceEvents?.AimedReference(collider) is not { } reference) return null;
         var source = _nativePluginStack!.GetEffective(reference.Base);
         var full = source.ReadSubrecords().SingleOrDefault(field => field.Signature == "FULL").Data;
         if (full.IsEmpty) return null;

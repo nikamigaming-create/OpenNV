@@ -106,7 +106,7 @@ internal sealed record FalloutWeaponPresentation(FalloutFormKey Form, FalloutNpc
         _ => 0,
     };
 
-    internal static FalloutWeaponPresentation Read(FalloutPluginStack records, FalloutFormKey key, bool firstPerson = true)
+    internal static FalloutWeaponPresentation Read(FalloutPluginStack records, FalloutFormKey key, bool firstPerson = true, byte weaponMods = 0)
     {
         var weapon = records.GetEffective(key);
         if (weapon.Signature != "WEAP") throw new InvalidDataException("Equipped weapon is not WEAP.");
@@ -202,7 +202,7 @@ internal sealed record FalloutWeaponPresentation(FalloutFormKey Form, FalloutNpc
                     sounds.Add("shoot", sound);
             }
         }
-        return new(key, owner.ReadSubrecords().Any(field => field.Signature == "MODL")
+        var result = new FalloutWeaponPresentation(key, owner.ReadSubrecords().Any(field => field.Signature == "MODL")
             ? FalloutNpcAppearanceResolver.ReadModel(records, owner, "weapon", "MODL", "MODS", "MODD", 0, null) : null, group, multiplier, data[13])
         {
             ClipSize = itemData[14],
@@ -230,5 +230,6 @@ internal sealed record FalloutWeaponPresentation(FalloutFormKey Form, FalloutNpc
             Sounds = sounds,
             ShellModel = FalloutNpcAppearanceResolver.PathField(weapon, "MOD2", "meshes", false, fields)
         };
+        return FalloutWeaponModifications.Apply(records, result, weaponMods, firstPerson);
     }
 }

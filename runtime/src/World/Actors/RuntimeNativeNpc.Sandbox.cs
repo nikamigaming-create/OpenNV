@@ -67,7 +67,7 @@ internal partial class RuntimeNativeNpc
                 BeginSandbox(pending.Package, pending.Initializing);
             }
             var source = _sandboxPackage ?? throw new InvalidOperationException("Sandbox did not acquire its live start owner.");
-            _sandboxWander = Combat.AdvanceSandboxWander(_aiPackage!, source, _sandboxWander, delta);
+            _sandboxWander = Combat.AdvanceSandboxWander(_aiPackage!, source, _sandboxWander, delta, this);
             completed = true;
             // Dialogue-busy admission returns before selecting an activity.
             // Keep that genuine untouched Start; only a new observation retires it.
@@ -76,6 +76,8 @@ internal partial class RuntimeNativeNpc
         }
         catch (Exception error) when (error is InvalidDataException or NotSupportedException or InvalidOperationException or IOException)
         {
+            InterruptSandboxFurniture();
+            InterruptSandboxMarker();
             ClearPendingSandboxStart(clearBlocker: false);
             _sandboxAdmissionFailure = error as FalloutSandboxAdmissionException;
             Combat.StopPackageMotion(); _aiError = error.Message; _failedPackage = _aiPackage?.FormKey;

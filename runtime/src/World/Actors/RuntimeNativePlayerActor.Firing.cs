@@ -30,12 +30,16 @@ internal sealed partial class RuntimeNativePlayerActor
         return Skeleton.Node.GetBoneGlobalPose(Skeleton.BoneIndex("Weapon")) * local;
     }
 
-    internal void PrepareMuzzle(FalloutProjectile projectile)
+    internal void PrepareMuzzle(FalloutProjectile projectile, NativeOwnedAnimationSoundPlayer? sounds = null,
+        Func<NodePath, Node3D>? soundEmitter = null)
     {
         if (!projectile.HasMuzzleFlash && projectile.MuzzleLight is null) return;
         _muzzle ??= new(_records, _content, ProjectileNode(), Skeleton.UnitsToMetres);
-        _muzzle.Prepare(projectile, _first && _xrLeftArm is null);
+        _muzzle.Prepare(projectile, _first && _xrLeftArm is null, sounds, soundEmitter);
     }
+    internal Node3D MuzzleAddonSoundEmitter(NodePath path) => (_muzzle ??
+        throw new NotSupportedException("World muzzle audio emitter is absent.")).AddonSoundEmitter(path);
     internal void FlashMuzzle() => _muzzle?.Flash();
+    internal void RetireMuzzleSounds() => _muzzle?.RetireSounds();
     private void AdvanceMuzzle(double delta) => _muzzle?.Advance(delta);
 }

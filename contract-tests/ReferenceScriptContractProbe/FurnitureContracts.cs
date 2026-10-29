@@ -106,6 +106,21 @@ internal static partial class FurnitureContracts
         owner.PackageAssignment = occupied.Assignment;
         owner.FurnitureContinuation = occupied;
         saved = warm.Capture();
+        var approach = occupied with { Assignment = assignment, Phase = 1,
+            Approach = (float[])pose.Clone(), ApproachFloor = [1, 2, 3] };
+        owner.PackageAssignment = assignment;
+        owner.FurnitureContinuation = approach;
+        using (var approaching = new FalloutReferenceWorld(records))
+        {
+            approaching.Restore(JsonSerializer.Deserialize<FalloutReferenceSnapshot[]>(JsonSerializer.Serialize(warm.Capture()))!);
+            Require(approaching.GetSitting(actor) == 0 && approaching.OwnsFurnitureSeat(chair, 0, actor),
+                "Retained approach changed public sitting state or released its selected seat.");
+        }
+        var independentApproach = approach.Copy();
+        independentApproach.Approach![9] += 1;
+        Require(independentApproach.Approach[9] != approach.Approach![9], "Furniture approach snapshots share mutable pose buffers.");
+        owner.PackageAssignment = occupied.Assignment;
+        owner.FurnitureContinuation = occupied;
         using (var cold = new FalloutReferenceWorld(records))
         {
             cold.Restore(JsonSerializer.Deserialize<FalloutReferenceSnapshot[]>(JsonSerializer.Serialize(saved))!);
