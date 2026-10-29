@@ -7,7 +7,20 @@ namespace OpenNV.Runtime.World.Actors;
 
 internal sealed record NativeActorNavigationRoute(Vector3[] Points,
     NativeNavigationProjectionRegion? Projection = null, Func<Vector3, bool>? Arrival = null,
-    Func<Vector3, int, Func<Vector3, bool>>? PrefixArrival = null);
+    Func<Vector3, int, Func<Vector3, bool>>? PrefixArrival = null,
+    string? SourceSha256 = null, Func<Vector3, bool>? TerminalFloor = null)
+{
+    internal static Func<Vector3, bool> ReadTerminalFloor(IReadOnlyList<Vector3> path,
+        Func<Vector3, int, Func<Vector3, bool>> prefix)
+    {
+        if (path.Count == 0) throw new InvalidDataException("Source route has no terminal floor.");
+        // FindPath emits one point per traversed triangle: preceding portals,
+        // then the destination. PrefixRegion indexes the triangle after that
+        // portal; a single-triangle route uses its endpoint as the cut plane.
+        var index = path.Count - 1;
+        return prefix(path[index == 0 ? 0 : index - 1], index);
+    }
+}
 
 internal sealed record NativeActorCombatContext(Func<RuntimeNativePlayer?> Player, Func<GameplayVitals> Vitals,
     Action<FalloutWeaponDamage, byte> DamagePlayer, Func<Vector3, Vector3, Vector3[]> Route, Func<Vector3, bool> Resident,

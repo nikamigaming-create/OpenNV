@@ -10,6 +10,9 @@ internal static partial class NativeCapsuleNavigation
         Vector3 start, float spacing, float heightTolerance, SupportedFlatEdge edge)
     {
         var points = route[0] == start ? route.ToArray() : new[] { start }.Concat(route).ToArray();
+        // A stationary goal still owns its queried, supported endpoint. There
+        // is no edge to smooth, but dropping that point loses the receipt.
+        if (points.Length == 1) { yield return points; yield break; }
         var result = new List<Vector3>();
         for (var anchor = 0; anchor < points.Length - 1;)
         {

@@ -46,10 +46,14 @@ public partial class RuntimeCoordinator
             var source = prefixRegion(Source(target), resume, .01f / units, NativeCapsuleNavigation.SourceHeightTolerance / units);
             return point => source(Source(point));
         }
-        if (radius <= 0) return new(points, PrefixArrival: Prefix);
+        var terminalFloor = NativeActorNavigationRoute.ReadTerminalFloor(points, Prefix);
+        var sourceHash = _botNavigation.SourceSha256;
+        if (radius <= 0) return new(points, PrefixArrival: Prefix,
+            SourceSha256: sourceHash, TerminalFloor: terminalFloor);
         var region = _botNavigation.ArrivalRegion(Source(from), Source(to), path[^1], radius / units,
             .01f / units, NativeCapsuleNavigation.SourceHeightTolerance / units);
         points = NativeCapsuleNavigation.TerminalRegionCorridor(points, point => region(Source(point)));
-        return new(points, new(to, points[^1], radius), point => region(Source(point)), Prefix);
+        return new(points, new(to, points[^1], radius), point => region(Source(point)), Prefix,
+            sourceHash, terminalFloor);
     }
 }

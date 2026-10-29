@@ -29,6 +29,7 @@ internal static partial class NativeNavigationContracts
         CheckProjectionBounds();
         CheckRefinementIntent();
         CheckTerminalArrivalIntent();
+        CheckPackageRouteReceipts();
         CheckSourceArrivalRegion();
         var prefix = NativeCapsuleNavigation.CorridorPrefix(Vector3.Zero,
             [new(0, 0, 6), new(2, 0, 6), new(2, 4, 0)], 8);
