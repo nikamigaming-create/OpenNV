@@ -51,7 +51,8 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
     FalloutSandboxDailyWindow? SandboxDailyWindow = null, uint? IdleMarkerUsedMask = null,
     FalloutActorIdleRequestsSnapshot? IdleRequests = null,
     FalloutActorSandboxMarkerContinuation? SandboxMarker = null,
-    FalloutSandboxIdleSelectionSnapshot? SandboxIdleSelection = null)
+    FalloutSandboxIdleSelectionSnapshot? SandboxIdleSelection = null,
+    FalloutActorLastIdleRequest? LastIdleRequest = null)
 {
     internal static void Validate(IReadOnlyList<FalloutReferenceSnapshot> snapshots)
     {
@@ -80,6 +81,7 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
             snapshot.IdleRequests?.Validate();
             snapshot.SandboxMarker?.Validate();
             snapshot.SandboxIdleSelection?.Validate();
+            snapshot.LastIdleRequest?.Validate();
             if (snapshot.IdleMarkerUsedMask is > 1)
                 throw new InvalidDataException("Saved idle marker used mask exceeds source slot zero.");
             if (snapshot.Ingestibles is { } ingestibles) FalloutActorIngestiblesSnapshot.Validate(ingestibles);
@@ -571,7 +573,7 @@ internal sealed partial class FalloutReferenceInstance
             IdleMarkerUsedMask: IdleMarkerUsedMask == 0 ? null : IdleMarkerUsedMask,
             IdleRequests: CaptureIdleRequests is { } captureIdles ? captureIdles() : IdleRequests?.Copy(),
             SandboxMarker: CaptureSandboxMarker is { } captureMarker ? captureMarker() : SandboxMarker?.Copy(),
-            SandboxIdleSelection: SandboxIdleSelection);
+            SandboxIdleSelection: SandboxIdleSelection, LastIdleRequest: LastIdleRequest);
     }
 }
 
@@ -742,6 +744,8 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
                 throw new InvalidDataException($"Reference {key} has no winning base {baseKey}.");
         }
         var instance = new FalloutReferenceInstance(record, definition, () => IsEnabled(key));
+        if (record.Signature is "ACHR" or "ACRE" && records.GetEffective(baseKey).Signature is "NPC_" or "CREA")
+            instance.LastIdleRequest = FalloutActorLastIdleRequest.NeverCreated;
         instance.TerminalHackState = InitialTerminalHackState(instance);
         _instances.Add(key, instance);
         instance.BindStateChanges(_instances.Count, TrackReferenceWork);
@@ -1003,6 +1007,15 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
                 instance.IdleRequests = idleRequests.Copy();
             }
             instance.SandboxIdleSelection = snapshot.SandboxIdleSelection;
+            instance.LastIdleRequest = snapshot.LastIdleRequest;
+            if (snapshot.LastIdleRequest is { } lastIdleRequest)
+            {
+                if (records.GetEffective(snapshot.Reference).Signature is not ("ACHR" or "ACRE"))
+                    throw new InvalidDataException("Saved last-idle request history has no placed actor source.");
+                _ = validated.Actor(snapshot.Reference);
+                lastIdleRequest.Validate(records);
+                instance.LastIdleRequest = lastIdleRequest;
+            }
             if (snapshot.IdleMarkerUsedMask is { } usedMask)
             {
                 if (records.GetEffective(instance.Base).Signature != "IDLM")

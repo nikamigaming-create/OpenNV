@@ -1005,6 +1005,7 @@ public partial class RuntimeCoordinator
             var previousActor = _nativeReferencePresentation?.Nodes.GetValueOrDefault(reference.FormKey);
             var launchState = _nativeReferences!.Get(reference.FormKey);
             var newLaunchProcess = launchState.MayInitializeLaunchProcess(previousActor is not null);
+            var newIdleProcess = launchState.MayInitializeIdleRequestHistory(previousActor is not null);
             try
             {
                 var selection = _nativeReferences!.InitializeActorTemplates(reference.FormKey,
@@ -1048,7 +1049,7 @@ public partial class RuntimeCoordinator
                 }
                 actor.Combat = RuntimeNativeActorCombat.Attach(actor, actor.Skeleton, actor.Appearance.SkeletonPath,
                     _nativeReferences!, _nativeReferences!.Get(reference.FormKey), _nativePluginStack!, source,
-                    _configuration.Player.CollisionLayer, _configuration.Player.CollisionMask | _configuration.Player.CollisionLayer, NativeCombatContext, newLaunchProcess);
+                    _configuration.Player.CollisionLayer, _configuration.Player.CollisionMask | _configuration.Player.CollisionLayer, NativeCombatContext, newLaunchProcess, newIdleProcess);
                 actor.ConfigureAi(_nativePluginStack!, _nativeQuestState!, cell, ReferenceTransform,
                     () => _nativeReferences!.ActorFactions(reference.FormKey), _nativeGameTime, _nativeGlobals, _nativeReferences,
                     NativeActorItemCount);
@@ -1077,6 +1078,7 @@ public partial class RuntimeCoordinator
             var previousActor = _nativeReferencePresentation?.Nodes.GetValueOrDefault(reference.FormKey);
             var launchState = _nativeReferences!.Get(reference.FormKey);
             var newLaunchProcess = launchState.MayInitializeLaunchProcess(previousActor is not null);
+            var newIdleProcess = launchState.MayInitializeIdleRequestHistory(previousActor is not null);
             var tracePublication = _options.ContainsKey("live-harness");
             var publicationStarted = tracePublication ? System.Diagnostics.Stopwatch.GetTimestamp() : 0;
             var publicationLast = publicationStarted;
@@ -1114,7 +1116,7 @@ public partial class RuntimeCoordinator
                 MarkPublication("attach");
                 actor.Combat = RuntimeNativeActorCombat.Attach(actor, actor.Skeleton, actor.Appearance.SkeletonPath,
                     _nativeReferences!, _nativeReferences.Get(reference.FormKey), _nativePluginStack!, source,
-                    _configuration.Player.CollisionLayer, _configuration.Player.CollisionMask | _configuration.Player.CollisionLayer, NativeCombatContext, newLaunchProcess);
+                    _configuration.Player.CollisionLayer, _configuration.Player.CollisionMask | _configuration.Player.CollisionLayer, NativeCombatContext, newLaunchProcess, newIdleProcess);
                 MarkPublication("combat");
                 actor.ConfigureAi(_nativePluginStack!, _nativeQuestState!, _nativeReferences, _nativeGameTime, _nativeGlobals,
                     NativeActorItemCount);

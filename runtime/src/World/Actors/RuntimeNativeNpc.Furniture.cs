@@ -195,6 +195,30 @@ internal partial class RuntimeNativeNpc
     {
         var clip = retained ?? (_sitting == 2 ? _furnitureEntry ?? throw new InvalidOperationException("Furniture entry source is absent.")
             : ReadFurnitureClip(_sitting));
+        if (retained is not null)
+        {
+            PublishFurnitureAnimation(clip);
+            return;
+        }
+        var generation = ++_furnitureIdleGeneration;
+        var package = _aiPackage?.FormKey;
+        var furniture = _reservedFurniture;
+        var seat = _seat;
+        var sitting = _sitting;
+        QueueProcedureIdle(_aiStack!, clip.Idle, "furniture",
+            () => generation == _furnitureIdleGeneration && _aiPackage?.FormKey == package &&
+                _reservedFurniture == furniture && ReferenceEquals(_seat, seat) && _sitting == sitting,
+            bind =>
+        {
+            PublishFurnitureAnimation(clip);
+            bind(_baseAnimation!, clip.Path);
+        });
+    }
+
+    private ulong _furnitureIdleGeneration;
+
+    private void PublishFurnitureAnimation(FurnitureClip clip)
+    {
         _furnitureClip = clip;
         Action<FalloutNifAnimationSample>? rootOwner = null;
         if (_sitting is 2 or 4)
@@ -318,6 +342,8 @@ internal partial class RuntimeNativeNpc
 
     private void ClearFurniture(bool retire = true)
     {
+        _furnitureIdleGeneration++;
+        CancelProcedureIdle("furniture");
         if (retire && _reservedFurniture is { } furniture && _seat is { } seat)
             _aiWorld?.ReleaseFurnitureSeat(furniture, seat.Index, Appearance.Reference!.Value);
         if (retire && _aiReferenceState is { } state)

@@ -1215,6 +1215,11 @@ if (args is ["--audit-sleep", var sleepData])
     OwnedSleepProbe.Run(sleepData);
     return;
 }
+if (args is ["--audit-last-idle", var lastIdleData])
+{
+    OwnedLastIdleProbe.Run(lastIdleData);
+    return;
+}
 if (args is ["--player-tag-skill-contracts"])
 {
     PlayerTagSkillContracts.Run();

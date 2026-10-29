@@ -34,6 +34,8 @@ internal static class FaceGeometryContracts
             var controls = FalloutFaceGeometryControls.Read(Controls());
             using var world = new FalloutReferenceWorld(records, faceControls: controls);
             world.LoadCell(FalloutCellSceneReader.Read(records, Key(0x800)));
+            Require(world.Get(Key(0x903)).LastIdleRequest is null,
+                "A placed reference with a nonactor base acquired a native actor process field.");
             FalloutActorAppearanceState player = new(true, Key(0x410), null, null,
                 new(Key(7), Floats(50, 4, 6, 8), Floats(30, 6), Floats(50, 400)));
             world.BindPlayerAppearance(() => player);

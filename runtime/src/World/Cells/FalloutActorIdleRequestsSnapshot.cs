@@ -5,7 +5,8 @@ namespace OpenNV.Runtime.World.Cells;
 internal sealed record FalloutActorIdleRequestSnapshot(FalloutFormKey Idle, string IdleSha256, string Owner,
     int State, int SequenceState, string? Resource = null, string? Sha256 = null,
     FalloutActorPackageIdleAnimation? Animation = null, FalloutIdleDeactivationSnapshot? Ease = null,
-    FalloutActorIdleSnapshotTransition? SnapshotBlend = null, FalloutFurnitureClipSnapshot? TransitionOther = null)
+    FalloutActorIdleSnapshotTransition? SnapshotBlend = null, FalloutFurnitureClipSnapshot? TransitionOther = null,
+    string? Procedure = null)
 {
     internal void Validate(FalloutPluginStack? records = null, bool outgoing = false)
     {
@@ -14,6 +15,9 @@ internal sealed record FalloutActorIdleRequestSnapshot(FalloutFormKey Idle, stri
             throw new InvalidDataException("Saved idle request identity or lifecycle is invalid.");
         Ease?.Validate(); SnapshotBlend?.Validate();
         TransitionOther?.Validate();
+        if (Procedure is not (null or "furniture" or "eat") || Procedure is not null &&
+            (outgoing || Animation is not null || Ease is not null || SnapshotBlend is not null || TransitionOther is not null))
+            throw new InvalidDataException("Procedure idle request has conflicting physical owners.");
         if (State == 1)
         {
             if (outgoing || SequenceState != 0 || Resource is not null || Sha256 is not null || Animation is not null || Ease is not null || SnapshotBlend is not null || TransitionOther is not null)
@@ -24,10 +28,11 @@ internal sealed record FalloutActorIdleRequestSnapshot(FalloutFormKey Idle, stri
             if (string.IsNullOrWhiteSpace(Resource) || !FalloutActorFurnitureContinuation.ValidHash(Sha256))
                 throw new InvalidDataException("Idle request lost its bound sequence identity.");
             if (State == 3 && (SequenceState != 0 || Animation is not null || Ease is not null || SnapshotBlend is not null || TransitionOther is not null) ||
-                State == 2 && (SequenceState == 0 || Animation is null || Animation.Idle != Idle ||
+                State == 2 && Procedure is null && (SequenceState == 0 || Animation is null || Animation.Idle != Idle ||
                     Animation.Resource != Resource || !Animation.Sha256.Equals(Sha256, StringComparison.OrdinalIgnoreCase)) ||
                 outgoing && (State != 2 || SequenceState != 3 || Ease is null || SnapshotBlend is not null) ||
-                State == 2 && ((SequenceState is 2 or 3) != (Ease is not null) || (SequenceState == 5) != (SnapshotBlend is not null)) && !outgoing)
+                State == 2 && Procedure is null && ((SequenceState is 2 or 3) != (Ease is not null) || (SequenceState == 5) != (SnapshotBlend is not null)) && !outgoing ||
+                State == 2 && Procedure is not null && SequenceState != 1)
                 throw new InvalidDataException("Idle request sequence and transition owners disagree.");
         }
         Animation?.Validate(outgoing || SequenceState == 3);

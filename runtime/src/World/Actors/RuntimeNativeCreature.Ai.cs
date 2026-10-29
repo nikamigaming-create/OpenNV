@@ -17,6 +17,7 @@ internal sealed partial class RuntimeNativeCreature
     private FalloutReferenceWorld? _aiWorld;
     private FalloutReferenceInstance? _aiState;
     private Func<FalloutFormKey?>? _currentPackageQuery;
+    private Func<FalloutActorLastIdleRequest?>? _lastIdleRequestQuery;
     private Func<int>? _sittingQuery;
     private Func<FalloutActorPackageAssignment?>? _packageAssignmentCapture;
     private FalloutPluginRecord? _aiPackage;
@@ -84,6 +85,7 @@ internal sealed partial class RuntimeNativeCreature
         _aiState = world.Get(Appearance.Reference!.Value);
         world.BindActorAlert(Appearance.Reference!.Value, Activity);
         _aiState.QueryCurrentPackage = _currentPackageQuery = () => _aiPackage?.FormKey;
+        _aiState.QueryLastIdleRequest = _lastIdleRequestQuery = () => _aiState.LastIdleRequest;
         _aiState.QuerySitting = _sittingQuery = () => _aiState.FurnitureContinuation is null ? 0 :
             throw new NotSupportedException("Creature furniture continuation has no physical sitting owner.");
         _packageEvents = new(DispatchPackageEvent);
@@ -171,6 +173,7 @@ internal sealed partial class RuntimeNativeCreature
             finally
             {
                 state.QueryCurrentPackage = null;
+                if (ReferenceEquals(state.QueryLastIdleRequest, _lastIdleRequestQuery)) state.QueryLastIdleRequest = null;
                 if (ReferenceEquals(state.QuerySitting, _sittingQuery)) state.QuerySitting = null;
                 if (ReferenceEquals(state.CapturePackageAssignment, _packageAssignmentCapture)) state.CapturePackageAssignment = null;
             }
@@ -184,6 +187,7 @@ internal sealed partial class RuntimeNativeCreature
         if (!IsInsideTree() || _sourceBindingsRetired || _aiState is not { } state ||
             state.QueryCurrentPackage is not null && !ReferenceEquals(state.QueryCurrentPackage, _currentPackageQuery)) return;
         state.QueryCurrentPackage ??= _currentPackageQuery;
+        state.QueryLastIdleRequest ??= _lastIdleRequestQuery;
         state.QuerySitting ??= _sittingQuery;
         state.CapturePackageAssignment ??= _packageAssignmentCapture;
         RebindSandboxAdmissionCapture();
@@ -200,6 +204,9 @@ internal sealed partial class RuntimeNativeCreature
         : condition.Function is 573 or 574 or 575
         ? (_aiWorld ?? throw new NotSupportedException("Creature reputation query has no shared world owner."))
             .EvaluateReputationCondition(condition)!.Value
+        : condition.Function == 451
+        ? (_aiWorld ?? throw new NotSupportedException("Creature last-idle query has no shared process owner."))
+            .IsLastIdlePlayed(condition, Appearance.Reference!.Value)
         : condition.Function == 159
         ? FalloutAiPackages.Sitting(_aiRecords ?? throw new NotSupportedException("Creature sitting query has no source owner."),
             condition, Appearance.Reference!.Value, PackageSitting)

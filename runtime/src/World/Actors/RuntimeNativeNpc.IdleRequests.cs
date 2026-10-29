@@ -19,6 +19,9 @@ internal partial class RuntimeNativeNpc
         internal string? Sha256 { get; private set; }
         internal FalloutActorPackageIdleAnimation? Saved { get; init; }
         internal bool RestoreCompletePose { get; init; }
+        internal string? Procedure { get; init; }
+        internal Action? ProcedureActivation { get; set; }
+        internal Func<bool>? ProcedureOwnerValid { get; init; }
 
         internal void Activate(RuntimeNativeNifAnimation animation, string resource)
         {
@@ -58,6 +61,7 @@ internal partial class RuntimeNativeNpc
     private Func<bool>? _idleRequestsReady;
     private Func<FalloutActorIdleRequestsSnapshot?>? _idleRequestsCapture;
     private bool _restoringIdleRequests;
+    private bool _processingIdleRequest;
     private readonly List<(FalloutPluginStack Stack, FalloutFormKey Form, string Owner,
         FalloutActorPackageIdleAnimation? Saved, bool CompletePose)> _deferredIdleInputs = [];
     private bool IdleRequestsReady => _queuedIdleRequest is null &&
@@ -66,20 +70,42 @@ internal partial class RuntimeNativeNpc
     private void PlayIdle(FalloutPluginStack stack, FalloutFormKey form, string owner,
         FalloutActorPackageIdleAnimation? saved = null, bool restoreCompletePose = false)
     {
+        // Reject an invalid typed argument before touching an existing queue.
+        var history = FalloutActorLastIdleRequest.Requested(stack, form);
+        var referenceState = _aiReferenceState ?? throw new InvalidOperationException("Idle request has no shared reference owner.");
         if (_restoringIdleRequests)
         { _deferredIdleInputs.Add((stack, form, owner, saved, restoreCompletePose)); return; }
         // Retiring a pending request does not activate or redraw it. The actual
         // source bindings/clocks are acquired only on queued promotion.
         _queuedIdleRequest?.Inactivate();
         _queuedIdleRequest = new(stack, form, owner) { Saved = saved, RestoreCompletePose = restoreCompletePose };
+        // Native history changes when the request enters the queue, before
+        // processing can defer or reject its animation. Hydration is not a new request.
+        if (saved is null)
+            referenceState.LastIdleRequest = history;
         ProcessQueuedIdle(stack);
     }
 
     private void ProcessQueuedIdle(FalloutPluginStack? stack = null)
     {
-        if (_queuedIdleRequest is not { } request || _currentIdleRequest?.SequenceState is 2 or 5) return;
-        ActivateIdleRequest(stack ?? _aiStack ?? throw new InvalidOperationException("Queued idle has no source stack."),
-            request.Idle, request.Owner, request, request.Saved, request.RestoreCompletePose);
+        RefreshProcedureIdleRequest();
+        if (_processingIdleRequest || _queuedIdleRequest is not { } request || _currentIdleRequest?.SequenceState is 2 or 5) return;
+        _processingIdleRequest = true;
+        try
+        {
+            if (request.Procedure is not null)
+            {
+                (request.ProcedureActivation ?? throw new NotSupportedException("Queued procedure idle has no physical activation owner."))();
+                return;
+            }
+            // Promotion clears the previous request slot independently of the
+            // base procedure's physical sequence. A script overlay must not
+            // cancel a chair or meal merely because it replaces that request.
+            if (_currentIdleRequest is { Procedure: not null }) _currentIdleRequest = null;
+            ActivateIdleRequest(stack ?? _aiStack ?? throw new InvalidOperationException("Queued idle has no source stack."),
+                request.Idle, request.Owner, request, request.Saved, request.RestoreCompletePose);
+        }
+        finally { _processingIdleRequest = false; }
     }
 
     private FalloutIdleTransition.Settings IdleTransitionSettings()
@@ -153,6 +179,9 @@ internal partial class RuntimeNativeNpc
         var pending = _idleRetirementPending;
         _idleRetirementPending = false;
         if (!pending) return;
+        RefreshProcedureIdleRequest();
+        if (_currentIdleRequest is { Procedure: not null, State: 2 })
+        { _idleRetirementPending = true; return; }
         if (_currentIdleRequest?.SequenceState is 2 or 5 || _queuedIdleRequest is { Sequence: null } ||
             _queuedIdleRequest?.SequenceState is 2 or 5)
         { _idleRetirementPending = true; return; }

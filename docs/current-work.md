@@ -1,73 +1,86 @@
 # Current work
 
-## Active owner: checked scalar-snapshot publication
+## Active batch: idle-request history and bot control
 
-The coordinator plans/reviews; user-authorized GPT-6.1 Sol High workers implement
-separate scopes. The central executor alone owns builds, game input and Git.
-Follow [implementation-plan.md](implementation-plan.md).
+One GPT-6.1 Sol High executor owns implementation, builds, game input and Git.
+The coordinator prioritizes and reviews the final coherent diff before publication.
+No parallel writers or per-decision approval loop remain. Follow
+[implementation-plan.md](implementation-plan.md): implement shared systems,
+execute headless cases, integrate, then compare representative ordinary gameplay
+with retail. Gameplay is not the primary feature-discovery loop.
 
-PR #330 merged at `78d643a332804b9d3221d3cdfbef73ed67e7ef27` with all required
-local/hosted checks passing. Local main equals origin/main. Current branch
-`codex/typed-scalar-snapshot` contains the reviewed scalar repair and dependent
-fixtures. Runtime writers are frozen. Owned/synthetic checks, the full required
-gate and diff check pass; actual forward F5 also completed. Checked publication
-is the current boundary. Eighteen unrelated classic import EOL changes remain
-preserved/excluded. No game or build runs. Recording and trace are off.
+Checked baseline PR #331 is `1f1a44e0c6eb97ce72059e9cf3fcfd8ccca3bf2e`;
+required local/owned checks and all five hosted checks passed. Local main equals
+origin/main and no task PR remains open. Active branch:
+`codex/idle-history-bot-control`. Eighteen unrelated classic import EOL changes
+remain preserved/excluded. Recording and render trace are off.
 
-## Verified player state
+Source is frozen. Focused bot, furniture/last-request, idle-transition, ingestion
+and actual owned-condition 08747d checks pass. The required full publication
+gate passes; reviewed publication remains pending. No game is running.
 
-Scalar export MVID `8d346c24-3a49-46ee-9901-d8d87aa7a648`, DLL SHA256
-`1FB71BE241AAB67CBD523BA68BB1B9BD42A08D233908735B909C5B6D9D9384EA`,
-Continued the saved cooking result (command 360). Healing Powder 1 remained;
-no ingredient or cooking replay occurred. Ordinary look/W and one jump followed
-source corridor guidance with the bot stopped, reaching the north rock shoulder.
+## Implemented behavior and bounds
 
-F5 command 377 generation 1 completed at 12:38:58.392 UTC, cell 0e19cd, HP 99,
-save/cleanup errors null and healthy capture owners. The live player pose at the
-save was approximately (-900.177, 93.971, 264.582). Actor 157c8f had no current
-animation error in detailed state 378. VCG03 15d912 remains stage 10, objectives
-10/20/30 complete and 40 displayed/incomplete. Tutorial 10a214 is completed.
+Function 451 IsLastIdlePlayed uses a distinct source-qualified persistent
+last-request field, updated on accepted queue creation before activation.
+Selected/current marker IDLE and visible animation are separate. Genuine new
+processes initialize empty; source-materialized actors not yet given a process
+remain distinct from missing historical state. Cold restore never invents history.
+Native binding retirement preserves history and removes only its query callback.
+
+Furniture and NPC Eat producers share duplicate admission and pending/current
+request ownership while their physical pose clocks remain the existing owners.
+Actual GetUp/replacement/release retires a cyclic furniture request; a loop clock
+does not manufacture terminal state. Queued furniture validates package,
+reservation, seat and phase generation and cancels stale work. Eat prepares its
+transaction at actual activation, validates its selected activity/meal, and
+consumes only after real pose publication. Procedure hydration does not replay
+requests, transactions or RNG. Full procedure/application-mode parity is unverified.
+
+The bot counts no-closing time during planning and finishes valid segments
+before refreshing moving travel/interact targets. Final live target/ray,
+scene/body and native collision checks remain. This does not prove a physical
+through-route around the rock join.
+
+## Actual integration and canonical state
+
+Export MVID `5b54e57b-d2f3-40b2-a0db-3481ee1aca8c`, DLL SHA256
+`D44ED7F0CF8119B5B88E90BACB943812040BA13F2AE0D46FAAEACF549FBC1419`,
+Continued the useful traversal/cooking save (command 386). Detailed 387 initially
+had healthy capture owners. No cooking replay occurred. Later detailed 393
+correctly refused absent historical last-request state on actor 157c8f; no
+history was inferred and no F5 overwrote the checkpoint. Ordinary Quit 395 /
+Yes 396 freed 288 prototypes and disposed source owners; PID 31720 is absent.
+The final queued-owner/transaction corrections were added after this play run.
+Their final build and related focused contracts pass; queued lifecycle changes
+are reviewed, with direct deferred-promotion/cancellation and live exercise
+unverified. The full required gate passes.
 
 Canonical: `local/integrated-baseline-20261028/gameplay/checkpoint.json`,
 56,422,258 bytes, SHA256
 `02ABCFE0D0179E3C8B51E0F867363D13D81CB7B364C882EA0CCF8038907E277F`.
-Its next ordinary Continue is unverified. Preserve this useful traversal save;
-never replay cooking or the earlier approach without an actual state need.
+F5 command 377 completed at 12:38:58.392 UTC, HP 99, cell 0e19cd, with no
+save/cleanup error. Healing Powder 1 is retained; VCG03 15d912 objectives
+10/20/30 are complete and 40 remains displayed/incomplete. Tutorial 10a214 is
+completed. The north-shoulder save pose is approximately (-900.177,93.971,264.582).
+Continue 386 verified this checkpoint. Further progression needs honest current
+history, so a fresh ordinary New Game is authorized when integration requires it.
+Do not backfill or edit saves. This batch did not advance objective 40.
 
-After saving, actor 157c8f reached the next distinct blocker: AI condition
-FalloutNV.esm:08747d/function 451 has no authoritative owner. Detailed state 381
-retains it. No F5 was attempted around that fault. Normal Quit 384/Yes 385 disposed
-source owners/freed 288 prototypes. The new canonical checkpoint remains intact.
+## Next system and acceptance
 
-## Frozen repair and evidence
+After checked publication, implement shared script/function/context dispatch,
+joining NPC/creature/dialogue/idle consumers and executing actual source-used
+families headlessly. Prioritize affected quests/packages from the retained
+system inventory. Do not start another NPC-specific failure chain or giant audit.
+The active plan covers data/readers; world/time/events/save; scripts/conditions/
+quests/dialogue; actor packages/animation/navigation; combat/AV/effects/inventory/
+crafting/trade/minigames; UI/audio/render/streaming; flat/XR/performance.
 
-Snapshot transitions now retain current typed float/face-morph constants beside
-transform poses, preserve source target identity/priority and restore the held
-incoming phase without resampling outgoing values. Unknown or unbound scalar
-targets remain refused. Both NPC and creature continuation use the same owner.
-
-Owned scalar audit passes on a held nine-scalar source sequence, with current
-HeadTrack, morph constants, partial blend and cold constants. Its selected source
-identity is inferred; it does not establish actual gameplay or retail parity.
-Synthetic current-value/blend/weight/priority/cold/refusal contracts and the full
-required gate pass. A dependent animation fixture was updated for typed bindings;
-the synthetic skeleton and managed-sequence source are separate, as in KF binding.
-The successful actual forward save is bounded integration evidence; a retained
-scalar transition and matched retail timing/pixels remain unverified.
-
-## Next owners and acceptance limits
-
-After checked publication, qualify function 451 at the actual source condition.
-Separately, diagnose the physical RockCanyon18 join along the extracted source
-corridor: ordinary movement contacted the rock near (-899.650, 93.776, 262.928)
-while the next source point was about (-901.847, 95.724, 260.920). The source
-corridor supplies guidance; exact capsule clearance at this join remains
-unproved. Do not increase tolerances or repeat direct-line cliff attempts.
-
-Continue the new traversal save after the next integrated repair toward Sunny
-objective 40/Trudy, then nearby trade and Caravan. Save healthy meaningful
-progress before a later unrelated fault. Native 4K60, physical XR144, matched
-retail pixels/audio and complete campaign/system coverage remain unmet. Raven
-locomotion, active non-radio speech saving, background creature Find/Food and
-physical lawn-chair entry remain open. No campaign, parity, headset or performance
-completion is claimed. See [runtime-repair-design.md](runtime-repair-design.md).
+The RockCanyon18 chord matches source collision with sampled slopes above the
+player's 50-degree limit. Do not repeat the chord or loosen collision. Physical
+through-traversal, fresh-campaign 451 advancement, actual multi-food meal playback,
+Sleep bed entry/wake and lawn-chair entry remain unverified. Raven locomotion,
+active speech saving and creature Find/Food remain open. Native 4K60, physical
+XR144, matched retail pixels/audio and complete campaign/system coverage are
+unmet. No campaign, parity, headset or performance completion is claimed.

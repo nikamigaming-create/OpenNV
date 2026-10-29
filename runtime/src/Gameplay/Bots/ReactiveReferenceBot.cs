@@ -241,9 +241,8 @@ internal sealed partial class ReactiveReferenceBot
                 _planningIdleSeconds = 0;
             else _planningIdleSeconds += seconds;
             _lastPlanningProgress = planning;
-            // A bounded native search that is actually advancing is not a
-            // stationary movement failure. Allow brief scheduler gaps, but a
-            // search that stops advancing eventually hits the ordinary bound.
+            // Query liveness describes scheduler work, not goal progress.
+            // Keep observing it while the independent no-closing clock runs.
             var planningAdvancing = planning is not null && _planningIdleSeconds < 10;
             if (_mode is "interact" or "travel" or "approach")
             {
@@ -259,11 +258,11 @@ internal sealed partial class ReactiveReferenceBot
                     _bestGoalDistance = distance;
                     _goalNoClosingSeconds = 0;
                 }
-                else if (!planningAdvancing) _goalNoClosingSeconds += seconds;
+                else _goalNoClosingSeconds += seconds;
             }
-            else if (!planningAdvancing) _goalNoClosingSeconds += seconds;
+            else _goalNoClosingSeconds += seconds;
             if (_elapsed > bound && _goalNoClosingSeconds > bound)
-                throw new InvalidOperationException("Goal exceeded its execution bound without observed closing progress.");
+                throw new InvalidOperationException($"Goal exceeded its execution bound without observed closing progress. Native planning advancing={planningAdvancing}.");
             if (_routeDoor is not null)
             {
                 var door = state.Door ?? throw new InvalidOperationException("Route door lost its resident source motion owner.");
@@ -371,10 +370,10 @@ internal sealed partial class ReactiveReferenceBot
             }
             if (move)
             {
-                // Follow and shooting targets can move during a queued query.
-                // Execute one collision-checked segment before refreshing the
-                // target, or continuous drift can starve the route forever.
-                var movingTarget = _mode is "follow" or "shoot";
+                // Travel and interaction references can move too. Execute one
+                // collision-checked segment before refreshing their target;
+                // observed final arrival still checks the live reference below.
+                var movingTarget = _mode is "follow" or "shoot" or "travel" or "interact";
                 if (_path is not null && !movingTarget && Vector3.Distance(state.Target, _plannedTarget) > .4f)
                 { CancelRoute(); _path = null; _projectionRadius = 2; _endpointReplans = 0; }
                 if (_path is null)

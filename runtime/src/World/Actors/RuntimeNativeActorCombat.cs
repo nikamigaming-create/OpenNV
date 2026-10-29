@@ -66,7 +66,8 @@ internal sealed partial class RuntimeNativeActorCombat : Node
 
     internal static RuntimeNativeActorCombat Attach(Node3D actor, RuntimeNativeNifSkeleton skeleton, string skeletonPath,
         FalloutReferenceWorld world, FalloutReferenceInstance state, FalloutPluginStack records, RuntimeLiveContentSource content,
-        uint layer, uint mask, NativeActorCombatContext? context = null, bool newLaunchProcess = false)
+        uint layer, uint mask, NativeActorCombatContext? context = null, bool newLaunchProcess = false,
+        bool newIdleProcess = false)
     {
         world.InitializeSourceCorpse(state.Reference);
         var owner = new RuntimeNativeActorCombat
@@ -85,6 +86,7 @@ internal sealed partial class RuntimeNativeActorCombat : Node
             _newLaunchProcess = newLaunchProcess,
             _context = context
         };
+        state.InitializeIdleRequestHistory(newIdleProcess);
         state.ConversationSuppressionSeconds ??= FalloutConversationSuppression.Sample(records.NumericSettings, state.SoundRandom.NextUnitFloat);
         state.ConversationHistory ??= FalloutConversationHistory.Create(records.NumericSettings);
         owner.PrepareHitReactionResources();

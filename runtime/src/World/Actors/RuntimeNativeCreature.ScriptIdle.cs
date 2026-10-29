@@ -30,6 +30,7 @@ internal sealed partial class RuntimeNativeCreature : IGamebryoReferenceEnableLi
             state.Unconscious || state.Restrained || state.KnockedDown || !_aiWorld!.IsEnabled(state.Reference))
             throw new NotSupportedException("Creature script idle cannot compose its current pose or failed source owner.");
         var record = FalloutDialogueTopic.Find(stack, "IDLE", editorId);
+        state.RecordIdleRequest(stack, record.FormKey);
         var idle = FalloutActorIdleSource.Resolve(stack, record);
         var source = ReadIdle(idle);
         var timing = FalloutIdleAnimationData.Read(record);

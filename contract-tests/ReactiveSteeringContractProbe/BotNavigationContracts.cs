@@ -40,23 +40,34 @@ internal static class BotNavigationContracts
 
     private static void PlanningProgressBound()
     {
-        var observation = Observation(100);
-        long steps = 0;
-        var bot = new ReactiveReferenceBot(_ => observation,
-            (_, _, _) => throw new InvalidOperationException("Asynchronous search fell back to a synchronous route."),
-            (_, _) => { }, (_, _, _, _, _) => null,
-            planningProgress: () => new BotPlanningProgress(1, steps));
-        bot.Start("reference", "interact", 1.5f);
-        for (var second = 0; second < 240; second++)
+        foreach (var (mode, bound, advancing) in new[]
         {
-            steps++;
+            ("interact", 180, false), ("interact", 180, true),
+            ("travel", 900, false), ("travel", 900, true),
+        })
+        {
+            var observation = Observation(100);
+            SteeringIntent input = default;
+            long steps = 0, search = 1;
+            var cancellations = 0;
+            var bot = new ReactiveReferenceBot(_ => observation,
+                (_, _, _) => throw new InvalidOperationException("Asynchronous search fell back to a synchronous route."),
+                (intent, _) => input = intent, (_, _, _, _, _) => null,
+                () => cancellations++, planningProgress: () => new BotPlanningProgress(search, steps));
+            bot.Start("reference", mode, 1.5f);
+            for (var second = 0; second <= bound; second++)
+            {
+                if (advancing) { steps++; search = 1 + second / 30; }
+                bot.Tick(1);
+                Require(bot.CampaignSkill.Error is null && Phase(bot) == "planning" && input == default,
+                    "Queued planning failed before its ordinary goal bound or retained movement input.");
+            }
+            var beforeBound = cancellations;
             bot.Tick(1);
-            Require(bot.CampaignSkill.Error is null && Phase(bot) == "planning",
-                "A bounded search making observable work was mistaken for a stationary movement failure.");
+            Require(bot.CampaignSkill.Error?.Contains("without observed closing progress", StringComparison.Ordinal) == true &&
+                Phase(bot) == "blocked" && input == default && cancellations > beforeBound,
+                "Planning work or restarted searches suspended the no-closing goal bound or retained a query/input lease.");
         }
-        for (var second = 0; second < 200 && bot.CampaignSkill.Error is null; second++) bot.Tick(1);
-        Require(bot.CampaignSkill.Error?.Contains("without observed closing progress", StringComparison.Ordinal) == true,
-            "A search that stopped advancing escaped the execution bound.");
     }
 
     private static void LongInteractionApproach()
@@ -182,61 +193,88 @@ internal static class BotNavigationContracts
 
     private static void MovingTargetQueuedSegments()
     {
-        var observation = Observation(6);
-        SteeringIntent input = default;
-        (Vector3 Start, Vector3 End, Vector3 Target)? pending = null;
-        var requests = new List<Vector3>();
-        var polls = 0;
-        var bot = new ReactiveReferenceBot(_ => observation,
-            (_, _, _) => throw new InvalidOperationException("Async follow used a synchronous fallback."),
-            (intent, _) => input = intent,
-            (start, end, target, _, _) =>
+        foreach (var mode in new[] { "follow", "shoot", "travel", "interact" })
+        {
+            var observation = Observation(12);
+            SteeringIntent input = default;
+            (Vector3 Start, Vector3 End, Vector3 Target)? pending = null;
+            var requests = new List<Vector3>();
+            var polls = 0;
+            var activations = 0;
+            var bot = new ReactiveReferenceBot(_ => observation,
+                (_, _, _) => throw new InvalidOperationException("Async reference navigation used a synchronous fallback."),
+                (intent, activate) => { input = intent; if (activate) activations++; },
+                (start, end, target, _, _) =>
+                {
+                    if (pending is null) { pending = (start, end, target); polls = 0; requests.Add(target); }
+                    Require(pending == (start, end, target), "Target drift replaced its pending native query.");
+                    if (++polls < 16) return null;
+                    return new([start + Vector3.UnitZ], end, end, false);
+                }, () => pending = null);
+            bot.Start("actor", mode, mode == "shoot" ? 6 : 1.5f);
+            for (var frame = 0; frame < 16; frame++)
             {
-                if (pending is null) { pending = (start, end, target); polls = 0; requests.Add(target); }
-                Require(pending == (start, end, target), "Moving follow replaced its pending native query.");
-                if (++polls < 16) return null;
-                return new([start + Vector3.UnitZ], end, end, false);
-            }, () => pending = null);
-        bot.Start("actor", "follow", 1.5f);
-        for (var frame = 0; frame < 16; frame++)
-        {
-            observation = observation with { Target = new(0, 0, 6 + frame * .5f), Aim = new(0, 1, 6 + frame * .5f) };
+                observation = observation with { Target = new(0, 0, 12 + frame * .5f), Aim = new(0, 1, 12 + frame * .5f) };
+                bot.Tick(1f / 60);
+            }
+            Require(requests.Count == 1 && input.Forward && Phase(bot) == "approaching",
+                "Target drift starved a queued reference query before movement.");
+            for (var frame = 1; frame < 8; frame++)
+            {
+                observation = Move(observation, frame * .1f) with
+                { Target = observation.Target + Vector3.UnitZ * .1f, Aim = observation.Aim + Vector3.UnitZ * .1f };
+                bot.Tick(1f / 60);
+                Require(requests.Count == 1 && input.Forward, "Target drift discarded a verified segment before arrival.");
+            }
+            observation = Move(observation, .85f); bot.Tick(1f / 60);
+            Require(Phase(bot) == "replanning-segment" && input == default,
+                "Navigation crossed a verified segment boundary without a fresh route.");
+            var nextTarget = observation.Target;
             bot.Tick(1f / 60);
+            Require(requests.Count == 2 && requests[1] == nextTarget && Phase(bot) == "planning",
+                "Observed segment arrival did not refresh the live target.");
+            observation = Move(observation, 1.35f); bot.Tick(1f / 60);
+            Require(requests.Count == 3 && pending!.Value.Start == observation.Position && input == default,
+                "Moving-reference policy retained a query after its player start changed.");
+            observation = observation with { Scene = "another-cell" }; bot.Tick(1f / 60);
+            Require(requests.Count == 4 && Phase(bot) == "planning" && input == default,
+                "Moving-reference policy retained a query across a scene change.");
+            if (mode != "shoot")
+            {
+                observation = observation with { Target = observation.Position + Vector3.UnitZ, Aim = observation.Camera + Vector3.UnitZ };
+                bot.Tick(1f / 60);
+                Require(pending is null && !input.Forward && input.Combat is null && !input.Pause && activations == 0,
+                    "A live nearby reference retained a queued route or caused an unobserved activation.");
+                if (mode == "follow") Require(Phase(bot) == "following-at-distance", "Live follow range was not observed.");
+                else if (mode == "travel") Require(Phase(bot) == "arrival-observed", "Travel did not use the live reference range.");
+                else
+                {
+                    Require(Phase(bot) == "aiming", "Interaction arrived without its live activation ray.");
+                    observation = observation with { AimedReference = "actor" }; bot.Tick(1f / 60);
+                    Require(activations == 1 && Phase(bot) == "awaiting-interaction", "Live interaction ray did not own ordinary activation.");
+                    observation = observation with { InteractionState = "conversation" }; bot.Tick(1f / 60);
+                    Require(Phase(bot) == "interaction-observed", "Ordinary interaction response was not observed.");
+                }
+            }
+            bot.Stop();
         }
-        Require(requests.Count == 1 && input.Forward && Phase(bot) == "approaching",
-            "Target drift starved an asynchronous follow query before movement.");
-        for (var frame = 1; frame < 8; frame++)
+        foreach (var mode in new[] { "travel", "interact" })
         {
-            observation = Move(observation, frame * .1f) with
-            { Target = observation.Target + Vector3.UnitZ * .1f, Aim = observation.Aim + Vector3.UnitZ * .1f };
-            bot.Tick(1f / 60);
-            Require(requests.Count == 1 && input.Forward, "Target drift discarded a verified follow segment before arrival.");
+            var observation = Observation(4);
+            SteeringIntent input = default;
+            var routes = 0;
+            var arrivals = 0;
+            var bot = new ReactiveReferenceBot(_ => observation, (_, end, _) =>
+            { routes++; return new([end], end, end, true, ObserveArrival: _ => arrivals++); }, (intent, _) => input = intent);
+            bot.Start("actor", mode, 1.5f); bot.Tick(.016f);
+            observation = Move(observation, 2.4f) with { Target = new(0, 0, 6), Aim = new(0, 1, 6) };
+            bot.Tick(.016f);
+            Require(Phase(bot) == "replanning-moving-target" && !input.Forward && arrivals == 0,
+                "A completed stale segment published final arrival at a moving reference.");
+            bot.Tick(.016f);
+            Require(routes == 2 && input.Forward, "The completed stale segment did not route toward the current reference.");
+            bot.Stop();
         }
-        observation = Move(observation, .85f); bot.Tick(1f / 60);
-        Require(Phase(bot) == "replanning-segment" && input == default,
-            "Follow crossed a verified segment boundary without a fresh route.");
-        var nextTarget = observation.Target;
-        bot.Tick(1f / 60);
-        Require(requests.Count == 2 && requests[1] == nextTarget && Phase(bot) == "planning",
-            "Follow did not refresh the live target after observed segment arrival.");
-        observation = observation with { Target = observation.Position + Vector3.UnitZ, Aim = observation.Camera + Vector3.UnitZ };
-        bot.Tick(1f / 60);
-        Require(Phase(bot) == "following-at-distance" && pending is null && !input.Forward &&
-            input.Combat is null && !input.Pause && input.AimAt == observation.Aim,
-            "An approaching actor did not cancel the pending route at the live follow distance.");
-        bot.Stop();
-
-        observation = Observation(12);
-        pending = null; requests.Clear(); polls = 0;
-        bot.Start("actor", "shoot", 6);
-        for (var frame = 0; frame < 16; frame++)
-        {
-            observation = observation with { Target = new(0, 0, 12 + frame * .5f), Aim = new(0, 1, 12 + frame * .5f) };
-            bot.Tick(1f / 60);
-        }
-        Require(requests.Count == 1 && input.Forward && Phase(bot) == "approaching",
-            "Moving shooting target repeatedly cancelled its queued collision-checked segment.");
-        bot.Stop();
     }
 
     private static void RouteDoors()

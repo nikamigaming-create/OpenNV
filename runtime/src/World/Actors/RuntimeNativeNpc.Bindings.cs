@@ -7,6 +7,7 @@ internal partial class RuntimeNativeNpc
         if (_aiReferenceState is not { } state) return;
         ReleasePendingSandboxStartBindings();
         if (ReferenceEquals(state.QueryCurrentPackage, _currentPackageQuery)) state.QueryCurrentPackage = null;
+        if (ReferenceEquals(state.QueryLastIdleRequest, _lastIdleRequestQuery)) state.QueryLastIdleRequest = null;
         if (ReferenceEquals(state.QuerySitting, _sittingQuery)) state.QuerySitting = null;
         if (ReferenceEquals(state.QuerySleeping, _sleepingQuery)) state.QuerySleeping = null;
         if (ReferenceEquals(state.CanCaptureIdleRequests, _idleRequestsReady)) state.CanCaptureIdleRequests = null;
@@ -41,6 +42,7 @@ internal partial class RuntimeNativeNpc
             _aiWorld?.ReserveFurnitureSeat(furniture, seat.Index, Appearance.Reference!.Value) != true)
             throw new NotSupportedException("Previous native actor cannot restore its source furniture reservation.");
         state.QueryCurrentPackage ??= _currentPackageQuery;
+        state.QueryLastIdleRequest ??= _lastIdleRequestQuery;
         state.QuerySitting ??= _sittingQuery;
         state.QuerySleeping ??= _sleepingQuery;
         state.CanCaptureIdleRequests ??= _idleRequestsReady;
