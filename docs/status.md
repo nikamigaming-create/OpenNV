@@ -39,6 +39,14 @@ of the area, without establishing physical impossibility or a new game blocker.
 Normal quit disposed source owners and preserved the successful cooking save.
 Next play uses continuous manual traversal with the bot stopped until clear of
 that area, then ordinary Sunny/Trudy, trade and Caravan progression.
+Final-phase export dcf66477 also Continued the saved Healing Powder successfully.
+A later actor 157c8f transition exposed bound HeadTrack/face-morph scalar snapshot
+support as the next saving owner; no F5 overwrote the cooking checkpoint. Normal
+quit disposed source owners. PR #330 also fixes native query temporary ownership
+found by hosted CI: focused allocation checks and the fresh full required gate
+pass with the strict assertion unchanged. Checked hosted publication remains the
+boundary; typed-scalar transition support belongs to the next fresh branch.
+
 The merged patch adds explicit source-text timing for audio/LIP-absent responses,
 authored furniture endpoint approach and source-qualified Sandbox occupied/exit
 procedure codes. Selected retained-source and compact contracts pass; actual

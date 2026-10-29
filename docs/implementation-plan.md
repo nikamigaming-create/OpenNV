@@ -65,6 +65,14 @@ locomotion, background creature Find/Food, complete Caravan and full system
 coverage remain explicit gaps. Neither a successful arrival nor selected feature
 checks establishes complete movement or parity.
 
+Final-phase export dcf66477 also Continued the saved Healing Powder successfully.
+A later actor 157c8f transition exposed bound HeadTrack/face-morph scalar snapshot
+support as the next saving owner; no F5 overwrote the cooking checkpoint. Normal
+quit disposed source owners. PR #330 also fixes native query temporary ownership
+found by hosted CI: focused allocation checks and the fresh full required gate
+pass with the strict assertion unchanged. Checked hosted publication remains the
+boundary; typed-scalar transition support belongs to the next fresh branch.
+
 ## One implementation and one build
 
 - Use the shared checkout and one active `codex/` feature branch based on current
