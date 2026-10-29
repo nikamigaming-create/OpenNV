@@ -41,12 +41,15 @@ Both package launchers select official base-game/DLC plugins and disable native
 extensions. Loose files already present in the owned installation still win
 resource lookup; this selection does not verify or repair a modified installation.
 
-The package launchers use an isolated profile root:
+The package launchers request this profile root:
 `%APPDATA%/Godot/app_userdata/OpenNV/vanilla/`. Installation registrations live in
 `launcher/profiles-v1.json`; FNV saves live in `profiles/newvegas/` beneath that
-root. Existing global profiles are not imported. Retail saves are not loaded or
-modified. Copy a compatible preserved OpenNV save into this isolated profile if
-needed; retain the original. A different source stack can be refused visibly.
+root. On first use, the current launcher can reuse existing registrations,
+including their stored save paths. Confirm the selected installation/save path;
+choosing the game folder again registers a save path beneath the requested root.
+Retail saves are not loaded or modified. Copy a compatible preserved OpenNV save
+into the chosen profile if needed; retain the original. A different source stack
+can be refused visibly.
 For another independent profile, use the executable directly, for example:
 `OpenNV.exe --xr-mode on -- --launcher --launcher-game newvegas --presentation openxr --native-plugins none --content-selection vanilla --profile-root <absolute-directory>`.
 
