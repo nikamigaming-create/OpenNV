@@ -30,6 +30,11 @@ internal partial class RuntimeNativeNpc
     private bool TryBeginFurniturePackage(FalloutPluginRecord package, FalloutPlacedReference reference,
         FalloutPluginRecord furniture, bool initializing, bool sandboxActivity = false)
     {
+        if (_aiWorld is { } world)
+        {
+            var placement = world.Placement(reference.FormKey);
+            reference = reference with { Cell = placement.Cell, Position = placement.Position, RotationRadians = placement.RotationRadians };
+        }
         var path = (_aiWorld?.PlacedSource(reference.FormKey).BaseObject ?? _aiCell!.BaseObjects[reference.Base]).ModelPath
             ?? throw new InvalidDataException("Furniture has no model.");
         var content = RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("Owned files are absent.");
@@ -235,7 +240,7 @@ internal partial class RuntimeNativeNpc
         _sitting = 1;
         StartFurnitureAnimation();
         _furnitureEntry = null;
-        if (!_furnitureSandboxActivity) _packageEvents!.Complete();
+        if (!_furnitureSandboxActivity && _sleepPackage is null) _packageEvents!.Complete();
         GD.Print($"OPENNV_NATIVE_FURNITURE_OCCUPIED reference={Appearance.Reference} package={_aiPackage!.FormKey} " +
             $"target={_furnitureReference} marker={_seat!.MarkerId} sourceIndex={_seat.Index} " +
             $"initialPlacement={_furnitureInitialPlacement} animation={_baseAnimation!.Sequence.Name} parity=unmeasured");
@@ -261,8 +266,16 @@ internal partial class RuntimeNativeNpc
     {
         Basis = _furnitureOccupied.Basis;
         var sandboxActivity = _furnitureSandboxActivity;
+        var sleep = _sleepPackage is not null;
         var packageExit = _sandboxFurniturePackageExit;
         ClearFurniture();
+        if (sleep)
+        {
+            _requestedSelection = _furniturePendingSelection ??
+                throw new InvalidOperationException("Sleep exit lost its accepted package selection.");
+            _furniturePendingSelection = null;
+            _sleepPackage = null; _sleepProgress = null; _sleepBeds = null;
+        }
         if (sandboxActivity && !packageExit)
         {
             // The chair is an activity inside the retained Sandbox package.
@@ -285,6 +298,12 @@ internal partial class RuntimeNativeNpc
             ClearPendingSandboxStart(clearBlocker: true);
         }
         _packageEvents!.Change(null);
+        if (sleep)
+        {
+            Combat?.RetirePackageMotionNavigation(_aiPackage!.FormKey);
+            if (_aiReferenceState?.PackageMotion?.Package == _aiPackage!.FormKey)
+                _aiReferenceState.PackageMotion = null;
+        }
         _aiPackage = null;
         _findFurniture = null;
         _packageIdleSource = null;
@@ -338,6 +357,16 @@ internal partial class RuntimeNativeNpc
         // same seat, and its existing animation keeps its observed phase.
         CancelIdle();
         ClearDialoguePackage();
+        if (_sleepPackage is { } sleep)
+        {
+            _packageEvents!.Change(null);
+            Combat?.RetirePackageMotionNavigation(sleep.Form);
+            _sleepPackage = null; _sleepProgress = null; _sleepBeds = null;
+            // FurnitureContinuation retains the physical seat and clock.
+            // The outgoing Sleep movement intent cannot own the new PACK.
+            if (_aiReferenceState?.PackageMotion?.Package == sleep.Form)
+                _aiReferenceState.PackageMotion = null;
+        }
         _aiPackage = selected; _packageIdleSource = source;
         _findFurniture = find;
         _packageIdles = new(source, _idleReplays, idle => _idleConditions!.AllPass(idle, EvaluateAiCondition));

@@ -62,7 +62,19 @@ internal sealed partial class RuntimeNativeActorCombat
         if (activity.Activity == FalloutSandboxActivity.Eat)
         {
             using var scope = OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Measure(OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Owner.SandboxEat);
-            AdvanceSandboxEat(package, source, activity, delta, context); return null;
+            var randomBeforeMeal = _state.SoundRandom.State;
+            try { AdvanceSandboxEat(package, source, activity, delta, context); }
+            catch (FalloutSandboxMealSelectionException error) when (_actor is RuntimeNativeNpc &&
+                _state.PackageMotion is null && randomBeforeMeal == _state.SoundRandom.State)
+            {
+                // Selection has consumed its draws, but no meal, pose, idle or
+                // ingestion transaction has been selected or published.
+                var prefix = new FalloutSandboxUnchosenMeal(activity, error.Inputs, selectedActivity,
+                    randomBeforeSelection, randomBeforeMeal, _state.SoundRandom.State);
+                prefix.Validate();
+                throw new FalloutSandboxAdmissionException(package.FormKey, error.Message, prefix);
+            }
+            return null;
         }
         if (activity.Activity == FalloutSandboxActivity.Dialogue)
         {

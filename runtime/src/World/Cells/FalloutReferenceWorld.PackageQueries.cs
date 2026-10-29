@@ -32,7 +32,7 @@ internal sealed partial class FalloutReferenceWorld
                     !hash.Equals(motion.PackageSha256, StringComparison.OrdinalIgnoreCase))
                     throw new InvalidDataException("Portal handoff package differs from its winning source.");
                 if (motion.Travel is { } travel)
-                    FalloutTravelPackage.Read(source, ownsIdleCollection: true).Validate(records, this, reference, travel);
+                    FalloutPackageTravelGoal.Read(records, this, reference, source, motion.Sleep).Validate(records, this, reference, travel);
                 else motion.AccompanyPortal!.Validate(records, this, reference, source);
                 return assignment.Package;
             }

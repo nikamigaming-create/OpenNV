@@ -47,6 +47,7 @@ internal sealed partial class FalloutPlayerInventory
                 value.Condition is { } condition && (!float.IsFinite(condition) || condition < 0 || condition > 1)))))
             throw new InvalidDataException("Weapon shot inventory transaction contains invalid item variants.");
 
+        InvalidateTraversalForInsertions(staged.Values);
         _items.Clear();
         foreach (var item in staged) _items.Add(item.Key, item.Value);
         NormalizeMagazineAmmunition();

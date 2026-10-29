@@ -11,7 +11,7 @@ internal partial class RuntimeNativeNpc
     private const string MarkerTravelCaptureBlocker = "Marker Travel native route or portal retirement is not ready for capture.";
     private CellNavigationGraph? _navigation;
     private GamebryoRootMotionTravel? _travelProgress;
-    private FalloutTravelPackage? _nativeMarkerTravel;
+    private FalloutPackageTravelGoal? _nativeMarkerTravel;
     private FalloutTravelProgress? _nativeMarkerTravelProgress;
     private Vector3? _nativeMarkerTravelDestination;
     private bool _nativeMarkerTravelRestored;
@@ -75,11 +75,11 @@ internal partial class RuntimeNativeNpc
             destinationRadiusGameUnits);
     }
 
-    private void BeginMarkerTravel(FalloutPluginRecord package, bool initializing)
+    private void BeginMarkerTravel(FalloutPluginRecord package, bool initializing, FalloutPackageTravelGoal? goal = null)
     {
         var world = _aiWorld ?? throw new NotSupportedException("Marker Travel has no shared reference owner.");
-        var source = FalloutTravelPackage.Read(package, ownsIdleCollection: true);
-        if (source.LocationType is not (0 or 2 or 3))
+        var source = goal ?? FalloutPackageTravelGoal.Read(_aiStack!, world, Appearance.Reference!.Value, package);
+        if (source.Sleep is null && source.LocationType is not (0 or 2 or 3))
             throw new NotSupportedException("Native Travel requires its reference, current-location or editor-location owner.");
         var actor = Appearance.Reference!.Value;
         var state = world.Get(actor);
@@ -202,7 +202,7 @@ internal partial class RuntimeNativeNpc
             }
             var radius = MarkerTravelRadius(progress);
             var reached = IsOnFloor() && GlobalPosition.DistanceTo(destination) <= radius + .1f;
-            var completedNow = reached && !progress.Complete && progress.PortalDoor is null &&
+            var completedNow = source.Sleep is null && reached && !progress.Complete && progress.PortalDoor is null &&
                 !source.HoldsForPlayer(source.ContinueIfPlayerNear && Combat.PackagePlayerInSameCell());
             progress = progress with
             {

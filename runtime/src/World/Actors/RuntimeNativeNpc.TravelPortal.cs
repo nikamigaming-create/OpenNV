@@ -65,14 +65,15 @@ internal partial class RuntimeNativeNpc : INativeActorPortal
     {
         if (!WantsTravelPortal(door) || !_markerPortalRequested || !IsOnFloor() || !PortalPlaybackReady())
             throw new NotSupportedException("NPC portal activation has no ready native Travel approach.");
-        var world = _aiWorld!;
+        var world = _aiWorld ?? throw new NotSupportedException("NPC portal has no shared reference owner.");
+        var records = _aiStack ?? throw new NotSupportedException("NPC portal has no winning package source owner.");
         var actor = Appearance.Reference!.Value;
         var state = world.Get(actor);
         if (state.ProcedureCaptureBlocker != PendingMarkerPortalCaptureBlocker)
             throw new NotSupportedException("NPC portal request no longer owns the pending procedure continuation.");
-        var source = FalloutTravelPackage.Read(_aiStack!.GetEffective(CurrentPackage!.Value), ownsIdleCollection: true);
+        var source = _nativeMarkerTravel ?? throw new InvalidDataException("Portal has no retained source destination owner.");
         var progress = _nativeMarkerTravelProgress!;
-        if (!world.CanUseTravelPortal(actor, door) || world.TravelPortal(actor, source.Start(_aiStack, world, actor).Cell) != door)
+        if (!world.CanUseTravelPortal(actor, door) || world.TravelPortal(actor, source.Start(records, world, actor).Cell) != door)
             throw new NotSupportedException("NPC portal activation no longer matches its current winning Travel route.");
         var placement = world.TravelPortalArrival(door, out var destination);
         state.ProcedureCaptureBlocker = null;

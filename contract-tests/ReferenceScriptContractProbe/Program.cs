@@ -435,6 +435,11 @@ if (args is ["--owned-idle-static-object", var idleObjectRoot])
     return;
 }
 
+if (args is ["--audit-food-order", var foodOrderRoot])
+{
+    OwnedIngestibleProbe.RunActorInventory(foodOrderRoot, 0x157c8f, validateTraversal: true);
+    return;
+}
 if (args is ["--owned-actor-food-source", var actorFoodRoot])
 {
     OwnedIngestibleProbe.RunActorInventory(actorFoodRoot);
@@ -1203,6 +1208,11 @@ if (args is ["--audit-dialogue-editor-region", var dialogueEditorData])
 if (args is ["--furniture-contracts"])
 {
     FurnitureContracts.Run();
+    return;
+}
+if (args is ["--audit-sleep", var sleepData])
+{
+    OwnedSleepProbe.Run(sleepData);
     return;
 }
 if (args is ["--player-tag-skill-contracts"])

@@ -9,7 +9,8 @@ internal sealed record FalloutActorPackageMotion(FalloutFormKey Package, string 
     float[] Position, float[] Rotation, FalloutPatrolProgress? Patrol = null, FalloutEscortProgress? Escort = null,
     FalloutEditorTravelProgress? EditorTravel = null, bool DialogueCompleted = false, FalloutTravelProgress? Travel = null,
     FalloutTravelProgress? Guard = null, FalloutAccompanyPortalArrival? AccompanyPortal = null,
-    FalloutWanderProgress? Wander = null, FalloutSandboxActivityProgress? Sandbox = null, FalloutActorEatProgress? Eat = null)
+    FalloutWanderProgress? Wander = null, FalloutSandboxActivityProgress? Sandbox = null, FalloutActorEatProgress? Eat = null,
+    FalloutActorSleepProgress? Sleep = null)
 {
     // Captures and restores must not share mutable route, pose or activity
     // buffers with the live owner or a caller retaining the snapshot.
@@ -43,6 +44,10 @@ internal sealed record FalloutActorPackageMotion(FalloutFormKey Package, string 
         Wander?.Validate();
         Sandbox?.Validate();
         Eat?.Validate();
+        Sleep?.Validate();
+        if (Sleep is not null && (new object?[] { Patrol, Escort, EditorTravel, Guard, AccompanyPortal, Wander, Sandbox, Eat }
+            .Any(value => value is not null) || DialogueCompleted || Sleep.Furniture && Travel is not null))
+            throw new InvalidDataException("Sleep continuation conflicts with another procedure owner.");
         if (Eat is not null && (Sandbox?.Activity != FalloutSandboxActivity.Eat || Wander is not null || Sandbox.Target != Eat.WorldReference))
             throw new InvalidDataException("Eat continuation conflicts with its selected Sandbox activity.");
         if (Sandbox is not null && (Sandbox.Activity is not (FalloutSandboxActivity.Wander or FalloutSandboxActivity.Dialogue or FalloutSandboxActivity.Eat or FalloutSandboxActivity.Furniture or FalloutSandboxActivity.Sleep or FalloutSandboxActivity.IdleMarker) ||

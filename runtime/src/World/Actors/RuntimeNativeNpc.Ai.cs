@@ -64,6 +64,9 @@ internal partial class RuntimeNativeNpc
         ? throw new NotSupportedException("Furniture entry needs its native script-visible procedure code.")
         : _guardPackage is not null ? throw new NotSupportedException("Guard script-visible procedure code has no source declaration.")
         : _sandboxPackage is not null ? CurrentSandboxAiProcedure
+        : _pendingCurrentLocationSleep is not null ? throw new NotSupportedException("Sleep awaits its native package-start location.")
+        : _sleepPackage is not null ? _sitting == 1 && _seat?.Sleeping == true ? 8 :
+            _nativeMarkerTravel is not null ? 0 : throw new NotSupportedException("Sleep transition has no admitted native procedure phase.")
         : _escortPackage is not null ? _escortProgress?.Complete == true ? 17 : _escortStatus switch
         {
             "ApproachTarget" => 19,
@@ -73,7 +76,20 @@ internal partial class RuntimeNativeNpc
 
     private int CurrentSandboxAiProcedure => _furnitureSandboxActivity && _seat is { } seat
         ? SandboxFurnitureProcedure(_sitting, seat.Sleeping, activityReselectionExit: _sitting == 4 && !_sandboxFurniturePackageExit)
+        : AdmittedSandboxMarkerProcedure is { } markerProcedure ? markerProcedure
         : throw new NotSupportedException("Sandbox script-visible procedure code has no admitted native phase.");
+
+    private int? AdmittedSandboxMarkerProcedure => _sandboxMarker is not null &&
+        _sandboxMarkerNativePhase is 2 or 3 && _sandboxMarkerPhase is FalloutSandboxMarkerPhase.Readiness or
+            FalloutSandboxMarkerPhase.Dispatch or FalloutSandboxMarkerPhase.Playback
+        ? SandboxMarkerProcedure(_sandboxMarkerNativePhase.Value) : null;
+
+    internal static int SandboxMarkerProcedure(int nativePhase) => nativePhase switch
+    {
+        2 => 0,
+        3 => 46,
+        _ => throw new NotSupportedException("Sandbox marker has no admitted native procedure phase.")
+    };
 
     internal static int SandboxFurnitureProcedure(int sitting, bool sleeping, bool activityReselectionExit)
     {
@@ -94,6 +110,7 @@ internal partial class RuntimeNativeNpc
         {
             0 => 0,
             2 => 2,
+            4 => 4,
             6 => 14, // Source PACK travel type -> script-visible Travel package.
             12 => 36, // Sandbox's script package code differs from its PACK type.
             13 => 37, // Fallout script-visible Patrol code (not the PACK type).
@@ -109,6 +126,14 @@ internal partial class RuntimeNativeNpc
         pendingSelectionCaptureReady = CanCapturePendingSelection(),
         furniture = _furnitureReference?.ToString(),
         marker = _seat?.MarkerId,
+        sandboxMarker = _sandboxMarker is { } selectedMarker ? new
+        {
+            reference = selectedMarker.ToString(),
+            phase = _sandboxMarkerPhase.ToString(),
+            nativePhase = _sandboxMarkerNativePhase,
+            procedure = AdmittedSandboxMarkerProcedure,
+            selectedIdle = _sandboxIdleSelection.SelectedIdle?.ToString()
+        } : null,
         sitting = SittingState,
         sleeping = SleepingState,
         dailyWindow = _aiReferenceState?.SandboxDailyWindow,
@@ -146,7 +171,8 @@ internal partial class RuntimeNativeNpc
         factions = _factions.Select(value => new { faction = value.Key.ToString(), rank = value.Value }).ToArray(),
         currentProcedure = Combat?.ScriptCombatProcedure ?? Combat?.ScriptEatProcedure ?? (_sitting == 2 || _requestedSelection is not null || _aiError is not null || _guardPackage is not null ||
             _sandboxPackage is not null && !(_furnitureSandboxActivity && _seat is not null &&
-                (_sitting == 1 || _sitting == 4 && !_sandboxFurniturePackageExit)) ? (int?)null : CurrentAiProcedure),
+                (_sitting == 1 || _sitting == 4 && !_sandboxFurniturePackageExit) || AdmittedSandboxMarkerProcedure is not null)
+            ? (int?)null : CurrentAiProcedure),
         navigation = TravelState,
         escort = EscortState,
         editorTravel = EditorTravelState,
@@ -182,7 +208,8 @@ internal partial class RuntimeNativeNpc
         },
         error = _aiError,
         stoppedSandboxAdmissionCaptureReady = CanCaptureSandboxAdmissionFailure(),
-        stoppedSandboxAdmissionStage = _sandboxAdmissionFailure is null ? null : "candidate-admission-before-first-activity",
+        stoppedSandboxAdmissionStage = _sandboxAdmissionFailure is null ? null : _sandboxAdmissionFailure.UnchosenMeal is not null
+            ? "selected-activity-before-meal-choice" : "candidate-admission-before-first-activity",
         stoppedBindingCaptureReady = CanCaptureBindingFailure(),
         stoppedBindingCapture = _selectionCaptureBlocker is null ? null : new
         {
@@ -245,6 +272,7 @@ internal partial class RuntimeNativeNpc
         }
         _referenceTransform = referenceTransform;
         _packageEvents = new(DispatchPackageEvent);
+        _deferredSleepAdmission = _aiReferenceState?.DeferredPackageContinuation?.Assignment.Package;
         if (world?.UnloadedPackages is { } unloaded)
             unloaded.BindNative(Appearance.Reference!.Value, _packageEvents);
         else if (_aiReferenceState?.DeferredPackageContinuation is { } deferred)
@@ -337,6 +365,12 @@ internal partial class RuntimeNativeNpc
         var package = _aiStack!.GetEffective(assignment.Package);
         if (package.Signature != "PACK") return;
         var declaration = FalloutScriptPackage.Read(package);
+        if (declaration.Procedure == 4 && state.FurnitureContinuation is null && state.PackageMotion?.Sleep is { } sleep)
+        {
+            _ = FalloutPackageTravelGoal.Read(_aiStack!, _aiWorld!, Appearance.Reference!.Value, package, sleep);
+            assignment.Bind(_aiStack!, _packageEvents!);
+            return;
+        }
         if (declaration.Procedure != 6 || declaration.LocationType is not (0 or 2) ||
             declaration.LocationType == 0 && _aiStack.GetEffective(_aiWorld!.Get(declaration.LocationReference!.Value).Base).Signature == "FURN") return;
         _ = FalloutTravelPackage.Read(package, ownsIdleCollection: true);
@@ -477,10 +511,10 @@ internal partial class RuntimeNativeNpc
             if (_sitting is 2 or 4)
             {
                 _pendingPackage = selected;
-                if (_furnitureSandboxActivity)
+                if (_furnitureSandboxActivity || _sleepPackage is not null)
                 {
                     _furniturePendingSelection = selection with { Forced = forced };
-                    if (_sitting == 4) _sandboxFurniturePackageExit = true;
+                    if (_furnitureSandboxActivity && _sitting == 4) _sandboxFurniturePackageExit = true;
                 }
                 return;
             }
@@ -490,7 +524,7 @@ internal partial class RuntimeNativeNpc
                 if (_seat is not null && !_furnitureApproaching)
                 {
                     _pendingPackage = selected;
-                    if (_furnitureSandboxActivity) _furniturePendingSelection = selection with { Forced = forced };
+                    if (_furnitureSandboxActivity || _sleepPackage is not null) _furniturePendingSelection = selection with { Forced = forced };
                     CancelIdle();
                     _sandboxFurniturePackageExit = _furnitureSandboxActivity;
                     _furnitureOccupied = Transform;
@@ -500,6 +534,7 @@ internal partial class RuntimeNativeNpc
                 }
                 CancelIdle();
                 _packageEvents!.Change(null);
+                Combat?.RetirePackageMotionNavigation(_aiPackage.FormKey);
                 ClearSandboxMarker();
                 ClearPendingSandboxStart(clearBlocker: true);
                 _aiPackage = null;
@@ -514,6 +549,7 @@ internal partial class RuntimeNativeNpc
                 _patrol = null; _patrolProgress = null;
                 _guardPackage = null; _guardProgress = null;
                 _sandboxPackage = null; _sandboxWander = null; _pendingCurrentLocationSandbox = null;
+                _sleepPackage = null; _sleepProgress = null; _sleepBeds = null; _pendingCurrentLocationSleep = null;
                 if (_aiReferenceState?.ProcedureCaptureBlocker?.StartsWith(FalloutSandboxPackage.CaptureBlockerPrefix, StringComparison.Ordinal) == true)
                     _aiReferenceState.ProcedureCaptureBlocker = null;
                 if ((_escortPackage is not null || _editorTravel is not null) && _aiWorld is { } escortWorld)
@@ -532,6 +568,7 @@ internal partial class RuntimeNativeNpc
             if (_packageIdleSource.Procedure == 0) { BeginFindFurniture(selected); return; }
             if (_packageIdleSource.Procedure == 12) { BeginSandbox(selected, initializing); return; }
             if (_packageIdleSource.Procedure == 2) { BeginEscort(selected, initializing); return; }
+            if (_packageIdleSource.Procedure == 4) { BeginSleep(selected, initializing); return; }
             if (_packageIdleSource.Procedure == 13) { BeginPatrol(selected); return; }
             if (_packageIdleSource.Procedure == 14) { BeginGuard(selected, initializing); return; }
             if (_packageIdleSource is { Procedure: 6, LocationType: 3 }) { BeginEditorTravel(selected, initializing); return; }

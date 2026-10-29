@@ -90,8 +90,9 @@ internal sealed partial class FalloutPlayerInventory
             ValidateWeaponInstances(staged.Items);
             if (stagedOther is not null) ValidateWeaponInstances(stagedOther.Items);
             var after = staged.Capture(); var afterOther = stagedOther?.Capture();
-            var changed = !SameSnapshot(before.Capture(), after);
-            var otherChanged = other is not null && !SameSnapshot(beforeOther!.Capture(), afterOther!);
+            var changed = !SameSnapshot(before.Capture(), after) || !ReferenceEquals(before._traversal, staged._traversal);
+            var otherChanged = other is not null && (!SameSnapshot(beforeOther!.Capture(), afterOther!) ||
+                !ReferenceEquals(beforeOther!._traversal, stagedOther!._traversal));
             if (!changed && !otherChanged && effects is null) return;
             var revision = Revision; var otherRevision = other?.Revision ?? 0;
             if (changed) _ = checked(revision + 1);
@@ -127,6 +128,7 @@ internal sealed partial class FalloutPlayerInventory
         _items.Clear(); foreach (var item in prepared._items) _items.Add(item.Key, item.Value);
         _equipped.Clear(); _equipped.UnionWith(prepared._equipped);
         _random = prepared._random;
+        _traversal = prepared._traversal;
         Revision = revision;
     }
 

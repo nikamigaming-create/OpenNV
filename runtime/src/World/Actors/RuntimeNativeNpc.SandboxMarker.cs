@@ -12,6 +12,7 @@ internal partial class RuntimeNativeNpc
     private FalloutIdleCollection? _sandboxMarkerSource;
     private Vector3? _sandboxMarkerFloor;
     private FalloutSandboxMarkerPhase _sandboxMarkerPhase;
+    private int? _sandboxMarkerNativePhase;
     private PackageSelection? _sandboxMarkerPendingSelection;
     private Func<bool>? _sandboxMarkerReady;
     private Func<FalloutActorSandboxMarkerContinuation?>? _sandboxMarkerCapture;
@@ -27,9 +28,13 @@ internal partial class RuntimeNativeNpc
             _sandboxMarker = target;
             _sandboxMarkerSource = FalloutIdleCollection.Read(_aiStack!.GetEffective(_aiWorld.Get(target).Base));
             _sandboxMarkerPhase = FalloutSandboxMarkerPhase.Approach;
+            _sandboxMarkerNativePhase = null;
             _aiReferenceState!.ProcedureCaptureBlocker = FalloutActorSandboxMarkerContinuation.CaptureBlocker;
         }
         if (_sandboxMarker != target) throw new InvalidOperationException("Sandbox marker changed its accepted target.");
+        if (_sandboxMarkerPhase is FalloutSandboxMarkerPhase.Dispatch or FalloutSandboxMarkerPhase.Playback)
+            _sandboxMarkerNativePhase = ObserveSandboxMarkerNativePhase(_sandboxMarkerNativePhase, Combat!.PackageMoving || Combat.PackageRoutePending,
+                _sandboxIdleSelection.SelectedIdle is not null);
         if (_sandboxMarkerPhase == FalloutSandboxMarkerPhase.Retiring)
         {
             if (!_idleRetirementPending && IdleRequestsReady) CompleteSandboxMarkerPackageExit();
@@ -72,6 +77,10 @@ internal partial class RuntimeNativeNpc
             // Readiness raises deferred process work. Retire the old request
             // before promoting the next activity's queued request.
             if (_currentIdleRequest is { Sequence: not null, SequenceState: not 3 }) RequestIdleRetirement();
+            // Readiness admits native phase two. The next update observes any
+            // process-selected IDLE before filtering this marker's candidates;
+            // a process with no prior selection still reports public0.
+            _sandboxMarkerNativePhase ??= 2;
             _sandboxMarkerPhase = FalloutSandboxMarkerPhase.Dispatch;
             return;
         }
@@ -93,6 +102,20 @@ internal partial class RuntimeNativeNpc
         }
     }
 
+    internal static int? ObserveSandboxMarkerNativePhase(int? phase, bool movementPending, bool hasSelectedIdle) => phase switch
+    {
+        // Source observation precedes this update's marker handler. The
+        // process-selected IDLE can survive a marker change; the new handler's
+        // selection still cannot promote its own eligibility evaluation.
+        2 => !movementPending && hasSelectedIdle ? 3 : 2,
+        3 => 3,
+        // An earlier continuation may own a valid request without having
+        // recorded this separate native phase. Keep it unknown until the next
+        // real update observes the same source transition; never assume two.
+        null => !movementPending && hasSelectedIdle ? 3 : null,
+        _ => throw new InvalidDataException("Sandbox marker observation has no admitted native phase.")
+    };
+
     private bool ReleaseSandboxMarkerForReselection()
     {
         if (_sandboxMarker is null) return true;
@@ -108,6 +131,7 @@ internal partial class RuntimeNativeNpc
         {
             RequestIdleRetirement();
             _sandboxMarkerPhase = FalloutSandboxMarkerPhase.Retiring;
+            _sandboxMarkerNativePhase = null;
             return false;
         }
         return false;
@@ -118,6 +142,7 @@ internal partial class RuntimeNativeNpc
         if (_sandboxMarker is null) return false;
         _sandboxMarkerPendingSelection = selected;
         _sandboxMarkerPhase = FalloutSandboxMarkerPhase.Retiring;
+        _sandboxMarkerNativePhase = null;
         RequestIdleRetirement();
         return true;
     }
@@ -136,6 +161,7 @@ internal partial class RuntimeNativeNpc
         if (release && _sandboxMarker is { } marker)
             _aiWorld?.ReleaseIdleMarker(marker, 0, Appearance.Reference!.Value);
         _sandboxMarker = null; _sandboxMarkerSource = null; _sandboxMarkerFloor = null;
+        _sandboxMarkerNativePhase = null;
         _sandboxMarkerPendingSelection = null;
         if (clearRetained && _aiReferenceState is { } state)
         {
@@ -170,7 +196,7 @@ internal partial class RuntimeNativeNpc
             _sandboxMarkerSource!.Form, FalloutActorFurnitureContinuation.RecordHash(_aiStack!.GetEffective(_sandboxMarkerSource.Form)),
             _sandboxMarkerPhase, _sandboxMarkerFloor is { } floor ? [floor.X, floor.Y, floor.Z] : null,
             _sandboxMarkerPendingSelection is not null, _sandboxMarkerPendingSelection?.Record?.FormKey,
-            _sandboxMarkerPendingSelection?.Forced == true);
+            _sandboxMarkerPendingSelection?.Forced == true, _sandboxMarkerNativePhase);
     }
 
     private void BindSandboxMarkerCapture()
@@ -200,6 +226,7 @@ internal partial class RuntimeNativeNpc
         _aiQuestRevision = _questState!.ProgressRevision; _aiActivityRevision = Activity.Revision;
         _sandboxMarker = saved.Marker; _sandboxMarkerSource = FalloutIdleCollection.Read(_aiStack!.GetEffective(saved.Source));
         _sandboxMarkerPhase = saved.Phase;
+        _sandboxMarkerNativePhase = saved.NativePhase;
         _sandboxMarkerFloor = saved.Floor is { } floor ? new Vector3(floor[0], floor[1], floor[2]) : null;
         var pending = saved.PendingPackage is { } key ? _aiStack.GetEffective(key) : null;
         _sandboxMarkerPendingSelection = saved.PendingSelectionAccepted

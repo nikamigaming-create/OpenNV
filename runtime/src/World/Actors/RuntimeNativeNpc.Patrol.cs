@@ -28,10 +28,12 @@ internal partial class RuntimeNativeNpc
         if (Combat?.Dead == true || Combat?.OwnsPose == true || Combat?.Restrained == true)
         {
             InterruptSandboxFurniture();
+            InterruptSleepFurniture();
             InterruptSandboxMarker();
             return;
         }
         if (_sandboxPackage is not null || _pendingCurrentLocationSandbox is not null) { AdvanceSandbox(delta); return; }
+        if (_sleepPackage is not null || _pendingCurrentLocationSleep is not null) { AdvanceSleep(delta); return; }
         if (_findFurniture is not null) AdvanceFindFurniture(delta);
         if (_furnitureApproaching) { AdvanceFurnitureApproach(delta); return; }
         if (_guardPackage is not null) { AdvanceGuard(delta); return; }

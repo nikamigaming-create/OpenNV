@@ -43,6 +43,8 @@ internal sealed partial class FalloutPlayerInventory
 
         Validate(thisItems.Values);
         Validate(otherItems.Values);
+        InvalidateTraversalForInsertions(thisItems.Values);
+        other.InvalidateTraversalForInsertions(otherItems.Values);
         _items.Clear();
         foreach (var item in thisItems) _items.Add(item.Key, item.Value);
         other._items.Clear();

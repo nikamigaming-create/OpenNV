@@ -5,7 +5,7 @@ using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.World.Cells;
 
-internal static class IngestibleContracts
+internal static partial class IngestibleContracts
 {
     internal static void Run()
     {
@@ -35,7 +35,9 @@ internal static class IngestibleContracts
                 Item(4, Effect(13, 20, 99)), Item(5, Effect(11, 0, 0), Effect(14, 50, 0)),
                 Spell(0x40, Effect(11, 2, 5), Effect(12, 1, 0, true)), Spell(0x41, Effect(15, 1, 8, actorValue: 7)),
                 Food(6, Effect(11, 4, 5), Effect(15, 1, 8, actorValue: 7)),
+                Food(0x18, Effect(11, 4, 5)),
                 Ingredient(8, Effect(11, 4, 5)),
+                NativeInventoryOrderFixture(actor),
                 Record("INGR", 9, Field("EDID", Text("UnknownIngredientFlags")), Field("DATA", BitConverter.GetBytes(1f)),
                     Field("ENIT", [0, 0, 0, 0, 4, 0, 0, 0]), Effect(11, 4, 5)),
                 Modifier(15, 0, 0x76, 7), Modifier(10, 34, 0x70), Modifier(11, 0, 0x70), Modifier(12, 1, 0x70), Modifier(13, 0, 0xf0), Modifier(14, 0, 0x1000075, 54, 20),
@@ -53,10 +55,13 @@ internal static class IngestibleContracts
                     Record("REFR", 0x92, Field("NAME", BitConverter.GetBytes(6u)), Field("DATA", new byte[24])),
                     Record("REFR", 0x95, Field("NAME", BitConverter.GetBytes(6u)), Field("DATA", new byte[24]), Field("XCNT", BitConverter.GetBytes(2))),
                     Record("REFR", 0x96, Field("NAME", BitConverter.GetBytes(0x21u)), Field("DATA", new byte[24])),
+                    Record("ACHR", 0x97, Field("NAME", BitConverter.GetBytes(0x23u)), Field("DATA", new byte[24])),
+                    Record("REFR", 0x98, Field("NAME", BitConverter.GetBytes(0x24u)), Field("DATA", new byte[24])),
                     Record("ACRE", 0x94, Field("NAME", BitConverter.GetBytes(0x20u)), Field("DATA", new byte[24]))));
             File.WriteAllBytes(path, bytes);
             using var records = FalloutPluginStack.Load(directory, ["Test.esm"]);
             FalloutFormKey Key(uint id) => new("Test.esm", id);
+            InventoryTraversalContracts(records);
             using (var foodWorld = new FalloutReferenceWorld(records))
             {
                 Check(foodWorld.IsActorFood(Key(6)) && !foodWorld.IsActorFood(Key(1)),

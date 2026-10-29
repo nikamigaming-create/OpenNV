@@ -10,7 +10,8 @@ internal sealed record FalloutActorSandboxMarkerContinuation(FalloutActorPackage
     ulong RandomState, double PollRemaining, FalloutScheduleTime? ScheduleTime, FalloutFormKey? SelectedPackage,
     FalloutActorActivitySnapshot Activity, FalloutFaceBlinkSnapshot? Blink,
     FalloutFormKey Marker, FalloutFormKey Source, string SourceSha256, FalloutSandboxMarkerPhase Phase,
-    float[]? Floor, bool PendingSelectionAccepted = false, FalloutFormKey? PendingPackage = null, bool PendingSelectionForced = false)
+    float[]? Floor, bool PendingSelectionAccepted = false, FalloutFormKey? PendingPackage = null, bool PendingSelectionForced = false,
+    int? NativePhase = null)
 {
     internal const string CaptureBlocker = "Sandbox marker approach, request and reservation continuation.";
     internal FalloutFormKey Package => Assignment.Package;
@@ -22,6 +23,8 @@ internal sealed record FalloutActorSandboxMarkerContinuation(FalloutActorPackage
         if (!FalloutActorFurnitureContinuation.ValidKey(Package) || !FalloutActorFurnitureContinuation.ValidKey(Marker) ||
             !FalloutActorFurnitureContinuation.ValidKey(Source) || !FalloutActorFurnitureContinuation.ValidHash(PackageSha256) ||
             !FalloutActorFurnitureContinuation.ValidHash(SourceSha256) || !Enum.IsDefined(Phase) ||
+            NativePhase is not (null or 2 or 3) ||
+            Phase is FalloutSandboxMarkerPhase.Approach or FalloutSandboxMarkerPhase.Retiring && NativePhase is not null ||
             Floor is not null && (Floor.Length != 3 || Floor.Any(value => !float.IsFinite(value))) ||
             PendingPackage is { } pending && !FalloutActorFurnitureContinuation.ValidKey(pending) ||
             !PendingSelectionAccepted && (PendingPackage is not null || PendingSelectionForced) ||
@@ -51,6 +54,9 @@ internal sealed record FalloutActorSandboxMarkerContinuation(FalloutActorPackage
             throw new InvalidDataException("Saved Sandbox marker event package differs from its source.");
         if (Blink is not null && Blink.Settings != FalloutFaceBlinkSettings.Read(records))
             throw new InvalidDataException("Saved Sandbox marker blink settings differ from source.");
+        if (NativePhase == 3 && (actor.SandboxIdleSelection?.SelectedIdle is not { } selectedIdle ||
+            records.GetEffective(selectedIdle).Signature != "IDLE"))
+            throw new InvalidDataException("Active Sandbox marker has no retained source IDLE selection.");
         if (Phase == FalloutSandboxMarkerPhase.Playback && actor.IdleRequests is null)
             throw new InvalidDataException("Sandbox marker playback has no retained source request owner.");
     }

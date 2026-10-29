@@ -23,6 +23,7 @@ internal sealed partial class FalloutPlayerInventory
             .ToArray();
         Notifications.RequirePublish(events);
         var priorItems = new Dictionary<FalloutFormKey, FalloutCampaignItem>(_items);
+        var priorTraversal = _traversal;
         var priorEquipped = _equipped.ToArray();
         var priorRandom = _random.State;
         var priorRevision = Revision;
@@ -42,6 +43,7 @@ internal sealed partial class FalloutPlayerInventory
             _equipped.Clear();
             _equipped.UnionWith(priorEquipped);
             _random = new(priorRandom);
+            _traversal = priorTraversal;
             Revision = priorRevision;
             throw;
         }

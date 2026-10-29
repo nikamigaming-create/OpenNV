@@ -152,12 +152,14 @@ internal sealed partial class FalloutPlayerInventory
         if (toRemove != 0) throw new InvalidDataException("Item extra-data stacks do not contain the saved count.");
         return stacks.Where(stack => stack.Count != 0).ToArray();
     }
-    internal void Add(FalloutPluginStack records, FalloutFormKey form, int count, int level, bool silent,
-        FalloutGlobalState? globals = null, FalloutItemVariant? extra = null, Action<FalloutFormKey>? validateAddition = null)
+    internal IReadOnlyList<FalloutItemAddition> Add(FalloutPluginStack records, FalloutFormKey form, int count, int level, bool silent,
+        FalloutGlobalState? globals = null, FalloutItemVariant? extra = null, Action<FalloutFormKey>? validateAddition = null,
+        bool nativeContainerOrder = false)
     {
         RequireNoChangeInProgress();
         var random = new FalloutSoundRandomState(_random.State);
-        var additions = FalloutLeveledItems.Resolve(records, form, count, level, random.NextBounded, globals is null ? null : globals.Get, extra);
+        var additions = FalloutLeveledItems.Resolve(records, form, count, level, random.NextBounded, globals is null ? null : globals.Get, extra,
+            nativeContainerOrder);
         // Leveled sources can resolve to a different set of forms. Check the
         // selected winners before publishing inventory or the random state.
         if (validateAddition is not null)
@@ -187,6 +189,7 @@ internal sealed partial class FalloutPlayerInventory
         Notifications.RequirePublish(notices);
         Publish(replacements); _random = random;
         Notifications.Publish(notices);
+        return additions;
     }
 
     internal void Equip(FalloutPluginStack records, FalloutFormKey form, bool? noUnequip = null)
@@ -237,6 +240,7 @@ internal sealed partial class FalloutPlayerInventory
             replacements.Select(item => item.FormKey).Distinct().Count() != replacements.Count)
             throw new InvalidDataException("Player inventory transaction contains invalid or duplicate items.");
         ValidateWeaponInstances(_items.Values.Where(item => replacements.All(value => value.FormKey != item.FormKey)).Concat(replacements));
+        InvalidateTraversalForInsertions(replacements);
         foreach (var item in replacements) _items[item.FormKey] = item;
         if (replacements.Count != 0) ++Revision;
     }

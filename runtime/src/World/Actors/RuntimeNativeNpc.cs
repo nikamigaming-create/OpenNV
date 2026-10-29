@@ -247,6 +247,7 @@ internal partial class RuntimeNativeNpc : CharacterBody3D
         if (Combat?.Dead == true || Combat?.OwnsPose == true || Combat?.Restrained == true)
         {
             InterruptSandboxFurniture();
+            InterruptSleepFurniture();
             InterruptSandboxMarker();
             if (_currentIdleRequest is { State: 2 } || _queuedIdleRequest is not null) RequestIdleRetirement();
             ConsumeIdleRetirement();

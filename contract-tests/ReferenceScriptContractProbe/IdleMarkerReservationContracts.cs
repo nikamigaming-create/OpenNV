@@ -4,6 +4,7 @@ using System.Text.Json;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.World.Cells;
+using OpenNV.Runtime.World.Actors;
 
 internal static class IdleMarkerReservationContracts
 {
@@ -29,7 +30,8 @@ internal static class IdleMarkerReservationContracts
                 Record("NPC_", 0x700), Record("CREA", 0x701), Record("STAT", 0x711),
                 Record("PACK", 0x720, Field("EDID", Encoding.ASCII.GetBytes("MarkerSandbox\0")),
                     Field("PKDT", packageData), Field("PLDT", location), Field("IDLC", [0]), Field("POBA", [])),
-                Record("IDLM", 0x710, Field("IDLF", [0]), Field("IDLC", [0]), Field("IDLT", BitConverter.GetBytes(0f))),
+                Record("IDLM", 0x710, Field("IDLF", [0]), Field("IDLC", [1]), Field("IDLA", U32(0x730)), Field("IDLT", BitConverter.GetBytes(0f))),
+                Record("IDLE", 0x730), Record("IDLE", 0x731),
                 Record("CELL", 0x800, Field("DATA", [1])), group));
             using var records = FalloutPluginStack.Load(directory, ["Markers.esm"]);
             using var world = new FalloutReferenceWorld(records);
@@ -130,9 +132,52 @@ internal static class IdleMarkerReservationContracts
                     ? retained with { Reference = competitor } : value).ToArray()));
                 Require(conflict.InstanceCount == 0 && !conflict.OwnsIdleMarker(first, 0, actor),
                     "Conflicting cold marker continuations partially published actors or reservations.");
+                var markerPrefix = participant.SandboxMarker! with { Phase = FalloutSandboxMarkerPhase.Dispatch, NativePhase = 2 };
+                Require(RuntimeNativeNpc.SandboxMarkerProcedure(markerPrefix.NativePhase.Value) == 0 &&
+                    RuntimeNativeNpc.ObserveSandboxMarkerNativePhase(2, movementPending: false, hasSelectedIdle: false) == 2 &&
+                    RuntimeNativeNpc.ObserveSandboxMarkerNativePhase(2, movementPending: true, hasSelectedIdle: true) == 2,
+                    "Marker selection or movement alone invented active native phase three before first eligibility.");
+                participant.SandboxMarker = markerPrefix;
+                var dispatchBytes = JsonSerializer.Serialize(source.Capture());
+                using var dispatchCold = new FalloutReferenceWorld(records);
+                dispatchCold.Restore(JsonSerializer.Deserialize<FalloutReferenceSnapshot[]>(dispatchBytes)!);
+                var restoredMarker = dispatchCold.Get(actor).SandboxMarker!;
+                Require(restoredMarker.NativePhase == 2 && RuntimeNativeNpc.SandboxMarkerProcedure(restoredMarker.NativePhase.Value) == 0 &&
+                    JsonSerializer.Serialize(dispatchCold.Capture()) == dispatchBytes,
+                    "Cold marker dispatch promoted its native phase or replayed source selection.");
+                var observedPhase = RuntimeNativeNpc.ObserveSandboxMarkerNativePhase(2, movementPending: false, hasSelectedIdle: true);
+                Require(observedPhase == 3 && RuntimeNativeNpc.SandboxMarkerProcedure(observedPhase.Value) == 46 &&
+                    RuntimeNativeNpc.ObserveSandboxMarkerNativePhase(3, movementPending: false, hasSelectedIdle: true) == 3,
+                    "A subsequent observed marker IDLE lost its source phase-three procedure.");
+                Reject(() => (markerPrefix with { NativePhase = observedPhase }).Validate(records, source, participant));
+                // Process history may come from a different marker. The
+                // native observation runs before this marker filters IDLEs.
+                participant.SandboxIdleSelection = new(0, Key(0x731));
+                participant.SandboxMarker = markerPrefix with { NativePhase = observedPhase };
+                var activeBytes = JsonSerializer.Serialize(source.Capture());
+                using var activeCold = new FalloutReferenceWorld(records);
+                activeCold.Restore(JsonSerializer.Deserialize<FalloutReferenceSnapshot[]>(activeBytes)!);
+                Require(activeCold.Get(actor).SandboxMarker!.NativePhase == 3 &&
+                    activeCold.Get(actor).SandboxIdleSelection!.SelectedIdle == Key(0x731) &&
+                    !FalloutIdleCollection.Read(records.GetEffective(Key(0x710))).Idles.Contains(Key(0x731)) &&
+                    JsonSerializer.Serialize(activeCold.Capture()) == activeBytes,
+                    "Cold marker dispatch lost its inherited process IDLE/observed phase or rebound it to the new marker's eligibility list.");
+                Reject(() => (markerPrefix with { Phase = FalloutSandboxMarkerPhase.Approach }).Validate());
+                Reject(() => (markerPrefix with { NativePhase = 1 }).Validate());
+                var legacyJson = JsonSerializer.SerializeToNode(markerPrefix with
+                { Phase = FalloutSandboxMarkerPhase.Playback, NativePhase = null })!.AsObject();
+                legacyJson.Remove(nameof(FalloutActorSandboxMarkerContinuation.NativePhase));
+                var legacyMarker = legacyJson.Deserialize<FalloutActorSandboxMarkerContinuation>()!;
+                legacyMarker.Validate();
+                Require(legacyMarker.NativePhase is null &&
+                    RuntimeNativeNpc.ObserveSandboxMarkerNativePhase(legacyMarker.NativePhase, movementPending: true, hasSelectedIdle: true) is null &&
+                    RuntimeNativeNpc.ObserveSandboxMarkerNativePhase(legacyMarker.NativePhase, movementPending: false, hasSelectedIdle: false) is null &&
+                    RuntimeNativeNpc.ObserveSandboxMarkerNativePhase(legacyMarker.NativePhase, movementPending: false, hasSelectedIdle: true) == 3,
+                    "An absent native marker phase was invented at load or failed to earn its next actual selected-IDLE observation.");
+                Reject(() => RuntimeNativeNpc.SandboxMarkerProcedure(1));
             }
             Console.WriteLine("OPENNV_IDLE_MARKER_RESERVATION_CONTRACT_PASS placedSource=true capacityOne=true separatePlacements=true " +
-                "occupancyAndReservationIndependent=true ownerGuard=true disabledDeletedTakenRefused=true unknownOccupancyRefused=true coldContinuation=true atomicConflict=true gameplay=unverified");
+                "occupancyAndReservationIndependent=true ownerGuard=true disabledDeletedTakenRefused=true unknownOccupancyRefused=true coldContinuation=true atomicConflict=true firstDispatchProcedure0=true inheritedDispatchProcedure46=true coldNativePhase=true absentPhaseRemainsUnknownUntilObserved=true gameplay=unverified");
         }
         finally { File.Delete(path); Directory.Delete(directory, recursive: false); }
     }

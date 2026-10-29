@@ -5,23 +5,75 @@ using OpenNV.Runtime.Gameplay.State;
 
 namespace OpenNV.Runtime.World.Cells;
 
-// POBA has completed, but the first Sandbox activity could not be admitted.
-// This preserves the stopped failure, not an unowned activity or route.
+internal sealed record FalloutSandboxFoodInput(FalloutFormKey Item, string Sha256, int Count);
+
+// These are the observed inputs to an unresolved choice, not a selected meal.
+internal sealed class FalloutSandboxMealSelectionException(IReadOnlyList<FalloutSandboxFoodInput> inputs)
+    : NotSupportedException(Describe(inputs))
+{
+    internal IReadOnlyList<FalloutSandboxFoodInput> Inputs { get; } = inputs.ToArray();
+    internal static string Describe(IReadOnlyList<FalloutSandboxFoodInput> inputs) =>
+        $"Eat inventory selection requires one qualified food kind; found {inputs.Count}: " +
+        string.Join(", ", inputs.Select(food => $"{food.Item} x{food.Count}")) + ".";
+}
+
+internal sealed record FalloutSandboxUnchosenMeal(FalloutSandboxActivityProgress Activity,
+    IReadOnlyList<FalloutSandboxFoodInput> Inputs, bool SelectedActivity,
+    ulong RandomBeforeSelection, ulong RandomBeforeMeal, ulong RandomAfterFailure)
+{
+    internal string Error => FalloutSandboxMealSelectionException.Describe(Inputs);
+    internal void Validate()
+    {
+        if (Activity is null || Inputs is null || Inputs.Count < 2 || !SelectedActivity ||
+            Activity.Activity != FalloutSandboxActivity.Eat || Activity.Target is not null ||
+            RandomBeforeMeal != RandomAfterFailure || Inputs.Any(input => input is null || input.Count <= 0 ||
+                !FalloutActorFurnitureContinuation.ValidKey(input.Item) || !FalloutActorFurnitureContinuation.ValidHash(input.Sha256)) ||
+            Inputs.Select(input => input.Item).Distinct().Count() != Inputs.Count)
+            throw new InvalidDataException("Stopped Sandbox meal has no exact unchosen inventory input.");
+        Activity.Validate();
+    }
+
+    internal bool MatchesInputs(FalloutPluginStack records, FalloutReferenceInstance actor)
+    {
+        Validate();
+        if (actor.Inventory is null || actor.SoundRandom.State != RandomAfterFailure) return false;
+        var foods = actor.Inventory.Contents.Items.Where(item => item.Count > 0 && FalloutActorFood.IsFood(records, item.FormKey)).ToArray();
+        return foods.Length == Inputs.Count && foods.Zip(Inputs).All(pair => pair.First.FormKey == pair.Second.Item &&
+            pair.First.Count == pair.Second.Count) && MatchesSources(records);
+    }
+
+    internal bool MatchesSources(FalloutPluginStack records)
+    {
+        Validate();
+        return Inputs.All(input => FalloutActorFood.IsFood(records, input.Item) &&
+            FalloutActorFurnitureContinuation.RecordHash(records.GetEffective(input.Item))
+                .Equals(input.Sha256, StringComparison.OrdinalIgnoreCase));
+    }
+
+    internal FalloutSandboxUnchosenMeal Copy() => this with
+    { Activity = Activity with { Preferences = (byte[])Activity.Preferences.Clone() }, Inputs = Inputs.ToArray() };
+}
+
+// POBA has completed, but activity admission or the first meal choice stopped.
+// The optional prefix retains a consumed selection without inventing motion.
 internal sealed record FalloutActorSandboxAdmissionFailure(FalloutFormKey Package, string PackageSha256,
     string Error, float[] Position, float[] Basis, ulong AiRandomState, double PollRemaining,
     FalloutScheduleTime? ScheduleTime, long QuestRevision, long ActivityRevision,
     FalloutActorActivitySnapshot Activity, long EventRevision, string LastEvent,
     FalloutFormKey LastPackage, string LastPackageSha256, FalloutFaceBlinkSnapshot? Blink = null,
-    FalloutReferencePlacement? SourcePlacement = null, long? SelectionAttempts = null)
+    FalloutReferencePlacement? SourcePlacement = null, long? SelectionAttempts = null,
+    FalloutSandboxUnchosenMeal? UnchosenMeal = null)
 {
     internal const string AdmissionErrorPrefix = "Sandbox candidate admission requires its activity owner: ";
 
     internal void Validate()
     {
+        UnchosenMeal?.Validate();
         if (!FalloutActorFurnitureContinuation.ValidKey(Package) ||
             !FalloutActorFurnitureContinuation.ValidHash(PackageSha256) ||
-            string.IsNullOrWhiteSpace(Error) || !Error.StartsWith(AdmissionErrorPrefix, StringComparison.Ordinal) ||
-            Error.Length == AdmissionErrorPrefix.Length || Position is not { Length: 3 } || Basis is not { Length: 9 } ||
+            string.IsNullOrWhiteSpace(Error) || (UnchosenMeal is null
+                ? !Error.StartsWith(AdmissionErrorPrefix, StringComparison.Ordinal) || Error.Length == AdmissionErrorPrefix.Length
+                : Error != UnchosenMeal.Error) || Position is not { Length: 3 } || Basis is not { Length: 9 } ||
             Position.Concat(Basis).Any(value => !float.IsFinite(value)) ||
             !double.IsFinite(PollRemaining) || PollRemaining < 0 || QuestRevision < -1 || QuestRevision == long.MaxValue ||
             ActivityRevision < -1 || ActivityRevision == long.MaxValue || Activity is null || Activity.InCombat ||
@@ -47,6 +99,20 @@ internal sealed record FalloutActorSandboxAdmissionFailure(FalloutFormKey Packag
 
     internal void Validate(FalloutPluginStack records, FalloutReferenceInstance actor)
     {
+        if (actor.InterruptedSandboxAdmission is not null)
+            throw new InvalidDataException("Historical Sandbox failure cannot resume as a live procedure.");
+        ValidateActor(records, actor, historical: false);
+    }
+
+    internal void ValidateInterrupted(FalloutPluginStack records, FalloutReferenceInstance actor)
+    {
+        if (actor.Injury?.Dead != true)
+            throw new InvalidDataException("Historical Sandbox failure requires its authoritative corpse owner.");
+        ValidateActor(records, actor, historical: true);
+    }
+
+    private void ValidateActor(FalloutPluginStack records, FalloutReferenceInstance actor, bool historical)
+    {
         Validate();
         if (SourcePlacement is { } placement && (records.GetEffective(placement.Cell).Signature != "CELL" ||
             actor.Placement is not { } authoritative || placement.Cell != authoritative.Cell ||
@@ -54,8 +120,11 @@ internal sealed record FalloutActorSandboxAdmissionFailure(FalloutFormKey Packag
             !placement.RotationRadians.SequenceEqual(authoritative.RotationRadians)))
             throw new InvalidDataException("Stopped Sandbox relocation differs from authoritative placement.");
         var signature = records.GetEffective(actor.Base).Signature;
+        if (UnchosenMeal is { } meal && (signature != "NPC_" ||
+            !(historical ? meal.MatchesSources(records) : meal.MatchesInputs(records, actor))))
+            throw new InvalidDataException("Stopped Sandbox meal differs from its unchosen source inventory.");
         if (signature == "CREA" && (Blink is not null || SelectionAttempts is null ||
-                AiRandomState != actor.SoundRandom.State || ActivityRevision != Activity.Revision) ||
+                !historical && AiRandomState != actor.SoundRandom.State || ActivityRevision != Activity.Revision) ||
             signature == "NPC_" && SelectionAttempts is not null)
             throw new InvalidDataException("Stopped Sandbox admission has unowned actor-specific state.");
         if (signature is not ("NPC_" or "CREA") || actor.PackageMotion is not null ||
@@ -93,7 +162,9 @@ internal sealed record FalloutActorSandboxAdmissionFailure(FalloutFormKey Packag
             events is not { Active: { } active, Done: false, Error: null } || active.Form != prior.Package ||
             events.Revision != prior.EventRevision || events.LastEvent != prior.LastEvent || events.LastPackage != prior.LastPackage)
             return false;
-        prior.Validate(records, actor);
+        // The matching live owner already captured this prefix before combat.
+        // Current loot and random streams now belong to the corpse/combat.
+        prior.ValidateInterrupted(records, actor);
         actor.InterruptedSandboxAdmission = prior.Copy();
         actor.SandboxAdmissionFailure = null;
         return true;
@@ -175,7 +246,13 @@ internal sealed record FalloutActorSandboxAdmissionFailure(FalloutFormKey Packag
     }
 
     internal FalloutActorSandboxAdmissionFailure Copy() => this with
-    { Position = (float[])Position.Clone(), Basis = (float[])Basis.Clone(), Blink = Blink?.Copy(), SourcePlacement = SourcePlacement?.Copy() };
+    {
+        Position = (float[])Position.Clone(),
+        Basis = (float[])Basis.Clone(),
+        Blink = Blink?.Copy(),
+        SourcePlacement = SourcePlacement?.Copy(),
+        UnchosenMeal = UnchosenMeal?.Copy()
+    };
 }
 
 // Restoring a cold actor is preparation until it actually enters the tree.
