@@ -2,12 +2,26 @@ using System.Buffers.Binary;
 using System.Text;
 using System.Text.Json;
 using OpenNV.Runtime.Content;
+using OpenNV.Runtime.World.Actors;
 using OpenNV.Runtime.World.Cells;
 
 internal static partial class FurnitureContracts
 {
     private static void PackageSittingContracts()
     {
+        Require(RuntimeNativeNpc.SandboxFurnitureProcedure(1, sleeping: false, activityReselectionExit: false) == 48 &&
+            RuntimeNativeNpc.SandboxFurnitureProcedure(1, sleeping: true, activityReselectionExit: false) == 8,
+            "Occupied Sandbox furniture confused its activity procedure with the package or sitting code.");
+        Require(RuntimeNativeNpc.SandboxFurnitureProcedure(4, sleeping: false, activityReselectionExit: true) == 21 &&
+            RuntimeNativeNpc.SandboxFurnitureProcedure(4, sleeping: true, activityReselectionExit: true) == 21,
+            "Sandbox activity reselection retained its occupied procedure after requesting Get Up.");
+        foreach (var transition in new[] { 0, 2, 4 })
+        {
+            Reject(() => RuntimeNativeNpc.SandboxFurnitureProcedure(transition, sleeping: false, activityReselectionExit: false));
+            Reject(() => RuntimeNativeNpc.SandboxFurnitureProcedure(transition, sleeping: true, activityReselectionExit: false));
+        }
+        foreach (var invalidExit in new[] { 0, 1, 2 })
+            Reject(() => RuntimeNativeNpc.SandboxFurnitureProcedure(invalidExit, sleeping: false, activityReselectionExit: true));
         var directory = Path.Combine(Path.GetTempPath(), "opennv-package-sitting-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(directory);
         try

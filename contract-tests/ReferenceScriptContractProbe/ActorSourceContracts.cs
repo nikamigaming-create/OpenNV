@@ -386,6 +386,29 @@ internal static class ActorSourceContracts
             Reject(() => new FalloutDialogueVoiceIndex(paths.Skip(1)).Resolve(speaker, info, 0));
             Reject(() => new FalloutDialogueVoiceIndex(paths.Append(paths[0].Replace(".wav", ".ogg"))).Resolve(speaker, info, 0));
             Reject(() => new FalloutDialogueVoiceIndex(paths).Resolve(speaker, info with { Speaker = Key(0x800) }, 0));
+            Check(new FalloutDialogueVoiceIndex(paths.Skip(1)).ResolveOrUnrecorded(speaker, info, 0) is null,
+                "Absent audio and LIP did not admit an explicit unrecorded response.");
+            Check(new FalloutDialogueVoiceIndex(paths).ResolveOrUnrecorded(speaker, info, 0) == binding,
+                "Unrecorded admission changed an exact recorded voice.");
+            Reject(() => new FalloutDialogueVoiceIndex(paths.Skip(1).Append(Path.ChangeExtension(paths[0], ".lip")))
+                .ResolveOrUnrecorded(speaker, info, 0));
+            Reject(() => new FalloutDialogueVoiceIndex(paths.Append(paths[0].Replace(".wav", ".ogg")))
+                .ResolveOrUnrecorded(speaker, info, 0));
+            Reject(() => new FalloutDialogueVoiceIndex(paths).ResolveOrUnrecorded(speaker,
+                info with { Speaker = Key(0x800) }, 0));
+            var unrecorded = new FalloutUnrecordedSpeech(" é ", .05f);
+            Check(unrecorded.TextBytes == 3 && Math.Abs(unrecorded.DurationSeconds - .15) < .000001 &&
+                !unrecorded.Advance(.1) && !unrecorded.Advance(.06) && unrecorded.RemainingSeconds < 0 &&
+                unrecorded.Advance(0), "Text speech lost source bytes or completed on its crossing tick.");
+            Check(new FalloutUnrecordedSpeech("", .05f).Advance(0) &&
+                new FalloutUnrecordedSpeech("source", 0).Advance(0),
+                "A zero-duration authored response failed its first ordinary speech tick.");
+            Reject(() => new FalloutUnrecordedSpeech("source", -.05f));
+            Reject(() => new FalloutUnrecordedSpeech("source", float.NaN));
+            Reject(() => new FalloutUnrecordedSpeech("source", float.PositiveInfinity));
+            Reject(() => new FalloutUnrecordedSpeech("source", float.MaxValue));
+            Reject(() => new FalloutUnrecordedSpeech("source", .05f).Advance(double.NaN));
+            Reject(() => new FalloutUnrecordedSpeech("source", .05f).Advance(-.1));
             var clock = new FalloutActorAnimationState(); var hash = new string('a', 64);
             clock.Bind("meshes/creatures/test/mtidle.kf", hash); clock.Advance(.73);
             var snapshot = JsonSerializer.Deserialize<FalloutActorAnimationSnapshot>(JsonSerializer.Serialize(clock.Capture()))!;

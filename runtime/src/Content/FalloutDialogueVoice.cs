@@ -68,6 +68,7 @@ internal sealed record FalloutDialogueVoiceBinding(FalloutFormKey Actor, Fallout
 internal sealed class FalloutDialogueVoiceIndex
 {
     private readonly Dictionary<string, List<string>> _voices = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _lips = new(StringComparer.OrdinalIgnoreCase);
 
     internal FalloutDialogueVoiceIndex(IEnumerable<string> paths)
     {
@@ -75,9 +76,10 @@ internal sealed class FalloutDialogueVoiceIndex
         {
             var canonical = path.Replace('\\', '/');
             var parts = canonical.Split('/');
+            var extension = Path.GetExtension(canonical).ToLowerInvariant();
             if (parts.Length != 5 || !parts[0].Equals("sound", StringComparison.OrdinalIgnoreCase) ||
                 !parts[1].Equals("voice", StringComparison.OrdinalIgnoreCase) ||
-                Path.GetExtension(canonical).ToLowerInvariant() is not (".ogg" or ".wav" or ".mp3")) continue;
+                extension is not (".ogg" or ".wav" or ".mp3" or ".lip")) continue;
             var stem = Path.GetFileNameWithoutExtension(canonical);
             var responseAt = stem.LastIndexOf('_');
             var identityAt = responseAt < 1 ? -1 : stem.LastIndexOf('_', responseAt - 1);
@@ -85,12 +87,29 @@ internal sealed class FalloutDialogueVoiceIndex
                 !uint.TryParse(stem.AsSpan(identityAt + 1, 8), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var id) ||
                 id > 0xffffff || !byte.TryParse(stem.AsSpan(responseAt + 1), NumberStyles.None, CultureInfo.InvariantCulture, out var response)) continue;
             var key = Key(parts[2], parts[3], id, response);
+            if (extension == ".lip") { _lips.Add(key); continue; }
             if (!_voices.TryGetValue(key, out var entries)) _voices.Add(key, entries = []);
             entries.Add(canonical);
         }
     }
 
     internal FalloutDialogueVoiceBinding Resolve(FalloutDialogueSpeaker speaker, FalloutDialogueInfo info, int responseIndex)
+        => Find(speaker, info, responseIndex) ?? throw MissingVoice(speaker, info, responseIndex, 0);
+
+    // Only absence of both media lanes admits the native text-duration owner.
+    // An audio-less LIP needs its own duration/setting path, not text timing.
+    internal FalloutDialogueVoiceBinding? ResolveOrUnrecorded(FalloutDialogueSpeaker speaker,
+        FalloutDialogueInfo info, int responseIndex)
+    {
+        var binding = Find(speaker, info, responseIndex);
+        if (binding is not null) return binding;
+        var response = info.Responses[responseIndex];
+        if (_lips.Contains(Key(info.Record.FormKey.OwnerPlugin, speaker.VoiceName, info.Record.FormKey.ObjectId, response.Number)))
+            throw new NotSupportedException($"INFO {info.Record.FormKey}/{response.Number} has LIP without audio; its LIP-duration speech owner is unbound.");
+        return null;
+    }
+
+    private FalloutDialogueVoiceBinding? Find(FalloutDialogueSpeaker speaker, FalloutDialogueInfo info, int responseIndex)
     {
         if ((uint)responseIndex >= info.Responses.Count) throw new ArgumentOutOfRangeException(nameof(responseIndex));
         if (info.Speaker is { } specified && specified != speaker.Actor)
@@ -99,11 +118,14 @@ internal sealed class FalloutDialogueVoiceIndex
         if (response.Sound is not null) throw new NotSupportedException($"INFO {info.Record.FormKey}/{response.Number} requires its explicit SOUN response owner.");
         var candidates = _voices.GetValueOrDefault(Key(info.Record.FormKey.OwnerPlugin, speaker.VoiceName,
             info.Record.FormKey.ObjectId, response.Number));
-        if (candidates is not { Count: 1 })
-            throw new InvalidDataException($"INFO {info.Record.FormKey}/{response.Number}, actor {speaker.Actor}, voice {speaker.VoiceType} ({speaker.VoiceName}) has {candidates?.Count ?? 0} exact voice candidates.");
+        if (candidates is null) return null;
+        if (candidates.Count != 1) throw MissingVoice(speaker, info, responseIndex, candidates.Count);
         return new(speaker.Actor, speaker.TraitsOwner, speaker.VoiceType, speaker.VoiceName, info.Record.FormKey,
             info.Record.Plugin.Name, response.Number, candidates[0], Path.ChangeExtension(candidates[0], ".lip"));
     }
+
+    private static InvalidDataException MissingVoice(FalloutDialogueSpeaker speaker, FalloutDialogueInfo info, int responseIndex, int count)
+        => new($"INFO {info.Record.FormKey}/{info.Responses[responseIndex].Number}, actor {speaker.Actor}, voice {speaker.VoiceType} ({speaker.VoiceName}) has {count} exact voice candidates.");
 
     private static string Key(string plugin, string voice, uint info, byte response)
         => $"{plugin}/{voice}/{info:x8}/{response}";
