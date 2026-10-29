@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using OpenNV.Runtime.Content.Definitions;
 
 namespace OpenNV.Runtime.Content;
 
@@ -6,10 +7,10 @@ namespace OpenNV.Runtime.Content;
 // They describe the game platform, not the host process's pointer width.
 internal static class FalloutPlatformConditions
 {
-    internal static float? Evaluate(FalloutCondition condition) => condition.Function switch
+    internal static float? Evaluate(FalloutCondition condition) => condition.Kind switch
     {
-        309 or 523 => 0, // IsXBox / IsPS3
-        524 => 1, // IsWin32 (PC edition, including the 64-bit reimplementation)
+        FalloutConditionFunction.IsXBox or FalloutConditionFunction.IsPS3 => 0,
+        FalloutConditionFunction.IsWin32 => 1, // PC edition, including the 64-bit reimplementation.
         _ => null,
     };
 }
@@ -18,6 +19,8 @@ internal sealed record FalloutCondition(FalloutPluginRecord Owner, byte Flags, f
     ushort Function, uint Argument1, uint Argument2, uint RunOn, uint Reference)
 {
     internal FalloutFormKey FormArgument1 => Owner.Plugin.AdjustFormId(Argument1);
+    internal FalloutConditionFunction Kind => (FalloutConditionFunction)Function;
+    internal uint SubjectRunOn => (Flags & 2) != 0 ? 1 : RunOn;
 
     internal static IReadOnlyList<FalloutCondition> Read(FalloutPluginRecord record) => record.ReadSubrecords()
         .Where(field => field.Signature == "CTDA").Select(field => Read(record, field.Data.Span)).ToArray();
@@ -43,18 +46,32 @@ internal sealed record FalloutCondition(FalloutPluginRecord Owner, byte Flags, f
         {
             if (!group)
             {
-                if ((condition.Flags & 0x1e) != 0 || condition.RunOn != 0 && !evaluateRunOn)
+                if ((condition.Flags & 0x18) != 0 || condition.SubjectRunOn != 0 && !evaluateRunOn)
                     throw new NotSupportedException($"{condition.Owner.FormKey} CTDA needs its flags/run-on owner.");
                 var actual = evaluate(condition);
                 if (!float.IsFinite(actual)) throw new InvalidDataException("Non-finite condition result.");
+                // The comparison union contains a declaring-plugin GLOB FormID
+                // when Use Global is set. Its value uses the same bound global
+                // query owner as an authored GetGlobalValue predicate.
+                var comparison = (condition.Flags & 4) == 0 ? condition.Comparison : evaluate(condition with
+                {
+                    Flags = 0,
+                    Comparison = 0,
+                    Function = (ushort)FalloutConditionFunction.GetGlobalValue,
+                    Argument1 = unchecked((uint)BitConverter.SingleToInt32Bits(condition.Comparison)),
+                    Argument2 = 0,
+                    RunOn = 0,
+                    Reference = 0,
+                });
+                if (!float.IsFinite(comparison)) throw new InvalidDataException("Non-finite condition comparison.");
                 group = (condition.Flags >> 5) switch
                 {
-                    0 => actual == condition.Comparison,
-                    1 => actual != condition.Comparison,
-                    2 => actual > condition.Comparison,
-                    3 => actual >= condition.Comparison,
-                    4 => actual < condition.Comparison,
-                    5 => actual <= condition.Comparison,
+                    0 => actual == comparison,
+                    1 => actual != comparison,
+                    2 => actual > comparison,
+                    3 => actual >= comparison,
+                    4 => actual < comparison,
+                    5 => actual <= comparison,
                     _ => throw new InvalidDataException("Unknown CTDA comparison operation."),
                 };
             }

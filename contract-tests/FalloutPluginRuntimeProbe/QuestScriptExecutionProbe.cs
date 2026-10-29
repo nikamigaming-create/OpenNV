@@ -7,7 +7,7 @@ using OpenNV.Runtime.Gameplay.State;
 internal static class QuestScriptExecutionProbe
 {
     private const string Body = "if active == 1\nif timer > 0\nset timer to timer - GetSecondsPassed\nelse\n" +
-        "set result to Abs (Player.GetActorValue Courage - 4) * 2\nset active to 0\nSetStage ProbeQuest 42\n" +
+        "set result to Abs (Player.GetActorValue Strength - 4) * 2\nset active to 0\nSetStage ProbeQuest 42\n" +
         "if GetStage ProbeQuest == 42\nset result to result + 1\nendif\nendif\nendif";
     internal static void Run()
     {
@@ -43,7 +43,8 @@ internal static class QuestScriptExecutionProbe
                         "SetStage published before its preceding source calculations.");
                     owner.EnterStage(target, stage);
                 };
-            }, name => name == "Courage" ? 8.5 : throw new InvalidDataException("Unexpected actor value argument."));
+            }, name => name.Equals("Strength", StringComparison.OrdinalIgnoreCase) ? 8.5 :
+                throw new InvalidDataException("Unexpected actor value argument."));
             var scripts = Scripts(state);
             var dormant = JsonSerializer.Serialize(scripts.Capture());
             scripts.AdvanceClaimed(quest.FormKey, 10, Host(state));

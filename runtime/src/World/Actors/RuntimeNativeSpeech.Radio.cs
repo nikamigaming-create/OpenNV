@@ -36,7 +36,8 @@ internal partial class RuntimeNativeSpeech
         playerFemale: _playerFemale, actorRace: _actorRace, currentPackage: _currentPackage, vampireQuery: _vampireQuery,
         itemCount: _itemCount, referenceDistance: _referenceDistance, referenceInZone: _referenceInZone,
         sitting: _sitting, deadCount: _deadCount, isDead: _isDead,
-        sleeping: reference => (_references ?? throw new NotSupportedException("Radio has no shared sleeping owner.")).GetSleeping(reference)).Evaluate(condition);
+        sleeping: reference => (_references ?? throw new NotSupportedException("Radio has no shared sleeping owner.")).GetSleeping(reference),
+        world: _references, randomPercent: _dialogueRandom is null ? null : () => _dialogueRandom(100)).Evaluate(condition);
 
     private void BindRadioSpeaker(Voice voice, FalloutPluginRecord station, Node3D? presentation, FalloutRadioConversation radio)
     {

@@ -31,7 +31,7 @@ internal partial class RuntimeNativeOpeningStageDriver
         var stages = _stageResults!.CaptureResults();
         FalloutTerminalMenu.ValidateClosed(_pluginStack, saved, stages);
         var conditions = new FalloutTerminalConditions(_pluginStack, _quests, _scripts.References!,
-            target => ReferencePresentation().GetOpenState(target));
+            target => ReferencePresentation().GetOpenState(target), runtime: SharedConditions);
         foreach (var item in saved)
             _terminalMenus.Add(item.Reference, FalloutTerminalMenu.RestoreClosed(_pluginStack, item, stages,
                 RequireTerminalAdmission, conditions.Evaluate, ExecuteTerminalSelection));
@@ -85,7 +85,7 @@ internal partial class RuntimeNativeOpeningStageDriver
         if (!TerminalHacked(reference) && !world.UnlockWithKey(reference, _inventory))
             throw new InvalidOperationException("Locked terminal requires its password or successful hacking outcome.");
         var conditions = new FalloutTerminalConditions(_pluginStack, _quests, world,
-            target => ReferencePresentation().GetOpenState(target));
+            target => ReferencePresentation().GetOpenState(target), runtime: SharedConditions);
         var menu = new FalloutTerminalMenu(_pluginStack, reference, RequireTerminalAdmission,
             conditions.Evaluate, ExecuteTerminalSelection);
         _terminalMenus[reference] = menu;

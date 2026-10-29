@@ -1,3 +1,4 @@
+using Function = OpenNV.Runtime.Content.Definitions.FalloutConditionFunction;
 using System.Security.Cryptography;
 using System.Text.Json;
 using OpenNV.Runtime.Content;
@@ -14,7 +15,7 @@ internal static class OwnedEscapeStageProbe
         var script = records.GetEffective(FalloutDialogueTopic.RequiredForm(quest, "SCRI"));
         var bindings = new FalloutScriptBindings(records, quest, script, script.ReadSubrecords());
         var package = records.GetEffective(new("Fallout3.esm", 0x067781));
-        var deathCondition = FalloutCondition.Read(package).Single(condition => condition.Function == 84);
+        var deathCondition = FalloutCondition.Read(package).Single(condition => condition.Kind == Function.GetDeadCount);
         var overseer = bindings.Reference("CG04OverseerREF");
         var wakePackage = FalloutScriptPackage.Read(records.GetEffective(new("FalloutNV.esm", 0x09df06)));
         var wakeEvent = wakePackage.EventPrograms["POBA"];
@@ -102,9 +103,10 @@ internal static class OwnedEscapeStageProbe
         if (factionCold.FactionCombatReaction(butchFaction, playerFaction) != 3)
             throw new InvalidDataException("Original stage18 lost source directional faction state on cold restoration.");
         var guardPackage = records.GetEffective(new("Fallout3.esm", 0x0be3d7));
-        var guardQuery = FalloutCondition.Read(guardPackage).First(condition => condition.Function == 14);
+        var guardQuery = FalloutCondition.Read(guardPackage).First(condition => condition.Kind == Function.GetActorValue);
         var guardActor = new FalloutFormKey("Fallout3.esm", 0x064912);
-        if (guardQuery.Argument1 != 63 || escapeWorld.EvaluateActorReferenceCondition(guardActor, guardQuery) != 0)
+        if (guardQuery.Argument1 != 63 ||
+            new FalloutConditionRuntime(records, escapeQuests, escapeWorld).Evaluate(guardQuery, new(guardActor)) != 0)
             throw new InvalidDataException("Original guard Variable02 query lost its current source user-value owner.");
         var amataTravel = records.GetEffective(new("FalloutNV.esm", 0x08f7bc));
         if (FalloutScriptPackage.Read(amataTravel).WeaponsVisible ||

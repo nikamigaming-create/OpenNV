@@ -62,8 +62,7 @@ internal static class OwnedPackageDataProbe
         {
             var value = condition.Function switch
             {
-                1 or 14 => world.EvaluateActorReferenceCondition(reference, condition, null, 1) ??
-                    throw new NotSupportedException("Owned package condition lacks its shared reference query."),
+                1 or 14 => new FalloutConditionRuntime(records, quests, world).Evaluate(condition, new(reference)),
                 56 => FalloutAiPackages.QuestRunning(condition, quests),
                 58 or 59 or 79 or 546 when condition.RunOn == 0 => quests.Evaluate(condition),
                 _ => throw new NotSupportedException($"Owned package priority reached unbound condition {condition.Function}/{condition.RunOn}."),

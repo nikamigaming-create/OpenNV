@@ -17,6 +17,7 @@
     <Compile Include="../../runtime/src/Content/FalloutQuestState.cs" Link="FalloutQuestState.cs" />
     <Compile Include="../../runtime/src/Gameplay/State/FalloutHudNotifications.cs" Link="FalloutHudNotifications.cs" />
     <Compile Include="../../runtime/src/Content/FalloutAiPackages.cs" Link="FalloutAiPackages.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutConditionSubject.cs" Link="FalloutConditionSubject.cs" />
     <Compile Include="../../runtime/src/Content/FalloutPackageSchedule.cs" Link="FalloutPackageSchedule.cs" />
     <Compile Include="../../runtime/src/Content/FalloutCalendar.cs" Link="FalloutCalendar.cs" />
     <Compile Include="../../runtime/src/Content/FalloutGlobal.cs" Link="FalloutGlobal.cs" />
@@ -92,5 +93,8 @@
     <Compile Include="../../runtime/src/Content/FalloutBsaArchive.cs" Link="FalloutBsaArchive.cs" />
     <Compile Include="../../runtime/src/Content/FalloutDeflateExtent.cs" Link="FalloutDeflateExtent.cs" />
     <Compile Include="../../runtime/src/Content/FalloutNumericGameSettings.cs" Link="FalloutNumericGameSettings.cs" />
+    <Compile Include="../../runtime/src/Content/Definitions/FalloutConditionFunction.cs" Link="FalloutConditionFunction.cs" />
+    <Compile Include="../../runtime/src/Content/Definitions/FalloutActorValueId.cs" Link="FalloutActorValueId.cs" />
+    <Compile Include="../../runtime/src/Content/Definitions/FalloutActorValueNames.cs" Link="FalloutActorValueNames.cs" />
   </ItemGroup>
 </Project>

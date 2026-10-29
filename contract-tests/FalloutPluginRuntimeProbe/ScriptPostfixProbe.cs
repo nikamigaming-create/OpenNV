@@ -164,7 +164,8 @@ internal static class ScriptPostfixProbe
             Require(quests.Capture().Instances.Single().Executions == 0, "Lexical migration invented a prior quest execution.");
             Reject(() => QuestScripts(state).Restore(initial with { Instances = [] }));
             var host = new FalloutQuestScriptHost((_, _) => throw new InvalidOperationException("Unexpected stage effect."),
-                name => name == "Health" ? 31 : throw new InvalidOperationException("Unexpected actor value."));
+                name => name.Equals("Health", StringComparison.OrdinalIgnoreCase) ? 31 :
+                    throw new InvalidOperationException("Unexpected actor value."));
             quests.Host = host;
             quests.Auxiliary.SetFloat(Key(0x14), "Postfix.esm", "offset", 2);
             quests.Advance(1);

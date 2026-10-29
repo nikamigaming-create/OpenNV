@@ -22,6 +22,26 @@ inventory and world owners. RuntimeNativePlayer owns locomotion and actions.
 Existing door and exterior-streaming owners load connected spaces. Persistent
 campaign snapshots retain gameplay state for both flat and OpenXR continuation.
 
+FalloutConditionRuntime shares query semantics across actor packages, dialogue,
+idle, quest, menu, terminal, unloaded-reference and parsed-script consumers.
+FalloutConditionScope resolves invocation subjects; FalloutConditionQuery keeps
+script-bound forms distinct from raw declaring-plugin FormIDs. Capabilities
+query existing state owners, with physical/native process predicates delegated
+to their actual actor or player adapters. Retiring an owner removes its callback;
+an absent owner never supplies a false/zero result. Ordered CTDA evaluation owns
+comparisons and lazy OR, including source-global comparisons. SCDA instruction
+decoding/execution remains a separate missing VM layer; SCTX execution is not
+evidence of compiled-bytecode support.
+
+Content.Definitions owns source condition-function and actor-value identifiers,
+canonical names and aliases, with neutral metadata references. It depends on
+neither Godot nor mutable gameplay owners. Readers preserve raw source fields;
+runtime dispatch consumes typed identifiers; state owners decide which values
+and formulas they can provide; Godot/native adapters publish actual process
+state. SourceSlot/SourceIndex/UserSlot, limb lookup and script query binding use
+the same cached identifier/name definition. Recognizing an identifier does not
+create a state pool or authorize a default result.
+
 NativeXrRig adapts tracked head/controller poses and ordinary action input to the
 same player. RuntimeNativePlayerActor owns body, hands and weapon presentation.
 NativeOwnedPipBoy renders the shared menu on the equipped wrist device.

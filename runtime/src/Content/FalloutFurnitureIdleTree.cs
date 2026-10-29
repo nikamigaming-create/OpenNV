@@ -54,7 +54,7 @@ internal sealed class FalloutFurnitureIdleTree
             }
             roots.Add(branch.Record.FormKey);
         }
-        var eligible = roots.Select(root => byForm[root]).Where(branch => FalloutCondition.AllPass(branch.Conditions, evaluate)).ToArray();
+        var eligible = roots.Select(root => byForm[root]).Where(branch => FalloutCondition.AllPass(branch.Conditions, evaluate, evaluateRunOn: true)).ToArray();
         var matches = eligible.Select(branch => Visit(branch, false, [])).Where(record => record is not null).DistinctBy(record => record!.FormKey).ToArray();
         if (matches.Length > 1) throw new NotSupportedException($"Actor procedure {procedure} has {matches.Length} eligible source KF leaves.");
         if (matches.Length == 0 && eligible.Any(branch => (branch.Group & 0x80) == 0))
@@ -69,7 +69,7 @@ internal sealed class FalloutFurnitureIdleTree
             foreach (var child in Order(_branches.Where(value => value.Parent == branch.Record.FormKey)
                 .OrderBy(value => _pluginOrder[value.Record.FormKey.OwnerPlugin]).ToArray()))
             {
-                if (!FalloutCondition.AllPass(child.Conditions, evaluate)) continue;
+                if (!FalloutCondition.AllPass(child.Conditions, evaluate, evaluateRunOn: true)) continue;
                 var selected = Visit(child, ownsProcedure, new(ancestors));
                 if (selected is not null) return selected;
                 if ((child.Group & 0x80) != 0) return null;
@@ -87,7 +87,7 @@ internal sealed class FalloutFurnitureIdleTree
         var roots = _branches.Where(branch => branch.Parent is null &&
             !branch.Model.EndsWith(".kf", StringComparison.OrdinalIgnoreCase) &&
             requested(branch) &&
-            FalloutCondition.AllPass(branch.Conditions, evaluate)).ToArray();
+            FalloutCondition.AllPass(branch.Conditions, evaluate, evaluateRunOn: true)).ToArray();
         if (roots.Length != 1) throw new NotSupportedException($"{owner} has {roots.Length} eligible source roots: {string.Join(',', roots.Select(value => value.Record.FormKey))}.");
         return Visit(roots[0], new HashSet<FalloutFormKey>()) ??
             throw new NotSupportedException($"{owner} has no eligible source KF leaf.");
@@ -99,7 +99,7 @@ internal sealed class FalloutFurnitureIdleTree
             foreach (var child in Order(_branches.Where(value => value.Parent == branch.Record.FormKey)
                 .OrderBy(value => _pluginOrder[value.Record.FormKey.OwnerPlugin]).ToArray()))
             {
-                if (!FalloutCondition.AllPass(child.Conditions, evaluate)) continue;
+                if (!FalloutCondition.AllPass(child.Conditions, evaluate, evaluateRunOn: true)) continue;
                 var result = Visit(child, new(ancestors));
                 if (result is not null) return result;
                 if ((child.Group & 0x80) != 0) return null;

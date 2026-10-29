@@ -1,3 +1,4 @@
+using Function = OpenNV.Runtime.Content.Definitions.FalloutConditionFunction;
 using System.Buffers.Binary;
 using OpenNV.Runtime.Gameplay.State;
 
@@ -304,19 +305,22 @@ internal sealed class FalloutQuestState(FalloutPluginStack stack, FalloutHudNoti
     }
 
     internal float Evaluate(FalloutCondition condition)
+        => Evaluate(condition.Kind, condition.FormArgument1, condition.Argument2);
+
+    internal float Evaluate(Function function, FalloutFormKey quest, uint argument)
     {
-        var state = Require(condition.FormArgument1);
-        return condition.Function switch
+        var state = Require(quest);
+        return function switch
         {
-            56 => state.Running ? 1 : 0,
-            58 => state.Stage,
-            59 => state.Stages.Contains(checked((short)condition.Argument2)) ? 1 : 0,
-            79 => state.Variables.TryGetValue(condition.Argument2, out var value) ? (float)value :
-                throw new NotSupportedException($"Quest {condition.FormArgument1} has no declared variable {condition.Argument2}."),
-            546 => state.Completed ? 1 : 0,
-            420 => state.Objectives.TryGetValue(condition.Argument2, out var completed) && completed.Completed ? 1 : 0,
-            421 => state.Objectives.TryGetValue(condition.Argument2, out var displayed) && displayed.Displayed ? 1 : 0,
-            _ => throw new NotSupportedException($"Quest condition {condition.Function} has no runtime owner."),
+            Function.GetQuestRunning => state.Running ? 1 : 0,
+            Function.GetStage => state.Stage,
+            Function.GetStageDone => state.Stages.Contains(checked((short)argument)) ? 1 : 0,
+            Function.GetQuestVariable => state.Variables.TryGetValue(argument, out var value) ? (float)value :
+                throw new NotSupportedException($"Quest {quest} has no declared variable {argument}."),
+            Function.GetQuestCompleted => state.Completed ? 1 : 0,
+            Function.GetObjectiveCompleted => state.Objectives.TryGetValue(argument, out var completed) && completed.Completed ? 1 : 0,
+            Function.GetObjectiveDisplayed => state.Objectives.TryGetValue(argument, out var displayed) && displayed.Displayed ? 1 : 0,
+            _ => throw new NotSupportedException($"Quest condition {function} has no runtime owner."),
         };
     }
 }

@@ -47,7 +47,7 @@ Do not require another giant audit before implementing known shared gaps.
 2. **Authoritative world/time/events/save:** references and actor lifecycle,
    enabled/deleted state, time, event order, RNG, transactions, streaming and
    current-build persistence; interruption/cancellation without replayed effects.
-3. **Scripts/conditions/quests/dialogue — next batch:** shared function/context
+3. **Scripts/conditions/quests/dialogue — active batch:** shared function/context
    dispatch joining bytecode execution and world-state host. Route NPC,
    creature, dialogue and idle consumers through the same handlers; preserve
    caller/target/run-on namespaces, time, RNG, locals and event/result order.
@@ -77,22 +77,39 @@ rather than being inferred from FNV results.
 
 ## Current coherent batch
 
-Checked baseline PR #331 is 1f1a44e0, with required local/owned and all five hosted
+Checked baseline PR #332 is 5d324d27, with required local/owned and all five hosted
 checks passed. Local main equals origin/main. Branch
-codex/idle-history-bot-control adds distinct source-qualified last-request
-history for function 451, shared procedure request admission and bot planning /
-moving-target segment control. Focused synthetic and owned-condition checks
-pass; the full required gate passes and reviewed publication remains pending.
+codex/shared-script-conditions now has shared owner-backed function bodies and
+caller/target/explicit/linked resolution across actor, dialogue, idle, quest,
+menu, terminal, unloaded-package and parsed-script consumers. Reordered source
+masters and typed native operands, mutable clock/globals, lazy OR/RNG,
+comparison-global CTDA, player bindings, limb GetAV and interrupted execution
+have production-handler headless coverage. Complete reference-script contracts
+and selected owned request-history execution pass. The required gate and
+bounded fresh-game integration through VCG01 stage36 pass; publication is pending.
 
-Immutable export MVID 5b54e57b-d2f3-40b2-a0db-3481ee1aca8c Continued the useful
-north-shoulder save without replaying cooking. Canonical SHA256 remains
+SCDA instruction decoding/execution is still absent: extent accounting and
+SCTX parsing do not constitute a VM. Complete the remaining source-used
+function families and subject/flag contexts through the same handlers, ordered
+by dependent quests/packages/records. Unknown process owners remain explicit;
+player unconscious state is not substituted with death. Do not turn the
+retained 148-ID inventory into a coverage claim or start a new actor-specific
+failure chain.
+
+Shared AV identities distinguish Aggression 0 from Mood 4 and preserve limb
+slots 25–31. Named parser queries use canonical, case-insensitive enum names;
+unknown state/formula pools still fail explicitly. Neutral enum/CTDA metadata
+was checked against [xEdit's FNV definitions](https://github.com/TES5Edit/TES5Edit/blob/dev-4.1.5/Core/wbDefinitionsFNV.pas);
+no external implementation was imported.
+
+Immutable export de3ccd56 advanced an ordinary fresh New Game through Doc
+Mitchell's recorded speech, name acceptance and VCG01 stage36 race/sex UI.
+Normal close freed 200 prototypes/source owners. No F5 changed canonical
 02ABCFE0D0179E3C8B51E0F867363D13D81CB7B364C882EA0CCF8038907E277F.
-VCG03 objectives 10/20/30 are complete and 40 remains open. Restoration does not
-invent missing request history: the next selection correctly refused that absent
-field. Normal close preserved the checkpoint; no game is running. Final queue
-corrections pass the required gate; publication remains pending. Complete this batch, then
-the shared script/condition batch; do not start another NPC-specific repair chain.
-
+The actual system boundary includes AddFormToFormList, an unclosed NVSE
+expression and unowned Confidence. Address remaining shared rules/VM ownership
+by source dependencies after checked publication; do not repeat the old-save
+451 refusal or start another NPC-specific chain.
 ## Validation and publication
 
 Focused synthetic/owned-data execution precedes an immutable export. Ordinary

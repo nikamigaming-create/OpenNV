@@ -612,6 +612,9 @@ internal sealed partial class FalloutQuestScripts
             instance.Bindings.HasVariable(name) && instance.Bindings.VariableKind(name) == FalloutScriptLocalKind.Form;
         bool HasValueOwner(string name) => FalloutScriptBindings.IsPlayer(name) || TryForm(name) is not null ||
             instance.Bindings.HasVariable(name);
+        FalloutFormKey QueryReference(string token) => FalloutScriptBindings.IsPlayer(token) || TryForm(token) is not null
+            ? instance.Bindings.Reference(token) : ReadValue(token).FormKey(_records);
+        var conditionRuntime = Conditions(host);
         var values = new FalloutScriptValueContext(ReadValue, WriteValue, FormName, ScriptValues.Arrays,
             ReferenceFunction, IsForm, HasValueOwner);
         FalloutPluginRecord Quest(string name)
@@ -666,6 +669,9 @@ internal sealed partial class FalloutQuestScripts
         {
             var parts = name.Split('.');
             var operation = parts[^1].ToLowerInvariant();
+            if (parts.Length <= 2 && conditionRuntime.ScriptFunction(operation, instance.Script,
+                () => caller?.FormKey(_records) ?? (parts.Length == 2 ? QueryReference(parts[0]) : instance.Quest.FormKey),
+                name => Form(name).FormKey, Variable, parts.Length == 2 || caller is not null) is { } shared) return shared;
             if (caller is { } receiver)
             {
                 FalloutScriptFunction.RequireReference(receiver);
@@ -697,33 +703,6 @@ internal sealed partial class FalloutQuestScripts
                     (host?.HeadingAngle ?? throw new NotSupportedException("GetHeadingAngle has no spatial owner."))
                     (caller?.FormKey(_records) ?? (parts.Length == 1 ? instance.Quest.FormKey : instance.Bindings.Reference(parts[0])),
                         arguments[0].Value.FormKey(_records)))
-                { ReadOnly = true };
-            if (parts.Length <= 2 && operation == "getincell")
-                return new([FalloutScriptArgumentKind.Value], arguments =>
-                    (host?.IsInCell ?? (References ?? throw new NotSupportedException("GetInCell has no reference owner.")).IsInCell)
-                    (caller?.FormKey(_records) ?? (parts.Length == 1 ? instance.Quest.FormKey : instance.Bindings.Reference(parts[0])),
-                        arguments[0].Value.FormKey(_records)) ? 1 : 0)
-                { ReadOnly = true };
-            if (parts.Length <= 2 && operation == "getiscurrentpackage")
-                return new([FalloutScriptArgumentKind.Value], arguments =>
-                    FalloutAiPackages.IsCurrentPackage(_records,
-                        caller?.FormKey(_records) ?? (parts.Length == 1 ? instance.Quest.FormKey : instance.Bindings.Reference(parts[0])),
-                        arguments[0].Value.FormKey(_records), host?.CurrentPackage ?? (References ??
-                            throw new NotSupportedException("Current-package query has no reference owner.")).CurrentPackage) ? 1 : 0)
-                { ReadOnly = true };
-            if (parts.Length <= 2 && operation == "getsitting")
-                return new([], _ => (References ?? throw new NotSupportedException("GetSitting has no reference owner."))
-                    .GetSitting(caller?.FormKey(_records) ?? (parts.Length == 1 ? instance.Quest.FormKey : instance.Bindings.Reference(parts[0])),
-                        host?.Sitting))
-                { ReadOnly = true };
-            if (parts.Length <= 2 && operation == "getsleeping")
-                return new([], _ => (References ?? throw new NotSupportedException("GetSleeping has no reference owner."))
-                    .GetSleeping(caller?.FormKey(_records) ?? (parts.Length == 1 ? instance.Quest.FormKey : instance.Bindings.Reference(parts[0]))))
-                { ReadOnly = true };
-            if (parts.Length <= 2 && operation == "gettalkedtopc")
-                return new([], _ => (References ?? throw new NotSupportedException("Talked-to-player query has no reference owner."))
-                    .GetTalkedToPlayer(caller?.FormKey(_records) ?? (parts.Length == 1 ? instance.Quest.FormKey : instance.Bindings.Reference(parts[0])))
-                    ? 1 : 0)
                 { ReadOnly = true };
             if (parts.Length <= 2 && operation == "getlinkedref")
                 return FalloutScriptFunction.Typed([], _ => FalloutScriptValue.Form(
@@ -761,33 +740,6 @@ internal sealed partial class FalloutQuestScripts
                         ? instance.Bindings.Reference(parts[0]) : instance.Quest.FormKey), arguments[0].Value.FormKey(_records));
                     return 0;
                 });
-            if (parts.Length <= 2 && operation == "getitemcount")
-                return new([FalloutScriptArgumentKind.Value], arguments =>
-                {
-                    var target = caller?.FormKey(_records) ?? (parts.Length == 2
-                        ? instance.Bindings.Reference(parts[0]) : instance.Quest.FormKey);
-                    var owner = host?.Inventory ?? new FalloutInventoryCommands(_records, References ??
-                        throw new NotSupportedException("Item count has no reference world."), _inventory,
-                        () => throw new NotSupportedException("NPC inventory has no player-level owner."), _globals);
-                    return owner.ItemCount(target, arguments[0].Value.FormKey(_records));
-                })
-                { ReadOnly = true };
-            if (parts.Length <= 2 && operation is "isweaponout" or "getweaponanimtype" or "getequipped")
-                return new(operation == "getequipped" ? [FalloutScriptArgumentKind.Value] : [], arguments =>
-                {
-                    var target = caller?.FormKey(_records) ?? (parts.Length == 2
-                        ? instance.Bindings.Reference(parts[0]) : instance.Quest.FormKey);
-                    var owner = host?.Inventory ?? new FalloutInventoryCommands(_records, References ??
-                        throw new NotSupportedException("Equipment query has no reference world."), _inventory,
-                        () => throw new NotSupportedException("NPC inventory has no player-level owner."), _globals);
-                    return operation switch
-                    {
-                        "isweaponout" => owner.IsWeaponOut(target) ? 1 : 0,
-                        "getweaponanimtype" => owner.WeaponAnimationType(target),
-                        _ => owner.IsEquipped(target, arguments[0].Value.FormKey(_records)) ? 1 : 0,
-                    };
-                })
-                { ReadOnly = true };
             if (parts.Length <= 2 && operation is "getequippedobject" or "geteqobj")
                 return FalloutScriptFunction.Typed([FalloutScriptArgumentKind.Number], arguments =>
                 {
@@ -913,49 +865,14 @@ internal sealed partial class FalloutQuestScripts
             {
                 "getgameloaded" => new([], _ => Events.GetGameLoaded(instance.Script.FormKey) ? 1 : 0),
                 "getgamerestarted" => new([], _ => Events.GetGameRestarted(instance.Script.FormKey) ? 1 : 0),
-                "getstage" => new([FalloutScriptArgumentKind.Identifier], arguments =>
-                {
-                    var quest = Quest(arguments[0].Identifier!).FormKey;
-                    return _quests.Stage(quest);
-                }),
-                "getquestrunning" => new([FalloutScriptArgumentKind.Identifier], arguments =>
-                    _quests.IsRunning(Quest(arguments[0].Identifier!).FormKey) ? 1 : 0),
-                "getquestcompleted" => new([FalloutScriptArgumentKind.Identifier], arguments =>
-                    _quests.IsCompleted(Quest(arguments[0].Identifier!).FormKey) ? 1 : 0),
-                "getstagedone" => new([FalloutScriptArgumentKind.Identifier, FalloutScriptArgumentKind.Number], arguments =>
-                {
-                    var stage = arguments[1].Number;
-                    if (stage < 0 || stage > short.MaxValue || stage != Math.Truncate(stage))
-                        throw new InvalidDataException("Quest stage index is invalid.");
-                    return _quests.StageDone(Quest(arguments[0].Identifier!).FormKey, (short)stage) ? 1 : 0;
-                }),
                 "getsecondspassed" => new([], _ => instance.Clock.Elapsed),
-                "getrandompercent" => new([], _ => ScriptValues.RandomPercent()),
-                "getcurrenttime" => new([], _ => (_globals ??
-                    throw new NotSupportedException("GetCurrentTime has no simulation clock."))
-                    .Get(FalloutGameTimeBindings.Read(_records).Hour))
-                { ReadOnly = true },
                 "getbuttonpressed" => new([], _ => MessageResults.Take(instance.Script.FormKey)),
                 "isplayertagskill" => new([FalloutScriptArgumentKind.Identifier], arguments =>
                     (host?.TagSkills ?? throw new NotSupportedException("Player tag skills have no shared owner."))
                         .IsTagged(arguments[0].Identifier!) ? 1 : 0)
                 { ReadOnly = true },
                 "abs" => new([FalloutScriptArgumentKind.Number], arguments => Math.Abs(arguments[0].Number)),
-                "getobjectivecompleted" => new([FalloutScriptArgumentKind.Identifier, FalloutScriptArgumentKind.Number], arguments =>
-                {
-                    var quest = Quest(arguments[0].Identifier!).FormKey;
-                    var value = arguments[1].Number;
-                    var index = value >= 0 && value <= uint.MaxValue && value == Math.Truncate(value) ? (uint)value :
-                        throw new InvalidDataException("Script objective index is invalid.");
-                    return _quests.ObjectiveCompleted(quest, index) ? 1 : 0;
-                }),
-                "getobjectivedisplayed" => new([FalloutScriptArgumentKind.Identifier, FalloutScriptArgumentKind.Number], arguments =>
-                {
-                    var index = arguments[1].Number;
-                    if (index != Math.Truncate(index)) throw new InvalidDataException("Objective index is fractional.");
-                    return _quests.ObjectiveDisplayed(Quest(arguments[0].Identifier!).FormKey, checked((uint)index)) ? 1 : 0;
-                }),
-                "player.getactorvalue" or "player.getav" or "player.getbaseactorvalue" or "player.getbaseav" or
+                "player.getbaseactorvalue" or "player.getbaseav" or
                     "player.getpermanentactorvalue" => new([FalloutScriptArgumentKind.Identifier], arguments =>
                 {
                     if (!instance.Bindings.HasPlayerReference) throw new InvalidDataException("Player function has no compiled engine reference.");
@@ -974,6 +891,7 @@ internal sealed partial class FalloutQuestScripts
         {
             var parts = command.Split('.');
             var operation = parts[^1].ToLowerInvariant();
+
             if (parts.Length <= 2 && operation == "placeatme")
             {
                 _ = FalloutNvseNumericExpression.EvaluateValue([command, .. rawArguments], values, Function);

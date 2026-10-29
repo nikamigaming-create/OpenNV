@@ -1257,6 +1257,7 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
     {
         _transientExplosions?.RetirePresentation();
         UnloadedPackages = null;
+        _playerCondition = null;
         _beforeActorHit = null;
         _sounds?.Clear();
         _pipBoyRadio?.Off();

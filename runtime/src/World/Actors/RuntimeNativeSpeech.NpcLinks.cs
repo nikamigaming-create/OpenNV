@@ -106,7 +106,8 @@ internal partial class RuntimeNativeSpeech
             listenerIdentity: listenerReference is { } reference ? SpeakerIdentity(reference) : null,
             currentPackage: _currentPackage, vampireQuery: _vampireQuery, itemCount: _itemCount, referenceDistance: _referenceDistance,
             referenceInZone: _referenceInZone, sitting: _sitting, deadCount: _deadCount, isDead: _isDead,
-            sleeping: reference => (_references ?? throw new NotSupportedException("Speech has no shared sleeping owner.")).GetSleeping(reference));
+            sleeping: reference => (_references ?? throw new NotSupportedException("Speech has no shared sleeping owner.")).GetSleeping(reference),
+            world: _references, randomPercent: _dialogueRandom is null ? null : () => _dialogueRandom(100));
         return (_selection ?? throw new NotSupportedException("Scripted speech has no shared dialogue quest selection owner."))
             .Select(topic, identity.Actor, _said, _questStage, conditions.Evaluate, _dialogueRandom,
                 npcConversation: npcConversation, immediateResults: true);

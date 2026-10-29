@@ -25,7 +25,8 @@ internal partial class RuntimeNativeOpeningStageDriver
             else if (note.Kind == FalloutNoteKind.Voice && note.Topic is { } topic && note.Actor is { } actor)
             {
                 var speaker = FalloutDialogueSpeaker.Read(_pluginStack, actor);
-                var conditions = new FalloutDialogueConditions(_pluginStack, _quests, actor, speaker, EvaluateMessageCondition);
+                var conditions = new FalloutDialogueConditions(_pluginStack, _quests, actor, speaker, EvaluateMessageCondition,
+                    world: _scripts.References, randomPercent: () => _ingestibleSoundRandom.NextBounded(100));
                 var info = FalloutDialogueTopic.Read(_pluginStack, topic).Select(actor, new HashSet<FalloutFormKey>(),
                     quest => _quests.Stage(quest), conditions.Evaluate, random: _ingestibleSoundRandom.NextBounded)
                     ?? throw new InvalidDataException("The note has no available voice response.");
