@@ -32,12 +32,13 @@ internal partial class RuntimeNativeNpc
         // A newly assembled body can already contain this override. Later
         // revisions still invalidate it even when age-family matching selects
         // the same final race; exact same-race input never creates a revision.
-        if (_appearanceRevision < 0 && state is null && !Appearance.RuntimeFace && Appearance.Race == world.ActorRace(reference) ||
-            _appearanceRevision < 0 && state is not null && Appearance.RuntimeFace &&
+        if (_appearanceRevision < 0 && FalloutNpcAppearanceResolver.ArmorListsMatch(stack, Appearance, world.FormLists) &&
+            (state is null && !Appearance.RuntimeFace && Appearance.Race == world.ActorRace(reference) ||
+            state is not null && Appearance.RuntimeFace &&
                 (state.Race is null || Appearance.Race == state.Race) &&
                 (state.FaceGen is null || Appearance.FaceGen.SymmetricGeometry.AsSpan().SequenceEqual(state.FaceGen.SymmetricGeometry) &&
                     Appearance.FaceGen.AsymmetricGeometry.AsSpan().SequenceEqual(state.FaceGen.AsymmetricGeometry) &&
-                    Appearance.FaceGen.SymmetricTexture.AsSpan().SequenceEqual(state.FaceGen.SymmetricTexture)))
+                    Appearance.FaceGen.SymmetricTexture.AsSpan().SequenceEqual(state.FaceGen.SymmetricTexture))))
         {
             _appearanceRevision = revision;
             _appearanceWorld = world;
@@ -48,7 +49,7 @@ internal partial class RuntimeNativeNpc
         try
         {
             var appearance = FalloutNpcAppearanceResolver.Resolve(stack, Appearance.Npc, reference,
-                world.EquippedArmor(reference, level, globals), state, world.Get(reference).Templates);
+                world.EquippedArmor(reference, level, globals), state, world.Get(reference).Templates, world.FormLists);
             if (!Appearance.SkeletonPath.Equals(appearance.SkeletonPath, StringComparison.OrdinalIgnoreCase))
                 throw new NotSupportedException("Appearance refresh changed the source skeleton and needs animation/contact rebinding.");
             var prepared = FalloutNpcPreparedGeometry.Read(appearance, source);

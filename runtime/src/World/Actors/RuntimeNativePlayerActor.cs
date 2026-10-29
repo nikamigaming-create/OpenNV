@@ -96,7 +96,8 @@ internal sealed partial class RuntimeNativePlayerActor : Node3D
     }
 
     internal RuntimeNativePlayerActor(FalloutPluginStack records, RuntimeLiveContentSource content, FalloutNpcAppearance appearance,
-        FalloutFormKey? weapon, bool firstPerson, float units, Color ambient, byte weaponMods = 0)
+        FalloutFormKey? weapon, bool firstPerson, float units, Color ambient, byte weaponMods = 0,
+        IFalloutFormLists? formLists = null)
     {
         Name = firstPerson ? "NativeFirstPersonBody" : "NativeThirdPersonBody";
         _records = records; _content = content; _first = firstPerson;
@@ -127,7 +128,7 @@ internal sealed partial class RuntimeNativePlayerActor : Node3D
             }
             if (weapon is { } form)
             {
-                Weapon = FalloutWeaponPresentation.Read(records, form, firstPerson, weaponMods);
+                Weapon = FalloutWeaponPresentation.Read(records, form, firstPerson, weaponMods, formLists);
                 _equippedObject = new(Weapon, Skeleton, _content);
                 _weaponAttachment = _equippedObject.Attachment; _weaponRoot = _equippedObject.Root; _weaponRest = _weaponRoot.Transform;
                 _weaponNodes.AddRange(_equippedObject.Nodes);

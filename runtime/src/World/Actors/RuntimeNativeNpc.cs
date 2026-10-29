@@ -398,9 +398,9 @@ internal partial class RuntimeNativeNpc : CharacterBody3D
         float unitsToMetres,
         Func<FalloutNpcAppearance, FalloutNpcAppearancePart, FalloutNifFile, FalloutNifGeometry, Material?>? materialOwner = null,
         IReadOnlyList<FalloutFormKey>? equippedArmor = null, FalloutActorTemplateSelection? selection = null,
-        FalloutActorAppearanceState? appearanceState = null)
+        FalloutActorAppearanceState? appearanceState = null, IFalloutFormLists? formLists = null)
     {
-        var actor = Create(FalloutNpcAppearanceResolver.Resolve(stack, reference.Base, reference.FormKey, equippedArmor, appearanceState, selection), source,
+        var actor = Create(FalloutNpcAppearanceResolver.Resolve(stack, reference.Base, reference.FormKey, equippedArmor, appearanceState, selection, formLists), source,
             unitsToMetres, materialOwner);
         try { actor.BindSourceBehavior(stack, selection); return actor; }
         catch { actor.Free(); throw; }

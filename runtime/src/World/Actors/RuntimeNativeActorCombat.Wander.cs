@@ -183,7 +183,7 @@ internal sealed partial class RuntimeNativeActorCombat
             physical?.Supports(selected.Activity) != true)
             throw new NotSupportedException($"Sandbox selected activity requires its execution owner: {selected.Activity} " +
                 $"reference={selected.Reference} base={selected.Base} inventory={selected.Inventory}");
-        var threat = FalloutActorThreat.Read(_records, _state.Base, _state.Templates);
+        var threat = CurrentThreat();
         return FalloutSandboxActivityProgress.Select(_records.NumericSettings, threat.Energy,
             selected.Activity, hour, preferences, _state.SoundRandom.NextUnitFloat, selected.Reference) with
         { ScheduledActivity = scheduled, DailyFoodAvailable = foodAvailable, DailyBedAvailable = bedAvailable };

@@ -15,7 +15,7 @@ internal sealed partial class RuntimeNativeActorCombat
         var handling = new FalloutWeaponHandling(owned.Contents, nativeNpc: true);
         var style = _world.CombatStyle(_state.Reference);
         var choices = owned.Contents.Items.Where(item => item.RecordType == "WEAP" && !owned.Unequipped.Contains(item.FormKey))
-            .Select(item => (Item: item, Weapon: FalloutWeaponPresentation.Read(_records, item.FormKey, false, owned.Contents.WeaponModMask(item.FormKey))))
+            .Select(item => (Item: item, Weapon: _world.WeaponPresentation(item.FormKey, false, owned.Contents.WeaponModMask(item.FormKey))))
             .Where(row => FalloutWeaponCondition.CanUse(row.Weapon, row.Item) &&
                 (style?.WeaponRestriction != 1 || row.Weapon.IsMeleeWeapon) &&
                 (style?.WeaponRestriction != 2 || !row.Weapon.IsMeleeWeapon) &&
@@ -34,7 +34,7 @@ internal sealed partial class RuntimeNativeActorCombat
     {
         var owned = _world.Inventory(_state.Reference, _context!.Level(), _context.Globals);
         owned.Contents.EnsureWeaponInstance(item.FormKey);
-        _enemyWeapon = FalloutWeaponPresentation.Read(_records, item.FormKey, firstPerson: false, owned.Contents.WeaponModMask(item.FormKey));
+        _enemyWeapon = _world.WeaponPresentation(item.FormKey, firstPerson: false, owned.Contents.WeaponModMask(item.FormKey));
         if (_enemyWeapon.IsMine) throw new NotSupportedException("Actor mine placement and proximity detonation are unbound.");
         if (_enemyWeapon.Automatic && (!float.IsFinite(_enemyWeapon.AttackShotsPerSecond) || _enemyWeapon.AttackShotsPerSecond <= 0))
             throw new InvalidDataException("Actor automatic weapon has no valid source attack-shot rate.");
@@ -49,8 +49,8 @@ internal sealed partial class RuntimeNativeActorCombat
         }
         _enemyWeaponHandling = new(owned.Contents, nativeNpc: true);
         if (_state.Engagement!.WeaponHandling is { } restored)
-            _enemyWeaponHandling.Restore(restored, key => FalloutWeaponPresentation.Read(_records, key, false),
-                (key, mods) => FalloutWeaponPresentation.Read(_records, key, false, mods));
+            _enemyWeaponHandling.Restore(restored, key => _world.WeaponPresentation(key, false),
+                (key, mods) => _world.WeaponPresentation(key, false, mods));
         else if (Ranged) _enemyWeaponHandling.CompleteReload(_enemyWeapon);
         var itemData = _records.GetEffective(item.FormKey).ReadSubrecords().Single(field => field.Signature == "DATA").Data.Span;
         _baseWeaponDamage = BinaryPrimitives.ReadInt16LittleEndian(itemData[12..]);

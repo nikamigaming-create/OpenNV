@@ -118,10 +118,10 @@ internal static class PlayerActorValueContracts
             var dead = JsonSerializer.Serialize(vitals.State);
             Reject(vitals.ResetHealth);
             Require(dead == JsonSerializer.Serialize(vitals.State), "ResetHealth substituted for player resurrection.");
-            var failing = FalloutGameModeProgram.Read("begin GameMode\nplayer.SetAV Strength 6\nplayer.ModAV Strength .25\nplayer.SetAV Strength 9\nend");
+            var failing = FalloutGameModeProgram.Read("begin GameMode\nplayer.SetAV Strength 6\nplayer.ModAV Strength 2147483648\nplayer.SetAV Strength 9\nend");
             Reject(() => executor.ExecuteProgram(quest, script, failing, 0));
             Require(owner.ReadBase(5) == 6 && owner.Capture().Values[5].Permanent == 6,
-                "Unsupported integer coercion replayed or rolled back the executed base prefix.");
+                "Out-of-range integer coercion replayed or rolled back the executed base prefix.");
         }
     }
 

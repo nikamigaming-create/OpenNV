@@ -45,10 +45,9 @@ internal sealed partial class FalloutReferenceScripts
         if (filter.Signature == "WEAP") return item.HitWeapons!.Contains(filter.FormKey);
         if (filter.Signature != "FLST") throw new InvalidDataException("OnHitWith filter requires a source WEAP or FLST form.");
         var matches = false;
-        foreach (var field in filter.ReadSubrecords().Where(field => field.Signature == "LNAM"))
+        foreach (var entry in world.FormLists.Entries(filter.FormKey))
         {
-            if (field.Data.Length != 4) throw new InvalidDataException("Hit weapon list has an invalid FormID extent.");
-            var form = filter.Plugin.AdjustFormId(BinaryPrimitives.ReadUInt32LittleEndian(field.Data.Span));
+            if (entry is not { } form) continue;
             if (records.GetEffective(form).Signature == "FLST")
                 throw new NotSupportedException("Nested object-script hit weapon lists require their source membership contract.");
             matches |= item.HitWeapons!.Contains(form);

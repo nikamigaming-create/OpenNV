@@ -7,10 +7,11 @@ internal sealed record FalloutCorpseEquipmentInventoryChange(FalloutActorCorpseE
     FalloutActorCorpseEquipment After, IReadOnlySet<FalloutFormKey> RemovedWeapons, bool RetiresHandling)
 {
     internal static FalloutCorpseEquipmentInventoryChange Prepare(FalloutPluginStack records,
-        FalloutActorCorpseEquipment equipment, FalloutOpeningInventoryGrant before, FalloutOpeningInventoryGrant after)
+        FalloutActorCorpseEquipment equipment, FalloutOpeningInventoryGrant before, FalloutOpeningInventoryGrant after,
+        IFalloutFormLists? formLists = null)
     {
         var previous = Inventory(before); var next = Inventory(after);
-        equipment.ValidateSource(records, previous);
+        equipment.ValidateSource(records, previous, formLists);
         foreach (var item in before.Inventory.Items.Where(item => item.RecordType == "WEAP" &&
             before.EquippedRuntimeFormIds.Contains(item.RuntimeFormId)))
         {
@@ -40,7 +41,7 @@ internal sealed record FalloutCorpseEquipmentInventoryChange(FalloutActorCorpseE
             EmbeddedMuzzleBone = retiredHandling ? null : equipment.EmbeddedMuzzleBone,
             Activity = activity
         };
-        result.ValidateSource(records, next);
+        result.ValidateSource(records, next, formLists);
         return new(equipment.Copy(), result, removed, retiredHandling);
     }
 

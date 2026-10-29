@@ -473,6 +473,8 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
         {
             var parts = name.Split('.');
             var operation = parts[^1].ToLowerInvariant();
+            if (parts.Length == 1 && FalloutScriptFormLists.Function(operation, records, () => world.FormLists) is { } formListFunction)
+                return formListFunction;
             FalloutFormKey? suppliedTarget = null;
             if (caller is { } value)
             {
@@ -504,7 +506,7 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                     (arguments[0].Text))
                 { ReadOnly = true };
             if (parts.Length == 1 && operation == "setonhiteventhandler")
-                return FalloutScriptHitHandlers.RegistrationFunction(records, () => Events().Hits);
+                return FalloutScriptHitHandlers.RegistrationFunction(records, () => Events().Hits, world.FormLists);
             if (parts.Length == 1 && operation == "getlocationspecificloadscreensonly")
                 return new([], _ => (host.LocationSpecificLoadScreensOnly ??
                     throw new NotSupportedException("Loading-screen policy query has no session owner."))() ? 1 : 0)
@@ -531,6 +533,9 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
             FalloutFormKey Target() => suppliedTarget ?? (parts.Length == 1 ? source : Reference(parts[0]));
             if (parts.Length <= 2 && Conditions.ScriptFunction(operation, records.GetEffective(bindings.Source), Target,
                 name => bindings.Form(name).FormKey, bindings.Variable, parts.Length == 2 || caller is not null) is { } shared) return shared;
+            if (parts.Length <= 2 && FalloutScriptActorValues.Function(operation, Target, records.RuntimeFormKey(0x14), () => world,
+                (actor, value, kind) => host.ReadActorValue is { } read ? read(actor, value, kind) : world.ActorValue(actor, value, kind),
+                referenceWrite: host.ChangeActorValue) is { } actorValueFunction) return actorValueFunction;
             if (parts.Length <= 2 && operation == "getcontainer")
                 return FalloutScriptFunction.Typed([], _ => FalloutScriptValue.Form(
                     (host.InventoryContainer ?? throw new NotSupportedException("GetContainer has no inventory-instance owner."))(Target()) is { } container
@@ -680,12 +685,6 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
             if (parts.Length <= 2 && parts[^1].Equals("IsTalking", StringComparison.OrdinalIgnoreCase))
                 return new([], _ => (host.IsTalking ?? throw new NotSupportedException("IsTalking has no speech owner."))
                     (Target()) ? 1 : 0);
-            if (parts.Length <= 2 && FalloutActorValue.Query(parts[^1]) is { } valueRead && valueRead != FalloutActorValueRead.Current)
-                return new([FalloutScriptArgumentKind.Identifier], arguments =>
-                    host.ReadActorValue is { } read ? read(Target(), arguments[0].Identifier!, valueRead) :
-                    valueRead == FalloutActorValueRead.Current
-                        ? (host.ActorValue ?? ((target, value) => world.ActorValue(target, value)))(Target(), arguments[0].Identifier!)
-                        : throw new NotSupportedException("Base/permanent actor value query has no source pool owner."));
             if (parts.Length <= 2 && operation == "getdestroyed")
                 return new([], _ => (suppliedTarget ??
                     (parts.Length == 1 ? CallingReference() : Reference(parts[0]))) is { } target &&
@@ -736,6 +735,12 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
         {
             var parts = command.Split('.');
             var operation = parts[^1].ToLowerInvariant();
+            if (parts.Length <= 2 && FalloutActorValueCommands.Operation(operation) is not null ||
+                parts.Length == 1 && FalloutScriptFormLists.Supports(operation))
+            {
+                _ = FalloutNvseNumericExpression.EvaluateValue([command, .. arguments], values, Function, UserFunction);
+                return;
+            }
             var target = parts.Length == 1 ? source : parts.Length == 2 ?
                 operation is "addnote" or "removenote" ? bindings.Reference(parts[0]) : Reference(parts[0]) :
                 throw new NotSupportedException("Script command target path is unbound.");
@@ -1034,9 +1039,6 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                         throw new InvalidDataException("Face matching percentage is outside its signed-integer domain.");
                     world.MatchFaceGeometry(target, Reference(arguments[0]), (int)Math.Truncate(facePercentage));
                     break;
-                case "restoreav" or "restoreactorvalue" when arguments.Count == 2:
-                    world.RestoreActorValue(target, arguments[0], (float)Number(arguments[1]));
-                    break;
                 case "ignorecrime" when arguments.Count == 1:
                     world.SetActorFlag(target, Boolean(arguments[0]), false);
                     break;
@@ -1242,10 +1244,6 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                     if (modifier.Signature != "IMAD") throw new InvalidDataException("Image-space modifier is not IMAD.");
                     host.Apply(new(FalloutReferenceEffectKind.ImageSpace, source, modifier.FormKey,
                         Enable: operation is "applyimagespacemodifier" or "imod"));
-                    break;
-                case "setav" or "setactorvalue" or "modav" or "modactorvalue" or "forceav" or "forceactorvalue" when arguments.Count == 2:
-                    if (host.ChangeActorValue is { } change) change(target, arguments[0], operation, Number(arguments[1]));
-                    else world.ChangeActorValue(target, arguments[0], operation, (float)Number(arguments[1]));
                     break;
                 case "enable" or "disable" when arguments.Count <= 1:
                     var enable = operation == "enable";

@@ -30,7 +30,7 @@ internal sealed partial class FalloutReferenceWorld
             throw new NotSupportedException("Corpse transfer requires settled source bodies and no pending hit-event admission.");
         var captured = instance.Capture();
         if (captured.CorpseEquipment is not { } equipment) return null;
-        var change = FalloutCorpseEquipmentInventoryChange.Prepare(records, equipment, before, after);
+        var change = FalloutCorpseEquipmentInventoryChange.Prepare(records, equipment, before, after, FormLists);
         var oldEquipment = instance.CorpseEquipment;
         var oldEngagement = instance.Engagement;
         return new(() =>

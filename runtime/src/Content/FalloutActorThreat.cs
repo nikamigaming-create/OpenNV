@@ -9,21 +9,17 @@ internal sealed record FalloutActorThreat(FalloutFormKey Owner, byte Aggression,
 
     internal static FalloutActorThreat Read(FalloutPluginStack records, FalloutFormKey actor, FalloutActorTemplateSelection? selection = null)
     {
-        var owner = FalloutActorTemplateOwner.Resolve(records, records.GetEffective(actor), 16, selection);
-        var data = owner.ReadSubrecords().Single(field => field.Signature == "AIDT").Data;
-        return Decode(owner.FormKey, data.Span);
+        return From(FalloutActorAiData.Read(records, actor, selection));
     }
 
     internal static FalloutActorThreat Decode(FalloutFormKey owner, ReadOnlySpan<byte> data)
     {
-        if (data.Length != 20) throw new NotSupportedException("Actor AIDT extent is unbound.");
-        var result = new FalloutActorThreat(owner, data[0], data[1], data[14], (data[15] & 1) != 0,
-            BinaryPrimitives.ReadInt32LittleEndian(data[16..]))
-        { Energy = data[2] };
-        if (result.Aggression > 3 || result.Confidence > 4 || result.Assistance > 2 || (data[15] & ~1) != 0 || result.Radius < 0)
-            throw new InvalidDataException("Actor threat parameters are invalid.");
-        return result;
+        return From(FalloutActorAiData.Decode(owner, data));
     }
+
+    private static FalloutActorThreat From(FalloutActorAiData data) => new(data.Owner, data.Aggression, data.Confidence,
+        data.Assistance, data.RadiusBehavior, data.Radius)
+    { Energy = data.Energy };
 
     // FACT group combat reactions: neutral, enemy, ally, friend. Aggression
     // and faction membership come from independent template groups.

@@ -29,7 +29,7 @@ internal sealed partial class RuntimeNativeActorCombat
         // A stopped source fault is captured, not cleared by looting.
         var captured = _state.Capture();
         if (captured.CorpseEquipment is not { } equipment) return null;
-        var change = FalloutCorpseEquipmentInventoryChange.Prepare(_records, equipment, before, after);
+        var change = FalloutCorpseEquipmentInventoryChange.Prepare(_records, equipment, before, after, _world.FormLists);
         var enemy = _enemyObject; var package = _packageWeapon;
         var weapon = _enemyWeapon; var handling = _enemyWeaponHandling;
         var muzzle = _embeddedMuzzle; var flash = _enemyMuzzle;
@@ -47,8 +47,8 @@ internal sealed partial class RuntimeNativeActorCombat
         else if (change.After.WeaponHandling is { } retained && !FalloutActorCorpseEquipment.SameHandling(equipment.WeaponHandling, retained))
         {
             reconciled = new(_state.Inventory!.Contents, nativeNpc: true);
-            reconciled.Restore(retained, key => FalloutWeaponPresentation.Read(_records, key, false),
-                (key, mods) => FalloutWeaponPresentation.Read(_records, key, false, mods));
+            reconciled.Restore(retained, key => _world.WeaponPresentation(key, false),
+                (key, mods) => _world.WeaponPresentation(key, false, mods));
         }
         var muzzleParent = muzzle?.GetParent(); var muzzleIndex = muzzle?.GetIndex() ?? 0;
         return new(() =>

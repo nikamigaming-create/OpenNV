@@ -15,11 +15,7 @@ internal sealed partial class FalloutReferenceWorld
             throw new NotSupportedException("Ambient conversation requires its disposition/should-attack perk entry owner.");
         bool Hostile(FalloutReferenceInstance from, FalloutReferenceInstance to)
         {
-            var threat = FalloutActorThreat.Read(records, from.Base, from.Templates);
-            var aggression = ActorValue(from.Reference, "aggression");
-            if (aggression != Math.Truncate(aggression) || aggression is < 0 or > 3)
-                throw new InvalidDataException("Conversation actor aggression is invalid.");
-            return (threat with { Aggression = (byte)aggression }).Hostile(ActorRelation(from.Reference, to.Reference));
+            return ActorThreat(from.Reference).Hostile(ActorRelation(from.Reference, to.Reference));
         }
         return Hostile(actor, partner) || Hostile(partner, actor);
     }

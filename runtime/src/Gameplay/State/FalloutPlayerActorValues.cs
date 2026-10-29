@@ -1,11 +1,13 @@
 using OpenNV.Runtime.Content;
+using OpenNV.Runtime.Content.Definitions;
 using OpenNV.Runtime.World.Actors;
 
 namespace OpenNV.Runtime.Gameplay.State;
 
 internal sealed record FalloutPlayerActorValuesSnapshot(string Schema, uint Reference, FalloutFormKey Player,
     string PlayerWinner, string PlayerSha256, FalloutFormKey StatsOwner, string StatsWinner, string StatsSha256,
-    IReadOnlyDictionary<int, FalloutActorValue> Values);
+    IReadOnlyDictionary<int, FalloutActorValue> Values,
+    FalloutFormKey? AiOwner = null, string? AiWinner = null, string? AiSha256 = null);
 
 // Mutable engine-created player values. Source constant effects are evaluated
 // into their evidenced pools on demand; they are never saved a second time.
@@ -15,6 +17,8 @@ internal sealed class FalloutPlayerActorValues
     internal const string SpecialOnlySchema = "opennv-player-special-values/v1";
     internal const uint PlayerReference = 0x14;
     private readonly FalloutPlayerActorValueSource _source;
+    private readonly FalloutPluginStack _records;
+    private FalloutActorAiData? _aiData;
     private Dictionary<int, FalloutActorValue> _values;
     private Func<int, FalloutActorValuePool, IReadOnlyList<FalloutAbilityModifier>>? _constantModifiers;
     private readonly HashSet<int> _evaluating = [];
@@ -28,6 +32,7 @@ internal sealed class FalloutPlayerActorValues
         if (restore is not null && legacy is not null)
             throw new InvalidDataException("Player values have two competing restore authorities.");
         _source = FalloutPlayerActorValueSource.Read(records);
+        _records = records;
         var initial = legacy?.Values ?? _source.Special;
         _values = Enumerable.Range(5, 7).ToDictionary(value => value, value => new FalloutActorValue(initial[value - 5]));
         _values.Add(21, new(_source.SpeedMultiplier));
@@ -56,18 +61,26 @@ internal sealed class FalloutPlayerActorValues
     }
 
     internal static bool HasPool(string name) => name.Equals("SpeedMult", StringComparison.OrdinalIgnoreCase) ||
+        FalloutActorValueNames.TryParse(name, out var id) && FalloutActorAiData.Contains(id) ||
         name.Equals("IgnoreCrippledLimbs", StringComparison.OrdinalIgnoreCase) ||
         FalloutNativeVigorResolver.AttributeNames.Any(value => value.Equals(name, StringComparison.OrdinalIgnoreCase));
     internal static int PoolValue(string name) => name.ToLowerInvariant() switch
     {
         "speedmult" => 21,
         "ignorecrippledlimbs" => 72,
-        _ => SpecialValue(name),
+        _ => FalloutActorValueNames.TryParse(name, out var id) && FalloutActorAiData.Contains(id) ? (int)id : SpecialValue(name),
     };
-    internal static bool HasPool(int value) => value is >= 5 and <= 11 or 21 or 72;
+    internal static bool HasPool(int value) => value is >= 5 and <= 11 or 21 or 72 || FalloutActorAiData.Contains((FalloutActorValueId)value);
 
-    private FalloutActorValue Value(int actorValue) => _values.TryGetValue(actorValue, out var value) ? value :
-        throw new NotSupportedException($"Player actor value {actorValue} has no base/formula pool owner.");
+    private FalloutActorValue Value(int actorValue)
+    {
+        if (_values.TryGetValue(actorValue, out var value)) return value;
+        if (!FalloutActorAiData.Contains((FalloutActorValueId)actorValue))
+            throw new NotSupportedException($"Player actor value {actorValue} has no base/formula pool owner.");
+        _aiData ??= FalloutActorAiData.Read(_records, _source.Player);
+        _values.Add(actorValue, value = new(_aiData.Value((FalloutActorValueId)actorValue)));
+        return value;
+    }
 
     internal float ReadBase(int actorValue) => Value(actorValue).Base;
     internal float ReadPermanent(int actorValue) => Evaluate(actorValue, () =>
@@ -123,25 +136,16 @@ internal sealed class FalloutPlayerActorValues
 
     internal void Change(string name, string operation, double argument)
     {
-        var value = SignedInteger(argument);
+        var value = (float)FalloutActorValueCommands.Argument(operation, argument);
         var actorValue = PoolValue(name);
-        switch (operation.ToLowerInvariant())
-        {
-            case "setav" or "setactorvalue": WriteBaseInteger(actorValue, value); break;
-            case "modav" or "modactorvalue": AddModifier(actorValue, FalloutActorValuePool.Permanent, value); break;
-            case "forceav" or "forceactorvalue":
-                AddModifier(actorValue, FalloutActorValuePool.Permanent, value - ReadCurrent(actorValue)); break;
-            default: throw new NotSupportedException($"Player value command {operation} is unbound.");
-        }
+        var kind = FalloutActorValueCommands.Operation(operation) ?? throw new NotSupportedException($"Player value command {operation} is unbound.");
+        var current = kind == FalloutActorValueOperation.ForceCurrent ? ReadCurrent(actorValue) : Value(actorValue).Current;
+        Publish(actorValue, FalloutActorValueCommands.Apply(Value(actorValue), kind, value, current));
     }
 
     internal static int SignedInteger(double value)
     {
-        if (!double.IsFinite(value) || value < int.MinValue || value > int.MaxValue)
-            throw new InvalidDataException("Actor value command argument exceeds signed integer storage.");
-        if (value != Math.Truncate(value))
-            throw new NotSupportedException("Fractional actor value command integer coercion is unbound.");
-        return checked((int)value);
+        return FalloutActorValueCommands.Integer(value);
     }
 
     private void Publish(int actorValue, FalloutActorValue value)
@@ -185,7 +189,7 @@ internal sealed class FalloutPlayerActorValues
 
     internal FalloutPlayerActorValuesSnapshot Capture() => new(SnapshotSchema, PlayerReference,
         _source.Player, _source.PlayerWinner, _source.PlayerSha256, _source.StatsOwner, _source.StatsWinner, _source.StatsSha256,
-        new Dictionary<int, FalloutActorValue>(_values));
+        new Dictionary<int, FalloutActorValue>(_values), _aiData?.Owner, _aiData?.Winner, _aiData?.Sha256);
 
     internal void Restore(FalloutPlayerActorValuesSnapshot snapshot)
     {
@@ -194,6 +198,14 @@ internal sealed class FalloutPlayerActorValues
             snapshot.StatsOwner != _source.StatsOwner || snapshot.StatsWinner != _source.StatsWinner || snapshot.StatsSha256 != _source.StatsSha256)
             throw new InvalidDataException("Saved player values differ from their winning source identity.");
         var replacement = snapshot.Values.ToDictionary(pair => pair.Key, pair => pair.Value);
+        if (snapshot.AiOwner is { } aiOwner)
+        {
+            var source = FalloutActorAiData.Read(_records, _source.Player);
+            if (source.Owner != aiOwner || source.Winner != snapshot.AiWinner || source.Sha256 != snapshot.AiSha256)
+                throw new InvalidDataException("Saved player AI-data values differ from their source owner.");
+            _aiData = source;
+        }
+        else _aiData = null;
         if (snapshot.Schema == SpecialOnlySchema)
         {
             replacement.Add(21, new(_source.SpeedMultiplier));
@@ -208,7 +220,13 @@ internal sealed class FalloutPlayerActorValues
         ArgumentNullException.ThrowIfNull(snapshot);
         if (snapshot.Schema is not (SnapshotSchema or SpecialOnlySchema) || snapshot.Reference != PlayerReference || snapshot.Player.ObjectId == 0 ||
             snapshot.StatsOwner.ObjectId == 0 || string.IsNullOrWhiteSpace(snapshot.PlayerWinner) || string.IsNullOrWhiteSpace(snapshot.StatsWinner) ||
-            !Hash(snapshot.PlayerSha256) || !Hash(snapshot.StatsSha256) || snapshot.Values is null || snapshot.Values.Count != (snapshot.Schema == SpecialOnlySchema ? 7 : 9) ||
+            !Hash(snapshot.PlayerSha256) || !Hash(snapshot.StatsSha256) || snapshot.Values is null ||
+            (snapshot.Schema == SpecialOnlySchema ? snapshot.Values.Count != 7 :
+                Enumerable.Range(5, 7).Concat([21, 72]).Any(id => !snapshot.Values.ContainsKey(id))) ||
+            snapshot.Values.Keys.Any(id => FalloutActorAiData.Contains((FalloutActorValueId)id)) && snapshot.AiOwner is null ||
+            snapshot.AiOwner is not null && !snapshot.Values.Keys.Any(id => FalloutActorAiData.Contains((FalloutActorValueId)id)) ||
+            snapshot.AiOwner is not null && (string.IsNullOrWhiteSpace(snapshot.AiWinner) || !Hash(snapshot.AiSha256!)) ||
+            snapshot.AiOwner is null && (snapshot.AiWinner is not null || snapshot.AiSha256 is not null) ||
             snapshot.Values.Any(pair => (snapshot.Schema == SpecialOnlySchema ? pair.Key is < 5 or > 11 : !HasPool(pair.Key)) || pair.Value is null || !pair.Value.IsFinite ||
                 pair.Value.Base != MathF.Truncate(pair.Value.Base) || pair.Value.Base < int.MinValue || (double)pair.Value.Base > 2147483648d))
             throw new InvalidDataException("Saved player actor-value pools are invalid.");

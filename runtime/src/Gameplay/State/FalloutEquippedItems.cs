@@ -1,4 +1,3 @@
-using System.Buffers.Binary;
 using OpenNV.Runtime.Content;
 
 namespace OpenNV.Runtime.Gameplay.State;
@@ -9,16 +8,16 @@ namespace OpenNV.Runtime.Gameplay.State;
 internal static class FalloutEquippedItems
 {
     internal static bool Any(FalloutPluginStack records, FalloutFormKey argument,
-        Func<FalloutFormKey, bool> equipped)
+        Func<FalloutFormKey, bool> equipped, IFalloutFormLists? current = null)
     {
+        if (FalloutEngineIdentity.IsPlayerReference(records, argument)) return false;
         var source = records.GetEffective(argument);
         if (source.Signature != "FLST") return Direct(source);
-        foreach (var field in source.ReadSubrecords().Where(field => field.Signature == "LNAM"))
+        foreach (var member in FalloutFormList.Entries(records, argument, current))
         {
-            if (field.Data.Length != sizeof(uint)) throw new InvalidDataException("Equipment form-list entry has an invalid extent.");
-            var raw = BinaryPrimitives.ReadUInt32LittleEndian(field.Data.Span);
-            if (raw == 0) break;
-            if (Direct(records.GetEffective(source.Plugin.AdjustFormId(raw)))) return true;
+            if (member is not { } form) break;
+            if (FalloutEngineIdentity.IsPlayerReference(records, form)) continue;
+            if (Direct(records.GetEffective(form))) return true;
         }
         return false;
 

@@ -40,6 +40,9 @@ internal sealed partial class RuntimeNativeActorCombat
     private static readonly StringName CombatActorsGroup = "OpenNVNativeCombatActors";
     private NativeActorCombatContext? _context;
     private FalloutActorThreat? _threat;
+    private FalloutActorThreat? _sourceThreat;
+    private FalloutActorThreat CurrentThreat() => _threat = _world.ActorThreat(_state.Reference,
+        _sourceThreat ??= FalloutActorThreat.Read(_records, _state.Base, _state.Templates));
     private uint? _relation;
     private float _detectRange;
     private double _detectionClock;
@@ -131,7 +134,7 @@ internal sealed partial class RuntimeNativeActorCombat
         var opponent = attacker == _records.RuntimeFormKey(0x14) ? null :
             CombatActors.SingleOrDefault(actor => actor._state.Reference == attacker);
         if (opponent is null && (attacker != _records.RuntimeFormKey(0x14) || player is not { CollisionResident: true })) return;
-        var threat = _threat ??= FalloutActorThreat.Read(_records, _state.Base, _state.Templates);
+        var threat = CurrentThreat();
         var candidates = _actor.GetTree().GetNodesInGroup(CombatActorsGroup);
         using var candidatesLifetime = (Godot.Collections.Array)candidates;
         foreach (var candidate in candidates.OfType<RuntimeNativeActorCombat>())
@@ -159,7 +162,7 @@ internal sealed partial class RuntimeNativeActorCombat
         var passiveCombat = PackageAllowsUnprovokedCombat();
         if (!PackageAllowsUnprovokedCombat(attacked ? victim.Reference : null)) return false;
         var defendingPackageTarget = attacked && !passiveCombat;
-        var threat = _threat ??= FalloutActorThreat.Read(_records, _state.Base, _state.Templates);
+        var threat = CurrentThreat();
         if (!defendingPackageTarget)
         {
             if (!factionAssistance || threat.Aggression == 3 || threat.Assistance == 0) return false;
@@ -228,10 +231,7 @@ internal sealed partial class RuntimeNativeActorCombat
                 if (_detectionClock <= 0)
                 {
                     _detectionClock = .2; // broad-phase scheduling; source rules own eligibility
-                    _threat ??= FalloutActorThreat.Read(_records, _state.Base, _state.Templates);
-                    var aggression = _world.ActorValue(_state.Reference, "aggression");
-                    if (aggression != Math.Truncate(aggression) || aggression is < 0 or > 3) throw new InvalidDataException("Actor aggression is invalid.");
-                    _threat = _threat with { Aggression = (byte)aggression };
+                    _threat = CurrentThreat();
                     if (!PackageAllowsUnprovokedCombat() || _state.PlayerTeammate || _threat.Confidence == 0 ||
                         _threat.Aggression == 0) ClearRadiusWarning();
                     else TryAcquireThreat(player);
@@ -250,7 +250,7 @@ internal sealed partial class RuntimeNativeActorCombat
             if (_actor is RuntimeNativeNpc npc) npc.RequireTravelCombatContinuation();
             if (!ResolveTarget(player)) return;
             StopPackageMotion(); _enemyObject?.Root.Show();
-            _threat ??= FalloutActorThreat.Read(_records, _state.Base, _state.Templates);
+            _threat = CurrentThreat();
             _detectRange = ThreatRadius(_threat);
             if (!float.IsFinite(_detectRange) || _detectRange <= 0) throw new InvalidDataException("Actor threat radius is invalid.");
             if (_threat.Confidence == 0)
@@ -276,7 +276,7 @@ internal sealed partial class RuntimeNativeActorCombat
         if (_engagementError is not null) return;
         if (!_engagementPrepared)
         {
-            _threat ??= FalloutActorThreat.Read(_records, _state.Base, _state.Templates);
+            _threat = CurrentThreat();
             if (_threat.Confidence == 0) PrepareFlee();
             else PrepareEngagement();
             _engagementPrepared = true;

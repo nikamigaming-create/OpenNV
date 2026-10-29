@@ -63,7 +63,8 @@ internal sealed record FalloutNativeCampaignState(
     FalloutPlayerAdvancementSnapshot? PlayerAdvancement = null,
     bool PlayerSneaking = false, FalloutPlayerCaravanCardsSnapshot? PlayerCaravanCards = null,
     IReadOnlyList<FalloutDroppedReferenceSnapshot>? DroppedItems = null,
-    FalloutActorProjectileLaunch? PlayerProjectileLaunch = null);
+    FalloutActorProjectileLaunch? PlayerProjectileLaunch = null,
+    FalloutFormListsSnapshot? FormLists = null);
 
 internal sealed record FalloutNativeCampaignRestore(
     FalloutNativeCampaignState State,
@@ -383,6 +384,7 @@ internal static class FalloutNativeCampaignSave
             FalloutNavigationSources.PrepareSavedTravel(stack, state.References, cancellation);
             progress?.Invoke(FalloutNativeCampaignReadPhase.NavigationReady);
             using var references = new FalloutReferenceWorld(stack, validatedValues);
+            if (state.FormLists is { } formLists) references.FormLists.Restore(formLists);
             references.TransientExplosions.Restore(state.TransientExplosions);
             references.RestoreEncounterZones(state.EncounterZones);
             references.Restore(state.References);

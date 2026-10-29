@@ -648,6 +648,7 @@ public partial class RuntimeCoordinator
             _nativeReferences?.Dispose();
             _nativeReferences = new(stack, auxiliary: _nativeScriptStorage?.Auxiliary,
                 ini: _nativeScriptStorage?.Ini, ui: _nativeUi, controls: _nativeScriptStorage?.Controls);
+            if (restore.State.FormLists is { } formLists) _nativeReferences.FormLists.Restore(formLists);
             _nativeReferences.RestoreEncounterZones(restore.State.EncounterZones);
             _nativeReferences.TransientExplosions.Restore(restore.State.TransientExplosions);
             if (restore.State.References is { } savedReferences) _nativeReferences.Restore(savedReferences);
@@ -1020,7 +1021,7 @@ public partial class RuntimeCoordinator
                 actor ??= RuntimeNativeNpc.Create(_nativePluginStack!, source, reference,
                     _configuration.World.GameUnitsToMeters, (appearance, part, nif, geometry) =>
                         NativeNpcMaterial.Resolve(appearance, part, nif, geometry, _nativePluginStack!,
-                            NativeAmbient(cell.Cell)), equippedArmor, selection, _nativeReferences.ActorAppearanceOverride(reference.FormKey));
+                            NativeAmbient(cell.Cell)), equippedArmor, selection, _nativeReferences.ActorAppearanceOverride(reference.FormKey), _nativeReferences.FormLists);
                 if (preparedNpc is not null) actor.BindSourceBehavior(_nativePluginStack!, selection);
                 SynchronizeNativeNpcAppearance(actor, cell);
                 actor.Transform = ReferenceTransform(reference);
@@ -1450,7 +1451,8 @@ public partial class RuntimeCoordinator
             () => _nativeOpeningStageDriver!.PlayerAppearance, () => NativeAmbient(_nativeActiveCell!.Cell),
             _nativeContinueOpening ? _nativeOpeningRestore?.State.WeaponHandling : null,
             () => _nativeOpeningStageDriver!.PlayerAppearanceRevision,
-            () => (_nativeQuestScripts ?? throw new InvalidOperationException("Player presentation has no shared script session.")).Scripts.Session);
+            () => (_nativeQuestScripts ?? throw new InvalidOperationException("Player presentation has no shared script session.")).Scripts.Session,
+            _nativeReferences!.FormLists);
         _nativePlayer.ConfigureCombat(_nativePluginStack!, _nativeGlobals!,
             () => _nativeOpeningStageDriver!.PlayerLevel, value => _nativeOpeningStageDriver!.PlayerCombatValue(value),
             () => _nativeOpeningStageDriver!.PlayerPerkEntries,

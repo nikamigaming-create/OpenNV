@@ -24,7 +24,7 @@ internal sealed partial class FalloutQuestScripts
                 return (References ?? throw new NotSupportedException("Quest has no actor value owner.")).ActorValue(subject, name);
             },
             ItemCount = (subject, item) => inventory is not null ? inventory.ItemCount(subject, item) :
-                subject == _records.RuntimeFormKey(0x14) ? FalloutInventoryItemCounts.Count(_records, _inventory, item) :
+                subject == _records.RuntimeFormKey(0x14) ? FalloutInventoryItemCounts.Count(_records, _inventory, item, References?.FormLists) :
                 throw new NotSupportedException("Quest has no actor inventory owner."),
             Equipped = (subject, item) => host?.Inventory is { } equipment ? equipment.IsEquipped(subject, item) :
                 subject == _records.RuntimeFormKey(0x14) && inventory is not null ? inventory.IsEquipped(subject, item) : null,

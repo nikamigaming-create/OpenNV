@@ -88,7 +88,8 @@ internal sealed partial class FalloutPlayerInventory
         Publish([item with { Variants = extras }]);
     }
 
-    internal IReadOnlyList<FalloutInventoryInstance> RepairMaterials(FalloutPluginStack records, FalloutFormKey target, int variant)
+    internal IReadOnlyList<FalloutInventoryInstance> RepairMaterials(FalloutPluginStack records, FalloutFormKey target, int variant,
+        IFalloutFormLists? formLists = null)
     {
         var item = Item(target) ?? throw new InvalidOperationException("Repair target is absent.");
         if (item.RecordType is not ("WEAP" or "ARMO")) return [];
@@ -114,20 +115,20 @@ internal sealed partial class FalloutPlayerInventory
             if (!active.Add(form)) throw new InvalidDataException("Repair list contains a cycle.");
             var list = records.GetEffective(form);
             if (list.Signature != "FLST") { allowed.Add(form); return; }
-            foreach (var field in list.ReadSubrecords().Where(field => field.Signature == "LNAM"))
+            foreach (var entry in FalloutFormList.Entries(records, form, formLists))
             {
-                if (field.Data.Length != 4) throw new InvalidDataException("Repair list entry extent is invalid.");
-                ReadList(list.Plugin.AdjustFormId(BinaryPrimitives.ReadUInt32LittleEndian(field.Data.Span)), new(active));
+                if (entry is not { } member) throw new InvalidDataException("Repair list member is null.");
+                ReadList(member, new(active));
             }
         }
     }
 
     internal void Repair(FalloutPluginStack records, FalloutFormKey target, int variant,
-        FalloutFormKey material, int materialVariant, float skill, long revision)
+        FalloutFormKey material, int materialVariant, float skill, long revision, IFalloutFormLists? formLists = null)
     {
         RequireRevision(revision);
         if (!float.IsFinite(skill)) throw new InvalidDataException("Repair skill is invalid.");
-        if (!RepairMaterials(records, target, variant).Any(value => value.Form == material && value.Variant == materialVariant))
+        if (!RepairMaterials(records, target, variant, formLists).Any(value => value.Form == material && value.Variant == materialVariant))
             throw new InvalidOperationException("Selected repair material is no longer eligible.");
         var selected = Instances(target)[variant].Extra;
         var donor = Instances(material)[materialVariant].Extra;
@@ -155,7 +156,7 @@ internal sealed partial class FalloutPlayerInventory
     }
 
     internal void InstallWeaponMod(FalloutPluginStack records, FalloutFormKey weapon, int variant,
-        int slot, long revision)
+        int slot, long revision, IFalloutFormLists? formLists = null)
     {
         RequireRevision(revision);
         var selected = Instances(weapon)[variant].Extra;
@@ -163,7 +164,7 @@ internal sealed partial class FalloutPlayerInventory
         FalloutWeaponModifications.RequireRuntimeEffect(modification);
         if ((selected.WeaponMods & (1 << slot)) != 0) throw new InvalidOperationException("This modification is already installed.");
         var mask = (byte)(selected.WeaponMods | (1 << slot));
-        var capacity = FalloutWeaponPresentation.Read(records, weapon, weaponMods: mask).ClipSize;
+        var capacity = FalloutWeaponPresentation.Read(records, weapon, weaponMods: mask, formLists: formLists).ClipSize;
         var magazine = selected.Magazine is { } previous ? previous with { Loaded = Math.Min(previous.Loaded, capacity) } : null;
         var material = Item(modification.Item) ?? throw new InvalidOperationException("Required weapon modification is absent.");
         if (records.QuestObjects.IsQuestObject(material.FormKey) || material.UnequipLocked)

@@ -192,7 +192,7 @@ internal sealed partial class FalloutReferenceWorld
             if (source.Signature == "WEAP") return EquippedObject(reference, 5, level, globals) == direct;
             if (source.Signature == "ARMO") _ = EquippedArmor(reference, level, globals);
             return Inventory(reference, level, globals).Contents.IsEquipped(records, direct);
-        });
+        }, FormLists);
 
     internal FalloutFormKey? EquippedObject(FalloutFormKey reference, uint slot, int level, FalloutGlobalState? globals = null)
     {

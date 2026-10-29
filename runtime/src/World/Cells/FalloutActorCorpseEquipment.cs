@@ -22,7 +22,7 @@ internal sealed record FalloutCorpseLaunchRefusal(FalloutFormKey Actor, FalloutC
             throw new InvalidDataException("Corpse launch refusal lost its consumed handling prefix.");
     }
 
-    internal void ValidateSource(FalloutPluginStack records)
+    internal void ValidateSource(FalloutPluginStack records, IFalloutFormLists? formLists = null)
     {
         Validate();
         var source = records.GetEffective(Weapon.Weapon);
@@ -30,7 +30,7 @@ internal sealed record FalloutCorpseLaunchRefusal(FalloutFormKey Actor, FalloutC
             .Equals(Weapon.Sha256, StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException("Corpse launch refusal differs from its winning weapon.");
         foreach (var magazine in Handling.Magazines)
-            if (magazine.Loaded > FalloutWeaponPresentation.Read(records, magazine.Weapon, false).ClipSize ||
+            if (magazine.Loaded > FalloutWeaponPresentation.Read(records, magazine.Weapon, false, formLists: formLists).ClipSize ||
                 records.GetEffective(magazine.Ammunition).Signature != "AMMO")
                 throw new InvalidDataException("Corpse launch refusal has an invalid historical magazine.");
     }
@@ -48,14 +48,15 @@ internal sealed record FalloutCorpseWeaponSource(FalloutFormKey Weapon, string S
             throw new InvalidDataException("Corpse weapon has no source identity.");
     }
 
-    internal FalloutWeaponPresentation ValidateSource(FalloutPluginStack records, FalloutPlayerInventory inventory)
+    internal FalloutWeaponPresentation ValidateSource(FalloutPluginStack records, FalloutPlayerInventory inventory,
+        IFalloutFormLists? formLists = null)
     {
         Validate();
         var record = records.GetEffective(Weapon);
         if (record.Signature != "WEAP" || !FalloutActorFurnitureContinuation.RecordHash(record).Equals(Sha256, StringComparison.OrdinalIgnoreCase) ||
             inventory.Item(Weapon) is not { Count: > 0, RecordType: "WEAP" } item || item.RuntimeFormId != records.RuntimeFormId(Weapon))
             throw new InvalidDataException("Corpse weapon differs from its winning declaration or retained inventory item.");
-        return FalloutWeaponPresentation.Read(records, Weapon, false);
+        return FalloutWeaponPresentation.Read(records, Weapon, false, formLists: formLists);
     }
 }
 
@@ -220,26 +221,26 @@ internal sealed record FalloutActorCorpseEquipment(IReadOnlyList<float> RootPose
         }
     }
 
-    internal void ValidateSource(FalloutPluginStack records, FalloutPlayerInventory inventory)
+    internal void ValidateSource(FalloutPluginStack records, FalloutPlayerInventory inventory, IFalloutFormLists? formLists = null)
     {
         Validate();
-        LaunchRefusal?.ValidateSource(records);
+        LaunchRefusal?.ValidateSource(records, formLists);
         foreach (var attachment in Attachments)
         {
-            var weapon = attachment.Source.ValidateSource(records, inventory);
+            var weapon = attachment.Source.ValidateSource(records, inventory, formLists);
             if (weapon.Model?.ModelPath is not { } path || !path.Equals(attachment.ModelResource, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidDataException("Corpse attachment differs from its winning weapon model.");
         }
         if (HandlingWeapon is { } handlingSource)
         {
-            var weapon = handlingSource.ValidateSource(records, inventory);
+            var weapon = handlingSource.ValidateSource(records, inventory, formLists);
             if ((weapon.Model is null) != (EmbeddedMuzzleBone is not null) ||
                 !inventory.Equipped.Contains(records.RuntimeFormId(weapon.Form)) ||
                 weapon.Model is not null && !Attachments.Any(attachment => attachment.Owner == "combat"))
                 throw new InvalidDataException("Corpse weapon handling differs from its actual embedded or equipped owner.");
             new FalloutWeaponHandling(inventory, nativeNpc: true).Restore(WeaponHandling!,
-                key => FalloutWeaponPresentation.Read(records, key, false),
-                (key, mods) => FalloutWeaponPresentation.Read(records, key, false, mods));
+                key => FalloutWeaponPresentation.Read(records, key, false, formLists: formLists),
+                (key, mods) => FalloutWeaponPresentation.Read(records, key, false, mods, formLists));
         }
         if (RouteRetirement?.Door is { } door)
         {
