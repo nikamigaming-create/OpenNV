@@ -1225,7 +1225,7 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
             {
                 if (records.GetEffective(validated.Get(snapshot.Reference).Base).Signature == "NPC_")
                     FalloutPackageTravelGoal.Read(records, validated, snapshot.Reference,
-                        records.GetEffective(snapshot.PackageMotion.Package), snapshot.PackageMotion.Sleep)
+                        records.GetEffective(snapshot.PackageMotion.Package), snapshot.PackageMotion.Sleep, snapshot.PackageMotion.EatPackage)
                         .Validate(records, validated, snapshot.Reference, travel);
                 else FalloutTravelPackage.Read(records.GetEffective(snapshot.PackageMotion.Package))
                         .Validate(records, validated, snapshot.Reference, travel);
@@ -1236,6 +1236,16 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
                 if (sleep.Furniture && (snapshot.FurnitureContinuation is not { SleepPackage: true } ||
                     snapshot.FurnitureContinuation.Furniture != sleep.Bed))
                     throw new InvalidDataException("Physical Sleep has no matching furniture continuation.");
+            }
+            if (snapshot.PackageMotion?.EatPackage is { } eating)
+            {
+                var source = FalloutEatPackage.Read(records.GetEffective(snapshot.PackageMotion.Package));
+                source.Validate(records, validated, snapshot.Reference, eating);
+                if (eating.Furniture && (snapshot.FurnitureContinuation is not { EatPackage: true } ||
+                    snapshot.FurnitureContinuation.Furniture != eating.Seat))
+                    throw new InvalidDataException("Physical Eat has no matching furniture continuation.");
+                if (snapshot.PackageMotion.Eat is { } selected && !source.AcceptsFood(records, validated, selected.Item))
+                    throw new InvalidDataException("Saved meal differs from its source Eat target.");
             }
             if (snapshot.PackageMotion?.Guard is { } guard)
                 FalloutGuardPackage.Read(records.GetEffective(snapshot.PackageMotion.Package))

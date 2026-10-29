@@ -79,6 +79,11 @@ internal sealed partial class RuntimeNativeActorCombat
         if (_state.PackageMotion is not { } motion) throw new NotSupportedException("Sleep has no observed package motion.");
         _state.PackageMotion = motion with { Sleep = progress };
     }
+    internal void SetEatPackageProgress(FalloutActorEatPackageProgress progress)
+    {
+        if (_state.PackageMotion is not { } motion) throw new NotSupportedException("Eat has no observed package motion.");
+        _state.PackageMotion = motion with { EatPackage = progress };
+    }
     internal void SetTravelProgress(FalloutTravelProgress progress)
     {
         if (_state.PackageMotion is not { } motion) throw new NotSupportedException("Travel has no observed package motion.");

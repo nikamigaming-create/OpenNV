@@ -5,6 +5,11 @@ using System.Text.RegularExpressions;
 
 namespace OpenNV.Runtime.Content;
 
+// Implemented character and radio categories from the source INFO/DIAL type
+// vocabulary. Parent DIAL grouping and a child INFO's category are independent;
+// character conversation topics can contain Topic-category INFO records.
+internal enum FalloutDialogueCategory : byte { Topic = 0, Conversation = 1, Radio = 7 }
+
 internal sealed record FalloutSayToCommand(string SpeakerEditorId, string TargetEditorId, string TopicEditorId,
     bool ForceSubtitles = false)
 {
@@ -118,7 +123,7 @@ internal sealed partial class FalloutDialogueTopic
     internal FalloutDialogueInfo? Select(FalloutFormKey speakerBase, IReadOnlySet<FalloutFormKey> said,
         Func<FalloutFormKey, float> questStage, Func<FalloutCondition, float>? context = null,
         Func<FalloutFormKey, bool>? questEligible = null, Func<FalloutFormKey, int>? questPriority = null,
-        bool conversation = false, Func<uint, uint>? random = null, bool npcConversation = false,
+        Func<uint, uint>? random = null, bool npcConversation = false,
         bool immediateResults = false, bool radio = false)
     {
         // A line excluded by its source speaker/SayOnce gate cannot own a
@@ -132,7 +137,7 @@ internal sealed partial class FalloutDialogueTopic
         {
             if (!EligibleAfterSpeaker(info, speakerBase, questStage, context, questEligible)) continue;
             if ((info.Flags & 2) == 0 && pool is not null) return Choose();
-            RequireFlags(info, conversation, randomSelection: true, npcConversation: npcConversation,
+            RequireFlags(info, randomSelection: true, npcConversation: npcConversation,
                 immediateResults: immediateResults, radio: radio);
             if ((info.Flags & 2) == 0) return info;
             (pool ??= []).Add(info);
@@ -291,17 +296,21 @@ internal sealed partial class FalloutDialogueTopic
                 $"INFO {info.Record.FormKey} condition {condition.Function} RunOn {condition.RunOn} is unbound.");
         }, evaluateRunOn: true);
 
-    internal static void RequireFlags(FalloutDialogueInfo info, bool conversation, bool randomSelection = false,
+    internal static void RequireFlags(FalloutDialogueInfo info, bool randomSelection = false,
         bool npcConversation = false, bool immediateResults = false, bool radio = false)
     {
         if (info.Responses.Count == 0)
             throw new NotSupportedException($"INFO {info.Record.FormKey} zero-response result/flow behavior is unbound.");
         var supported = randomSelection ? 39 : 5;
         if (immediateResults) supported |= 8;
-        if (info.Type != (radio ? 7 : conversation ? 0 : 1) || info.NextSpeaker > 1 || info.NextSpeaker != 0 && !npcConversation ||
+        if (!SupportsCategory(info.Type, radio) || info.NextSpeaker > 1 || info.NextSpeaker != 0 && !npcConversation ||
             (info.Flags & ~supported) != 0 || info.Flags2 != 0)
             throw new NotSupportedException($"INFO {info.Record.FormKey} needs its conversation/random/flag owner.");
     }
+
+    internal static bool SupportsCategory(byte type, bool radio) => radio
+        ? (FalloutDialogueCategory)type == FalloutDialogueCategory.Radio
+        : (FalloutDialogueCategory)type is FalloutDialogueCategory.Topic or FalloutDialogueCategory.Conversation;
 
     internal static bool Eligible(FalloutDialogueInfo info, FalloutFormKey speaker, IReadOnlySet<FalloutFormKey> said,
         Func<FalloutFormKey, float> questStage, Func<FalloutCondition, float>? context,

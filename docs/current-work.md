@@ -15,26 +15,39 @@ codex/experimental-playtest-release. Eighteen
 unrelated classic import EOL changes remain preserved and excluded.
 No game is active. Recording and render trace are off.
 
-Packaged build 49bf9ba6 restored fresh stage 80. Ordinary movement/E completed
-physical couch entry, Doc's word-association and inkblot conversations, tag-skill
-and optional-trait menus, then couch exit. VCG01 reached stage 110 and ordinary
-F5 committed slot c536f90fd4b54d15aef0714e995c9616, SHA256
-9FC82049EAE9AFEAEE63C1142FC73FFBB0C5CD6973197BC4EAB46D882A13D8E1.
-This is the next Continue point; do not replay the questionnaire. The game closed
-normally and source owners were disposed. The retained 621.5-second 3840x2124
-continuous take is video-only and does not verify audio, Sunny's route or combat.
+Packaged build c6065970 cold-loaded the successful stage 110 slot. Doc's real
+Pip-Boy handoff completed, VCG01 reached stage 200/completed and ordinary F5 saved.
+The player exited to Goodsprings, traversed to the Saloon, spoke with Sunny and
+advanced the tutorial to stage 20. A bot obstruction outside Doc's yard was cleared
+with ordinary manual movement. Combat and crafting were not performed in this take.
+The game closed normally and source owners were disposed. The retained 1014.4-second
+3840x2124 continuous take is video-only; it does not verify audio or parity.
 Requested footage and selected images remain in local/playtest-proof-20261029.
 
-The shared null-faction correction has actual conversation execution as well as
-focused/owned selection proof. Doc's next INFO 1057e4 handoff reached the missing
-typed visibility owner on the real GivePipBoy animation object. The current
-correction captures local visibility as canonical boolean snapshot constants and
-uses the shared source-priority/weight reducer with native discrete publication.
-Debug build, synthetic vote/tie/priority checks, cold contracts and the actual
-owned ANIO audit pass, including hidden-parent/local-visible distinction and
-recreated external bindings. Actual corrected handoff remains unverified.
-Next: pin the corrected package, Continue stage 110 and advance the recorded route.
-The final full gate remains required before pushing these runtime changes.
+The latest healthy exterior slot is e1a5489228934b73a90038f00187b474 (schema v65),
+written 2026-10-29 21:24:54 UTC, SHA256
+8BF5EC3F719BF732FDF1C3DF6E4828ADF4BF6F726AEA976A12F6651DB8B55934.
+Later saves failed admission; Sunny stage 20 is unsaved. Preserve this slot and
+resume its short exterior continuation after repair; do not replay Doc's questionnaire.
+
+The shared null-faction and typed visibility corrections have actual conversation,
+handoff, quest and save execution. Debug, synthetic vote/tie/priority checks, cold
+contracts and the actual owned ANIO audit pass, including local flags and recreated
+external bindings. The final full gate remains required before pushing this batch.
+
+The next candidate implements the two reached saving blockers. Standalone Eat
+retains its actual PACK, authored location/food restriction, independent request
+and fallback clocks, navigation, meal receipt and physical chair continuation.
+No-food occupied sitting holds the real chair; food availability precedes fallback
+timers. Consumed meals bypass new approach/ingestion admission. Shared character
+dialogue admits Topic/Conversation INFO independently of the validated parent DIAL
+channel, preserving flags, RNG and links. Debug, focused contracts and the selected
+owned Eat/mixed-category audits pass. Physical Eat handoff and ambient completion
+remain unverified until candidate 4 continues the healthy exterior save. Whole-cell
+Eat wandering, exact-reference acquisition, nonzero quantities and additional search
+flags remain explicit unsupported boundaries. No runtime bypass supplies success.
+The exterior sky also has conspicuous horizontal bands/seams. Record that rendering
+defect in release notes and defer its repair until after the gameplay/save blockers.
 
 ## Merged shared state systems
 

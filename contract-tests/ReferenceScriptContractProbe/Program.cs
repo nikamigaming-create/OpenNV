@@ -127,14 +127,23 @@ if (args is ["--owned-ingredient-use", var ingredientUseRoot])
             var owner = new FalloutPlayerIngestibles(records, inventory, vitals, body, _ => 50, _ => false, () => false);
             var use = owner.Prepare(ingredient.FormKey);
             use.Commit();
-            rows.Add(new { source = ingredient.FormKey.ToString(), outcome = "committed", effects = source.Effects.Count,
-                sourceSound = source.Sound?.ToString(), remaining = inventory.Item(ingredient.FormKey)?.Count ?? 0 });
+            rows.Add(new
+            {
+                source = ingredient.FormKey.ToString(),
+                outcome = "committed",
+                effects = source.Effects.Count,
+                sourceSound = source.Sound?.ToString(),
+                remaining = inventory.Item(ingredient.FormKey)?.Count ?? 0
+            });
         }
         catch (Exception error) when (error is InvalidDataException or NotSupportedException or InvalidOperationException or IOException)
         { rows.Add(new { source = ingredient.FormKey.ToString(), outcome = "refused", error = error.Message }); }
     }
-    Console.WriteLine(JsonSerializer.Serialize(new { rows,
-        boundary = "Owned ingredient offline preparation and commit only; sound delivery, menu, ordinary gameplay and retail behavior are unverified." }));
+    Console.WriteLine(JsonSerializer.Serialize(new
+    {
+        rows,
+        boundary = "Owned ingredient offline preparation and commit only; sound delivery, menu, ordinary gameplay and retail behavior are unverified."
+    }));
     return;
 }
 
@@ -168,8 +177,13 @@ if (args is ["--owned-ingredient-inventory", var ingredientRoot])
         catch (Exception error) when (error is InvalidDataException or NotSupportedException or InvalidOperationException or IOException)
         { failures.Add(new { source = ingredient.FormKey.ToString(), error = error.Message }); }
     }
-    Console.WriteLine(JsonSerializer.Serialize(new { discovered = ingredients.Length, admitted, failures,
-        boundary = "Inventory transfer and cold source economics only; ingredient consumption and retail behavior remain unverified." }));
+    Console.WriteLine(JsonSerializer.Serialize(new
+    {
+        discovered = ingredients.Length,
+        admitted,
+        failures,
+        boundary = "Inventory transfer and cold source economics only; ingredient consumption and retail behavior remain unverified."
+    }));
     if (failures.Count != 0) Environment.ExitCode = 1;
     return;
 }
@@ -249,12 +263,16 @@ if (args is ["--owned-find-food-population", var foodRoot])
     }
     var spatialSource = new
     {
-        center = actorReference.Position, radius = declaration.LocationRadius, cell = actorReference.Cell.ToString(),
+        center = actorReference.Position,
+        radius = declaration.LocationRadius,
+        cell = actorReference.Cell.ToString(),
         loadedGridCells = neighborhood.Cells.Count,
-        discoveredReferences = cell.References.Count, finiteSameCellWithinRadius = nearby.Length,
+        discoveredReferences = cell.References.Count,
+        finiteSameCellWithinRadius = nearby.Length,
         finiteOtherCellsWithinRadius = otherCells.Length,
         invalidPositions = cell.References.Count(reference => reference.Position.Length != 3 || reference.Position.Any(value => !float.IsFinite(value))),
-        worldFood, worldFoodFailures,
+        worldFood,
+        worldFoodFailures,
         nearbyInventoryReferences = nearbyInventories.Length,
         directFoodHolders = nearbyInventories.Where(reference => directFoodBases.Contains(reference.Base))
             .Select(reference => new { reference = reference.FormKey.ToString(), basis = reference.Base.ToString() }).ToArray(),
@@ -267,10 +285,19 @@ if (args is ["--owned-find-food-population", var foodRoot])
             .Select(reference => new { reference = reference.FormKey.ToString(), basis = reference.Base.ToString(), cell = reference.Cell.ToString() }).ToArray(),
     };
     var ingredients = records.EffectiveRecords("INGR").Select(record => new { source = record.FormKey.ToString(), deleted = record.IsDeleted }).ToArray();
-    Console.WriteLine(JsonSerializer.Serialize(new { actor = actor.ToString(), cell = cell.Cell.FormKey.ToString(),
-        sourceReferences = cell.References.Count, winningIngredientRecords = ingredients, kinds,
-        inventoryBases = inventoryBases.Length, foodSources, unresolvedSources, spatialSource,
-        boundary = "Authored exterior 3x3 grid and direct actor/container inventory declarations only; persistent-reference spatial residency, live movement, availability, leveled rolls, Find eligibility and retail selection unverified." }));
+    Console.WriteLine(JsonSerializer.Serialize(new
+    {
+        actor = actor.ToString(),
+        cell = cell.Cell.FormKey.ToString(),
+        sourceReferences = cell.References.Count,
+        winningIngredientRecords = ingredients,
+        kinds,
+        inventoryBases = inventoryBases.Length,
+        foodSources,
+        unresolvedSources,
+        spatialSource,
+        boundary = "Authored exterior 3x3 grid and direct actor/container inventory declarations only; persistent-reference spatial residency, live movement, availability, leveled rolls, Find eligibility and retail selection unverified."
+    }));
     return;
 }
 
@@ -1214,6 +1241,11 @@ if (args is ["--audit-dialogue-editor-region", var dialogueEditorData])
 if (args is ["--furniture-contracts"])
 {
     FurnitureContracts.Run();
+    return;
+}
+if (args is ["--audit-eat", var eatData])
+{
+    OwnedEatProbe.Run(eatData);
     return;
 }
 if (args is ["--audit-sleep", var sleepData])

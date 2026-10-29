@@ -52,6 +52,7 @@ internal enum FalloutConditionFunction : ushort
     GetEquipped = 182,
     GetUnconscious = 242,
     GetRestrained = 244,
+    GetIsUsedItem = 246,
     GetIsUsedItemType = 247,
     IsSneaking = 286,
     IsRunning = 287,

@@ -45,7 +45,7 @@ internal partial class RuntimeNativeNpc
             _furnitureSandboxActivity, _sandboxFurniturePackageExit,
             _furnitureApproaching ? WriteFurniturePose(_furnitureApproach) : null,
             _furnitureApproaching && _furnitureApproachFloor is { } floor ? [floor.X, floor.Y, floor.Z] : null,
-            _furniturePendingSelection is not null, _furniturePendingSelection?.Forced == true, _sleepPackage is not null);
+            _furniturePendingSelection is not null, _furniturePendingSelection?.Forced == true, _sleepPackage is not null, _eatPackage is not null);
         state.Validate();
         return state;
     }
@@ -91,6 +91,13 @@ internal partial class RuntimeNativeNpc
             _sleepProgress = new(_aiWorld!.Placement(saved.Furniture!.Value).Cell, saved.Furniture.Value, true);
             _sleepBeds = _sleepPackage.Source(_aiStack!, _aiWorld, Appearance.Reference!.Value);
             _sleepPackage.Validate(_aiStack!, _aiWorld, Appearance.Reference!.Value, _sleepProgress);
+        }
+        else if (saved.EatPackage)
+        {
+            _eatPackage = FalloutEatPackage.Read(package);
+            _eatProgress = _aiReferenceState!.PackageMotion?.EatPackage ??
+                throw new InvalidDataException("Saved physical Eat has no parent procedure intent.");
+            _eatPackage.Validate(_aiStack!, _aiWorld!, Appearance.Reference!.Value, _eatProgress);
         }
         _findFurniture = source.Procedure == 0 ? FalloutFindFurniturePackage.Read(package) : null;
         _furnitureSandboxActivity = saved.SandboxActivity;

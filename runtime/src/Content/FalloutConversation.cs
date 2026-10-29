@@ -46,7 +46,7 @@ internal sealed class FalloutConversation(FalloutPluginStack records, FalloutQue
             {
                 var next = FalloutDialogueTopic.Decode(records.GetEffective(follow));
                 if (!FalloutDialogueTopic.Eligible(next, _speaker, _said, quest => quests.Stage(quest), evaluate, QuestEligible)) continue;
-                FalloutDialogueTopic.RequireFlags(next, conversation: true, immediateResults: true);
+                FalloutDialogueTopic.RequireFlags(next, immediateResults: true);
                 Begin(next);
                 return;
             }

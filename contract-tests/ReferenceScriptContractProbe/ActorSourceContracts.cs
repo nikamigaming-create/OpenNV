@@ -465,6 +465,14 @@ internal static class ActorSourceContracts
         FalloutFormKey Key(uint id) => new("Random.esm", id);
         var topic = FalloutDialogueTopic.Read(records, Key(0x100));
         var said = new HashSet<FalloutFormKey>();
+        foreach (var category in new[] { FalloutDialogueCategory.Topic, FalloutDialogueCategory.Conversation })
+            FalloutDialogueTopic.RequireFlags(topic.Infos[0] with { Type = (byte)category }, randomSelection: true, npcConversation: true);
+        foreach (var category in new byte[] { 2, 3, 4, 5, 6, 8, byte.MaxValue })
+            Reject(() => FalloutDialogueTopic.RequireFlags(topic.Infos[0] with { Type = category }, randomSelection: true, npcConversation: true));
+        FalloutDialogueTopic.RequireFlags(topic.Infos[0] with { Type = (byte)FalloutDialogueCategory.Radio }, radio: true);
+        Reject(() => FalloutDialogueTopic.RequireFlags(topic.Infos[0] with { Type = (byte)FalloutDialogueCategory.Topic }, radio: true));
+        Check(!FalloutDialogueTopic.SupportsCategory(8, false) && !FalloutDialogueTopic.SupportsCategory(2, false),
+            "Unknown or unsupported parent categories entered a character dialogue channel.");
         var draws = 0;
         uint ChooseLast(uint count) { ++draws; Check(count == 2, "Random End lost its eligible pool boundary."); return count - 1; }
         Check(topic.Select(Key(0x14), said, _ => 0, _ => 0, random: ChooseLast)!.Record.FormKey == Key(0x101) && draws == 0,

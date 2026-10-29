@@ -79,7 +79,7 @@ internal partial class RuntimeNativeNpc
     {
         var world = _aiWorld ?? throw new NotSupportedException("Marker Travel has no shared reference owner.");
         var source = goal ?? FalloutPackageTravelGoal.Read(_aiStack!, world, Appearance.Reference!.Value, package);
-        if (source.Sleep is null && source.LocationType is not (0 or 2 or 3))
+        if (source.Sleep is null && source.Eat is null && source.LocationType is not (0 or 2 or 3))
             throw new NotSupportedException("Native Travel requires its reference, current-location or editor-location owner.");
         var actor = Appearance.Reference!.Value;
         var state = world.Get(actor);
@@ -202,7 +202,7 @@ internal partial class RuntimeNativeNpc
             }
             var radius = MarkerTravelRadius(progress);
             var reached = IsOnFloor() && GlobalPosition.DistanceTo(destination) <= radius + .1f;
-            var completedNow = source.Sleep is null && reached && !progress.Complete && progress.PortalDoor is null &&
+            var completedNow = source.Sleep is null && source.Eat is null && reached && !progress.Complete && progress.PortalDoor is null &&
                 !source.HoldsForPlayer(source.ContinueIfPlayerNear && Combat.PackagePlayerInSameCell());
             progress = progress with
             {

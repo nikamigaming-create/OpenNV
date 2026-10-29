@@ -25,6 +25,7 @@ internal static partial class FurnitureContracts
                 Record("GMST", 0x722, Field("EDID", Text("fFurnitureMarker14DeltaZ")), Field("DATA", BitConverter.GetBytes(3f))),
                 Record("GMST", 0x723, Field("EDID", Text("fFurnitureMarker14HeadingDelta")), Field("DATA", BitConverter.GetBytes(.125f))),
                 Record("ALCH", 0x713, Field("ENIT", new byte[3])),
+                Record("ALCH", 0x715, Field("ENIT", FoodHeader())), Record("ALCH", 0x716, Field("ENIT", FoodHeader())),
                 Record("CELL", 0x800, Field("DATA", [1])), References()));
             var sittingCondition = new byte[28]; BinaryPrimitives.WriteUInt16LittleEndian(sittingCondition.AsSpan(8), 159);
             File.WriteAllBytes(Path.Combine(directory, "Find.esp"), Join(Header("Seats.esm"),
@@ -33,6 +34,9 @@ internal static partial class FurnitureContracts
                 SleepFixture(0x01000406, 1, 0x800), SleepFixture(0x01000407, 0, 0x905, 5),
                 SleepFixture(0x01000408, 2, 0, 5), SleepFixture(0x01000409, 3, 0, 5),
                 SleepFixture(0x0100040a, 4, 0), SleepFixture(0x0100040b, 1, 0x800, flags: 0x40000000),
+                EatFixture(0x0100040c), EatFixture(0x0100040d, foodType: 1, food: 0x715),
+                EatFixture(0x0100040e, foodType: 0, food: 0x901), EatFixture(0x0100040f, count: 1),
+                EatFixture(0x01000410, location: 4),
                 Record("SCPT", 0x01000500, Field("SCRO", BitConverter.GetBytes(0x900u)),
                     Field("SCRO", BitConverter.GetBytes(0x90au)),
                     Field("SCRO", BitConverter.GetBytes(0x901u)), Field("SCRO", BitConverter.GetBytes(0x14u))),
@@ -50,6 +54,7 @@ internal static partial class FurnitureContracts
             Reject(() => FalloutFurnitureSource.ReadSeats(records, permitted, FurnitureMarkers(0)));
             var cell = FalloutCellSceneReader.Read(records, Key(0x800)); world.LoadCell(cell);
             SleepContracts(records, cell);
+            EatContracts(records, cell);
             var source = FalloutFindFurniturePackage.Read(records.GetEffective(new("Find.esp", 0x400)));
             var actor = Key(0x900); var chair = Key(0x901); var otherActor = Key(0x90a); var player = Key(0x14);
             var sandbox = new FalloutSandboxPackage(new("Find.esp", 0x400), 0, 0, Key(0x905), 5, new(31));
@@ -116,15 +121,28 @@ internal static partial class FurnitureContracts
         var furniture = records.GetEffective(warm.Get(chair).Base);
         var idle = records.GetEffective(new("Seats.esm", 0x712));
         var seat = new FalloutFurnitureSeat(furniture.FormKey, 0, 1, new(new(0, 0, 0), 0, 1, 1), [0, 0, 0], 0);
-        var occupied = search with { Assignment = assignment with { Done = true }, Phase = 3,
-            Furniture = chair, FurnitureSha256 = FalloutActorFurnitureContinuation.RecordHash(furniture),
-            Model = "meshes/fixture-chair.nif", ModelSha256 = hash, Seat = seat, Occupied = (float[])pose.Clone(),
-            Clip = new(idle.FormKey, FalloutActorFurnitureContinuation.RecordHash(idle), resource, hash) };
+        var occupied = search with
+        {
+            Assignment = assignment with { Done = true },
+            Phase = 3,
+            Furniture = chair,
+            FurnitureSha256 = FalloutActorFurnitureContinuation.RecordHash(furniture),
+            Model = "meshes/fixture-chair.nif",
+            ModelSha256 = hash,
+            Seat = seat,
+            Occupied = (float[])pose.Clone(),
+            Clip = new(idle.FormKey, FalloutActorFurnitureContinuation.RecordHash(idle), resource, hash)
+        };
         owner.PackageAssignment = occupied.Assignment;
         owner.FurnitureContinuation = occupied;
         saved = warm.Capture();
-        var approach = occupied with { Assignment = assignment, Phase = 1,
-            Approach = (float[])pose.Clone(), ApproachFloor = [1, 2, 3] };
+        var approach = occupied with
+        {
+            Assignment = assignment,
+            Phase = 1,
+            Approach = (float[])pose.Clone(),
+            ApproachFloor = [1, 2, 3]
+        };
         owner.PackageAssignment = assignment;
         owner.FurnitureContinuation = approach;
         using (var approaching = new FalloutReferenceWorld(records))

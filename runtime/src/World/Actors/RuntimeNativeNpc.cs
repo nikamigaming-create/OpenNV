@@ -259,6 +259,7 @@ internal partial class RuntimeNativeNpc : CharacterBody3D
         {
             InterruptSandboxFurniture();
             InterruptSleepFurniture();
+            InterruptEatFurniture();
             InterruptSandboxMarker();
             if (_currentIdleRequest is { State: 2 } || _queuedIdleRequest is not null) RequestIdleRetirement();
             ConsumeIdleRetirement();

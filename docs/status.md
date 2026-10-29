@@ -32,14 +32,21 @@ rather than a successful SetEssential command with missing lifecycle behavior.
 SCDA instruction execution and general runtime reference identity/allocation/
 lifetime/persistence remain absent; source parsing is not a VM.
 
-Packaged build 49bf9ba6 continued fresh stage 80 through physical couch entry,
-Doc's word-association/inkblot conversations and tag/trait menus to stage 110.
-Ordinary F5 committed a new healthy source slot; the 621.5-second continuous
-3840x2124 take remains private and video-only. The shared null-faction correction
-therefore has actual conversation execution. The next handoff exposed untyped
-animation-object visibility. Its shared typed correction passes Debug, synthetic,
-cold and owned ANIO checks, including local flags, half-weight ties and recreated
-bindings. Actual corrected handoff and the final publication gate remain pending.
+Packaged build c6065970 continued the healthy stage 110 slot through the real
+Pip-Boy handoff, completed Doc at stage 200, saved and exited to Goodsprings.
+Ordinary traversal and Sunny dialogue advanced the tutorial to 20; that later
+progress was unsaved because background Eat/ambient-dialogue owners blocked F5.
+The healthy exterior slot remains authoritative. A 1014.4-second continuous
+3840x2124 private video shows this route; it is video-only. Combat/crafting,
+sustained 4K60 and matched retail parity are unverified. Horizontal sky seams
+are an explicit rendering defect. Typed visibility has actual handoff execution.
+
+The next candidate's standalone Eat and mixed Topic/Conversation INFO corrections
+pass Debug, focused contracts and selected owned audits. They retain authored
+scope/food, real package/chair state, independent retry clocks and consumed meal
+receipts. Physical Eat handoff/ambient completion and the final publication gate
+remain pending. Unsupported search, whole-cell wandering and exact-reference food
+acquisition stay visible; source decoding is not evidence of those behaviors.
 
 The merged batch adds source-bound Sleep using existing travel/portal/bed
 owners, exact outgoing package-query retirement, sole marker history restoration,
