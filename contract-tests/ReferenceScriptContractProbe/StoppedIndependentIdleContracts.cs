@@ -1,5 +1,6 @@
 using System.Text.Json;
 using OpenNV.Runtime.Content;
+using OpenNV.Runtime.Formats.Gamebryo;
 using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.World.Cells;
 
@@ -85,7 +86,8 @@ internal static class StoppedIndependentIdleContracts
             var metadata = new FalloutIdleTransition.Metadata(0, 0, 0);
             var transition = FalloutIdleTransition.CreateSnapshot(new(0, false, false, false, false, false), metadata, null, settings);
             transition.Advance(0); transition.Advance(1);
-            var blend = new FalloutActorIdleSnapshotTransition(transition.Capture(), settings, residual.Copy());
+            var scalar = new FalloutNifSnapshotScalar(new(FalloutNifScalarKind.FloatExtraData, "Head", "Control"), 50, .63f);
+            var blend = new FalloutActorIdleSnapshotTransition(transition.Capture(), settings, residual.Copy(), Scalars: [scalar]);
             var finite = new FalloutIdleAnimationPlayback(0, 2, 1, 2, keys, 0);
             finite.Advance(2);
             var fade = new FalloutIdleDeactivation(metadata, settings);
@@ -99,8 +101,15 @@ internal static class StoppedIndependentIdleContracts
             restored.Validate(records);
             Require(restored.Animation.Clock == finite.Capture() && restored.ScriptPhase == returning.ScriptPhase &&
                 restored.Transition!.Phase == blend.Phase &&
+                restored.Transition.Scalars!.Single() == scalar && !ReferenceEquals(restored.Transition.Scalars, blend.Scalars) &&
                 !ReferenceEquals(restored.Transition!.Pose.Bones[0].Position, returning.Transition!.Pose.Bones[0].Position),
                 "Cold finite return lost its completed KF, partial fade, held transition or immutable pose ownership.");
+            foreach (var invalidScalars in new IReadOnlyList<FalloutNifSnapshotScalar>[]
+            {
+                [scalar, scalar], [scalar with { Value = float.NaN }],
+                [scalar with { Target = scalar.Target with { Kind = (FalloutNifScalarKind)99 } }],
+                [scalar with { Target = scalar.Target with { Name = "" } }],
+            }) Reject(() => (blend with { Scalars = invalidScalars }).Validate());
             var coldFade = new FalloutIdleDeactivation(metadata, settings);
             coldFade.Restore(restored.ScriptPhase!.Deactivation!);
             fade.Advance(.0625); coldFade.Advance(.0625);

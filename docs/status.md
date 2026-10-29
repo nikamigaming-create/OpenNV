@@ -7,17 +7,26 @@ FO1 remains an incomplete classic preview with selected movement, inventory,
 equipment, door and save flows. Complete campaign execution and 1:1 3D art are
 unverified. See [current-work.md](current-work.md) for the active owner.
 
-The merged baseline is PR #329, `c99d7f21`, with its full mandatory local gate,
-selected owned/native audits, diff check and all five hosted checks passed.
-Local main equals origin/main. Fresh branch `codex/sandbox-sleep-continuation`
-owns the next reached Sleep and marker lifecycle repairs.
+The merged baseline is PR #330, `78d643a3`, with its full required local gate,
+selected owned/native checks, diff check and all five hosted checks passed.
+Local main equals origin/main. Fresh branch `codex/typed-scalar-snapshot` owns
+the reached HeadTrack/face-morph scalar transition repair. Its source and
+dependent fixtures are reviewed/frozen; owned and synthetic scalar checks pass,
+with the full required gate and actual forward F5 passing.
+Scalar export 8d346c24 Continued the saved Healing Powder and followed the source
+corridor with ordinary input. F5 command 377 completed at 12:38:58.392 UTC, HP 99,
+no save/cleanup error, saving useful traversal near the north shoulder. Canonical
+SHA256 is `02ABCFE0D0179E3C8B51E0F867363D13D81CB7B364C882EA0CCF8038907E277F`;
+its next Continue is unverified. Objective 40 remains displayed/incomplete. Later,
+function 451 on AI condition 08747d lacked an owner; the RockCanyon18 join also
+remains physically unproved. Normal quit preserved the new save. These are next
+bounded owners after checked scalar publication, without replaying cooking.
 
-Current coherent branch adds source-bound Sleep using existing travel/portal/bed
+The merged batch adds source-bound Sleep using existing travel/portal/bed
 owners, exact outgoing package-query retirement, sole marker history restoration,
 observed marker procedure phases, typed unchosen-meal failure capture and
 qualified forward inventory traversal. Selected native/contracts and owned
-Sleep/source-food audits pass; all runtime scopes are reviewed/frozen and the
-full publication gate is running. Missing inventory provenance, unknown insertions
+Sleep/source-food audits and the merged publication gate pass. Missing inventory provenance, unknown insertions
 and duplicate direct-food order remain explicit. Fault persistence does not
 establish meal behavior or permit fabricated ingestion.
 
@@ -44,8 +53,8 @@ A later actor 157c8f transition exposed bound HeadTrack/face-morph scalar snapsh
 support as the next saving owner; no F5 overwrote the cooking checkpoint. Normal
 quit disposed source owners. PR #330 also fixes native query temporary ownership
 found by hosted CI: focused allocation checks and the fresh full required gate
-pass with the strict assertion unchanged. Checked hosted publication remains the
-boundary; typed-scalar transition support belongs to the next fresh branch.
+pass with the strict assertion unchanged. PR #330 completed checked publication; typed-scalar transition support belongs
+to the current fresh branch.
 
 The merged patch adds explicit source-text timing for audio/LIP-absent responses,
 authored furniture endpoint approach and source-qualified Sandbox occupied/exit

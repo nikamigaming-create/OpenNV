@@ -182,16 +182,23 @@ internal sealed class RuntimeNativeNifSkeleton
             var sampler = new FalloutNifBoolAnimation(source, link.Interpolator);
             return time => { _visibility[link.NodeName] = sampler.Sample(time); RefreshVisibility(); };
         }
-        if (link.ControllerType == "NiGeomMorpherController" && _attachments.TryGetValue(link.NodeName, out var attachment) && attachment.Morph is { } morph)
+        return null;
+    }
+
+    internal RuntimeNifScalarBinding? BindMorphChannel(FalloutNifFile source, FalloutNifControllerLink link)
+    {
+        if (link.ControllerType == "NiGeomMorpherController" && link.PropertyType.Length == 0 && link.Variable1.Length == 0 &&
+            _attachments.TryGetValue(link.NodeName, out var attachment) && attachment.Morph is { } morph)
         {
             var index = morph.Index(link.Variable2);
             var sampler = new FalloutNifFloatAnimation(source, link.Interpolator);
-            return time =>
+            return new(new(FalloutNifScalarKind.MorphWeight, link.NodeName, link.Variable2), link.Priority, sampler,
+                () => _morphWeights[(link.NodeName, index)], value =>
             {
-                var value = morph.EffectiveWeight(index, sampler.Sample(time));
+                value = morph.EffectiveWeight(index, value);
                 _morphWeights[(link.NodeName, index)] = value;
                 if (index > 0) attachment.Mesh.SetBlendShapeValue(index - 1, value);
-            };
+            }, value => morph.EffectiveWeight(index, value));
         }
         return null;
     }

@@ -12,6 +12,14 @@ public partial class NativeNifInstanceAudit : Node
     {
         try
         {
+            if (OS.GetCmdlineUserArgs() is ["--scalar-snapshots"])
+            {
+                ExerciseScalarSnapshots(); GetTree().Quit(); return;
+            }
+            if (OS.GetCmdlineUserArgs() is ["--owned-scalar-snapshots", var scalarRoot])
+            {
+                ExerciseOwnedScalarSnapshots(scalarRoot); GetTree().Quit(); return;
+            }
             if (OS.GetCmdlineUserArgs() is ["--owned-archive-index", var archiveGame, .. var archivePaths])
             {
                 ExerciseOwnedArchiveIndex(archiveGame, archivePaths); GetTree().Quit(); return;
@@ -247,6 +255,7 @@ public partial class NativeNifInstanceAudit : Node
             ExercisePlacedLights();
             ExerciseMorphBasis();
             ExerciseManagedMorph();
+            ExerciseScalarSnapshots();
             ExerciseParticleChannels();
             ExerciseParticleTransformCache();
             ExerciseParticleShapesColors();
