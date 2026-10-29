@@ -1,6 +1,6 @@
 # Current work
 
-## Active batch and ownership
+## Active batch: experimental playtest package and proof video
 
 One GPT-6.1 Sol High executor owns implementation, builds, game input and Git.
 The coordinator reviews the final coherent diff before publication. No parallel
@@ -8,13 +8,14 @@ writers or per-decision approval loop remain. Follow implementation-plan.md:
 shared systems, headless execution, integration, then representative retail
 comparison; gameplay is not the primary missing-feature discovery loop.
 
-Checked baseline PR #333 is c6ac937697d713cbd8b20c3014e4c35693f4163f.
+Checked baseline PR #334 is f614166484bef221d8d2e5a192bc2d50b29bd78a.
 Its required local/owned gates and all five hosted checks passed; main was
-reconciled with origin/main. Active branch: codex/script-state-owners. Eighteen
+reconciled with origin/main; no PR remains open. Active branch:
+codex/experimental-playtest-release. Eighteen
 unrelated classic import EOL changes remain preserved and excluded.
 No game is active. Recording and render trace are off.
 
-## Implemented candidate
+## Merged shared state systems
 
 World-owned mutable FormLists retain ordered additions over immutable winning
 source members. AddFormToFormList, ListGetCount and ListGetNthForm share both
@@ -76,7 +77,8 @@ matched-retail parity claim. Recording stayed off throughout.
 
 ## Delivery priority and next systems
 
-Owned/full validation and diff check pass. Complete checked publication of this batch.
+PR #334 completed checked publication; local main equals origin/main. Build and
+validate the pinned experimental package, then record the requested gameplay.
 Then prepare an accurately labeled asset-free experimental Windows playtest using
 Build-OpenNVPlaytest.ps1 and Package-OpenNV.ps1. Inspect loose files, actual PCK
 entries and final archive; exclude owned/derived retail content, saves, captures

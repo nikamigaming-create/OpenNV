@@ -7,8 +7,8 @@ FO1 remains an incomplete classic preview with selected movement, inventory,
 equipment, door and save flows. Complete campaign execution and 1:1 3D art are
 unverified. See [current-work.md](current-work.md) for the active owner.
 
-The checked baseline is PR #333, c6ac9376, with local/owned gates and all five
-hosted checks passed. Branch codex/script-state-owners implements shared mutable
+The checked baseline is PR #334, f6141664, with local/owned gates and all five
+hosted checks passed. The merged runtime implements shared mutable
 FormLists and behavioral AV pools, persistent additions/modifiers, both parsed
 script hosts and live inventory/equipment/hit/weapon/appearance consumers.
 Focused headless contracts, selected owned audit, the full required gate and diff

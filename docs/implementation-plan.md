@@ -77,7 +77,7 @@ rather than being inferred from FNV results.
 
 ## Current batch and delivery order
 
-Checked baseline PR #333 is c6ac9376. The script-state-owners candidate implements
+Checked baseline PR #334 is f6141664. The merged shared-state runtime implements
 shared mutable FormLists and behavioral actor-value pools, used command/query
 families, live consumers and current-save persistence. Named source definitions
 are immutable; world state and native/Godot adapters remain separate. Focused
@@ -86,7 +86,8 @@ pass. The full publication gate and diff check pass. Actual fresh-game export b2
 Reflectron, manual traversal and Vigor acceptance, then saved successfully.
 Retain the requested screenshots and reuse the fresh checkpoint for next launch.
 
-The user now requests an outside-tester release. After checked publication:
+The active codex/experimental-playtest-release branch now prepares the requested
+outside-tester release after completed checked publication:
 
 1. Build/pin the existing experimental Windows playtest pipeline. Inspect actual
    PCK entries as well as loose/package archive contents. Ship no owned/derived
