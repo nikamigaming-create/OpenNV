@@ -1,4 +1,5 @@
 using OpenNV.Runtime.Content;
+using OpenNV.Runtime.World.Cells;
 
 namespace OpenNV.Runtime.World.Actors;
 
@@ -7,7 +8,8 @@ namespace OpenNV.Runtime.World.Actors;
 internal readonly record struct NativeCreaturePoseOwners(string Owner, double DefaultElapsedSeconds, float DefaultSourceSeconds,
     double? PackageElapsedSeconds, float? EventSourceSeconds, float? ScriptSourceSeconds,
     bool CombatOwnsPose, bool PackageOwnsPose, bool Moving, FalloutFormKey? Package, string? PackageAnimation,
-    FalloutFormKey? EventIdle, FalloutFormKey? ScriptIdle, string? AnimationError, string? SourceError, string? PackageError);
+    FalloutFormKey? EventIdle, FalloutFormKey? ScriptIdle, string? AnimationError, string? SourceError, string? PackageError,
+    FalloutCreatureScriptIdlePhase? ScriptPhase);
 
 internal sealed partial class RuntimeNativeCreature
 {
@@ -18,5 +20,6 @@ internal sealed partial class RuntimeNativeCreature
         _clock.ElapsedSeconds, SourceSeconds, _aiState?.PackageMotion?.Seconds, _eventIdleClock?.SourceSeconds,
         _scriptIdleClock?.SourceSeconds, Combat?.OwnsPose == true, Combat?.PackageOwnsPose == true, Combat?.PackageMoving == true,
         _aiPackage?.FormKey, _aiState?.PackageMotion?.Animation, _aiState?.PackageIdle?.Idle,
-        _aiState?.CreatureScriptIdle?.Animation.Idle, Error, _aiState?.ScriptError, _aiError);
+        _aiState?.CreatureScriptIdle?.Animation.Idle, Error, _aiState?.ScriptError, _aiError,
+        ScriptIdleActive ? CaptureScriptIdlePhase() : null);
 }

@@ -28,13 +28,15 @@ internal static class FalloutFurnitureSource
         var tables = nif.Blocks.Where(block => block.TypeName == "BSFurnitureMarker")
             .Select(block => (FalloutNifFurnitureMarker)nif.ReadObject(block.Index)).ToArray();
         if (tables.Length != 1) throw new NotSupportedException("Furniture marker table is absent or ambiguous.");
-        var enabled = Enumerable.Range(0, 30).Where(index => (flags & (1u << index)) != 0).ToArray();
+        // MNAM permits positions; only the model defines physical candidates.
+        // Unused permission bits neither create markers nor index past the NIF.
+        var enabled = Enumerable.Range(0, Math.Min(30, tables[0].Positions.Length))
+            .Where(index => (flags & (1u << index)) != 0).ToArray();
         if (enabled.Length == 0) throw new InvalidDataException("Furniture has no enabled source seats.");
         return enabled.Select(Seat).ToArray();
 
         FalloutFurnitureSeat Seat(int selected)
         {
-            if (selected >= tables[0].Positions.Length) throw new InvalidDataException("Furniture mask exceeds the source marker table.");
             var marker = tables[0].Positions[selected];
             if (marker.PositionReference1 != marker.PositionReference2)
                 throw new NotSupportedException("Furniture marker references require distinct entry/exit ownership.");

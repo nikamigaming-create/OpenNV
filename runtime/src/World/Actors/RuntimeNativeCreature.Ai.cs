@@ -412,7 +412,7 @@ internal sealed partial class RuntimeNativeCreature
         using var frameWork = OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Measure(OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Owner.CreaturePackages);
         Combat?.StopPackageMotion();
         _waitingForTarget = null;
-        if (ScriptIdleActive) return;
+        if (ScriptIdleActive) { ObserveScriptIdleInterruption(); return; }
         if (SandboxMotionError is not null) return;
         if (SandboxAdmissionError is not null || HasDetachedSandboxAdmission || HasDetachedPendingSandboxStart) return;
         if (_aiRecords is null || Combat is null || Combat.OwnsPose ||

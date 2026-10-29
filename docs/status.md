@@ -7,31 +7,28 @@ FO1 remains an incomplete classic preview with selected movement, inventory,
 equipment, door and save flows. Complete campaign execution and 1:1 3D art are
 unverified. See [current-work.md](current-work.md) for the active owner.
 
-The merged baseline is PR #325, `a8c6b154`. Its required gate and hosted checks
-passed. Current branch `codex/sandbox-activity-execution` is unpublished and has
-passed its fresh required gate and selected owned NPC furniture/checkpoint audit.
-Hosted checks await publication. User-authorized Sol High workers share
-one checkout and branch; one executor owns integrated builds and gameplay.
+The merged baseline is PR #326, `874c56d8`, with its local/hosted checks passed.
+Current branch `codex/creature-idle-completion` repairs finite creature idle
+return, restores idle-marker reservation adoption and reads physical furniture
+positions before ordinal permissions. Its fresh publication gate and selected owned checkpoint audit pass; hosted
+checks await publication.
 
-Candidate `06d9e517-0d91-4e53-b0ee-c3fa50bb1c7f` continued the canonical stage-200
-exterior save. Both NPCs 104f03 and 104f0a completed LooseRaking through End and
-returned to marker selection or Wander without AI/animation errors. Ordinary
-F5 command 103, generation 1, succeeded; the 21:56:13 checkpoint retains two
-marker continuations and their idle request graphs. Cold continuation of that
-new marker checkpoint remains unverified. The held-phase combat interruption
-guard is fixed in source after this candidate and passes the publication gate.
+ExportRelease `d6367556-4a09-427b-ba2c-9dd38a633259` continued tutorial 20 and
+reached tutorial 50 through rifle practice, hostile gecko kills and corpse Take
+All. NVGeckoMeat 1 entered inventory; HP remained100. F5 generation 1 completed
+without save/cleanup error at 06:31:32.972 UTC in cell 0e1ab6. This is the canonical
+current checkpoint. The game closed normally, disposing source owners without
+the former creature-retirement/logger failure.
 
-Ordinary play then reached Sunny in the saloon and completed F5 generation 2.
-Her next conversation stops at Cheyenne script idle 0c1991: finite creature
-completion/return is unimplemented. The saved saloon state precedes that failure;
-this is the next runtime owner after the current integration is merged.
-
-An earlier integrated candidate passed ordinary Stimpak Drop/Take, 9 -> 8 -> 9,
-using the settled dynamic body and E activation. Caravan and VATS compile into
-the gameplay path; an ordinary match and engagement remain untested. Magazine
-and Take All changes compile, with targeted probe cases passing the central
-gate. Doc's real bed approach can save; bed entry and exit remain unverified.
-
+Both formerly missing NPCs 104f03/104f0a publish after Continue; source raking
+runs and retires without a missing-reservation error. The lawn-chair mask case
+is grounded in actual FURN 153553/NIF data and a synthetic regression; the final
+route saved without the prior blocker, but its physical chair entry is unverified.
+Earlier integrated ordinary VATS selection/cancel and two hostile-gecko misses
+completed real shots/ammunition/AP effects. Hit/damage and full VATS acceptance,
+an ordinary complete Caravan match, retail pixels, native 4K60 and physical XR
+remain unverified. Active SayTo saving and creature Find/Food remain explicit
+missing owners. No campaign or parity completion is claimed.
 Classic reconstruction is parked; FO3 and classic work are preserved. Earlier
 merged feature checks below describe bounded evidence, not validation of every
 current branch change. The user's physical FNV VR playtest remains failed.
@@ -47,9 +44,9 @@ See [implementation-plan.md](implementation-plan.md) for the active delivery pla
 | Flat object handling | Grab uses source dynamic bodies, weight limits and bounded force. Merged PR #251 retains model/body identity, transform, velocities, sleep and wind state in v55. Ordinary Z moved the skull from shelf to floor; F5, separate-process Continue, visible restored floor placement and another F5 pass. Detached preparation does not replace a live save callback. Local and hosted runtime checks pass. Saving while holding an object and matched retail physics remain open. |
 | FNV world | Exploration, interiors and some dialogue render in the user's recording. Missing vegetation/models/materials, physics and LOD behavior remain visible in diagnostics. No world/parity completion. |
 | Population | Shared Sandbox owns NAVM wandering, activity duration/preferences and ambient conversation attempts. The current candidate completes both reached exterior NPC LooseRaking activities and resumes marker selection or Wander. Doc's bed approach saves. General furniture entry/exit, other activities, voiced exchanges, defensive combat and complete population behavior remain unverified. |
-| Animation props | Earlier owned raking checks retained native bones, ANIO rake transforms, idle clocks and sound history across cold reconstruction. Current ordinary exterior raking reaches End and request retirement; F5 retains both marker request graphs. Cold Continue of that new checkpoint, combat interruption and general independent object controllers remain open. |
+| Animation props | Earlier owned raking checks retained native bones, ANIO rake transforms, idle clocks and sound history across cold reconstruction. Current ordinary exterior raking reaches End and request retirement; F5 retains both marker request graphs. Cold Continue now restores both reached marker actors. Combat interruption and general independent object controllers remain open. |
 | Inventory actions | Ordinary hotkey equip/draw and physical Stimpak Drop/Take pass. Repair, Mod, per-instance magazines and loaded-ammo/Take All conservation compile; their added regression cases pass the final gate and broader ordinary use remains unverified. |
-| Caravan / VATS | Shared runtime state, input and menus are integrated and compile. Ordinary Caravan match consequences and VATS targeting, firing, cancellation and AP behavior remain untested in gameplay. No retail or physical XR acceptance is claimed. |
+| Caravan / VATS | Shared runtime state, input and menus are integrated and compile. A complete ordinary Caravan match remains untested. VATS targeting/cancel and two queued misses produced real shots/ammo/AP effects; hit/damage, cinematic and broader engagement coverage remain open. No retail or physical XR acceptance is claimed. |
 | Creature patrol | PR #248 merged source linked routes, retained waits/motion, native walk clips and actor-scoped XPPA results. The Securitron walk's inherited Bethesda rotation layout is decoded. Ordinary play saves/cold-loads patrol, crosses the saved cemetery failure through source-prefix triangle regions, reaches home, changes its quest variable, waits and retires through POEA/POCA. Post-result F5, separate-process Continue without restart and another F5 pass. Native capsule, wall, wrong-floor, saved-facing and local/hosted runtime checks pass. Other patrol inputs, marker idles, duration holds, Sandbox, full Victor dialogue and visual/retail parity remain open. |
 | Automatic greeting / actor lifetime | Source editor-position dialogue waits retain native approach state. Ordinary saloon entry, F5 while waiting, cold Continue, walking into Sunny's voiced greeting, Goodbye and another F5 pass. Source corpses skip living AI; detached diagnostics cannot change another owner's corpse capture admission. Full runtime gate and synthetic contracts pass. General Sandbox activity execution remains incomplete. |
 | Doc Mitchell tutorial repair | Current source-query and HUD repair passes full healthy source-script execution, five authored messages, cold stage receipts and a native control-label/handoff audit. Ordinary New Game completes the Vigor Tester, questionnaire, skills/traits, final Doc dialogue, exterior traversal and F5 at stage 200. Final release cold Continue, pause/resume and F5 pass; the movement prompt is visually readable after ordinary loading. All optional lessons and retail parity remain open. |
@@ -57,7 +54,7 @@ See [implementation-plan.md](implementation-plan.md) for the active delivery pla
 | Combat | User rejects combat. Ordinary second-well rifle hits expose a shared enable-parent bug: rendering uses effective enabled state while five combat checks use the local flag, freezing pursuit and hit reactions for quest-enabled actors. The correction now produces ordinary gecko pursuit and repeated melee hits through player death, plus settler/gecko combat. The owned parent-enabled retaliation check and full local/hosted runtime gates pass; PR #255 is merged. Blended-terrain impacts now use a source-position vertex/texture-weight query shared by player and NPC shots. The owned terrain audit and an ordinary aimed LAND shot resolve without material errors; the full local runtime gate passes. Matched retail material results and cell-edge lookup remain unverified. Unique compatible attack-group binding now passes source deathclaw/coyote hit, range-miss and cold-clock fixtures. Ordinary deathclaw terrain encounter, embedded emitters and faction assistance remain open. |
 | VR rig | Visible severe rifle hand/forearm deformation around source recording 32:10-32:48. Physical VR acceptance failed. |
 | Launch/render | The D3D12 simulator candidate uses a render boundary for launcher entry and preserves stereo through process cleanup. Direct/launcher close checks report zero view-count/type errors and unchanged checkpoints. A separately identified experimental source template also clears the profile RID leak in synthetic/shared-path and owned direct/launcher checks; the official product engine still leaks it. Native API-hash verification and source-template promotion remain pending. Physical D3D12 white output, shader failures, continuous stereo and headset lifecycle acceptance remain open. |
-| Saves | Current candidate passes canonical stage-200 exterior Continue and F5 retaining two marker continuations/request graphs. Cold Continue of the newly written marker checkpoint remains unverified. Earlier coyote limb-reaction checks retained exact phase, injury and health across processes. The source held-phase interruption correction passes its gate; off-cell audio continuation, save stalls and physical XR persistence remain open. |
+| Saves | Current candidate passes canonical stage-200 exterior Continue and F5 retaining two marker continuations/request graphs. Actual Continue restores both reached marker actors; the current candidate also saves tutorial 50 combat/loot progress. Earlier coyote limb-reaction checks retained exact phase, injury and health across processes. The source held-phase interruption correction passes its gate; off-cell audio continuation, save stalls and physical XR persistence remain open. |
 | Quest/scripts | Doc's source-driven opening reaches stage 200 and current-build exterior continuation. Broader campaign scripts, reputation, conversation conditions, triggers and actor-value/effect behavior still require connected gameplay coverage. |
 | Audio/UI | Wrist page changes are visible; complete interaction/input release remains unaccepted. Radio broadcast scheduling is unbound. Audio mix/sync is not certified by this review. |
 | Traversal | Cross-cell NPC/creature route owners, authored floor destinations and the prior Cheyenne saloon portal remain open. |

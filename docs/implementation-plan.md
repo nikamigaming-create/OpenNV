@@ -24,41 +24,33 @@ them in the integrated product. Continue until the target works.
 
 ## Current implementation boundary
 
-The merged baseline is `a8c6b154` (PR #325), with its required gate and hosted
-checks passed. Branch `codex/sandbox-activity-execution` is unpublished and has
-passed its fresh required gate and selected owned NPC furniture/checkpoint audit.
-Hosted checks await publication. OpenNV has working portions of New
-Vegas; complete campaign, retail presentation, sustained 4K60 and physical XR
-acceptance remain unmet.
+The merged baseline is `874c56d8` (PR #326), with required local and hosted
+checks passed. Current branch `codex/creature-idle-completion` contains the next
+coherent patch; its fresh final gate and selected owned checkpoint audit pass. Hosted checks
+await publication. Complete campaign, retail
+presentation, sustained 4K60 and physical XR acceptance remain unmet.
 
-Candidate `06d9e517-0d91-4e53-b0ee-c3fa50bb1c7f` passes canonical stage-200
-exterior Continue. Both reached NPCs, 104f03 and 104f0a, complete LooseRaking
-through End and return to marker selection or Wander without AI/animation
-errors. Ordinary F5 command 103, generation 1, succeeded; the 21:56:13 checkpoint
-retains two marker continuations and their idle request graphs. Continue from
-this progress for the next gameplay check; cold restoration of the new marker
-checkpoint remains unverified. The held-phase combat interruption guard is fixed
-in source after this candidate and passes the publication gate.
+Actual ExportRelease d6367556 continued tutorial 20, then rifle practice, hostile
+gecko kills and corpse Take All reached tutorial 50 with Gecko Meat 1/HP 100.
+F5 generation 1 completed without error/cleanup error at 06:31:32.972 UTC. This
+is the canonical checkpoint; no opening or questionnaire replay is needed.
 
-Ordinary play then reached Sunny in the saloon and completed F5 generation 2.
-Her next conversation stops at Cheyenne script idle 0c1991: finite creature
-completion/return is unimplemented. The saved saloon state precedes that failure;
-this is the next runtime owner after the current integration is merged.
+The patch closes the reached Cheyenne finite-idle return and shutdown-capture
+failure, transfers validated marker reservations during world restore, and
+enumerates actual furniture positions before testing ordinal permission bits.
+Actual Continue publishes both formerly missing marker NPCs. The shipped
+lawn-chair mismatch and synthetic cases ground the decoder fix; physical entry
+into that chair and retail surplus-bit parity remain unverified.
 
-An earlier integrated candidate passed actual Stimpak Drop/Take, 9 -> 8 -> 9,
-through a settled physical body and E activation. Doc's real bed approach
-supports saving; bed entry/exit remains unverified. Caravan and VATS runtime,
-input and menus compile together, but an ordinary match/engagement is untested.
-Per-instance magazines and Take All changes compile; targeted regression cases
-passed the central publication gate. Repair/Mod and broader inventory use also
-need ordinary gameplay coverage.
+Bounded ordinary VATS selection/cancel/two-miss execution now produces actual
+shots, ammunition and AP effects. Hit/damage, full VATS and a complete Caravan
+match remain untested. Active SayTo saving lacks a structured channel continuation;
+background creature Find/Food remains unbound. Do not substitute waiting, a
+Sandbox Eat activity, or inventory-only acquisition for those missing owners.
 
-The interruption correction, final required gate and selected owned audit pass.
-Next publish this coherent integration through a checked PR. Continue
-connected play through the available inventory, combat, crafting, trading,
-Caravan and VATS interactions. A passing local feature check does not close
-campaign, presentation or performance acceptance.
-
+The fresh mandatory gate and selected owned audit pass. Next use checked PR
+publication. Continue connected play from tutorial 50 after that boundary. No
+arrival, selected feature check or plausible frame establishes full acceptance.
 ## One implementation and one build
 
 - Use the shared checkout and one active `codex/` feature branch based on current
