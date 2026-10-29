@@ -9,6 +9,7 @@ internal partial class RuntimeNativePlayer
 {
     private FalloutPluginStack? _presentationRecords;
     private FalloutPlayerInventory? _presentationInventory;
+    private IFalloutFormLists? _presentationFormLists;
     private Func<FalloutNpcAppearance>? _appearance;
     private Func<long>? _appearanceRevision;
     private Func<FalloutScriptSession>? _playerPolicy;
@@ -56,15 +57,17 @@ internal partial class RuntimeNativePlayer
 
     internal void ConfigurePresentation(FalloutPluginStack records, FalloutPlayerInventory inventory,
         Func<FalloutNpcAppearance> appearance, Func<Color> ambient, FalloutWeaponHandlingSnapshot? handling = null,
-        Func<long>? appearanceRevision = null, Func<FalloutScriptSession>? playerPolicy = null)
+        Func<long>? appearanceRevision = null, Func<FalloutScriptSession>? playerPolicy = null,
+        IFalloutFormLists? formLists = null)
     {
         _presentationRecords = records; _presentationInventory = inventory; _appearance = appearance; _presentationAmbient = ambient;
         _appearanceRevision = appearanceRevision;
+        _presentationFormLists = formLists;
         _playerPolicy = playerPolicy;
         if (playerPolicy is not null) ApplySourceScale(playerPolicy().PlayerScale);
         _weaponHandling = new(inventory);
-        if (handling is not null) _weaponHandling.Restore(handling, key => FalloutWeaponPresentation.Read(records, key),
-            (key, mods) => FalloutWeaponPresentation.Read(records, key, weaponMods: mods));
+        if (handling is not null) _weaponHandling.Restore(handling, key => FalloutWeaponPresentation.Read(records, key, formLists: formLists),
+            (key, mods) => FalloutWeaponPresentation.Read(records, key, weaponMods: mods, formLists: formLists));
     }
 
     private bool PresentationInput(InputEvent input)
@@ -223,8 +226,8 @@ internal partial class RuntimeNativePlayer
         RuntimeNativePlayerActor? first = null, third = null;
         try
         {
-            first = new(records, content, appearance, weapon, true, UnitsToMeters, ambient, _presentationWeaponMods);
-            third = new(records, content, appearance, weapon, false, UnitsToMeters, ambient, _presentationWeaponMods);
+            first = new(records, content, appearance, weapon, true, UnitsToMeters, ambient, _presentationWeaponMods, _presentationFormLists);
+            third = new(records, content, appearance, weapon, false, UnitsToMeters, ambient, _presentationWeaponMods, _presentationFormLists);
             if (first.Error is not null || third.Error is not null) throw new NotSupportedException(first.Error ?? third.Error);
             third.ConfigureBodyContacts(CollisionLayer);
             third.SetMeta("opennv_reference_form_key", records.RuntimeFormKey(0x14).ToString());

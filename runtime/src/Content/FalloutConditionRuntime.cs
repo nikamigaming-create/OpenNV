@@ -170,7 +170,7 @@ internal sealed partial class FalloutConditionRuntime(FalloutPluginStack records
                 NoArguments(condition); return (Interior is { } interior ? interior(subject) :
                 Required(world, "spatial state").IsInInterior(subject, PlayerPlacement?.Invoke()?.Cell)) ? 1 : 0;
             case Function.IsChild: NoArguments(condition); return ActorRace(subject) is { } race && FalloutRaceProperties.IsChild(records.GetEffective(race)) ? 1 : 0;
-            case Function.IsInList: SecondUnused(condition); return FalloutReferenceIdentity.IsInList(records, subject, condition.FormArgument1) ? 1 : 0;
+            case Function.IsInList: SecondUnused(condition); return FalloutReferenceIdentity.IsInList(records, subject, condition.FormArgument1, world?.FormLists) ? 1 : 0;
             case Function.GetIsVoiceType: SecondUnused(condition); return Voice(subject) == Form(condition, "VTYP") ? 1 : 0;
             case Function.GetHealthPercentage:
                 NoArguments(condition); return HealthPercentage is { } health ? health(subject) :

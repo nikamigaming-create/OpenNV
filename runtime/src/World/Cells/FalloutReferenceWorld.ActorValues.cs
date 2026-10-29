@@ -1,4 +1,5 @@
 using OpenNV.Runtime.Content;
+using OpenNV.Runtime.Content.Definitions;
 using OpenNV.Runtime.World.Actors;
 
 namespace OpenNV.Runtime.World.Cells;
@@ -13,20 +14,34 @@ internal sealed partial class FalloutReferenceWorld
         return instance;
     }
 
-    internal float ActorValue(FalloutFormKey reference, string name)
+    internal float ActorValue(FalloutFormKey reference, string name) => ActorValue(reference, name, FalloutActorValueRead.Current);
+
+    internal float ActorValue(FalloutFormKey reference, string name, FalloutActorValueRead read)
     {
-        if (name.Equals("health", StringComparison.OrdinalIgnoreCase)) return Health(reference).Current;
+        if (name.Equals("health", StringComparison.OrdinalIgnoreCase)) return Select(Health(reference), read);
         var actor = Actor(reference);
-        if (name.Equals("aggression", StringComparison.OrdinalIgnoreCase)) return actor.ActorValues.GetValueOrDefault("aggression",
-            new(FalloutActorThreat.Read(records, actor.Base, actor.Templates).Aggression)).Current;
-        if (LimbActorValue(name) is { } limb) return BodyParts(reference).LimbCondition(limb, Health(reference).Base, actor.Injury?.LimbDamage);
+        if (LimbActorValue(name) is { } limb)
+        {
+            if (read != FalloutActorValueRead.Current) throw new NotSupportedException("Limb base/permanent queries require their anatomy value contract.");
+            return BodyParts(reference).LimbCondition(limb, Health(reference).Base, actor.Injury?.LimbDamage);
+        }
         var slot = FalloutActorValue.SourceSlot(name);
-        return actor.ActorValues.GetValueOrDefault(slot, new(SourceActorValue(actor, slot))).Current;
+        return Select(actor.ActorValues.GetValueOrDefault(slot, new(SourceActorValue(actor, slot))), read);
     }
+
+    private static float Select(FalloutActorValue value, FalloutActorValueRead read) => read switch
+    {
+        FalloutActorValueRead.Base => value.Base,
+        FalloutActorValueRead.Permanent => value.Base + value.Permanent,
+        FalloutActorValueRead.Current => value.Current,
+        _ => throw new ArgumentOutOfRangeException(nameof(read)),
+    };
 
     private float SourceActorValue(FalloutReferenceInstance actor, string slot)
     {
         var index = FalloutActorValue.SourceIndex(slot);
+        if (FalloutActorAiData.Contains((FalloutActorValueId)index))
+            return FalloutActorAiData.Read(records, actor.Base, actor.Templates).Value((FalloutActorValueId)index);
         if (index == 54) return 0; // Accumulated radiation starts in an empty engine value pool.
         if (index < 0) return 0; // Declared user slots have zero initial pools.
         var source = FalloutActorTemplateOwner.Resolve(records, records.GetEffective(actor.Base), 2, actor.Templates);
@@ -49,6 +64,27 @@ internal sealed partial class FalloutReferenceWorld
     }
 
     private static int? LimbActorValue(string name) => FalloutBodyPartData.LimbActorValue(name);
+
+    internal FalloutActorThreat ActorThreat(FalloutFormKey reference, FalloutActorThreat? source = null)
+    {
+        var actor = Actor(reference);
+        source ??= FalloutActorThreat.Read(records, actor.Base, actor.Templates);
+        return source with
+        {
+            Aggression = Value(FalloutActorValueId.Aggression, source.Aggression, 3),
+            Confidence = Value(FalloutActorValueId.Confidence, source.Confidence, 4),
+            Energy = Value(FalloutActorValueId.Energy, source.Energy, byte.MaxValue),
+            Assistance = Value(FalloutActorValueId.Assistance, source.Assistance, 2),
+        };
+
+        byte Value(FalloutActorValueId id, byte original, byte maximum)
+        {
+            var value = actor.ActorValues.TryGetValue(FalloutActorValueNames.Name(id), out var pool) ? pool.Current : original;
+            if (!float.IsFinite(value) || value != MathF.Truncate(value) || value < 0 || value > maximum)
+                throw new NotSupportedException($"AI behavior for {id} value {value} is not qualified.");
+            return (byte)value;
+        }
+    }
 
     internal void ResetHealth(FalloutFormKey reference)
     {
@@ -80,7 +116,13 @@ internal sealed partial class FalloutReferenceWorld
             damage[part.Type] = Math.Max(0, damage.GetValueOrDefault(part.Type) - value * health.Base * part.HealthPercent / 10000);
             actor.Injury = actor.Injury with { LimbDamage = damage };
         }
-        else throw new NotSupportedException($"Actor restore value {name} is unbound.");
+        else
+        {
+            var slot = FalloutActorValue.SourceSlot(name);
+            var previous = actor.ActorValues.GetValueOrDefault(slot, new(SourceActorValue(actor, slot)));
+            actor.ActorValues[slot] = FalloutActorValueCommands.Apply(previous,
+                FalloutActorValueOperation.Restore, value, previous.Current);
+        }
     }
 
     internal bool IsUnconscious(FalloutFormKey reference) => Actor(reference).Unconscious;
@@ -88,19 +130,13 @@ internal sealed partial class FalloutReferenceWorld
     internal void SetRestrained(FalloutFormKey reference, bool restrained) => Actor(reference).Restrained = restrained;
     internal void SetPlayerTeammate(FalloutFormKey reference, bool teammate) => Actor(reference).PlayerTeammate = teammate;
 
-    internal void ChangeActorValue(FalloutFormKey reference, string name, string operation, float value)
+    internal void ChangeActorValue(FalloutFormKey reference, string name, string operation, double argument)
     {
         var instance = Actor(reference);
-        var slot = name.Equals("aggression", StringComparison.OrdinalIgnoreCase) ? "aggression" : FalloutActorValue.SourceSlot(name);
-        var previous = instance.ActorValues.GetValueOrDefault(slot, new(ActorValue(reference, slot)));
-        var changed = operation switch
-        {
-            "setav" or "setactorvalue" => previous with { Base = value },
-            "modav" or "modactorvalue" => previous with { Permanent = previous.Permanent + value },
-            "forceav" or "forceactorvalue" => previous with { Permanent = previous.Permanent + value - previous.Current },
-            _ => throw new NotSupportedException($"Actor value operation {operation} is unbound."),
-        };
-        if (!changed.IsFinite) throw new InvalidDataException("Actor value exceeds Float32 storage.");
-        instance.ActorValues[slot] = changed;
+        var value = (float)FalloutActorValueCommands.Argument(operation, argument);
+        var slot = FalloutActorValue.SourceSlot(name);
+        var previous = instance.ActorValues.GetValueOrDefault(slot, new(SourceActorValue(instance, slot)));
+        var kind = FalloutActorValueCommands.Operation(operation) ?? throw new NotSupportedException($"Actor value operation {operation} is unbound.");
+        instance.ActorValues[slot] = FalloutActorValueCommands.Apply(previous, kind, value, previous.Current);
     }
 }

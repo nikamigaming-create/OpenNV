@@ -1220,6 +1220,11 @@ if (args is ["--shared-condition-contracts"])
     SharedConditionContracts.Run();
     return;
 }
+if (args is ["--audit-mutable-script-state", var mutableScriptRoot])
+{
+    OwnedMutableScriptStateProbe.Run(mutableScriptRoot);
+    return;
+}
 if (args is ["--audit-last-idle", var lastIdleData])
 {
     OwnedLastIdleProbe.Run(lastIdleData);

@@ -109,7 +109,7 @@ internal sealed partial class RuntimeNativeActorCombat
             handlingSource, _enemyWeaponHandling?.Capture(), _embeddedMuzzle?.BoneName.ToString(), _deathRouteRetirement,
             _launchRefusal?.Copy());
         result.ValidateSource(_records, _state.Inventory?.Contents ??
-            throw new NotSupportedException("Corpse equipment has no actual retained reference inventory."));
+            throw new NotSupportedException("Corpse equipment has no actual retained reference inventory."), _world.FormLists);
         return result;
     }
 
@@ -133,16 +133,16 @@ internal sealed partial class RuntimeNativeActorCombat
         if (_enemyObject is not null || _packageWeapon is not null || _enemyWeaponHandling is not null || _embeddedMuzzle is not null)
             throw new InvalidOperationException("Corpse equipment restoration needs fresh native owners.");
         var inventory = _state.Inventory?.Contents ?? throw new InvalidDataException("Saved corpse equipment has no inventory.");
-        saved.ValidateSource(_records, inventory);
+        saved.ValidateSource(_records, inventory, _world.FormLists);
         saved.ResidualPose.ValidateBinding(_skeletonPath, _skeleton.Source.Sha256, _ragdoll!.PoseCoverage);
         FalloutWeaponPresentation? weapon = null;
         FalloutWeaponHandling? handling = null;
         if (saved.HandlingWeapon is { } source)
         {
-            weapon = source.ValidateSource(_records, inventory);
+            weapon = source.ValidateSource(_records, inventory, _world.FormLists);
             handling = new(inventory, nativeNpc: true);
-            handling.Restore(saved.WeaponHandling!, key => FalloutWeaponPresentation.Read(_records, key, false),
-                (key, mods) => FalloutWeaponPresentation.Read(_records, key, false, mods));
+            handling.Restore(saved.WeaponHandling!, key => _world.WeaponPresentation(key, false),
+                (key, mods) => _world.WeaponPresentation(key, false, mods));
         }
 
         if (saved.EmbeddedMuzzleBone is { } muzzle)
@@ -155,7 +155,7 @@ internal sealed partial class RuntimeNativeActorCombat
         try
         {
             foreach (var attachment in saved.Attachments)
-                staged.Add((attachment, new(attachment.Source.ValidateSource(_records, inventory), _skeleton, _content)));
+                staged.Add((attachment, new(attachment.Source.ValidateSource(_records, inventory, _world.FormLists), _skeleton, _content)));
             // Validate the complete graph before publishing any saved pose.
             foreach (var (receipt, native) in staged) native.ValidatePersistence(receipt, _records);
             if (Activity.Alerted != saved.Activity.Alerted)

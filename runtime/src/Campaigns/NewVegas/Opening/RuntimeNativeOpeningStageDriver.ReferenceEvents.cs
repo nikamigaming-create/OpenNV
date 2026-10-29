@@ -223,7 +223,7 @@ internal partial class RuntimeNativeOpeningStageDriver
 
     internal FalloutNpcAppearance PlayerAppearance => FalloutNpcAppearanceResolver.Resolve(_pluginStack, _raceSexContract.Player,
         equippedArmor: _inventory.Equipped.Select(_pluginStack.RuntimeFormKey).Where(key => _pluginStack.GetEffective(key).Signature == "ARMO").ToArray(),
-        appearanceState: PlayerActorState);
+        appearanceState: PlayerActorState, formLists: _scripts.References!.FormLists);
 
     internal int TakeMessageButton(FalloutFormKey caller) => _scripts.MessageResults.Take(caller);
     internal bool IsTalking(FalloutFormKey actor) => _speech?.IsTalking(actor) ??
@@ -256,12 +256,11 @@ internal partial class RuntimeNativeOpeningStageDriver
         : kind == FalloutActorValueRead.Current ? _scriptHost.PlayerActorValue(name) :
             throw new NotSupportedException($"Player base/permanent value {name} has no pool/formula owner.");
     internal double ReadActorValue(FalloutFormKey actor, string name, FalloutActorValueRead kind) => _pluginStack.RuntimeFormId(actor) == 0x14
-        ? ReadPlayerActorValue(name, kind) : kind == FalloutActorValueRead.Current ? _scripts.References!.ActorValue(actor, name) :
-            throw new NotSupportedException($"Reference {actor} base/permanent value {name} has no query owner.");
+        ? ReadPlayerActorValue(name, kind) : _scripts.References!.ActorValue(actor, name, kind);
     internal void ChangeActorValue(FalloutFormKey actor, string name, string operation, double value)
     {
         if (_pluginStack.RuntimeFormId(actor) == 0x14) ChangePlayerActorValue(name, operation, value);
-        else _scripts.References!.ChangeActorValue(actor, name, operation, (float)value);
+        else _scripts.References!.ChangeActorValue(actor, name, operation, value);
     }
     internal bool IsPlayerTagSkill(string name) => _tagSkills.IsTagged(name);
     internal float PlayerSkillValue(string name) => _playerSkills.Value(name);

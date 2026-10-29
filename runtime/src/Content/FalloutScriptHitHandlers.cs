@@ -30,15 +30,15 @@ internal sealed class FalloutScriptHitHandlers
             callback.Executions, callback.LastCaller, callback.Error)).ToArray();
 
     internal static FalloutScriptFunction RegistrationFunction(FalloutPluginStack records,
-        Func<FalloutScriptHitHandlers> owner) =>
+        Func<FalloutScriptHitHandlers> owner, IFalloutFormLists? lists = null) =>
         FalloutScriptFunction.Typed([FalloutScriptArgumentKind.Value, FalloutScriptArgumentKind.Value,
             FalloutScriptArgumentKind.OptionalValue], arguments =>
         {
-            owner().Set(records, arguments.Select(argument => argument.Value).ToArray());
+            owner().Set(records, arguments.Select(argument => argument.Value).ToArray(), lists);
             return 0;
         });
 
-    internal void Set(FalloutPluginStack records, IReadOnlyList<FalloutScriptValue> arguments)
+    internal void Set(FalloutPluginStack records, IReadOnlyList<FalloutScriptValue> arguments, IFalloutFormLists? lists = null)
     {
         if (arguments.Count is < 2 or > 3)
             throw new InvalidDataException("SetOnHitEventHandler takes a script, registration flag and optional actor or FLST.");
@@ -54,7 +54,7 @@ internal sealed class FalloutScriptHitHandlers
         if (filter.Kind is not (FalloutScriptValueKind.Form or FalloutScriptValueKind.Number) ||
             filter.Kind == FalloutScriptValueKind.Number && filter.Number != 0)
             throw new InvalidDataException("Hit handler filter is not an actor, FLST or null form.");
-        var targets = Targets(records, filter);
+        var targets = Targets(records, filter, lists);
         // Removal needs only the compiled identity, including when the source
         // body is unsupported. Registration validates before changing any scope.
         if (register) _ = FalloutUserFunction.Read(definition);
@@ -74,7 +74,7 @@ internal sealed class FalloutScriptHitHandlers
         }
     }
 
-    private static IReadOnlyList<FalloutFormKey?> Targets(FalloutPluginStack records, FalloutScriptValue filter)
+    private static IReadOnlyList<FalloutFormKey?> Targets(FalloutPluginStack records, FalloutScriptValue filter, IFalloutFormLists? lists)
     {
         if (filter.Number == 0) return [null];
         var form = filter.FormKey(records);
@@ -82,12 +82,9 @@ internal sealed class FalloutScriptHitHandlers
         var list = records.GetEffective(form);
         if (list.Signature != "FLST") throw new InvalidDataException("Hit filter must be an actor reference or FLST.");
         var targets = new HashSet<FalloutFormKey>();
-        foreach (var field in list.ReadSubrecords().Where(field => field.Signature == "LNAM"))
+        foreach (var entry in FalloutFormList.Entries(records, form, lists))
         {
-            if (field.Data.Length != 4) throw new InvalidDataException("Hit filter FLST has a malformed LNAM.");
-            var id = BinaryPrimitives.ReadUInt32LittleEndian(field.Data.Span);
-            if (id == 0) continue;
-            var member = list.Plugin.AdjustFormId(id);
+            if (entry is not { } member) continue;
             // The published filter expands one level and ignores non-actors;
             // actor bases and nested lists are not actor reference filters.
             if (FalloutReferenceHitEvents.IsActor(records, member)) targets.Add(member);

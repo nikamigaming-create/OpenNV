@@ -669,9 +669,19 @@ internal sealed partial class FalloutQuestScripts
         {
             var parts = name.Split('.');
             var operation = parts[^1].ToLowerInvariant();
+            if (parts.Length == 1 && FalloutScriptFormLists.Function(operation, _records, () =>
+                (References ?? throw new NotSupportedException("Form-list commands have no shared world owner.")).FormLists) is { } formListFunction)
+                return formListFunction;
             if (parts.Length <= 2 && conditionRuntime.ScriptFunction(operation, instance.Script,
                 () => caller?.FormKey(_records) ?? (parts.Length == 2 ? QueryReference(parts[0]) : instance.Quest.FormKey),
                 name => Form(name).FormKey, Variable, parts.Length == 2 || caller is not null) is { } shared) return shared;
+            if (parts.Length <= 2 && FalloutScriptActorValues.Function(operation,
+                () => caller?.FormKey(_records) ?? (parts.Length == 2 ? QueryReference(parts[0]) : instance.Quest.FormKey),
+                _records.RuntimeFormKey(0x14), () => References ?? throw new NotSupportedException("Actor values have no reference world."),
+                (actor, value, kind) => actor == _records.RuntimeFormKey(0x14)
+                    ? (host?.ReadPlayerActorValue ?? throw new NotSupportedException("Player base/permanent query has no value owner."))(value, kind)
+                    : (References ?? throw new NotSupportedException("Actor query has no reference world.")).ActorValue(actor, value, kind),
+                playerWrite: host?.ChangePlayerActorValue) is { } actorValueFunction) return actorValueFunction;
             if (caller is { } receiver)
             {
                 FalloutScriptFunction.RequireReference(receiver);
@@ -691,7 +701,7 @@ internal sealed partial class FalloutQuestScripts
                     .GetDeadCount(arguments[0].Value.FormKey(_records)))
                 { ReadOnly = true };
             if (parts.Length == 1 && operation == "setonhiteventhandler")
-                return FalloutScriptHitHandlers.RegistrationFunction(_records, () => Events.Hits);
+                return FalloutScriptHitHandlers.RegistrationFunction(_records, () => Events.Hits, References?.FormLists);
             if (parts.Length == 1 && operation == "getlocationspecificloadscreensonly")
                 return new([], _ => Session.LocationSpecificLoadScreensOnly ? 1 : 0) { ReadOnly = true };
             if (parts.Length == 1 && operation == "ishardcore")
@@ -872,18 +882,6 @@ internal sealed partial class FalloutQuestScripts
                         .IsTagged(arguments[0].Identifier!) ? 1 : 0)
                 { ReadOnly = true },
                 "abs" => new([FalloutScriptArgumentKind.Number], arguments => Math.Abs(arguments[0].Number)),
-                "player.getbaseactorvalue" or "player.getbaseav" or
-                    "player.getpermanentactorvalue" => new([FalloutScriptArgumentKind.Identifier], arguments =>
-                {
-                    if (!instance.Bindings.HasPlayerReference) throw new InvalidDataException("Player function has no compiled engine reference.");
-                    if (caller is { } value && value.Number != 0x14)
-                        throw new NotSupportedException("Quest fallback actor values have only a player gameplay owner.");
-                    var kind = FalloutActorValue.Query(operation)!.Value;
-                    return host?.ReadPlayerActorValue is { } read ? read(arguments[0].Identifier!, kind) :
-                        kind == FalloutActorValueRead.Current ? host?.PlayerActorValue(arguments[0].Identifier!) ??
-                            throw new NotSupportedException("Player actor values have no gameplay owner.") :
-                            throw new NotSupportedException("Player base/permanent values have no source pool owner.");
-                }),
                 _ => null,
             };
         }
@@ -891,6 +889,12 @@ internal sealed partial class FalloutQuestScripts
         {
             var parts = command.Split('.');
             var operation = parts[^1].ToLowerInvariant();
+            if (parts.Length <= 2 && FalloutActorValueCommands.Operation(operation) is not null ||
+                parts.Length == 1 && FalloutScriptFormLists.Supports(operation))
+            {
+                _ = FalloutNvseNumericExpression.EvaluateValue([command, .. rawArguments], values, Function);
+                return;
+            }
 
             if (parts.Length <= 2 && operation == "placeatme")
             {
@@ -994,15 +998,6 @@ internal sealed partial class FalloutQuestScripts
                 if (arguments.Count != 1) throw new InvalidDataException("StartCombat requires one actor target.");
                 (References ?? throw new NotSupportedException("Script combat has no shared reference owner."))
                     .StartCombat(ReferenceArgument(parts[0]), ReferenceArgument(arguments[0]));
-                return;
-            }
-            if (parts.Length == 2 && parts[0].Equals("player", StringComparison.OrdinalIgnoreCase) &&
-                operation is "setav" or "setactorvalue" or "modav" or "modactorvalue" or "forceav" or "forceactorvalue")
-            {
-                if (!instance.Bindings.HasPlayerReference || arguments.Count != 2)
-                    throw new InvalidDataException("Player actor value command requires its compiled reference and two arguments.");
-                (host?.ChangePlayerActorValue ?? throw new NotSupportedException("Player actor value writes have no source pool owner."))
-                    (arguments[0], operation, NumberArgument(arguments[1]));
                 return;
             }
             if (parts.Length == 1 && operation is "triggerscreenblood" or "tsb")

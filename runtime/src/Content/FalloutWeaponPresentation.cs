@@ -106,7 +106,8 @@ internal sealed record FalloutWeaponPresentation(FalloutFormKey Form, FalloutNpc
         _ => 0,
     };
 
-    internal static FalloutWeaponPresentation Read(FalloutPluginStack records, FalloutFormKey key, bool firstPerson = true, byte weaponMods = 0)
+    internal static FalloutWeaponPresentation Read(FalloutPluginStack records, FalloutFormKey key, bool firstPerson = true,
+        byte weaponMods = 0, IFalloutFormLists? formLists = null)
     {
         var weapon = records.GetEffective(key);
         if (weapon.Signature != "WEAP") throw new InvalidDataException("Equipped weapon is not WEAP.");
@@ -166,6 +167,7 @@ internal sealed record FalloutWeaponPresentation(FalloutFormKey Form, FalloutNpc
             return id == 0 ? null : weapon.Plugin.AdjustFormId(id);
         }
         var ammunition = new List<FalloutFormKey>();
+        IReadOnlyList<FalloutFormKey>? currentAmmunition = null;
         var ammunitionSource = Form("NAM0");
         if (ammunitionSource is { } ammo)
         {
@@ -173,14 +175,19 @@ internal sealed record FalloutWeaponPresentation(FalloutFormKey Form, FalloutNpc
             if (source.Signature == "AMMO") ammunition.Add(ammo);
             else if (source.Signature == "FLST")
             {
-                foreach (var field in source.ReadSubrecords().Where(field => field.Signature == "LNAM"))
+                if (formLists is not null)
                 {
-                    if (field.Data.Length != 4) throw new InvalidDataException("Weapon ammunition list has an invalid FormID extent.");
-                    var entry = source.Plugin.AdjustFormId(BinaryPrimitives.ReadUInt32LittleEndian(field.Data.Span));
-                    if (records.GetEffective(entry).Signature != "AMMO") throw new NotSupportedException("Weapon ammunition list contains a non-AMMO entry.");
-                    ammunition.Add(entry);
+                    currentAmmunition = new FalloutTypedFormList(records, ammo, "AMMO", formLists);
+                    _ = currentAmmunition.Count;
                 }
-                if (ammunition.Count == 0) throw new NotSupportedException("Weapon ammunition list has no source AMMO entries.");
+                if (formLists is null)
+                    foreach (var member in FalloutFormList.Read(records, ammo).Members)
+                    {
+                        if (member is not { } entry) throw new InvalidDataException("Weapon ammunition list has a null member.");
+                        if (records.GetEffective(entry).Signature != "AMMO") throw new NotSupportedException("Weapon ammunition list contains a non-AMMO entry.");
+                        ammunition.Add(entry);
+                    }
+                if (currentAmmunition is null && ammunition.Count == 0) throw new NotSupportedException("Weapon ammunition list has no source AMMO entries.");
             }
             else throw new NotSupportedException("WEAP ammunition is neither AMMO nor FLST.");
         }
@@ -226,7 +233,7 @@ internal sealed record FalloutWeaponPresentation(FalloutFormKey Form, FalloutNpc
             Reach = FalloutProjectile.Number(data, 8),
             MaximumRange = FalloutProjectile.Number(data, 48),
             HasAmmunitionSource = ammunitionSource is not null,
-            Ammunition = ammunition,
+            Ammunition = currentAmmunition ?? ammunition,
             Sounds = sounds,
             ShellModel = FalloutNpcAppearanceResolver.PathField(weapon, "MOD2", "meshes", false, fields)
         };

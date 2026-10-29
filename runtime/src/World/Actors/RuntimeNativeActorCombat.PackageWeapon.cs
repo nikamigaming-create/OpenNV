@@ -49,7 +49,7 @@ internal sealed partial class RuntimeNativeActorCombat
             _packageWeaponPrepared = true;
             if (SelectCombatWeapon() is { } item)
             {
-                var weapon = FalloutWeaponPresentation.Read(_records, item.FormKey, false);
+                var weapon = _world.WeaponPresentation(item.FormKey, false);
                 _packageWeaponType = weapon.WeaponAnimationType;
                 _world.Inventory(_state.Reference, _context!.Level(), _context.Globals).Contents.Equip(_records, item.FormKey);
                 _packageWeapon = new(weapon, _skeleton, _content);

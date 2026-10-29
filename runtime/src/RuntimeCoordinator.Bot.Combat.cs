@@ -167,11 +167,7 @@ public partial class RuntimeCoordinator
 
     private bool NativeBotHostile(FalloutReferenceWorld world, FalloutReferenceInstance actor, uint relation)
     {
-        var aggression = world.ActorValue(actor.Reference, "aggression");
-        if (!float.IsFinite(aggression) || aggression != MathF.Truncate(aggression) || aggression is < 0 or > 3)
-            throw new InvalidDataException("Combat observation has an invalid source aggression value.");
-        var source = FalloutActorThreat.Read(_nativePluginStack!, actor.Base, actor.Templates);
-        return (source with { Aggression = (byte)aggression }).Hostile(relation);
+        return world.ActorThreat(actor.Reference).Hostile(relation);
     }
 
     private BotCombatWeapon? ObserveNativeBotWeapon(RuntimeNativePlayer player, JsonElement presentation, JsonElement handling,
@@ -182,7 +178,7 @@ public partial class RuntimeCoordinator
         if (view.ValueKind != JsonValueKind.Object || BotCombatTelemetry.Text(view, "weapon") is not { } identity) return null;
         var reference = BotSourceReference(identity);
         var source = _botCombatWeaponIdentity?.Weapon == reference && _botCombatWeaponSource is { } cached
-            ? cached : FalloutWeaponPresentation.Read(_nativePluginStack!, reference);
+            ? cached : _nativeReferences!.WeaponPresentation(reference);
         var snapshot = player.CaptureWeaponHandling() ?? throw new InvalidOperationException("Native weapon handling owner is absent.");
         var selectedInstance = _nativeInventory.SelectedWeapon(reference).Extra.Instance;
         var magazine = snapshot.Magazines.SingleOrDefault(value => value.Weapon == reference && value.Instance == selectedInstance);

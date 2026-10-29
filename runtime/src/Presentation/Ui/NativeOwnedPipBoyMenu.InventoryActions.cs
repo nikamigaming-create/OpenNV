@@ -40,7 +40,7 @@ internal sealed partial class NativeOwnedPipBoyMenu
             InventoryActionButton("IM_DropButton", "Drop", () => BeginInventoryAction("drop", selected));
         if (selected.RecordType is "WEAP" or "ARMO" && !selected.UnequipLocked)
         {
-            var materials = _inventory.RepairMaterials(_records, selected.FormKey, _selectedVariant);
+            var materials = _inventory.RepairMaterials(_records, selected.FormKey, _selectedVariant, _references.FormLists);
             if (materials.Count != 0)
                 InventoryActionButton("IM_RepairButton", "Repair", () => BeginInventoryAction("repair", selected));
         }
@@ -69,13 +69,13 @@ internal sealed partial class NativeOwnedPipBoyMenu
             _ => throw new InvalidOperationException("Unknown inventory action.")
         };
         if (_inventoryAction == "repair")
-            foreach (var donor in _inventory.RepairMaterials(_records, _actionItem, _actionVariant))
+            foreach (var donor in _inventory.RepairMaterials(_records, _actionItem, _actionVariant, _references.FormLists))
             {
                 var material = _inventory.Item(donor.Form)!;
                 rows.Add((InventoryInstanceLabel(material, donor.Extra), () =>
                 {
                     _inventory.Repair(_records, _actionItem, _actionVariant, donor.Form, donor.Variant,
-                        (_actorValue ?? throw new InvalidOperationException("Repair has no player skill owner."))("Repair"), _actionRevision);
+                        (_actorValue ?? throw new InvalidOperationException("Repair has no player skill owner."))("Repair"), _actionRevision, _references.FormLists);
                     EndInventoryAction();
                 }, false));
             }
@@ -86,7 +86,7 @@ internal sealed partial class NativeOwnedPipBoyMenu
                 var available = _inventory.Item(modification.Item)?.Count ?? 0;
                 rows.Add(($"{NameOf(modification.Item)}  {(installed ? "Installed" : available > 0 ? "Install" : "Not owned")}", () =>
                 {
-                    _inventory.InstallWeaponMod(_records, _actionItem, _actionVariant, modification.Slot, _actionRevision);
+                    _inventory.InstallWeaponMod(_records, _actionItem, _actionVariant, modification.Slot, _actionRevision, _references.FormLists);
                     EndInventoryAction();
                 }, installed));
             }

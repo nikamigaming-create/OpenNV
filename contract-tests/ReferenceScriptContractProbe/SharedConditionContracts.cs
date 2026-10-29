@@ -7,7 +7,7 @@ using OpenNV.Runtime.Content.Definitions;
 using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.World.Cells;
 
-internal static class SharedConditionContracts
+internal static partial class SharedConditionContracts
 {
     internal static void Run()
     {
@@ -20,21 +20,32 @@ internal static class SharedConditionContracts
             OpenNV.Runtime.World.Actors.FalloutActorValue.UserSlot((int)FalloutActorValueId.Variable10) == "variable10" &&
             FalloutBodyPartData.LimbActorValue("BrainCondition") == (int)FalloutActorValueId.BrainCondition,
             "Source aliases, old pool adapters and script queries have competing AV definitions.");
-        Reject(() => OpenNV.Runtime.World.Actors.FalloutActorValue.SourceSlot("Mood"));
+        Require(OpenNV.Runtime.World.Actors.FalloutActorValue.SourceSlot("Mood") == "mood",
+            "AI-data values did not join the shared source pool owner.");
         var directory = Directory.CreateTempSubdirectory("opennv-shared-conditions-");
         try
         {
             var female = new byte[24]; female[0] = 1;
+            var playerStats = new byte[24]; playerStats[8] = 1; playerStats[14] = 100;
+            var ai = new byte[20]; ai[0] = 2; ai[1] = 1; ai[2] = 73; ai[3] = 44; ai[4] = 6; ai[14] = 1;
+            var inheritedAi = new byte[24]; inheritedAi[22] = (byte)FalloutActorTemplateGroup.AiData;
             File.WriteAllBytes(Path.Combine(directory.FullName, "Main.esm"), Join(Header(),
-                Record("NPC_", 7),
+                Record("NPC_", 7, Field("ACBS", playerStats), Field("AIDT", ai),
+                    Field("DATA", Join(U32(100), [5, 5, 5, 5, 5, 5, 5]))),
                 Record("NPC_", 0x20, Field("EDID", Text("SharedActorBase")), Field("ACBS", female),
-                    Field("RNAM", U32(0x30)), Field("VTCK", U32(0x31)), Field("SNAM", Join(U32(0x32), [2, 0, 0, 0]))),
-                Record("CREA", 0x21, Field("ACBS", new byte[24]), Field("VTCK", U32(0x31))),
+                    Field("AIDT", ai), Field("RNAM", U32(0x30)), Field("VTCK", U32(0x31)), Field("SNAM", Join(U32(0x32), [2, 0, 0, 0]))),
+                Record("CREA", 0x21, Field("ACBS", new byte[24]), Field("AIDT", ai), Field("VTCK", U32(0x31))),
+                Record("NPC_", 0x23, Field("ACBS", inheritedAi), Field("TPLT", U32(0x20))),
                 Record("ACTI", 0x22), Record("RACE", 0x30),
                 Record("VTYP", 0x31, Field("EDID", Text("TestVoice"))), Record("FACT", 0x32),
                 Record("GLOB", 0x40, Field("EDID", Text("Threshold")), Field("FNAM", [(byte)'f']), Field("FLTV", BitConverter.GetBytes(1f))),
                 Record("QUST", 0x50, Field("DATA", [1, 0])), Record("IDLE", 0x70),
                 Record("WEAP", 0x71, Field("EDID", Text("SourceItem"))),
+                Record("FLST", 0x72, Field("EDID", Text("SharedMutableList")), Field("LNAM", U32(0x71))),
+                Record("AMMO", 0x74), Record("AMMO", 0x75),
+                Record("FLST", 0x76, Field("LNAM", U32(0x74))),
+                Record("FLST", 0x77, Field("LNAM", U32(0x71))),
+                Record("FLST", 0x78, Field("LNAM", U32(0))), Record("FLST", 0x79),
                 Record("CELL", 0x100, Field("EDID", Text("SharedRoom")), Field("DATA", [1])), Group(0x100,
                     Record("ACHR", 0x200, Field("EDID", Text("SharedActor")), Field("NAME", U32(0x20)), Field("DATA", new byte[24])),
                     Record("ACRE", 0x201, Field("NAME", U32(0x21)), Field("DATA", new byte[24])),
@@ -42,8 +53,16 @@ internal static class SharedConditionContracts
             File.WriteAllBytes(Path.Combine(directory.FullName, "Other.esm"), Join(Header(),
                 Record("VTYP", 0x31, Field("EDID", Text("WrongVoice"))), Record("WEAP", 0x71)));
             const string program = "float result\nbegin GameMode\nset result to 0\n" +
+                "AddFormToFormList SharedMutableList SharedActorBase\n" +
+                "SharedActor.RestoreAV Health 5.5\n" +
+                "SharedActor.SetAV Confidence 3\nSharedActor.ForceAV Confidence 3\nSharedActor.ModAV Confidence -1\nSharedActor.DamageAV Confidence 1\nSharedActor.RestoreAV Confidence 1\n" +
+                "player.RestoreAV Mood 100\nplayer.SetAV Mood 6.9\nplayer.ForceAV Mood 6.9\nplayer.ModAV Mood -1.75\nplayer.DamageAV Mood 0.75\nplayer.RestoreAV Mood 0.25\n" +
+                "SharedActor.RestoreAV Mood 100\nSharedActor.SetAV Mood 6.9\nSharedActor.ForceAV Mood 6.9\nSharedActor.ModAV Mood -1.75\nSharedActor.DamageAV Mood 0.75\nSharedActor.RestoreAV Mood 0.25\n" +
                 "if SharedActor.GetIsVoiceType TestVoice && SharedActor.IsEquipped SourceItem && player.GetIsSex Female && " +
-                "player.GetAV LeftAttackCondition == 17 && player.GetAV Aggression == 2 && player.GetAV Mood == 6 && GetGlobalValue Threshold == 0\n" +
+                "SharedActor.IsInList SharedMutableList && ListGetCount SharedMutableList == 2 && " +
+                "SharedActor.GetBaseAV Confidence == 3 && SharedActor.GetPermanentActorValue Confidence == 2 && SharedActor.GetAV Confidence == 2 && " +
+                "player.GetAV LeftAttackCondition == 17 && player.GetAV Aggression == 2 && player.GetAV Mood == 4.5 && " +
+                "SharedActor.GetAV Mood == 4.5 && player.GetBaseAV Mood == 6 && player.GetPermanentActorValue Mood == 5 && GetGlobalValue Threshold == 0\n" +
                 "set result to 1\nendif\nend";
             var local = new byte[24]; U32(1).CopyTo(local, 0);
             var header = new byte[20]; U32(1).CopyTo(header, 12); header[16] = 1;
@@ -53,6 +72,7 @@ internal static class SharedConditionContracts
                 Record("SCPT", 0x02000090, Field("SCHR", header), Field("SLSD", local), Field("SCVR", Text("result")),
                     Field("SCRO", U32(0x01000200)), Field("SCRO", U32(0x01000031)),
                     Field("SCRO", U32(0x01000071)), Field("SCRO", U32(0x01000040)), Field("SCRO", U32(0x01000014)),
+                    Field("SCRO", U32(0x01000072)), Field("SCRO", U32(0x01000020)),
                     Field("SCTX", Text(program))),
                 Record("QUST", 0x02000091, Field("DATA", [1, 0]), Field("SCRI", U32(0x02000090)))));
             using var records = FalloutPluginStack.Load(directory.FullName, ["Main.esm", "Other.esm", "Queries.esp"]);
@@ -126,6 +146,7 @@ internal static class SharedConditionContracts
                 .Evaluate(Query(Function.GetDistance, 0x01000201), scope));
             Reject(() => runtime.Evaluate(Query((Function)65000), scope));
             ScriptConsumers(records, world, quests, globals);
+            MutableState(records, world, quests);
             History(records, world, runtime, Query(Function.IsLastIdlePlayed, 0x01000070), scope);
             var retired = new FalloutReferenceWorld(records);
             var staleCalls = 0;
@@ -155,23 +176,37 @@ internal static class SharedConditionContracts
         world.Get(Key(0x200)).QueryNativeCondition = Native;
         var script = records.GetEffective(new("Queries.esp", 0x90));
         var source = FalloutDialogueTopic.ScriptText(script.ReadSubrecords().Single(field => field.Signature == "SCTX").Data.Span);
+        var player = new FalloutPlayerActorValues(records);
+        player.BindConstantModifiers((_, _) => []); // Fixture has no SPLO declarations.
+        double ReadPlayer(string name, OpenNV.Runtime.World.Actors.FalloutActorValueRead kind) => name == "leftattackcondition"
+            ? kind == OpenNV.Runtime.World.Actors.FalloutActorValueRead.Current ? 17 :
+                throw new NotSupportedException("Fixture limb owner only supplies current state.")
+            : player.Read(FalloutPlayerActorValues.PoolValue(name), kind);
         var executor = new FalloutReferenceScripts(records, world, quests,
-            new((_, _) => false, _ => throw new InvalidDataException("Query-only program emitted an effect."), Globals: globals,
-                ReadActorValue: (actor, name, kind) => actor == records.RuntimeFormKey(0x14) &&
-                    kind == OpenNV.Runtime.World.Actors.FalloutActorValueRead.Current ? Value(name) :
-                    throw new InvalidDataException("Shared GetAV lost the actual player value owner.")));
+            new((_, _) => false, _ => throw new InvalidDataException("Shared-state program emitted an unrelated effect."), Globals: globals,
+                ReadActorValue: (actor, name, kind) => actor == records.RuntimeFormKey(0x14)
+                    ? ReadPlayer(name, kind) : world.ActorValue(actor, name, kind),
+                ChangeActorValue: (actor, name, operation, amount) =>
+                {
+                    if (actor == records.RuntimeFormKey(0x14)) player.Change(name, operation, amount);
+                    else world.ChangeActorValue(actor, name, operation, amount);
+                }));
+        // Fixture begins with an existing damaged health pool; both script
+        // adapters must reach the actual world health restore owner.
+        world.Get(Key(0x200)).ActorValues["health"] = new(100, Damage: -10);
         executor.ExecuteProgram(records.GetEffective(Key(0x203)), script, FalloutGameModeProgram.Read(source), 0);
-        Require(world.Get(Key(0x203)).Read(1) == 1 && nativeCalls == 1,
+        Require(world.Get(Key(0x203)).Read(1) == 1 && nativeCalls == 1 && world.Health(Key(0x200)).Current == 95.5f,
             "Reference parsed-script queries did not reach shared handlers with typed forms.");
         var quest = new FalloutFormKey("Queries.esp", 0x91);
         var scripts = new FalloutQuestScripts(records, quests, new HashSet<FalloutFormKey>(), new(),
             globals: globals, references: world, defaultProcessingDelay: 0);
         scripts.Host = new((_, _) => throw new InvalidDataException("Query-only program changed a stage."), _ => 0,
-            ReadPlayerActorValue: (name, kind) => kind == OpenNV.Runtime.World.Actors.FalloutActorValueRead.Current ? Value(name) :
-                throw new InvalidDataException("Quest GetAV lost the actual player value owner."));
+            ReadPlayerActorValue: ReadPlayer, ChangePlayerActorValue: player.Change);
+        world.Get(Key(0x200)).ActorValues["health"] = new(100, Damage: -10);
         scripts.Advance(0);
-        Require(quests.Variable(quest, 1) == 1 && nativeCalls == 2 && scripts.Capture().Instances.Single().Error is null,
-            "Quest fallback parsed-script queries did not use the same handlers.");
+        Require(quests.Variable(quest, 1) == 1 && nativeCalls == 2 && scripts.Capture().Instances.Single().Error is null &&
+            world.Health(Key(0x200)).Current == 95.5f,
+            $"Quest fallback shared handlers failed: result={quests.Variable(quest, 1)} nativeCalls={nativeCalls} error={scripts.Capture().Instances.Single().Error}");
         world.Get(Key(0x200)).QueryNativeCondition = null;
         scripts.Advance(1);
         Require(quests.Variable(quest, 1) == 0 && scripts.Capture().Instances.Single().Error is not null,
@@ -180,12 +215,9 @@ internal static class SharedConditionContracts
         scripts.Advance(1);
         Require(quests.Variable(quest, 1) == 0 && nativeCalls == 2,
             "Stopped script replayed its consumed query prefix after owner replacement.");
+        // The separate behavioral cold test has no health/anatomy fixture.
+        world.Get(Key(0x200)).ActorValues.Remove("health");
 
-        static double Value(string name) => name switch
-        {
-            "leftattackcondition" => 17, "aggression" => 2, "mood" => 6,
-            _ => throw new InvalidDataException("GetAV collapsed distinct numeric identities or lost a supported limb name."),
-        };
     }
 
     private static void History(FalloutPluginStack records, FalloutReferenceWorld world, FalloutConditionRuntime runtime,

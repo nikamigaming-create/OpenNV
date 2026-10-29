@@ -58,7 +58,7 @@ public partial class RuntimeCoordinator
         if (selection.Absent) return null;
         var armor = _nativeReferences.EquippedArmor(reference.FormKey, level, _nativeGlobals);
         var appearance = FalloutNpcAppearanceResolver.Resolve(_nativePluginStack!, reference.Base, reference.FormKey, armor,
-            _nativeReferences.ActorAppearanceOverride(reference.FormKey), selection);
+            _nativeReferences.ActorAppearanceOverride(reference.FormKey), selection, _nativeReferences.FormLists);
         var preparation = new ExteriorNpcPreparation(appearance, RuntimeLiveContentSource.Current!, cancellation);
         _nativeGridNpcPreparations.Add(preparation);
         return preparation;

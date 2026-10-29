@@ -50,7 +50,8 @@ internal static class FalloutNpcAppearanceResolver
 
     internal static FalloutNpcAppearance Resolve(FalloutPluginStack stack, FalloutFormKey npcKey,
         FalloutFormKey? reference = null, IReadOnlyList<FalloutFormKey>? equippedArmor = null,
-        FalloutActorAppearanceState? appearanceState = null, FalloutActorTemplateSelection? selection = null)
+        FalloutActorAppearanceState? appearanceState = null, FalloutActorTemplateSelection? selection = null,
+        IFalloutFormLists? formLists = null)
     {
         var npc = Require(stack, npcKey, "NPC_");
         if (reference is { } referenceKey)
@@ -98,7 +99,7 @@ internal static class FalloutNpcAppearanceResolver
         var inventory = ReadInventory(stack, inventoryOwner);
         var armorKeys = inventory.Where(item => item.Signature == "ARMO" && item.Count > 0).Select(item => item.Item)
             .Concat(equippedArmor ?? []).DistinctBy(key => key.ToString(), StringComparer.OrdinalIgnoreCase).ToArray();
-        var armors = armorKeys.Select(key => ReadArmor(stack, key, female)).ToArray();
+        var armors = armorKeys.Select(key => ReadArmor(stack, key, female, formLists)).ToArray();
         var blockers = new List<string>();
         foreach (var item in inventory.Where(item => item.Count < 0))
             blockers.Add($"negative-inventory-count-semantics-required:{item.Item}");
@@ -248,7 +249,19 @@ internal static class FalloutNpcAppearanceResolver
         ancestors.Remove(record.FormKey.ToString());
     }
 
-    private static FalloutNpcArmor ReadArmor(FalloutPluginStack stack, FalloutFormKey key, bool female)
+    internal static bool ArmorListsMatch(FalloutPluginStack stack, FalloutNpcAppearance appearance, IFalloutFormLists formLists)
+    {
+        foreach (var armor in appearance.Armor)
+        {
+            var source = Require(stack, armor.Source, "ARMO");
+            if (OptionalForm(source, "BIPL") is not { } list) continue;
+            if (!FalloutFormList.Entries(stack, list, formLists).SequenceEqual(
+                armor.Addons.Select(part => (FalloutFormKey?)part.Source))) return false;
+        }
+        return true;
+    }
+
+    private static FalloutNpcArmor ReadArmor(FalloutPluginStack stack, FalloutFormKey key, bool female, IFalloutFormLists? formLists)
     {
         var record = Require(stack, key, "ARMO");
         var data = Bytes(record, "BMDT", 8);
@@ -261,10 +274,10 @@ internal static class FalloutNpcAppearanceResolver
         var addons = new List<FalloutNpcAppearancePart>();
         if (OptionalForm(record, "BIPL") is { } listKey)
         {
-            var list = Require(stack, listKey, "FLST");
-            foreach (var row in list.ReadSubrecords().Where(row => row.Signature == "LNAM"))
+            foreach (var entry in FalloutFormList.Entries(stack, listKey, formLists))
             {
-                var addon = Require(stack, list.Plugin.AdjustFormId(UInt32(row.Data.Span, list, "LNAM")), "ARMA");
+                if (entry is not { } member) throw new InvalidDataException("Armor addon list has a null member.");
+                var addon = Require(stack, member, "ARMA");
                 var addonMask = BinaryPrimitives.ReadUInt32LittleEndian(Bytes(addon, "BMDT", 8));
                 addons.Add(ReadModel(stack, addon, "armor-addon", female ? "MOD3" : "MODL", female ? "MO3S" : "MODS",
                     female ? "MOSD" : "MODD", addonMask, null));

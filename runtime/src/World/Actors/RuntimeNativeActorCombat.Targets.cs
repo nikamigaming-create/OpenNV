@@ -131,7 +131,7 @@ internal sealed partial class RuntimeNativeActorCombat
                  actor._state.Engagement is { } engagement && CombatActors.Any(friend => friend._state.Reference == engagement.Target && friend._state.PlayerTeammate)))
             .OrderBy(actor => actor._actor.GlobalPosition.DistanceSquaredTo(_actor.GlobalPosition)).FirstOrDefault();
         if (target is null) return false;
-        var threat = _threat ??= FalloutActorThreat.Read(_records, _state.Base, _state.Templates);
+        var threat = CurrentThreat();
         if (_actor.GlobalPosition.DistanceTo(target._actor.GlobalPosition) > ThreatRadius(threat) ||
             !CanSeePoint(target.BodyTargetPoint(), target)) return false;
         _state.Engagement = new(target._state.Reference);

@@ -239,7 +239,7 @@ internal sealed class FalloutUnloadedActorPackages(FalloutPluginStack records, F
         Hour = () => (clock ?? throw new NotSupportedException("Unloaded AI has no simulation clock.")).Hour,
         Sitting = sitting,
         ItemCount = (subject, item) => FalloutInventoryItemCounts.Count(records,
-            world.Inventory(subject, playerLevel(), globals).Contents, item),
+            world.Inventory(subject, playerLevel(), globals).Contents, item, world.FormLists),
         PlayerPlacement = playerPlacement,
         UnitsToMetres = () => unitsToMetres,
     };

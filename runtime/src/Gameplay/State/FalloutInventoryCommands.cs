@@ -18,7 +18,7 @@ internal sealed class FalloutInventoryCommands(FalloutPluginStack records, Fallo
     private FalloutPlayerInventory Inventory(FalloutFormKey target) => IsPlayer(target) ? player : world.Inventory(target, level(), globals).Contents;
 
     internal double ItemCount(FalloutFormKey target, FalloutFormKey item) =>
-        FalloutInventoryItemCounts.Count(records, Inventory(target), item);
+        FalloutInventoryItemCounts.Count(records, Inventory(target), item, world.FormLists);
 
     internal FalloutFormKey? EquippedObject(FalloutFormKey target, uint slot) => IsPlayer(target)
         ? player.EquippedObject(records, slot) : world.EquippedObject(target, slot, level(), globals);
@@ -36,7 +36,7 @@ internal sealed class FalloutInventoryCommands(FalloutPluginStack records, Fallo
     internal bool IsEquipped(FalloutFormKey target, FalloutFormKey item)
     {
         return IsPlayer(target)
-            ? FalloutEquippedItems.Any(records, item, direct => player.IsEquipped(records, direct))
+            ? FalloutEquippedItems.Any(records, item, direct => player.IsEquipped(records, direct), world.FormLists)
             : world.IsEquipped(target, item, level(), globals);
     }
 

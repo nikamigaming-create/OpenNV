@@ -69,7 +69,7 @@ internal sealed class FalloutReferenceHitEvents(FalloutPluginStack records)
     }
 
     internal static bool IsActor(FalloutPluginStack records, FalloutFormKey reference) =>
-        reference == records.RuntimeFormKey(0x14) || records.GetEffective(reference).Signature is "ACHR" or "ACRE";
+        FalloutEngineIdentity.IsPlayerReference(records, reference) || records.GetEffective(reference).Signature is "ACHR" or "ACRE";
 
     internal static void RequireActor(FalloutPluginStack records, FalloutFormKey actor)
     {

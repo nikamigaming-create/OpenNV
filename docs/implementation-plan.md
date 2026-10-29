@@ -75,41 +75,55 @@ paths integrated while replacing duplicate owners. FO3, TTW, DLC and plugins
 remain in the objective; their acceptance follows the corresponding systems
 rather than being inferred from FNV results.
 
-## Current coherent batch
+## Current batch and delivery order
 
-Checked baseline PR #332 is 5d324d27, with required local/owned and all five hosted
-checks passed. Local main equals origin/main. Branch
-codex/shared-script-conditions now has shared owner-backed function bodies and
-caller/target/explicit/linked resolution across actor, dialogue, idle, quest,
-menu, terminal, unloaded-package and parsed-script consumers. Reordered source
-masters and typed native operands, mutable clock/globals, lazy OR/RNG,
-comparison-global CTDA, player bindings, limb GetAV and interrupted execution
-have production-handler headless coverage. Complete reference-script contracts
-and selected owned request-history execution pass. The required gate and
-bounded fresh-game integration through VCG01 stage36 pass; publication is pending.
+Checked baseline PR #333 is c6ac9376. The script-state-owners candidate implements
+shared mutable FormLists and behavioral actor-value pools, used command/query
+families, live consumers and current-save persistence. Named source definitions
+are immutable; world state and native/Godot adapters remain separate. Focused
+production-handler contracts and the selected owned GRA-prefix/player-state audit
+pass. The full publication gate and diff check pass. Actual fresh-game export b2a220ad reached VCG01 stage80 through Doc speech,
+Reflectron, manual traversal and Vigor acceptance, then saved successfully.
+Retain the requested screenshots and reuse the fresh checkpoint for next launch.
 
-SCDA instruction decoding/execution is still absent: extent accounting and
-SCTX parsing do not constitute a VM. Complete the remaining source-used
-function families and subject/flag contexts through the same handlers, ordered
-by dependent quests/packages/records. Unknown process owners remain explicit;
-player unconscious state is not substituted with death. Do not turn the
-retained 148-ID inventory into a coverage claim or start a new actor-specific
-failure chain.
+The user now requests an outside-tester release. After checked publication:
 
-Shared AV identities distinguish Aggression 0 from Mood 4 and preserve limb
-slots 25–31. Named parser queries use canonical, case-insensitive enum names;
-unknown state/formula pools still fail explicitly. Neutral enum/CTDA metadata
-was checked against [xEdit's FNV definitions](https://github.com/TES5Edit/TES5Edit/blob/dev-4.1.5/Core/wbDefinitionsFNV.pas);
-no external implementation was imported.
+1. Build/pin the existing experimental Windows playtest pipeline. Inspect actual
+   PCK entries as well as loose/package archive contents. Ship no owned/derived
+   retail assets, saves or private diagnostics. Verify notices and hashes.
+2. Verify ordinary packaged launch, real scripting/quest interaction, combat and
+   useful save/Continue. Reuse fresh stage80 progress; do not replay character
+   creation after minor cleanup. Resolve blockers on this playable release path
+   in coherent shared-system batches and label known limitations accurately.
+   Retain the user-requested continuous proof video from this exact package:
+   identity/launcher, Continue, finish Doc, Goodsprings/Sunny, shooting, combat,
+   loot/crafting and save/quit/Continue. Use real elapsed time and game audio if
+   available, exclude unrelated apps, and keep the original take. Encoded frame
+   rate is not measured game FPS. A blocked route stays explicitly incomplete.
+3. Publish an asset-free experimental release once package/gameplay and required
+   checks pass. Complete parity, sustained native 4K60 and physical XR144 remain
+   product objectives, not prerequisites or claims for this limited playtest.
+4. Complete shared actor-state semantics required on that path: mutable actor-base
+   flags plus essential damage, knockdown, recovery, queries and persistence.
+   SetEssential targets a base identity; per-reference extension behavior is
+   distinct. Registration alone cannot replace the current essential-hit refusal.
+5. Advance compiled SCDA program decoding/execution through the existing shared
+   host. Extent accounting and SCTX parsing are not a VM. Do not turn an unclosed
+   NVSE expression into another isolated parser-patch chain. Implement remaining
+   used function/context families by dependency breadth, without default returns.
 
-Immutable export de3ccd56 advanced an ordinary fresh New Game through Doc
-Mitchell's recorded speech, name acceptance and VCG01 stage36 race/sex UI.
-Normal close freed 200 prototypes/source owners. No F5 changed canonical
-02ABCFE0D0179E3C8B51E0F867363D13D81CB7B364C882EA0CCF8038907E277F.
-The actual system boundary includes AddFormToFormList, an unclosed NVSE
-expression and unowned Confidence. Address remaining shared rules/VM ownership
-by source dependencies after checked publication; do not repeat the old-save
-451 refusal or start another NPC-specific chain.
+General dynamic references also require authoritative allocation, stable identity,
+lifetime and persistence. PluginStack currently resolves source forms, PlayerRef
+is intrinsic and PlaceAtMe owns EXPL only. A VM must share the eventual world
+owner rather than manufacture plugin records or privately stash dynamic members.
+Do not add another streaming owner: exterior worker preparation and reads exist.
+Measured CPU creature/package/capsule work remains a performance target; unrelated
+GPU techniques are not evidence of a fix.
+
+The complete system-first dependency order above remains active. Shared AV IDs
+and aliases stay centralized; recognizing an ID never invents a supported pool.
+Existing selected systems do not imply full campaign, FO3/TTW/plugin or XR support.
+
 ## Validation and publication
 
 Focused synthetic/owned-data execution precedes an immutable export. Ordinary

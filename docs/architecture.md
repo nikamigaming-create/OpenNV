@@ -42,6 +42,17 @@ state. SourceSlot/SourceIndex/UserSlot, limb lookup and script query binding use
 the same cached identifier/name definition. Recognizing an identifier does not
 create a state pool or authorize a default result.
 
+FalloutFormList keeps winning source declarations immutable. The world-owned
+FalloutFormListState supplies ordered mutable additions and atomic validated
+restoration to every live list consumer. FalloutActorAiData caches immutable
+selected-template metadata; actor/player pools retain independent modifiers and
+provenance. FalloutActorValueCommands owns shared argument and pool semantics;
+script adapters route health/limb restoration to their existing specialized owners.
+These state owners do not depend on presentation or create dynamic references.
+FalloutEngineIdentity binds named reserved identities into the stack namespace;
+recognizing PlayerRef does not require a placed source record or create its base
+state. Base/actor-value queries still require their actual source and state owners.
+
 NativeXrRig adapts tracked head/controller poses and ordinary action input to the
 same player. RuntimeNativePlayerActor owns body, hands and weapon presentation.
 NativeOwnedPipBoy renders the shared menu on the equipped wrist device.

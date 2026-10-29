@@ -71,7 +71,7 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
                     !ValidKey(snapshot.Script.Value) || snapshot.ScriptSha256 is not { Length: 64 } || !snapshot.ScriptSha256.All(Uri.IsHexDigit)))
                 throw new InvalidDataException("Saved reference state is invalid or duplicated.");
             foreach (var (name, value) in snapshot.ActorValues ?? new Dictionary<string, FalloutActorValue>())
-                if ((name is not ("health" or "aggression") && FalloutActorValue.SourceSlot(name) != name) || value is null || !value.IsFinite)
+                if ((name != "health" && FalloutActorValue.SourceSlot(name) != name) || value is null || !value.IsFinite)
                     throw new InvalidDataException("Saved actor value is invalid.");
             if (snapshot.ConversationSuppressionSeconds is { } suppression && !float.IsFinite(suppression))
                 throw new InvalidDataException("Saved conversation suppression is not finite.");
@@ -605,6 +605,18 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
     internal FalloutInputControls? Controls { get; } = controls;
     internal FalloutPlayerMoves PlayerMoves { get; } = new();
     internal FalloutPlayerNotes PlayerNotes { get; } = new(records);
+    private FalloutFormListState? _formLists;
+    internal FalloutFormListState FormLists
+    {
+        get
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            if (_formLists is not null) return _formLists;
+            _formLists = new(records);
+            _formLists.Changed += FormListChanged;
+            return _formLists;
+        }
+    }
     internal FalloutPlayerCaravanCards PlayerCaravanCards { get; } = new(records);
     internal FalloutScriptMenus Menus { get; } = new();
     private FalloutReferencePackageEvents? _packageEvents;
@@ -837,6 +849,7 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
         if (_instances.Count != 0 || PendingPackageEventCount != 0) throw new InvalidOperationException("Reference restoration requires a fresh world.");
         FalloutReferenceSnapshot.Validate(snapshots);
         using var validated = new FalloutReferenceWorld(records);
+        if (_formLists is not null) validated.FormLists.Restore(_formLists.Capture());
         foreach (var snapshot in snapshots)
         {
             if (snapshot is null || validated._instances.ContainsKey(snapshot.Reference))
@@ -1110,7 +1123,7 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
             if (snapshot.CorpseEquipment is { } equipment)
             {
                 equipment.ValidateSource(records, instance.Inventory?.Contents ??
-                    throw new InvalidDataException("Saved corpse equipment has no retained inventory owner."));
+                    throw new InvalidDataException("Saved corpse equipment has no retained inventory owner."), validated.FormLists);
                 instance.CorpseEquipment = equipment.Copy();
             }
             FalloutActorStoppedPose.ValidateTarget(records, snapshot);
