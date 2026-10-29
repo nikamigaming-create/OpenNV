@@ -24,54 +24,41 @@ them in the integrated product. Continue until the target works.
 
 ## Current implementation boundary
 
-The merged baseline is `c99d7f21` (PR #329), with the required local gate,
+The merged baseline is `78d643a3` (PR #330), with the required local gate,
 selected owned/native audits, diff check and all five hosted checks passed.
-Local main equals origin/main. Current branch `codex/sandbox-sleep-continuation`
-contains the reviewed source Sleep/marker/query-retirement repairs and selected
-unchosen-meal failure capture; full publication validation remains pending.
+Local main equals origin/main. Current branch `codex/typed-scalar-snapshot`
+starts from the checked merged Sleep/marker/inventory/query-retirement repairs
+and owns the reached typed-scalar snapshot transition. All required local and
+hosted checks passed for the merged baseline.
 
-Current ordinary gameplay is beyond the opening and well lesson. Receipt export
-`440e7ae0` Continued the ingredient checkpoint, reached the campfire through
-ordinary movement, crafted Healing Powder and completed F5 command 263 at
-10:19:05.997 UTC without save/cleanup error. VCG03 15d912 objectives 10/20/30 are
-complete and 40 is displayed/incomplete. Canonical SHA256 is
-`5D7BDDD425DBB0259B55DAB97A0E675B0267A41349D5229CDD0A779A17A45BA8`.
-The next needed candidate launch must Continue this cooking save toward objective
-40, Sunny/Trudy, nearby trading and Caravan. Never replay opening, ingredients or
-cooking unless actual authoritative state requires it. Newest Continue remains
-unverified until that ordinary launch.
+Current gameplay is beyond the opening, well lesson and campfire recipe. Scalar
+export 8d346c24 Continued saved Healing Powder, followed source corridor guidance
+with ordinary input and completed F5 command 377 at 12:38:58.392 UTC, HP 99, no
+save/cleanup error. VCG03 objectives 10/20/30 are complete; 40 remains displayed.
+Canonical SHA256 is
+`02ABCFE0D0179E3C8B51E0F867363D13D81CB7B364C882EA0CCF8038907E277F`.
+Its next Continue is unverified. Never replay cooking or earlier traversal
+without an actual authoritative state need.
 
-Marker actor 10a72b now publishes without its prior duplicate-history failure.
-Sunny's Sleep 176ad3 selected, began native travel and handed off on schedule to
-0200d5 without a surviving error. Physical bed arrival/wake remains open. The
-unchosen-meal failure receipt passes synthetic contracts; its live fault capture
-remains unverified because the original two-food error did not recur before the
-successful save. Do not call retained failure an Eat behavior implementation.
+The reviewed scalar transition repair passes owned/synthetic checks and the
+full required gate. Actual forward saving succeeded with healthy animation
+owners. Owned selected identity remains inferred; source audit and a plausible
+pose do not establish actual retained scalar-transition behavior or retail parity.
+Publish this bounded batch through hosted checks before changing the next owner.
 
-During objective 40 travel, actor 157c8f selected IdleMarker activity 4/target
-157cc0 and reached an unqualified script-visible procedure query. Detailed state
-284 is the bounded diagnosis fixture. The game closed normally without
-superseding the cooking save. Those bounded repairs are now reviewed/frozen;
-selected source/contract checks pass. Integrated export 92183296 Continued the
-saved Healing Powder with healthy owners. Final inherited-IDLE phase observation
-is contract-tested after that candidate. The mandatory publication gate and diff
-check pass; checked publication is the current boundary. Next play must keep the
-bot stopped until continuous manual traversal clears the elevated rock corridor,
-then continue Sunny/Trudy and ordinary trade/Caravan.
+After saving, AI condition 08747d/function 451 had no authoritative owner on
+actor 157c8f. The physical RockCanyon18 join along the source corridor also needs
+bounded diagnosis. Normal quit preserved the useful north-shoulder save. Qualify
+these actual owners on a fresh branch; do not weaken collision or save guards.
+Continue toward Sunny objective 40/Trudy and ordinary trade/Caravan after repair,
+saving healthy progress before a later unrelated fault.
 
-Sustained native 4K60, physical XR144, complete campaign execution and matched
-retail pixels/audio remain unmet. Active non-radio speech saving, raven source
-locomotion, background creature Find/Food, complete Caravan and full system
-coverage remain explicit gaps. Neither a successful arrival nor selected feature
-checks establishes complete movement or parity.
-
-Final-phase export dcf66477 also Continued the saved Healing Powder successfully.
-A later actor 157c8f transition exposed bound HeadTrack/face-morph scalar snapshot
-support as the next saving owner; no F5 overwrote the cooking checkpoint. Normal
-quit disposed source owners. PR #330 also fixes native query temporary ownership
-found by hosted CI: focused allocation checks and the fresh full required gate
-pass with the strict assertion unchanged. Checked hosted publication remains the
-boundary; typed-scalar transition support belongs to the next fresh branch.
+Use a fast build plus affected/owned checks before immutable export and actual
+forward play. Run the full mandatory gate after normal close and before pushing
+runtime/claim changes; do not repeat it before every play attempt. Sustained
+native 4K60, physical XR144, complete campaign execution and matched retail
+pixels/audio remain unmet. Active speech saving, raven locomotion, background
+Find/Food, full Caravan and broader system coverage remain explicit gaps.
 
 ## One implementation and one build
 

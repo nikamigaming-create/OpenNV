@@ -1,5 +1,26 @@
 namespace OpenNV.Runtime.Formats.Gamebryo;
 
+internal enum FalloutNifScalarKind { FloatExtraData, MorphWeight }
+internal readonly record struct FalloutNifScalarTarget(FalloutNifScalarKind Kind, string Node, string Name);
+internal sealed record FalloutNifSnapshotScalar(FalloutNifScalarTarget Target, byte Priority, float Value)
+{
+    internal void Validate()
+    {
+        if (Target.Kind is not (FalloutNifScalarKind.FloatExtraData or FalloutNifScalarKind.MorphWeight) ||
+            string.IsNullOrWhiteSpace(Target.Node) || string.IsNullOrWhiteSpace(Target.Name) || !float.IsFinite(Value))
+            throw new InvalidDataException("Snapshot scalar has an invalid typed target or value.");
+    }
+}
+
+// The sampler and current-value access refer to the same declared controller
+// target. Snapshot constants never resample the outgoing clip at a guessed time.
+internal sealed record RuntimeNifScalarBinding(FalloutNifScalarTarget Target, byte Priority,
+    FalloutNifFloatAnimation Sampler, Func<float> Read, Action<float> Publish, Func<float, float>? Effective = null)
+{
+    internal float Sample(float time) => Normalize(Sampler.Sample(time));
+    internal float Normalize(float value) => Effective?.Invoke(value) ?? value;
+}
+
 /// <summary>Source scalar interpolation and declared NiFloatExtraData targets.</summary>
 internal sealed class FalloutNifFloatAnimation
 {
@@ -83,12 +104,13 @@ internal sealed class FalloutNifFloatExtraDataState
     // NiExtraDataController's controller ID is the Extra Data Name, as defined
     // by https://www.niftools.org/nifxml/NiExtraDataController.html . No actor,
     // sequence or extra-data name is a special case in the binding contract.
-    internal Action<float> Bind(FalloutNifFile source, FalloutNifControllerLink link)
+    internal RuntimeNifScalarBinding Bind(FalloutNifFile source, FalloutNifControllerLink link)
     {
         if (link.ControllerType != "NiFloatExtraDataController" || link.PropertyType.Length != 0 ||
             link.Variable2.Length != 0 || !_values.ContainsKey((link.NodeName, link.Variable1)))
             throw new InvalidDataException($"Float channel has no declared source target: {link.NodeName}/{link.Variable1}.");
         var sampler = new FalloutNifFloatAnimation(source, link.Interpolator);
-        return time => _values[(link.NodeName, link.Variable1)] = sampler.Sample(time);
+        return new(new(FalloutNifScalarKind.FloatExtraData, link.NodeName, link.Variable1), link.Priority, sampler,
+            () => Get(link.NodeName, link.Variable1), value => Restore(link.NodeName, link.Variable1, value));
     }
 }

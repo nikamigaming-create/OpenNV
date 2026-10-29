@@ -11,6 +11,7 @@ internal sealed partial class RuntimeNativeCreature : IGamebryoReferenceEnableLi
     private FalloutIdleAnimationPlayback? _scriptIdleClock;
     private FalloutIdleTransition? _scriptIdleTransition;
     private IReadOnlyList<FalloutNifAnimationSample>? _scriptIdleSnapshot;
+    private IReadOnlyList<FalloutNifSnapshotScalar>? _scriptIdleSnapshotScalars;
     private long _scriptIdleRevision;
     private bool _scriptIdlePosePublished;
     private bool _scriptIdleSourceCancelled;
@@ -35,6 +36,7 @@ internal sealed partial class RuntimeNativeCreature : IGamebryoReferenceEnableLi
         var transition = PrepareScriptIdleTransition(source.Animation, timing);
         var snapshotPose = CaptureScriptIdlePose();
         var snapshotSamples = ReadScriptIdleSnapshot(snapshotPose);
+        var snapshotScalars = source.Animation.CaptureSnapshotScalars();
         var revision = checked(_scriptIdleRevision + 1);
         if (revision == long.MaxValue) throw new InvalidOperationException("Creature script idle revision overflowed.");
         var sequence = source.Animation.Sequence;
@@ -43,13 +45,14 @@ internal sealed partial class RuntimeNativeCreature : IGamebryoReferenceEnableLi
             timing.SelectAdditionalLoops(state.SoundRandom.NextBounded));
         RequireScriptIdleEnd(source.Animation, clock);
         combat.StopPackageMotion();
-        source.Animation.ApplySnapshotTransition(clock.SourceSeconds, snapshotSamples, 1, 0);
+        source.Animation.ApplySnapshotTransition(clock.SourceSeconds, snapshotSamples, 1, 0, scalars: snapshotScalars);
         var saved = new FalloutActorStoppedIdleAnimation("script", new(record.FormKey, Hash(record.ReadData()),
             idle.AnimationPath, source.Hash, clock.Capture(), revision, CaptureScriptIdlePose(), []),
-            new(transition.Capture(), ScriptIdleTransitionSettings(), snapshotPose), new(2, 5));
+            new(transition.Capture(), ScriptIdleTransitionSettings(), snapshotPose, Scalars: snapshotScalars), new(2, 5));
         saved.Validate(stack);
         _scriptIdleAnimation = source.Animation; _scriptIdleClock = clock;
         _scriptIdleTransition = transition; _scriptIdleSnapshot = snapshotSamples;
+        _scriptIdleSnapshotScalars = snapshotScalars;
         _scriptIdleRequestState = 2; _scriptIdleSequenceState = 5;
         _scriptIdleDeactivation = null; _scriptIdleEndPending = false;
         _scriptIdleRevision = revision; _scriptIdlePosePublished = true;
@@ -68,7 +71,8 @@ internal sealed partial class RuntimeNativeCreature : IGamebryoReferenceEnableLi
         Error is null && _eventIdleClock is null && _conversationTarget is null &&
         Combat is { Dead: false, OwnsPose: false, PackageMoving: false, PackageOwnsPose: false, AnimationWeapon: null, StoppedAiPoseCaptureReady: true } &&
         (_scriptIdleClock is { Complete: false } || _scriptIdleDeactivation is { Complete: false }) && _scriptIdleAnimation is not null &&
-        _scriptIdleTransition is not null && _scriptIdleSnapshot is not null && state.CreatureScriptIdle.Transition is not null &&
+        _scriptIdleTransition is not null && _scriptIdleSnapshot is not null && _scriptIdleSnapshotScalars is not null &&
+        state.CreatureScriptIdle.Transition is not null &&
         OpenNV.Runtime.SceneGraph.NodeTraversal.SelfAndDescendants<NativeOwnedAnimationSoundPlayer>(this)
             .All(sound => sound.CanCaptureSilent);
 
@@ -162,6 +166,8 @@ internal sealed partial class RuntimeNativeCreature : IGamebryoReferenceEnableLi
         ValidateScriptIdleSnapshotPose(snapshot.Pose);
         var restoredTransition = PrepareScriptIdleTransition(source.Animation,
             FalloutIdleAnimationData.Read(_aiRecords!.GetEffective(saved.Animation.Idle)), snapshot);
+        var scalars = (snapshot.Scalars ?? []).ToArray();
+        source.Animation.ValidateSnapshotScalars(scalars);
         var sequence = source.Animation.Sequence;
         var clock = new FalloutIdleAnimationPlayback(sequence.StartTime, sequence.StopTime, sequence.Frequency,
             sequence.CycleType, source.Animation.TextKeys.Select(key => (key.Time, key.Value)).ToArray(),
@@ -170,6 +176,7 @@ internal sealed partial class RuntimeNativeCreature : IGamebryoReferenceEnableLi
         RequireScriptIdleEnd(source.Animation, clock);
         _scriptIdleAnimation = source.Animation; _scriptIdleClock = clock;
         _scriptIdleTransition = restoredTransition; _scriptIdleSnapshot = ReadScriptIdleSnapshot(snapshot.Pose);
+        _scriptIdleSnapshotScalars = scalars;
         _scriptIdleRevision = saved.Animation.Revision;
         RestoreScriptIdlePhase(saved);
         Combat?.StopPackageMotion();

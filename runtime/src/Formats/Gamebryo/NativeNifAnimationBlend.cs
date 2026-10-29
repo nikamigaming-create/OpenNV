@@ -5,6 +5,14 @@ namespace OpenNV.Runtime.Formats.Gamebryo;
 /// <summary>Reusable per-skeleton layer reduction; no channel lists or per-bone objects.</summary>
 internal sealed class NativeNifAnimationBlend(int boneCount)
 {
+    internal struct Scalar
+    {
+        internal RuntimeNifScalarBinding Binding;
+        internal FalloutNifBlendWeights Weights;
+        internal float Value, Weight;
+        internal void Add(float value, float weight) { Value += value * weight; Weight += weight; }
+    }
+
     internal struct Bone
     {
         internal bool Active;
@@ -34,13 +42,14 @@ internal sealed class NativeNifAnimationBlend(int boneCount)
     }
 
     internal Bone[] Bones { get; } = new Bone[boneCount];
+    internal Dictionary<FalloutNifScalarTarget, Scalar> Scalars { get; } = [];
     private (RuntimeNativeNifAnimation Animation, float Time, float Ease)[] _layers = [];
     internal Span<(RuntimeNativeNifAnimation Animation, float Time, float Ease)> LayerScratch(int count)
     {
         if (_layers.Length < count) Array.Resize(ref _layers, Math.Max(count, _layers.Length * 2));
         return _layers.AsSpan(0, count);
     }
-    internal void Clear() => Array.Clear(Bones);
+    internal void Clear() { Array.Clear(Bones); Scalars.Clear(); }
     internal void Publish(RuntimeNativeNifSkeleton skeleton)
     {
         for (var index = 0; index < Bones.Length; index++)

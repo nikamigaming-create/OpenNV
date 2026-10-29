@@ -11,6 +11,7 @@ internal partial class RuntimeNativeNpc
     private FalloutActorResidualPose? _idleSnapshotPose;
     private IReadOnlyList<FalloutNifAnimationSample>? _idleSnapshotSamples;
     private IReadOnlyList<RuntimeNifSnapshotTransform>? _idleSnapshotTargets;
+    private IReadOnlyList<FalloutNifSnapshotScalar>? _idleSnapshotScalars;
     private FalloutIdleTransition.Settings _idleSnapshotSettings;
 
     private bool IdleSnapshotActive => _idleSnapshotTransition is not null;
@@ -30,10 +31,13 @@ internal partial class RuntimeNativeNpc
         var pose = CaptureCompleteIdlePose();
         var samples = ReadIdleSnapshotPose(pose, incoming);
         var targets = incoming.CaptureSnapshotTransforms();
+        var scalars = incoming.CaptureSnapshotScalars();
+        incoming.ValidateSnapshotScalars(scalars);
         _idleSnapshotAnimation = incoming;
         _idleSnapshotPose = pose;
         _idleSnapshotSamples = samples;
         _idleSnapshotTargets = targets;
+        _idleSnapshotScalars = scalars;
         _idleSnapshotSettings = settings;
         _idleSnapshotTransition = transition;
         return true;
@@ -104,7 +108,7 @@ internal partial class RuntimeNativeNpc
         var factors = transition.Factors;
         _idleSnapshotAnimation!.ApplySnapshotTransition(clock.SourceSeconds, _idleSnapshotSamples!,
             factors.SnapshotWeight, factors.IncomingWeight, Combat?.PackageOwnsPose == true ? null : _baseAnimation,
-            _baseAnimationSeconds, _idleSnapshotTargets);
+            _baseAnimationSeconds, _idleSnapshotTargets, _idleSnapshotScalars);
     }
 
     private FalloutActorIdleSnapshotTransition? CaptureIdleSnapshot() => _idleSnapshotTransition is { } transition
@@ -112,7 +116,7 @@ internal partial class RuntimeNativeNpc
         {
             var p = value.Local.Translation!.Value; var q = value.Local.Rotation!.Value;
             return new FalloutActorIdleSnapshotTarget(value.Target, value.Priority, [p.X, p.Y, p.Z], [q.X, q.Y, q.Z, q.W], value.Local.Scale!.Value);
-        }).ToArray()) : null;
+        }).ToArray(), _idleSnapshotScalars!.ToArray()) : null;
 
     private void RestoreIdleSnapshot(FalloutActorIdleSnapshotTransition saved)
     {
@@ -134,10 +138,13 @@ internal partial class RuntimeNativeNpc
         var actual = incoming.CaptureSnapshotTransforms();
         if (!targets.Select(value => (value.Target, value.Priority)).SequenceEqual(actual.Select(value => (value.Target, value.Priority))))
             throw new InvalidDataException("Idle snapshot external targets differ from their source bindings.");
+        var scalars = (saved.Scalars ?? []).ToArray();
+        incoming.ValidateSnapshotScalars(scalars);
         _idleSnapshotAnimation = incoming;
         _idleSnapshotPose = pose;
         _idleSnapshotSamples = samples;
         _idleSnapshotTargets = targets;
+        _idleSnapshotScalars = scalars;
         _idleSnapshotSettings = settings;
         _idleSnapshotTransition = transition;
         _currentIdleRequest?.SnapshotBlend();
@@ -148,5 +155,6 @@ internal partial class RuntimeNativeNpc
         _idleSnapshotTransition = null; _idleSnapshotAnimation = null;
         _idleSnapshotPose = null; _idleSnapshotSamples = null;
         _idleSnapshotTargets = null;
+        _idleSnapshotScalars = null;
     }
 }

@@ -79,7 +79,7 @@ internal sealed partial class RuntimeNativeCreature
         {
             var factors = _scriptIdleTransition!.Factors;
             _scriptIdleAnimation!.ApplySnapshotTransition(_scriptIdleClock!.SourceSeconds, _scriptIdleSnapshot!,
-                factors.SnapshotWeight, factors.IncomingWeight);
+                factors.SnapshotWeight, factors.IncomingWeight, scalars: _scriptIdleSnapshotScalars);
         }
         else RuntimeNativeNifAnimation.ApplyLayers((_animation, SourceSeconds), (_scriptIdleAnimation!, _scriptIdleClock!.SourceSeconds));
     }
@@ -99,6 +99,7 @@ internal sealed partial class RuntimeNativeCreature
     private void ClearScriptIdleOwner()
     {
         _scriptIdleAnimation = null; _scriptIdleClock = null; _scriptIdleTransition = null; _scriptIdleSnapshot = null;
+        _scriptIdleSnapshotScalars = null;
         _scriptIdleDeactivation = null; _scriptIdleEndPending = false; _scriptIdlePosePublished = false;
         _scriptIdleRequestState = 0; _scriptIdleSequenceState = 0;
         if (_aiState is { } state) state.CreatureScriptIdle = null;

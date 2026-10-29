@@ -140,9 +140,12 @@ floatState.Add("Synthetic Joint", "Authored Parameter", -7);
 var floatLink = new FalloutNifControllerLink("Synthetic Joint", "", "NiFloatExtraDataController",
     "Authored Parameter", "", 0, -1, 0);
 var applyFloat = floatState.Bind(floats, floatLink);
-applyFloat(0.5f);
+Require(applyFloat.Target == new FalloutNifScalarTarget(FalloutNifScalarKind.FloatExtraData, "Synthetic Joint", "Authored Parameter") &&
+    applyFloat.Priority == floatLink.Priority, "Declared float target lost its typed identity or priority.");
+applyFloat.Publish(applyFloat.Sample(0.5f));
 Near(floatState.Values.Single().Value, 6, "Declared float target interpolation");
-applyFloat(10);
+Near(applyFloat.Read(), 6, "Typed float binding current value");
+applyFloat.Publish(applyFloat.Sample(10));
 Near(floatState.Values.Single().Value, 10, "Scalar endpoint clamping");
 ExpectInvalid(() => floatState.Bind(floats, floatLink with { Variable1 = "Missing" }));
 ExpectInvalid(() => floatState.Add("Synthetic Joint", "Authored Parameter", 1));
@@ -380,7 +383,7 @@ if (args.Length is 2 or 3)
                 {
                     var apply = ownedFloats.Bind(source, link);
                     for (var tick = 0; tick <= 120; tick++)
-                        apply(sequence.StartTime + (sequence.StopTime - sequence.StartTime) * tick / 120.0f);
+                        apply.Publish(apply.Sample(sequence.StartTime + (sequence.StopTime - sequence.StartTime) * tick / 120.0f));
                     Console.WriteLine($"OPENNV_OWNED_FLOAT_CHANNEL_BOUND node={link.NodeName} extra={link.Variable1} samples=121");
                     continue;
                 }

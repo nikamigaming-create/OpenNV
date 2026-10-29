@@ -11,6 +11,7 @@ internal sealed class RuntimeNativeNifAnimation
     private readonly List<(int Bone, byte Priority, FalloutNifAnimationSampler Sampler)> _transforms = [];
     private readonly Dictionary<int, FalloutNifTransformComponents> _transformComponents = [];
     private readonly List<Action<float>> _otherChannels = [];
+    private readonly Dictionary<FalloutNifScalarTarget, RuntimeNifScalarBinding> _scalars = [];
     private readonly List<RuntimeNifUnboundAnimationChannel> _unbound = [];
     private readonly List<FalloutNifControllerLink> _absentTargets = [];
     private readonly Dictionary<FalloutNifControllerLink, Action<float>> _snapshotCandidateActions = [];
@@ -85,7 +86,13 @@ internal sealed class RuntimeNativeNifAnimation
                 {
                     if (!floatTargets.Add((link.NodeName, link.Variable1)))
                         throw new NotSupportedException("Multiple float links require a blend/priority owner.");
-                    _otherChannels.Add(skeleton.FloatExtraData.Bind(source, link));
+                    var scalar = skeleton.FloatExtraData.Bind(source, link);
+                    _scalars.Add(scalar.Target, scalar);
+                }
+                else if (skeleton.BindMorphChannel(source, link) is { } morph)
+                {
+                    if (!_scalars.TryAdd(morph.Target, morph))
+                        throw new NotSupportedException("Multiple morph links require a blend/priority owner.");
                 }
                 else if (skeleton.BindVisualChannel(source, link) is { } visual)
                     _otherChannels.Add(visual);
@@ -117,6 +124,28 @@ internal sealed class RuntimeNativeNifAnimation
     internal IReadOnlyList<RuntimeNifUnboundAnimationChannel> UnboundChannels => _unbound;
     internal IReadOnlyList<FalloutNifControllerLink> AbsentSourceTargets => _absentTargets;
     internal int TransformChannelCount => _transforms.Count;
+    internal int ScalarChannelCount => _scalars.Count;
+
+    internal IReadOnlyList<FalloutNifSnapshotScalar> CaptureSnapshotScalars() => _scalars.Values
+        .Select(binding => new FalloutNifSnapshotScalar(binding.Target, binding.Priority, binding.Read())).ToArray();
+
+    internal void ValidateSnapshotScalars(IReadOnlyList<FalloutNifSnapshotScalar> values)
+    {
+        if (values.Count != _scalars.Count)
+            throw new InvalidDataException("Snapshot scalar bindings differ from their source.");
+        for (var index = 0; index < values.Count; index++)
+        {
+            var value = values[index];
+            if (value is null) throw new InvalidDataException("Snapshot scalar is absent.");
+            value.Validate();
+            if (!_scalars.TryGetValue(value.Target, out var binding) || binding.Priority != value.Priority ||
+                binding.Normalize(value.Value) != value.Value)
+                throw new InvalidDataException("Snapshot scalar target, priority or value differs from its source binding.");
+            for (var previous = 0; previous < index; previous++)
+                if (values[previous].Target == value.Target)
+                    throw new InvalidDataException("Snapshot scalar target is duplicated.");
+        }
+    }
 
     internal void RegisterSnapshotTransformTarget(FalloutNifControllerLink link, Node3D target)
     {
@@ -145,26 +174,28 @@ internal sealed class RuntimeNativeNifAnimation
     internal void RequireSnapshotTransitionOver(RuntimeNativeNifAnimation? background)
     {
         if (background is not null && (_skeleton != background._skeleton || background._unbound.Count != 0) ||
-            _unbound.Count != 0 || _otherChannels.Count != 0 || _transforms.Count + _snapshotTargets.Count == 0)
-            throw new NotSupportedException("Snapshot transition requires complete typed transform bindings on one skeleton.");
+            _unbound.Count != 0 || _otherChannels.Count != 0 || _transforms.Count + _snapshotTargets.Count + _scalars.Count == 0)
+            throw new NotSupportedException("Snapshot transition requires complete typed transform/scalar bindings on one skeleton.");
     }
 
     internal void ApplySnapshotTransition(float sourceTime, IReadOnlyList<FalloutNifAnimationSample> snapshot,
         float snapshotWeight, float incomingWeight, RuntimeNativeNifAnimation? background = null, float backgroundTime = 0,
-        IReadOnlyList<RuntimeNifSnapshotTransform>? external = null)
+        IReadOnlyList<RuntimeNifSnapshotTransform>? external = null, IReadOnlyList<FalloutNifSnapshotScalar>? scalars = null)
     {
         if (_unbound.Count != 0 || _otherChannels.Count != 0 || snapshot.Count != _skeleton.Node.GetBoneCount() ||
             !float.IsFinite(snapshotWeight) || !float.IsFinite(incomingWeight) || snapshotWeight < 0 || incomingWeight < 0 ||
             snapshotWeight + incomingWeight <= 0 || !float.IsFinite(sourceTime) || sourceTime < Sequence.StartTime || sourceTime > Sequence.StopTime)
             throw new InvalidDataException("Snapshot transition has invalid weights, phase or source bindings.");
         external ??= [];
+        scalars ??= [];
+        ValidateSnapshotScalars(scalars);
         if (external.Count != _snapshotTargets.Count || external.Select(value => value.Target).Distinct(StringComparer.Ordinal).Count() != external.Count ||
             external.Any(value => !_snapshotTargets.TryGetValue(value.Target, out var target) || target.Priority != value.Priority))
             throw new InvalidDataException("Snapshot external transform bindings differ from their source.");
         var layers = _skeleton.AnimationBlend.LayerScratch(background is null ? 1 : 2);
         if (background is null) layers[0] = (this, sourceTime, 1);
         else { layers[0] = (background, backgroundTime, 1); layers[1] = (this, sourceTime, 1); }
-        try { ApplyWeightedLayers(layers, this, snapshot, external, snapshotWeight, incomingWeight); }
+        try { ApplyWeightedLayers(layers, this, snapshot, external, scalars, snapshotWeight, incomingWeight); }
         finally { layers.Clear(); }
     }
 
@@ -192,6 +223,7 @@ internal sealed class RuntimeNativeNifAnimation
             throw new NotSupportedException($"Selected source sequence {Sequence.Name} has {_unbound.Count} unbound channels: " +
                 string.Join("; ", _unbound.Select(item => $"{item.Source.NodeName}/{item.Source.ControllerType}: {item.Reason}")));
         ApplyTransformChannels(sourceTime);
+        foreach (var binding in _scalars.Values) binding.Publish(binding.Sample(sourceTime));
         foreach (var apply in _otherChannels)
             apply(sourceTime);
     }
@@ -248,16 +280,18 @@ internal sealed class RuntimeNativeNifAnimation
     // Ease is transient controller state; it scales, never replaces, the
     // authored sequence weight. Attachment priority survives zero contribution.
     internal static void ApplyWeightedLayers(ReadOnlySpan<(RuntimeNativeNifAnimation Animation, float Time, float Ease)> layers)
-        => ApplyWeightedLayers(layers, null, null, null, 0, 1);
+        => ApplyWeightedLayers(layers, null, null, null, null, 0, 1);
 
     private static void ApplyWeightedLayers(ReadOnlySpan<(RuntimeNativeNifAnimation Animation, float Time, float Ease)> layers,
         RuntimeNativeNifAnimation? snapshotOwner, IReadOnlyList<FalloutNifAnimationSample>? snapshot,
-        IReadOnlyList<RuntimeNifSnapshotTransform>? external, float snapshotWeight, float incomingWeight)
+        IReadOnlyList<RuntimeNifSnapshotTransform>? external, IReadOnlyList<FalloutNifSnapshotScalar>? scalars,
+        float snapshotWeight, float incomingWeight)
     {
         if (layers.Length == 0) return;
         var skeleton = layers[0].Animation._skeleton;
         var blend = skeleton.AnimationBlend;
         blend.Clear();
+        var scalarBlend = blend.Scalars;
         var nodes = layers[0].Animation._snapshotBlendScratch;
         nodes.Clear();
         float SequenceWeight(RuntimeNativeNifAnimation animation) => animation.Sequence.Weight *
@@ -282,6 +316,11 @@ internal sealed class RuntimeNativeNifAnimation
                 nodes.TryGetValue(target.Node, out var current);
                 current.Weights.Attach(target.Priority); nodes[target.Node] = current;
             }
+            foreach (var binding in animation._scalars.Values)
+            {
+                scalarBlend.TryGetValue(binding.Target, out var current);
+                current.Binding = binding; current.Weights.Attach(binding.Priority); scalarBlend[binding.Target] = current;
+            }
         }
         if (snapshotOwner is not null)
         {
@@ -290,6 +329,10 @@ internal sealed class RuntimeNativeNifAnimation
             {
                 var node = snapshotOwner._snapshotTargets[value.Target].Node;
                 var current = nodes[node]; current.Weights.Attach(value.Priority); nodes[node] = current;
+            }
+            foreach (var value in scalars!)
+            {
+                var current = scalarBlend[value.Target]; current.Weights.Attach(value.Priority); scalarBlend[value.Target] = current;
             }
         }
         foreach (var (animation, time, ease) in layers)
@@ -301,6 +344,11 @@ internal sealed class RuntimeNativeNifAnimation
                 var current = nodes[target.Node]; current.Weights.Gather(target.Priority, SequenceWeight(animation), ease);
                 nodes[target.Node] = current;
             }
+            foreach (var binding in animation._scalars.Values)
+            {
+                var current = scalarBlend[binding.Target]; current.Weights.Gather(binding.Priority, SequenceWeight(animation), ease);
+                scalarBlend[binding.Target] = current;
+            }
         }
         if (snapshotOwner is not null)
         {
@@ -309,6 +357,11 @@ internal sealed class RuntimeNativeNifAnimation
             {
                 var node = snapshotOwner._snapshotTargets[value.Target].Node;
                 var current = nodes[node]; current.Weights.Gather(value.Priority, snapshotWeight, 1); nodes[node] = current;
+            }
+            foreach (var value in scalars!)
+            {
+                var current = scalarBlend[value.Target]; current.Weights.Gather(value.Priority, snapshotWeight, 1);
+                scalarBlend[value.Target] = current;
             }
         }
         foreach (var (animation, time, ease) in layers)
@@ -326,6 +379,13 @@ internal sealed class RuntimeNativeNifAnimation
                 if (weight > 0) current.Add(target.Sampler.Sample(time), weight);
                 nodes[target.Node] = current;
             }
+            foreach (var binding in animation._scalars.Values)
+            {
+                var current = scalarBlend[binding.Target];
+                var weight = current.Weights.Normalize(binding.Priority, SequenceWeight(animation), ease);
+                if (weight > 0) current.Add(binding.Sample(time), weight);
+                scalarBlend[binding.Target] = current;
+            }
         }
         if (snapshotOwner is not null)
         {
@@ -342,6 +402,12 @@ internal sealed class RuntimeNativeNifAnimation
                 if (weight > 0) current.Add(value.Local, weight);
                 nodes[node] = current;
             }
+            foreach (var value in scalars!)
+            {
+                var current = scalarBlend[value.Target]; var weight = current.Weights.Normalize(value.Priority, snapshotWeight, 1);
+                if (weight > 0) current.Add(value.Value, weight);
+                scalarBlend[value.Target] = current;
+            }
         }
         blend.Publish(skeleton);
         foreach (var (node, current) in nodes)
@@ -352,6 +418,9 @@ internal sealed class RuntimeNativeNifAnimation
             if (current.ScaleWeight > 0) node.Scale = Vector3.One * (current.Scale / current.ScaleWeight);
         }
         nodes.Clear();
+        foreach (var current in scalarBlend.Values)
+            if (current.Weight > 0) current.Binding.Publish(current.Value);
+        scalarBlend.Clear();
         foreach (var (animation, time, ease) in layers)
             if (ease > 0 && animation.Sequence.Weight > 0)
                 foreach (var apply in animation._otherChannels) apply(time);

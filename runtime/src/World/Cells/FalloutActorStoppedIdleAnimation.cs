@@ -1,4 +1,5 @@
 using OpenNV.Runtime.Content;
+using OpenNV.Runtime.Formats.Gamebryo;
 
 namespace OpenNV.Runtime.World.Cells;
 
@@ -57,7 +58,7 @@ internal sealed record FalloutCreatureScriptIdlePhase(int RequestState, int Sequ
 
 internal sealed record FalloutActorIdleSnapshotTransition(FalloutIdleTransition.Snapshot Phase,
     FalloutIdleTransition.Settings Settings, FalloutActorResidualPose Pose,
-    IReadOnlyList<FalloutActorIdleSnapshotTarget>? Targets = null)
+    IReadOnlyList<FalloutActorIdleSnapshotTarget>? Targets = null, IReadOnlyList<FalloutNifSnapshotScalar>? Scalars = null)
 {
     internal void Validate()
     {
@@ -79,9 +80,20 @@ internal sealed record FalloutActorIdleSnapshotTransition(FalloutIdleTransition.
                 target.Validate();
             }
         }
+        if (Scalars is not null)
+        {
+            var targets = new HashSet<FalloutNifScalarTarget>();
+            foreach (var scalar in Scalars)
+            {
+                if (scalar is null || !targets.Add(scalar.Target))
+                    throw new InvalidDataException("Idle snapshot scalar targets are duplicated or absent.");
+                scalar.Validate();
+            }
+        }
     }
 
-    internal FalloutActorIdleSnapshotTransition Copy() => this with { Pose = Pose.Copy(), Targets = Targets?.Select(value => value.Copy()).ToArray() };
+    internal FalloutActorIdleSnapshotTransition Copy() => this with
+    { Pose = Pose.Copy(), Targets = Targets?.Select(value => value.Copy()).ToArray(), Scalars = Scalars?.ToArray() };
 }
 
 internal sealed record FalloutActorIdleSnapshotTarget(string Name, byte Priority, IReadOnlyList<float> Position,
