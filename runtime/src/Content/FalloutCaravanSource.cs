@@ -80,4 +80,3 @@ internal sealed record FalloutCaravanCommandRequest(FalloutFormKey Opponent, Fal
         return new(opponent, FalloutCaravanDeck.Read(records, deck), checked((int)aiType), bet);
     }
 }
-

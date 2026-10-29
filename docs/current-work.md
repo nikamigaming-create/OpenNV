@@ -21,12 +21,12 @@ Current branch: `codex/integrated-gameplay-continuation`, based on freshly fetch
 preserved and unpublished. Their initial file hashes and the prior detailed work
 notes are retained privately under `local/integrated-baseline-20261028`.
 
-Release and Debug build; formatting/analyzers and managed/native gate stages
-pass across resumed runs after repairing the dialogue-probe dependency and stale
-skin-lifetime fixture. A single fresh full gate remains required before pushing.
-The selected owned creature publication check passes. Product ExportRelease
-uses the normal launcher script. Recording is off; builds and gameplay are
-serialized.
+The fresh full required gate passes: Release and Debug builds, formatting and
+analyzers, managed contracts and native Godot checks. The selected owned creature
+pending-Sandbox publication audit and `git diff --check` also pass. This audit
+checks state publication, not ordinary creature gameplay or retail parity.
+Product ExportRelease uses the normal launcher script. Recording is off; builds
+and gameplay are serialized.
 
 Two reviewed runtime repairs are implemented in this block: stopped creature
 alert changes now keep the retained activity revisions consistent (focused
@@ -35,12 +35,14 @@ source-publication owner after configuration. The second fixes a missing join
 that could leave streamed pending-Sandbox creatures frozen and unsaveable.
 Ordinary gameplay validation of these fixes is still pending.
 
-## Stopping point and resume
+## Active integration checkpoint
 
-Stopped at the user's explicit request on 2026-10-28. No new implementation,
-full gate, push, PR or merge is authorized during this wind-down. Relevant
-integrated source/tests/docs are checkpointed locally on the existing branch;
-publication remains pending a fresh full gate and review.
+Resumed at the user's explicit request on 2026-10-28 from local WIP commit
+`45f525bb`. The active goal is authorized again. Fresh required gate and selected
+owned check now pass; the integrated scope has been reviewed. Publish one checked
+integration PR before the next gameplay repair block. The 18 unrelated generated
+classic import EOL changes remain preserved and excluded. Recording is off and
+the game stays closed during validation.
 
 The final ExportRelease product MVID is
 `9d38a82d-9efe-42fd-949a-1b86ba6d46a7`. Ordinary New Game passed the formerly
@@ -65,10 +67,9 @@ The canonical current save and profile are under
 historical restore. PID 19632 exited normally and disposed its source owners.
 Recording, render trace and campaign automation are off. No game/build is running.
 
-On resume, first run the selected owned check and one fresh full required gate;
-review the integrated diff before checked publication. Current focused menu,
-movie-pause and owned LoveTester checks pass, but resumed gate stages from
-before the final fixes are not a fresh integrated pass. Continue ordinary play
+The full gate, selected owned publication check, focused menu, movie-pause and
+owned LoveTester checks pass. Hosted checks and checked publication are next.
+Continue ordinary play
 from the current save after the integration boundary. The next reached gameplay
 repair is NPC Sandbox Furniture: candidate enumeration currently refuses chairs
 before selection. Reuse source reservation/approach/entry/exit while retaining
