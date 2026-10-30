@@ -34,19 +34,28 @@ lifetime/persistence remain absent; source parsing is not a VM.
 
 Packaged build c6065970 continued the healthy stage 110 slot through the real
 Pip-Boy handoff, completed Doc at stage 200, saved and exited to Goodsprings.
-Ordinary traversal and Sunny dialogue advanced the tutorial to 20; that later
-progress was unsaved because background Eat/ambient-dialogue owners blocked F5.
-The healthy exterior slot remains authoritative. A 1014.4-second continuous
-3840x2124 private video shows this route; it is video-only. Combat/crafting,
-sustained 4K60 and matched retail parity are unverified. Horizontal sky seams
-are an explicit rendering defect. Typed visibility has actual handoff execution.
+Its later Sunny continuation exposed background Eat/ambient-dialogue save blockers.
+That earlier 1014.4-second private video separately verifies the typed visibility
+handoff. Candidate 4 and its newer checkpoint below supersede that continuation.
+Horizontal sky seams, sustained 4K60 and matched retail parity remain unresolved.
 
-The next candidate's standalone Eat and mixed Topic/Conversation INFO corrections
+Packaged candidate 4 (743aa164) continued the Saloon save through Sunny dialogue,
+bottle shooting, player gecko kills, incoming damage, wells, real corpse loot and
+both ingredient harvests. A new ordinary F5 saved HP 94 and the current quest/item
+state; a new process on the identical package restored them. The 3224.833-second
+gameplay take and 331.033-second cold Continue take are separate, private,
+3840x2124 video-only recordings. Campfire cooking was not performed in this run.
+
+Standalone Eat and mixed Topic/Conversation INFO corrections
 pass Debug, focused contracts and selected owned audits. They retain authored
 scope/food, real package/chair state, independent retry clocks and consumed meal
-receipts. Physical Eat handoff/ambient completion and the final publication gate
-remain pending. Unsupported search, whole-cell wandering and exact-reference food
+receipts. Actual ambient INFO 15a548 reached audio completion; later saves passed.
+The final required publication gate passes; isolated physical Eat handoff/meal
+playback remains unverified. Unsupported search, whole-cell wandering and exact-reference food
 acquisition stay visible; source decoding is not evidence of those behaviors.
+Additional reached limits include creature Find packages, property-free LOD
+materials, LIGH flag 0x8 and ragdoll joint ownership. Repeated combat health values
+for the settler/gecko pair were authored script protection, not a damage reset bug.
 
 The merged batch adds source-bound Sleep using existing travel/portal/bed
 owners, exact outgoing package-query retirement, sole marker history restoration,
@@ -72,8 +81,8 @@ Objective 40 follow-up toward Sunny/Trudy remains unfinished. The bot kept
 planning back toward the elevated rock corridor; manual detours traversed parts
 of the area, without establishing physical impossibility or a new game blocker.
 Normal quit disposed source owners and preserved the successful cooking save.
-The fresh stage80 checkpoint now owns the next packaged-launch acceptance;
-the earlier cooking save remains preserved without invented idle history.
+The current d4c408 checkpoint supersedes those older launch states; historical
+cooking saves remain preserved without invented idle history.
 Final-phase export dcf66477 also Continued the saved Healing Powder successfully.
 A later actor 157c8f transition exposed bound HeadTrack/face-morph scalar snapshot
 support as the next saving owner; no F5 overwrote the cooking checkpoint. Normal
