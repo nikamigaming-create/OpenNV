@@ -1,10 +1,28 @@
-# Windows FNV recovery playtest
+# Windows experimental Fallout: New Vegas playtest
 
-This experimental build targets vanilla Fallout: New Vegas for a local VR test.
-The complete campaign, every weapon, physical headset behavior and performance
-still need acceptance. Fallout 3 follows FNV; mods and TTW follow both base games.
-The launcher reports available routes from this package's runtime manifest.
-Availability does not establish a completed gameplay test.
+This experimental Windows build reads a legally owned Fallout: New Vegas
+installation directly. The current desktop development build has exercised
+recorded Doc dialogue, Reflectron, Vigor allocation, ordinary movement and F5
+saving. Selected combat, inventory, crafting and quest paths also have existing
+runtime evidence and headless checks; the complete campaign is unfinished.
+Package-specific acceptance and exact build identity belong to the release notes.
+Candidate 0.1.0-experimental.20261029.4 exercised Sunny dialogue, bottle shooting,
+player gecko combat, incoming damage, corpse loot, ingredient harvesting and an
+ordinary save/quit/fresh-process Continue. Campfire cooking was not performed in
+that take. Its private proof is video-only at 3840x2124; encoded frame rate is not
+a sustained game-performance result.
+
+Expect bugs and explicit unsupported behavior. The compiled SCDA bytecode VM is
+not implemented; parsed-source execution is not complete scripting support.
+Some DLC startup paths stop at missing essential-state or leveled-list mutation
+owners. Arbitrary dynamic references, full actor procedures, all weapons, source
+presentation parity and performance remain incomplete. Physical OpenXR/Air Link
+acceptance is open. Launcher route availability is not a gameplay certification.
+FO3, TTW and custom-plugin acceptance remain incomplete.
+Reached presentation limits include sky bands/seams, missing property-free LOD
+materials, some light flags and ragdoll joint ownership. Some creature Find
+packages remain unsupported. These are experimental limitations, not hidden
+fallbacks or a claim that every actor in the tested region is complete.
 
 Bring your own legally owned installation. No retail files, transformed game
 assets, retail executables or saves are included. Read `NOTICE.md` and
@@ -32,12 +50,15 @@ Both package launchers select official base-game/DLC plugins and disable native
 extensions. Loose files already present in the owned installation still win
 resource lookup; this selection does not verify or repair a modified installation.
 
-The package launchers use an isolated profile root:
+The package launchers request this profile root:
 `%APPDATA%/Godot/app_userdata/OpenNV/vanilla/`. Installation registrations live in
 `launcher/profiles-v1.json`; FNV saves live in `profiles/newvegas/` beneath that
-root. Existing global profiles are not imported. Retail saves are not loaded or
-modified. Copy a compatible preserved OpenNV save into this isolated profile if
-needed; retain the original. A different source stack can be refused visibly.
+root. On first use, the current launcher can reuse existing registrations,
+including their stored save paths. Confirm the selected installation/save path;
+choosing the game folder again registers a save path beneath the requested root.
+Retail saves are not loaded or modified. Copy a compatible preserved OpenNV save
+into the chosen profile if needed; retain the original. A different source stack
+can be refused visibly.
 For another independent profile, use the executable directly, for example:
 `OpenNV.exe --xr-mode on -- --launcher --launcher-game newvegas --presentation openxr --native-plugins none --content-selection vanilla --profile-root <absolute-directory>`.
 
@@ -72,8 +93,15 @@ playtest helper, also records the source tree, exporter and SDK. The launcher
 displays build identity. `scripts/Build-OpenNVPlaytest.ps1` requires clean committed
 source and checks the exported launcher; it does not certify gameplay.
 
-Report the build commit, mode, location, action and visible result. The recovery
-route includes New Game, dialogue, travel to Primm, ED-E, combat/loot, Pip-Boy,
-crafting, and Save/Quit/cold Continue. Current acceptance is recorded separately
-in the recovery handoff. A successful launcher or simulator frame does not
-establish campaign completion, all-weapon support or parity.
+Report the release version/commit, mode, owned source selection, location,
+ordinary input and visible result, including the first error and whether saving
+or Continue still works. Describe expected behavior separately from observation.
+Do not upload retail assets or saves to public issues; share only a concise error
+excerpt and non-proprietary build/system information.
+
+A useful bounded path is Doc's opening, Goodsprings/Sunny dialogue, shooting,
+combat/loot, campfire crafting and Save/Quit/cold Continue. The requested proof
+recording follows real elapsed-time gameplay from this package; encoded video
+frame rate is not measured game FPS. A blocked or untested part stays incomplete.
+Native 4K60, full campaign/parity and physical XR144 are not claimed by this
+experimental playtest.

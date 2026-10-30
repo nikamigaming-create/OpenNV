@@ -168,9 +168,10 @@ internal sealed class RuntimeNativeNifSkeleton
         }
     }
 
-    internal Action<float>? BindVisualChannel(FalloutNifFile source, FalloutNifControllerLink link)
+    internal Action<float>? BindVisualChannel(FalloutNifFile source, FalloutNifControllerLink link) => MaterialChannels.Bind(source, link);
+
+    internal RuntimeNifScalarBinding? BindScalarChannel(FalloutNifFile source, FalloutNifControllerLink link)
     {
-        if (MaterialChannels.Bind(source, link) is { } material) return material;
         if (link.PropertyType.Length != 0 || link.Variable1.Length != 0) return null;
         if (link.ControllerType == "NiVisController" && link.Variable2.Length == 0 && HasSourceTarget(link.NodeName))
         {
@@ -179,14 +180,9 @@ internal sealed class RuntimeNativeNifSkeleton
             var controllers = Source.Blocks.Where(value => value.TypeName == "NiVisController")
                 .Select(value => (FalloutNifVisibilityController)Source.ReadObject(value.Index)).Where(value => value.Time.Target == block).ToArray();
             if (controllers.Length != 1) throw new InvalidDataException("Visibility channel has no unique declared source controller.");
-            var sampler = new FalloutNifBoolAnimation(source, link.Interpolator);
-            return time => { _visibility[link.NodeName] = sampler.Sample(time); RefreshVisibility(); };
+            return RuntimeNifScalarBinding.Visibility(source, link, () => _visibility[link.NodeName],
+                value => { _visibility[link.NodeName] = value; RefreshVisibility(); });
         }
-        return null;
-    }
-
-    internal RuntimeNifScalarBinding? BindMorphChannel(FalloutNifFile source, FalloutNifControllerLink link)
-    {
         if (link.ControllerType == "NiGeomMorpherController" && link.PropertyType.Length == 0 && link.Variable1.Length == 0 &&
             _attachments.TryGetValue(link.NodeName, out var attachment) && attachment.Morph is { } morph)
         {

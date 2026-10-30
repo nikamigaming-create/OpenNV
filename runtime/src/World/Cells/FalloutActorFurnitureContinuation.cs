@@ -28,7 +28,7 @@ internal sealed record FalloutActorFurnitureContinuation(FalloutActorPackageAssi
     string? ModelSha256 = null, FalloutFurnitureSeat? Seat = null, float[]? Occupied = null,
     FalloutFurnitureClipSnapshot? Clip = null, bool InitialPlacement = false, FalloutActorPackageIdleState? IdleState = null,
     bool SandboxActivity = false, bool SandboxPackageExit = false, float[]? Approach = null, float[]? ApproachFloor = null,
-    bool PendingSelectionAccepted = false, bool PendingSelectionForced = false, bool SleepPackage = false)
+    bool PendingSelectionAccepted = false, bool PendingSelectionForced = false, bool SleepPackage = false, bool EatPackage = false)
 {
     internal const string CaptureBlocker = "Furniture search, reservation and physical animation continuation.";
     internal int SittingState => Seat?.Sleeping == true || Phase == 1 ? 0 : Phase;
@@ -45,8 +45,9 @@ internal sealed record FalloutActorFurnitureContinuation(FalloutActorPackageAssi
             SelectedPackage is { } selected && !ValidKey(selected) || PendingPackage is { } pending && !ValidKey(pending) ||
             (EventRevision == 0 ? LastEvent is not null || LastPackage is not null || LastPackageSha256 is not null :
                 LastEvent is not ("POBA" or "POCA" or "POEA") || LastPackage is not { } previous || !ValidKey(previous) || !ValidHash(LastPackageSha256)) ||
-            Assignment.Done != (!(SandboxActivity || SleepPackage) && Phase is 3 or 4) ||
-            SleepPackage && (SandboxActivity || Seat?.Sleeping != true) ||
+            Assignment.Done != (!(SandboxActivity || SleepPackage || EatPackage) && Phase is 3 or 4) ||
+            SleepPackage && (SandboxActivity || EatPackage || Seat?.Sleeping != true) ||
+            EatPackage && (SandboxActivity || Seat?.Sleeping != false) ||
             SandboxPackageExit && (!SandboxActivity || Phase != 4 || !PendingSelectionAccepted) ||
             PendingSelectionForced && !PendingSelectionAccepted || PendingSelectionAccepted && Phase is not (2 or 4) ||
             ScheduleTime is { } time && (time.Month is < 0 or > 11 || time.Date is < 1 or > 31 || time.Weekday is < 0 or > 6 ||
@@ -65,7 +66,7 @@ internal sealed record FalloutActorFurnitureContinuation(FalloutActorPackageAssi
         if (Phase == 0)
         {
             if (Furniture is not null || FurnitureSha256 is not null || Model is not null || ModelSha256 is not null ||
-                Seat is not null || Occupied is not null || Clip is not null || InitialPlacement || PendingPackage is not null || SandboxActivity || SleepPackage)
+                Seat is not null || Occupied is not null || Clip is not null || InitialPlacement || PendingPackage is not null || SandboxActivity || SleepPackage || EatPackage)
                 throw new InvalidDataException("Furniture search has an unowned seat or transition.");
             return;
         }
@@ -129,6 +130,13 @@ internal sealed record FalloutActorFurnitureContinuation(FalloutActorPackageAssi
                 throw new InvalidDataException("Saved Sleep has no physical sleeping source bed.");
             FalloutSleepPackage.Read(package).Validate(records, world, actor.Reference,
                 new(world.Placement(bed).Cell, bed, true));
+        }
+        else if (EatPackage)
+        {
+            if (source.Procedure != 3 || Furniture is not { } chair || Seat?.Sleeping != false ||
+                actor.PackageMotion?.EatPackage is not { Furniture: true } eating || eating.Seat != chair)
+                throw new InvalidDataException("Saved Eat has no matching physical chair intent.");
+            FalloutEatPackage.Read(package).Validate(records, world, actor.Reference, eating);
         }
         else if (source.Procedure == 0) _ = FalloutFindFurniturePackage.Read(package);
         else if (source.Procedure != 6 || source.LocationType != 0 || source.LocationRadius != 0 ||

@@ -162,11 +162,7 @@ internal partial class RuntimeNativeNpc : CharacterBody3D
                     .Where(node => node.Name.ToString().Equals(link.NodeName, StringComparison.Ordinal)).ToArray();
                 if (matches.Length == 0) return weapon?.Bind(source, link);
                 if (matches.Length != 1) return null;
-                if (link.ControllerType == "NiVisController")
-                {
-                    var visibility = new FalloutNifBoolAnimation(source, link.Interpolator);
-                    return time => matches[0].Visible = visibility.Sample(time);
-                }
+                if (link.ControllerType == "NiVisController") return null; // Typed owner below.
                 var sampler = new FalloutNifAnimationSampler(source, link.Interpolator);
                 snapshotTargets.Add((link, matches[0]));
                 return time =>
@@ -179,8 +175,23 @@ internal partial class RuntimeNativeNpc : CharacterBody3D
                     if (sample.Scale is { } scale) matches[0].Scale = Vector3.One * scale;
                 };
             }
+            RuntimeNifScalarBinding? BindScalar(FalloutNifControllerLink link)
+            {
+                if (link.ControllerType != "NiVisController") return null;
+                var matches = objectNodes.Where(node => node.Name.ToString().Equals(link.NodeName, StringComparison.Ordinal)).ToArray();
+                if (matches.Length == 0) return null;
+                if (matches.Length != 1) throw new InvalidDataException("Animation-object visibility has no unique target.");
+                var target = matches[0];
+                void RequireLive()
+                {
+                    if (!GodotObject.IsInstanceValid(target) || target.IsQueuedForDeletion())
+                        throw new InvalidOperationException("Animated visibility target was retired.");
+                }
+                return RuntimeNifScalarBinding.Visibility(source, link,
+                    () => { RequireLive(); return target.Visible; }, value => { RequireLive(); target.Visible = value; });
+            }
             var selected = new RuntimeNativeNifAnimation(source, sequences[0], Skeleton, BindObject,
-                externalObjectTargets: externalTargets);
+                externalObjectTargets: externalTargets, bindScalarChannel: BindScalar);
             if (selected.UnboundChannels.Count != 0)
                 throw new NotSupportedException($"IDLE {idle.Form} has unbound source channels: " +
                     string.Join("; ", selected.UnboundChannels.Select(channel => channel.Source.NodeName + "/" + channel.Reason)));
@@ -248,6 +259,7 @@ internal partial class RuntimeNativeNpc : CharacterBody3D
         {
             InterruptSandboxFurniture();
             InterruptSleepFurniture();
+            InterruptEatFurniture();
             InterruptSandboxMarker();
             if (_currentIdleRequest is { State: 2 } || _queuedIdleRequest is not null) RequestIdleRetirement();
             ConsumeIdleRetirement();

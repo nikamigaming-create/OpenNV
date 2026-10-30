@@ -214,6 +214,6 @@ internal partial class RuntimeNativeConversation : Node
         _layer?.QueueFree(); _layer = null; _menu = null;
         _player.SetModalInput(false);
         Input.MouseMode = _player.ModalInput ? Input.MouseModeEnum.Visible : Input.MouseModeEnum.Captured;
-        GD.PushError($"OPENNV_NATIVE_CONVERSATION_DIVERGENCE speaker={_speaker}: {error.Message}");
+        GD.PushError($"OPENNV_NATIVE_CONVERSATION_DIVERGENCE speaker={_speaker}: {error}");
     }
 }

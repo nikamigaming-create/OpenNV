@@ -7,8 +7,8 @@ FO1 remains an incomplete classic preview with selected movement, inventory,
 equipment, door and save flows. Complete campaign execution and 1:1 3D art are
 unverified. See [current-work.md](current-work.md) for the active owner.
 
-The checked baseline is PR #333, c6ac9376, with local/owned gates and all five
-hosted checks passed. Branch codex/script-state-owners implements shared mutable
+The checked baseline is PR #334, f6141664, with local/owned gates and all five
+hosted checks passed. The merged runtime implements shared mutable
 FormLists and behavioral AV pools, persistent additions/modifiers, both parsed
 script hosts and live inventory/equipment/hit/weapon/appearance consumers.
 Focused headless contracts, selected owned audit, the full required gate and diff
@@ -31,6 +31,31 @@ work includes mutable base flags and essential knockdown/recovery/query/save,
 rather than a successful SetEssential command with missing lifecycle behavior.
 SCDA instruction execution and general runtime reference identity/allocation/
 lifetime/persistence remain absent; source parsing is not a VM.
+
+Packaged build c6065970 continued the healthy stage 110 slot through the real
+Pip-Boy handoff, completed Doc at stage 200, saved and exited to Goodsprings.
+Its later Sunny continuation exposed background Eat/ambient-dialogue save blockers.
+That earlier 1014.4-second private video separately verifies the typed visibility
+handoff. Candidate 4 and its newer checkpoint below supersede that continuation.
+Horizontal sky seams, sustained 4K60 and matched retail parity remain unresolved.
+
+Packaged candidate 4 (743aa164) continued the Saloon save through Sunny dialogue,
+bottle shooting, player gecko kills, incoming damage, wells, real corpse loot and
+both ingredient harvests. A new ordinary F5 saved HP 94 and the current quest/item
+state; a new process on the identical package restored them. The 3224.833-second
+gameplay take and 331.033-second cold Continue take are separate, private,
+3840x2124 video-only recordings. Campfire cooking was not performed in this run.
+
+Standalone Eat and mixed Topic/Conversation INFO corrections
+pass Debug, focused contracts and selected owned audits. They retain authored
+scope/food, real package/chair state, independent retry clocks and consumed meal
+receipts. Actual ambient INFO 15a548 reached audio completion; later saves passed.
+The final required publication gate passes; isolated physical Eat handoff/meal
+playback remains unverified. Unsupported search, whole-cell wandering and exact-reference food
+acquisition stay visible; source decoding is not evidence of those behaviors.
+Additional reached limits include creature Find packages, property-free LOD
+materials, LIGH flag 0x8 and ragdoll joint ownership. Repeated combat health values
+for the settler/gecko pair were authored script protection, not a damage reset bug.
 
 The merged batch adds source-bound Sleep using existing travel/portal/bed
 owners, exact outgoing package-query retirement, sole marker history restoration,
@@ -56,8 +81,8 @@ Objective 40 follow-up toward Sunny/Trudy remains unfinished. The bot kept
 planning back toward the elevated rock corridor; manual detours traversed parts
 of the area, without establishing physical impossibility or a new game blocker.
 Normal quit disposed source owners and preserved the successful cooking save.
-The fresh stage80 checkpoint now owns the next packaged-launch acceptance;
-the earlier cooking save remains preserved without invented idle history.
+The current d4c408 checkpoint supersedes those older launch states; historical
+cooking saves remain preserved without invented idle history.
 Final-phase export dcf66477 also Continued the saved Healing Powder successfully.
 A later actor 157c8f transition exposed bound HeadTrack/face-morph scalar snapshot
 support as the next saving owner; no F5 overwrote the cooking checkpoint. Normal
@@ -115,7 +140,7 @@ See [implementation-plan.md](implementation-plan.md) for the active delivery pla
 | Traversal | Cross-cell NPC/creature route owners, authored floor destinations and the prior Cheyenne saloon portal remain open. |
 | Fast travel | Earlier bounded flat/XR travel worked. Final population and saving after travel remain unaccepted. |
 | Performance | Native 3840x2160 travel measured rolling median 21.2512 ms, p95 31.2714 ms and p99 38.2948 ms, failing 4K60. Retained attribution identifies creature Sandbox movement, package pursuit and capsule sweeps; nested totals must not be added. Physical 144 Hz, loading/save stalls and headset acceptance remain open. |
-| Builds | Baseline PR #333 passed the full required gate, selected owned audits, bounded fresh-game smoke and all five hosted checks. The next mutable-script-state batch is active on its fresh feature branch. |
+| Builds | Baseline PR #334 passed the full required gate, selected owned audits and all five hosted checks. The experimental package/proof branch has focused fixes; its final required gate remains pending. |
 | Content | Official ESM selection logged; installed loose/resource winners still need provenance review. Native extensions disabled; pristine vanilla is not established by plugin selection alone. |
 | FO3 | Earlier rendered New Game reached birth stage 22. No accepted standalone FO3 VR release. |
 | Mods/TTW | Deferred until standalone games work. |

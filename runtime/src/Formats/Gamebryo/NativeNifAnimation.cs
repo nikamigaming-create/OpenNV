@@ -26,7 +26,8 @@ internal sealed class RuntimeNativeNifAnimation
         RuntimeNativeNifSkeleton skeleton,
         Func<FalloutNifControllerLink, Action<float>?>? bindOtherChannel = null,
         Action<FalloutNifAnimationSample>? accumulationRoot = null,
-        IReadOnlySet<string>? externalObjectTargets = null)
+        IReadOnlySet<string>? externalObjectTargets = null,
+        Func<FalloutNifControllerLink, RuntimeNifScalarBinding?>? bindScalarChannel = null)
     {
         if (!float.IsFinite(sequence.Weight) || sequence.Weight < 0)
             throw new InvalidDataException("Source animation sequence weight is invalid.");
@@ -89,10 +90,10 @@ internal sealed class RuntimeNativeNifAnimation
                     var scalar = skeleton.FloatExtraData.Bind(source, link);
                     _scalars.Add(scalar.Target, scalar);
                 }
-                else if (skeleton.BindMorphChannel(source, link) is { } morph)
+                else if ((skeleton.BindScalarChannel(source, link) ?? bindScalarChannel?.Invoke(link)) is { } boundScalar)
                 {
-                    if (!_scalars.TryAdd(morph.Target, morph))
-                        throw new NotSupportedException("Multiple morph links require a blend/priority owner.");
+                    if (!_scalars.TryAdd(boundScalar.Target, boundScalar))
+                        throw new NotSupportedException("Multiple scalar links require a blend/priority owner.");
                 }
                 else if (skeleton.BindVisualChannel(source, link) is { } visual)
                     _otherChannels.Add(visual);

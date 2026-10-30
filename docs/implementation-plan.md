@@ -77,22 +77,26 @@ rather than being inferred from FNV results.
 
 ## Current batch and delivery order
 
-Checked baseline PR #333 is c6ac9376. The script-state-owners candidate implements
+Checked baseline PR #334 is f6141664. The merged shared-state runtime implements
 shared mutable FormLists and behavioral actor-value pools, used command/query
 families, live consumers and current-save persistence. Named source definitions
 are immutable; world state and native/Godot adapters remain separate. Focused
 production-handler contracts and the selected owned GRA-prefix/player-state audit
 pass. The full publication gate and diff check pass. Actual fresh-game export b2a220ad reached VCG01 stage80 through Doc speech,
 Reflectron, manual traversal and Vigor acceptance, then saved successfully.
-Retain the requested screenshots and reuse the fresh checkpoint for next launch.
+Retain the requested screenshots; the release checkpoint below supersedes that
+earlier opening checkpoint.
 
-The user now requests an outside-tester release. After checked publication:
+The active codex/experimental-playtest-release branch now prepares the requested
+outside-tester release after completed checked publication:
 
 1. Build/pin the existing experimental Windows playtest pipeline. Inspect actual
    PCK entries as well as loose/package archive contents. Ship no owned/derived
    retail assets, saves or private diagnostics. Verify notices and hashes.
 2. Verify ordinary packaged launch, real scripting/quest interaction, combat and
-   useful save/Continue. Reuse fresh stage80 progress; do not replay character
+   useful save/Continue. Reuse checkpoint d4c408782359473da7b8bd7d1bc32c19:
+   Doc 200, tutorial 50, crafting 10, HP 94, meat/hide and both ingredients.
+   Its ordinary save/quit/fresh-process Continue is verified; do not replay character
    creation after minor cleanup. Resolve blockers on this playable release path
    in coherent shared-system batches and label known limitations accurately.
    Retain the user-requested continuous proof video from this exact package:
@@ -105,8 +109,11 @@ The user now requests an outside-tester release. After checked publication:
    product objectives, not prerequisites or claims for this limited playtest.
 4. Complete shared actor-state semantics required on that path: mutable actor-base
    flags plus essential damage, knockdown, recovery, queries and persistence.
-   SetEssential targets a base identity; per-reference extension behavior is
-   distinct. Registration alone cannot replace the current essential-hit refusal.
+   SetEssential targets a base identity; SetActorRefEssential needs its native
+   per-reference saved-state owner. Qualify base/template scope, knockout,
+   recovery clocks and Kill behavior before implementation. Setting names alone
+   do not establish timing or formulas. Registration alone cannot replace the
+   current essential-hit refusal.
 5. Advance compiled SCDA program decoding/execution through the existing shared
    host. Extent accounting and SCTX parsing are not a VM. Do not turn an unclosed
    NVSE expression into another isolated parser-patch chain. Implement remaining

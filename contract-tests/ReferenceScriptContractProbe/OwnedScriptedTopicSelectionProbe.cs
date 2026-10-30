@@ -27,7 +27,7 @@ internal static class OwnedScriptedTopicSelectionProbe
         if ((info.Flags & 8) == 0 || !FalloutDialogueTopic.Eligible(info, identity.Actor, new HashSet<FalloutFormKey>(),
             key => quests.Stage(key), context.Evaluate))
             throw new InvalidDataException("Original immediate dialogue no longer owns the selected initial result.");
-        FalloutDialogueTopic.RequireFlags(info, conversation: false, npcConversation: true, immediateResults: true);
+        FalloutDialogueTopic.RequireFlags(info, npcConversation: true, immediateResults: true);
         var scripts = new FalloutReferenceScripts(records, world, quests,
             new((_, _) => false, _ => throw new NotSupportedException("Original immediate result requested an unrelated fixture effect.")));
         scripts.ExecuteResult(info, caller.FormKey, true);

@@ -58,6 +58,7 @@ public partial class NativeNifInstanceAudit
             // replacement's one; the float source retains priority fifty.
             Check(.75f, 0, .2f);
             GD.Print("OPENNV_SCALAR_SNAPSHOT_PASS currentConstants=true heldIncoming=true partialBlend=true coldConstants=true typedIdentityAndPriority=true relativeTargetZero=true ordinaryWeightsAndEase=true priorities=true missingAndUnknownRefused=true");
+            ExerciseVisibilitySnapshots(source, skeleton, sequence);
 
             void Check(float extra, float a, float b)
             {
@@ -109,8 +110,127 @@ public partial class NativeNifInstanceAudit
                 Near(current.Value, (.75f * cold.Single(value => value.Target == current.Target).Value +
                     .25f * sequence.Weight * incoming.Single(value => value.Target == current.Target).Value) / denominator);
             GD.Print($"OPENNV_OWNED_SCALAR_SNAPSHOT_PASS source={source.Sha256} sequence={sequence.Name} scalars={cold.Length} currentHeadTrack=true morphConstants=true coldConstants=true partialBlend=true sourcePhase=held actualSelectedIdentity=inferred gameplay=unverified");
+            ExerciseOwnedAnimationObjectSnapshot(content, skeleton);
         }
         finally { skeleton.Node.Free(); }
+    }
+
+    private sealed record ConstantVisibility(bool Value) : IFalloutNifScalarSampler
+    {
+        public float Sample(float sourceTime) => FalloutNifBoolAnimation.Encode(Value);
+    }
+
+    private static void ExerciseVisibilitySnapshots(FalloutNifFile source, RuntimeNativeNifSkeleton skeleton,
+        FalloutNifControllerSequence sequence)
+    {
+        var visible = true;
+        var target = new FalloutNifScalarTarget(FalloutNifScalarKind.Visibility, "ExternalObject", "NiVisController");
+        var link = new FalloutNifControllerLink(target.Node, "", target.Name, "", "", -1, -1, 50);
+        RuntimeNativeNifAnimation Clip(bool value, byte priority = 50) => new(source,
+            sequence with { ControlledBlocks = [link with { Priority = priority }], Weight = 1 }, skeleton,
+            bindScalarChannel: current => new(target, current.Priority, new ConstantVisibility(value),
+                () => FalloutNifBoolAnimation.Encode(visible), value => visible = FalloutNifBoolAnimation.BlendedValue(value)));
+        var incoming = Clip(false);
+        incoming.RequireSnapshotTransitionOver(null);
+        var cold = JsonSerializer.Deserialize<FalloutNifSnapshotScalar[]>(JsonSerializer.Serialize(incoming.CaptureSnapshotScalars()))!;
+        var pose = new FalloutNifAnimationSample[skeleton.Node.GetBoneCount()];
+        incoming.ApplySnapshotTransition(0, pose, 1, 0, scalars: cold);
+        Require(visible, "Held visibility resampled the incoming false flag.");
+        incoming.ApplySnapshotTransition(0, pose, .75f, .25f, scalars: cold);
+        Require(visible, "Visibility ignored its snapshot majority.");
+        incoming.ApplySnapshotTransition(0, pose, .5f, .5f, scalars: cold);
+        Require(visible, "The native equal-weight visibility vote must be true.");
+        incoming.ApplySnapshotTransition(0, pose, .25f, .75f, scalars: cold);
+        Require(!visible, "Visibility ignored its incoming majority.");
+        RuntimeNativeNifAnimation.ApplyWeightedLayers([(Clip(true), 0, .25f), (Clip(false), 0, .75f)]);
+        Require(!visible, "Ordinary visibility layers ignored authored contribution.");
+        RuntimeNativeNifAnimation.ApplyWeightedLayers([(Clip(true), 0, .5f), (Clip(false), 0, .5f)]);
+        Require(visible, "Ordinary visibility layers lost the equal-weight vote.");
+        RuntimeNativeNifAnimation.ApplyWeightedLayers([(Clip(true, 1), 0, 1), (Clip(false), 0, 1)]);
+        Require(!visible, "Visibility ignored source channel priority.");
+        visible = true;
+        RuntimeNativeNifAnimation.ApplyWeightedLayers([(Clip(false), 0, 0)]);
+        Require(!visible, "The native single attached interpolator fast path lost its source value.");
+        Reject(() => incoming.ValidateSnapshotScalars([]));
+        Reject(() => incoming.ValidateSnapshotScalars([cold[0], cold[0]]));
+        Reject(() => (cold[0] with { Value = .5f }).Validate());
+        GD.Print("OPENNV_VISIBILITY_SNAPSHOT_PASS held=true majority=true equalHalfVisible=true ordinaryLayers=true priority=true singleAttachedFastPath=true coldConstants=true malformedRefused=true");
+    }
+
+    private static void ExerciseOwnedAnimationObjectSnapshot(RuntimeLiveContentSource content, RuntimeNativeNifSkeleton skeleton)
+    {
+        using var records = FalloutPluginStack.Load(content.PluginSources);
+        var idle = FalloutActorIdleSource.Resolve(records, records.GetEffective(records.RuntimeFormKey(0x059444)));
+        FalloutNifFile Read(string path) => content.TryRead(path, null, out var bytes, out _)
+            ? FalloutNifFile.Read(bytes) : throw new FileNotFoundException(path);
+        var source = Read(idle.AnimationPath);
+        var sequence = source.Roots.Select(source.ReadObject).OfType<FalloutNifControllerSequence>().Single();
+        var roots = new List<Node3D>();
+        try
+        {
+            var controlled = sequence.ControlledBlocks.Select(link => link.NodeName).ToHashSet(StringComparer.Ordinal);
+            var visibility = sequence.ControlledBlocks.Single(link => link.ControllerType == "NiVisController");
+            RuntimeNativeNifAnimation Bind(out Node3D visibilityTarget)
+            {
+                foreach (var attachment in idle.Objects)
+                    roots.Add(NativeNifMeshBuilder.AddActorPart(Read(attachment.ModelPath), skeleton,
+                        externalTransformTargets: controlled).Root);
+                var nodes = roots.SelectMany(root => root.FindChildren("*", "", true, false).OfType<Node3D>().Prepend(root)).ToArray();
+                var transforms = new List<(FalloutNifControllerLink Link, Node3D Node)>();
+                Node3D? Target(FalloutNifControllerLink link) => nodes.SingleOrDefault(node => node.Name.ToString() == link.NodeName);
+                var animation = new RuntimeNativeNifAnimation(source, sequence, skeleton, link =>
+                {
+                    if (link.ControllerType != "NiTransformController" || Target(link) is not { } node) return null;
+                    transforms.Add((link, node)); return _ => { }; // Replaced by the production typed transform binding below.
+                }, externalObjectTargets: nodes.Select(node => node.Name.ToString()).ToHashSet(StringComparer.Ordinal),
+                    bindScalarChannel: link => link.ControllerType == "NiVisController" && Target(link) is { } node
+                        ? RuntimeNifScalarBinding.Visibility(source, link, () => node.Visible, value => node.Visible = value) : null);
+                foreach (var target in transforms) animation.RegisterSnapshotTransformTarget(target.Link, target.Node);
+                visibilityTarget = Target(visibility) ?? throw new InvalidDataException("Owned animation-object visibility target is absent.");
+                return animation;
+            }
+            var animation = Bind(out var node);
+            var baseSource = Read("meshes/Characters/_Male/Locomotion/mtidle.kf");
+            var background = new RuntimeNativeNifAnimation(baseSource,
+                baseSource.Roots.Select(baseSource.ReadObject).OfType<FalloutNifControllerSequence>().Single(), skeleton);
+            animation.RequireSnapshotTransitionOver(background);
+            var sampler = new FalloutNifBoolAnimation(source, visibility.Interpolator);
+            var authored = sampler.Sample(sequence.StartTime);
+            foreach (var root in roots) root.Visible = false;
+            node.Visible = true;
+            Require(animation.CaptureSnapshotScalars().Single(value => value.Target.Kind == FalloutNifScalarKind.Visibility).Value == 1,
+                "A hidden parent replaced the animation object's current local visibility flag.");
+            foreach (var root in roots) root.Visible = true;
+            node.Visible = !authored;
+            var cold = JsonSerializer.Deserialize<FalloutNifSnapshotScalar[]>(JsonSerializer.Serialize(animation.CaptureSnapshotScalars()))!;
+            Require(cold.Count(value => value.Target.Kind == FalloutNifScalarKind.Visibility) == 1,
+                "Owned handoff lost its typed local visibility constant.");
+            var pose = new FalloutNifAnimationSample[skeleton.Node.GetBoneCount()];
+            var external = animation.CaptureSnapshotTransforms();
+            animation.ApplySnapshotTransition(sequence.StartTime, pose, 1, 0, external: external, scalars: cold);
+            Require(node.Visible != authored, "Owned held transition exposed the incoming visibility.");
+            animation.ApplySnapshotTransition(sequence.StartTime, pose, .5f, .5f, external: external, scalars: cold);
+            Require(node.Visible, "Owned equal-weight visibility vote differed from native.");
+            animation.ApplySnapshotTransition(sequence.StartTime, pose, 0, 1, external: external, scalars: cold);
+            Require(node.Visible == authored, "Owned completed transition did not publish its authored visibility.");
+            foreach (var time in sampler.BoundaryTimes.Append(sequence.StartTime).Append(sequence.StopTime))
+            {
+                animation.ApplySourceTime(time);
+                Require(node.Visible == sampler.Sample(time), "Owned ordinary visibility missed a source key boundary.");
+            }
+            foreach (var root in roots) root.Free();
+            roots.Clear();
+            var restored = Bind(out var restoredNode);
+            restoredNode.Visible = authored;
+            restored.RequireSnapshotTransitionOver(background);
+            restored.ValidateSnapshotScalars(cold);
+            restored.ApplySnapshotTransition(sequence.StartTime, pose, 1, 0, external: external, scalars: cold);
+            Require(restoredNode.Visible != authored, "Cold animation-object rebind resampled instead of restoring its constant.");
+            restored.ApplySnapshotTransition(sequence.StartTime, pose, 0, 1, external: external, scalars: cold);
+            Require(restoredNode.Visible == authored, "Cold animation-object rebind lost its incoming visibility.");
+            GD.Print($"OPENNV_OWNED_OBJECT_VISIBILITY_PASS idle={idle.Form} source={source.Sha256} objects={roots.Count} currentFlag=true hiddenParentLocalFlag=true held=true equalHalfVisible=true completed=true sourceBoundaries=true coldConstants=true coldExternalRebind=true gameplay=separate");
+        }
+        finally { foreach (var root in roots) root.Free(); }
     }
 
     private static void Near(float actual, float expected)

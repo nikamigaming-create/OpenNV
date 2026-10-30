@@ -28,7 +28,7 @@ internal partial class RuntimeNativeNpc
     }
 
     private bool TryBeginFurniturePackage(FalloutPluginRecord package, FalloutPlacedReference reference,
-        FalloutPluginRecord furniture, bool initializing, bool sandboxActivity = false)
+        FalloutPluginRecord furniture, bool initializing, bool sandboxActivity = false, bool parentOwnsLifecycle = false)
     {
         if (_aiWorld is { } world)
         {
@@ -68,7 +68,7 @@ internal partial class RuntimeNativeNpc
 
             _aiPackage = package;
             _furnitureInitialPlacement = initializing;
-            if (!sandboxActivity) _packageEvents!.Change(_packageIdleSource);
+            if (!sandboxActivity && !parentOwnsLifecycle) _packageEvents!.Change(_packageIdleSource);
             // Initial process binding retains the existing source placement. A
             // later package must physically approach and enter before it is done.
             if (initializing)
@@ -118,7 +118,7 @@ internal partial class RuntimeNativeNpc
                     $"authored={authored} navm={_furnitureApproachFloor.Value} owner=source-corridor-and-native-capsule arrival=unobserved");
             }
             Combat.AdvancePackageMotion(_aiPackage!, authored, .08f,
-                _furnitureSandboxActivity ? _sandboxPackage!.Running : _findFurniture?.Running == true,
+                _furnitureSandboxActivity ? _sandboxPackage!.Running : _findFurniture?.Running == true || _eatPackage?.Running == true || _sleepPackage?.Running == true,
                 delta, weaponDrawn: _furnitureSandboxActivity && _sandboxPackage!.WeaponDrawn, requireArrivalHeight: true);
             if (!IsOnFloor() || GlobalPosition.DistanceTo(authored) > .1f) return;
             var direction = -(parent.GlobalBasis * _furnitureApproach.Basis.Z).Normalized();
@@ -264,7 +264,7 @@ internal partial class RuntimeNativeNpc
         _sitting = 1;
         StartFurnitureAnimation();
         _furnitureEntry = null;
-        if (!_furnitureSandboxActivity && _sleepPackage is null) _packageEvents!.Complete();
+        if (!_furnitureSandboxActivity && _sleepPackage is null && _eatPackage is null) _packageEvents!.Complete();
         GD.Print($"OPENNV_NATIVE_FURNITURE_OCCUPIED reference={Appearance.Reference} package={_aiPackage!.FormKey} " +
             $"target={_furnitureReference} marker={_seat!.MarkerId} sourceIndex={_seat.Index} " +
             $"initialPlacement={_furnitureInitialPlacement} animation={_baseAnimation!.Sequence.Name} parity=unmeasured");
@@ -291,6 +291,7 @@ internal partial class RuntimeNativeNpc
         Basis = _furnitureOccupied.Basis;
         var sandboxActivity = _furnitureSandboxActivity;
         var sleep = _sleepPackage is not null;
+        var eat = _eatPackage is not null;
         var packageExit = _sandboxFurniturePackageExit;
         ClearFurniture();
         if (sleep)
@@ -299,6 +300,14 @@ internal partial class RuntimeNativeNpc
                 throw new InvalidOperationException("Sleep exit lost its accepted package selection.");
             _furniturePendingSelection = null;
             _sleepPackage = null; _sleepProgress = null; _sleepBeds = null;
+        }
+        if (eat)
+        {
+            _requestedSelection = _furniturePendingSelection ??
+                throw new InvalidOperationException("Eat exit lost its accepted package selection.");
+            _furniturePendingSelection = null;
+            CancelProcedureIdle("eat");
+            _eatPackage = null; _eatProgress = null;
         }
         if (sandboxActivity && !packageExit)
         {
@@ -367,8 +376,9 @@ internal partial class RuntimeNativeNpc
 
     private bool RetainFurniturePackage(FalloutPluginRecord selected)
     {
-        if (_furnitureSandboxActivity) return false;
         var source = FalloutScriptPackage.Read(selected);
+        if (source.Procedure == 3) return RetainEatFurniture(selected, source);
+        if (_furnitureSandboxActivity) return false;
         FalloutFindFurniturePackage? find = null;
         if (source.Procedure == 0)
         {
@@ -391,6 +401,15 @@ internal partial class RuntimeNativeNpc
             // FurnitureContinuation retains the physical seat and clock.
             // The outgoing Sleep movement intent cannot own the new PACK.
             if (_aiReferenceState?.PackageMotion?.Package == sleep.Form)
+                _aiReferenceState.PackageMotion = null;
+        }
+        if (_eatPackage is { } eating)
+        {
+            CancelProcedureIdle("eat");
+            _packageEvents!.Change(null);
+            Combat?.RetirePackageMotionNavigation(eating.Form);
+            _eatPackage = null; _eatProgress = null;
+            if (_aiReferenceState?.PackageMotion?.Package == eating.Form)
                 _aiReferenceState.PackageMotion = null;
         }
         _aiPackage = selected; _packageIdleSource = source;

@@ -1,6 +1,6 @@
 # Current work
 
-## Active batch and ownership
+## Active batch: experimental playtest package and proof video
 
 One GPT-6.1 Sol High executor owns implementation, builds, game input and Git.
 The coordinator reviews the final coherent diff before publication. No parallel
@@ -8,13 +8,59 @@ writers or per-decision approval loop remain. Follow implementation-plan.md:
 shared systems, headless execution, integration, then representative retail
 comparison; gameplay is not the primary missing-feature discovery loop.
 
-Checked baseline PR #333 is c6ac937697d713cbd8b20c3014e4c35693f4163f.
+Checked baseline PR #334 is f614166484bef221d8d2e5a192bc2d50b29bd78a.
 Its required local/owned gates and all five hosted checks passed; main was
-reconciled with origin/main. Active branch: codex/script-state-owners. Eighteen
+reconciled with origin/main; no PR remains open. Active branch:
+codex/experimental-playtest-release. Eighteen
 unrelated classic import EOL changes remain preserved and excluded.
-No game is active. Recording and render trace are off.
+No game is active. Recording and render trace are off. Both proof processes quit
+normally and disposed source owners. Immutable candidate 4 is
+743aa1647f9858eda56cc1fccc9b90ec8299a75e, MVID
+1a60420b-d9b0-4098-8f4d-cd65a9de04a2. Its package is
+OpenNV-0.1.0-experimental.20261029.4-windows-x64; archive SHA256
+980BB51EC7BCC25C1C1D5A1A433B6B51809E1E7B10C52819A7242C9FD72D4B6B.
 
-## Implemented candidate
+Ordinary Continue loaded the existing healthy Saloon/tutorial 10 slot. Sunny's
+dialogue, player rifle shots at bottles and geckos, real incoming damage, the well
+fights, corpse looting and ordinary Xander Root/Broc Flower harvesting ran on this
+package. The settler died in the authored fight; no outcome was repaired or forced.
+Tutorial 10a214 is at 50 and crafting quest 15d912 at 10. Campfire cooking was not
+performed in this bounded take. The general planner's unrelated-quest detours were
+stopped and observed source targets used through ordinary inputs.
+
+The authoritative checkpoint is slot d4c408782359473da7b8bd7d1bc32c19 (schema v65),
+written 2026-10-29 23:41:26.780 UTC, cell 0dadaf, HP 94, SHA256
+D3E700D44F46B72DA9C1543BFD7EF64958AF62F64EE0F58C96113890BDA358EC.
+Fresh-process Continue on the identical package restored its exact player position,
+HP, quest stages, Gecko Meat/Hide and both ingredients (one each). Preserve this
+progress; do not replay Doc or the wells. Source slot path and exact identities
+are retained privately under local/playtest-proof-20261029.
+
+Requested footage and selected images remain in that folder. The continuous
+gameplay take is 3224.833 seconds at 3840x2124. Cold start/Continue is a separate
+window take, not an uninterrupted join. Both are video-only; capture rate does
+not measure game FPS. The earlier c6065970 take separately verifies Doc's real
+Pip-Boy handoff and completed stage 200 after the typed visibility correction.
+
+Shared character Topic/Conversation admission retains parent channel validation,
+flags, RNG and links. Actual INFO 15a548 reached audio completion and later saves
+succeeded. Standalone Eat retains its actual PACK, authored location/food,
+independent clocks, navigation, consumed receipt and physical chair continuation.
+Debug, focused/cold contracts and selected owned audits pass; isolated live Eat
+handoff/meal playback is not claimed. Whole-cell Eat wandering, exact-reference
+acquisition, nonzero quantities and additional search flags remain explicit.
+
+The final required full gate and diff check pass. Next owner: checked PR/merge
+and accurately labeled asset-free experimental release. Keep cooking unfinished
+in acceptance notes.
+Reached remaining limits include creature Find PACK 1651b1, property-free LOD
+materials, LIGH flag 0x8, ragdoll joint ownership at 1767cd and visible sky seams.
+The repeated settler/gecko health values were qualified as authored OnHit
+protection; damage accumulated after that protection lifted. Do not change the
+damage owner for that source behavior. Full scripting, parity, sustained 4K60 and
+physical XR acceptance remain open under implementation-plan.md.
+
+## Merged shared state systems
 
 World-owned mutable FormLists retain ordered additions over immutable winning
 source members. AddFormToFormList, ListGetCount and ListGetNthForm share both
@@ -48,57 +94,25 @@ Lonesome Road reaches unowned AddItemToLeveledList before its FormList prefix an
 is not counted as list execution proof. The final required gate and diff check pass.
 No unsupported command is skipped or given a default.
 
-## Actual player result and retained screenshots
+## Retained deliverables and next systems
 
-Immutable exported DLL MVID b2a220ad-522b-4c9e-8cc9-a7c523e74f03, SHA256
-A5AA722971D4037B39407257BB2CDC4A3FA095265665493EA60E588888A9BF8F,
-ran an ordinary fresh New Game. Recorded Doc speech, name acceptance, Reflectron
-sex/race confirmation and manual house traversal worked. E activated the source
-Vigor Tester; ordinary buttons allocated [6,6,6,5,5,6,6] and accepted all points.
-VCG01 reached stage80. Doc physically walked to and occupied the psychology chair.
-Opening/speech errors were null; couch/psychology follow-up was not activated.
-No new engine blocker was established in this bounded run.
+Requested original Doc/Reflectron/Vigor screenshots remain in
+local/screenshots-20261029-script-state. Current gameplay, separate cold Continue,
+selected images and exact identities remain in local/playtest-proof-20261029.
+The current checkpoint and accepted route are described above; older saves and
+clips are historical evidence, not restart instructions.
 
-F5 command450 completed at 2026-10-29T18:57:10Z. Fresh checkpoint:
-local/integrated-baseline-20261028/gameplay/script-state-fresh-checkpoint.json,
-2,429,252 bytes, SHA256
-73A1248C07B3FD0FF4B4832C5350D0D8075F8993DCDE20B8A3270BF086E9E930.
-The previous 02ABC cooking/traversal checkpoint remains untouched; its absent
-historical idle field must not be backfilled or replayed as a known refusal.
-Continue the fresh stage80 save for the next needed packaged-launch acceptance.
-PID26272 closed normally; source-owner disposal and process absence were verified.
-
-Six requested full-resolution screenshots and capture metadata are retained in
-local/screenshots-20261029-script-state. They show awakening, recorded dialogue,
-Reflectron, world/HUD, Vigor interaction and seated Doc. Actual client resolution
-was 3840x2124, constrained by the window work area; this is not a native 4K or
-matched-retail parity claim. Recording stayed off throughout.
-
-## Delivery priority and next systems
-
-Owned/full validation and diff check pass. Complete checked publication of this batch.
-Then prepare an accurately labeled asset-free experimental Windows playtest using
-Build-OpenNVPlaytest.ps1 and Package-OpenNV.ps1. Inspect loose files, actual PCK
-entries and final archive; exclude owned/derived retail content, saves, captures
-and private diagnostics. Verify packaged launch, real quest/script interaction,
-combat and useful saving using current fresh progress. Publish only after those
-checks and required gates pass. Full parity, native 4K60 and physical XR144 are
-not prerequisites for this limited release and remain unclaimed.
-
-The user also requests a continuous proof video from that exact packaged build:
-show identity/launcher, Continue fresh stage80, finish Doc and exit to Goodsprings,
-then ordinary Sunny dialogue/shooting/combat/loot/crafting and save/quit/Continue.
-This is planned acceptance, not a completed route. Record real elapsed time and
-game audio if available; retain the original requested take and relevant blocked
-segment. Report actual resolution/performance without treating encoded FPS as
-game FPS. Recording stays off outside this specific run; exclude unrelated apps
-and clean temporary frames. No staged scene, forced quest change or intro replay.
+Complete checked publication and the asset-free experimental release using the
+reviewed package. Keep owned data, saves, captures and private diagnostics out of
+its archive. No additional gameplay run is required for this bounded batch.
 
 The next actor-state batch must join mutable actor-base flags, essential damage/
 knockdown/recovery/query/save behavior; adding SetEssential registration alone
-would leave the existing essential-hit refusal intact. Preserve the BaseID versus
-per-reference extension distinction. Compiled SCDA decoding/execution remains a
-broad missing scripting system; SCTX parsing and extent accounting are not a VM.
+would leave the existing essential-hit refusal intact. Distinguish base/template
+flags from native per-reference SetActorRefEssential state; qualify knockout,
+recovery clocks and Kill behavior before implementation. Compiled SCDA decoding/
+execution remains a broad missing scripting system; SCTX parsing and extent
+accounting are not a VM.
 Use the shared world host. Runtime reference allocation/identity/lifetime/save
 is another explicit world gap: current resolution owns source forms and PlayerRef,
 and PlaceAtMe owns EXPL only. Do not fabricate records or private dynamic members.

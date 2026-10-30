@@ -3,9 +3,58 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Gameplay.State;
+using OpenNV.Runtime.World.Cells;
 
 internal static class OwnedDialogueVoiceProbe
 {
+    internal static void OpeningConversation(string root, string savePath)
+    {
+        var saved = JsonSerializer.Deserialize<FalloutNativeCampaignState>(File.ReadAllBytes(savePath))!;
+        RuntimeLiveContentSource.Configure(root, RuntimeLiveContentSource.FalloutNewVegasGame,
+            activePlugins: RuntimeLiveContentSource.ResolveVanillaPlugins(root), includeImplicitPlugins: false);
+        using var content = RuntimeLiveContentSource.Current!;
+        using var records = FalloutPluginStack.Load(content.PluginSources);
+        using var world = new FalloutReferenceWorld(records);
+        var quests = new FalloutQuestState(records);
+        quests.Restore(saved.Quests ?? throw new InvalidDataException("Opening save has no quest state."));
+        var globals = FalloutGlobalState.Read(records);
+        if (saved.Globals is { } savedGlobals) globals.Restore(savedGlobals);
+        var speaker = records.RuntimeFormKey(0x104c0f);
+        var actor = records.GetEffective(speaker);
+        var identity = FalloutDialogueSpeaker.Read(records, FalloutDialogueTopic.RequiredForm(actor, "NAME"));
+        var nullFaction = FalloutCondition.Read(records.GetEffective(records.RuntimeFormKey(0x140eb4)))
+            .Single(condition => condition.Kind == Function.GetInFaction && condition.Argument1 == 0);
+        var shared = new FalloutConditionRuntime(records, quests, world) { Globals = globals };
+        var context = new FalloutDialogueConditions(records, quests, speaker, identity,
+            runtime: condition => shared.Evaluate(condition, new(speaker, records.RuntimeFormKey(0x14))),
+            sitting: subject => subject == records.RuntimeFormKey(0x14) ? 3 :
+                throw new NotSupportedException("Opening audit has no other observed sitting owner."), world: world);
+        var conversation = new FalloutConversation(records, quests, condition =>
+        {
+            try { return context.Evaluate(condition); }
+            catch (Exception error)
+            {
+                throw new InvalidDataException($"Opening condition owner={condition.Owner.FormKey} function={condition.Kind} " +
+                    $"runOn={condition.RunOn} argument1={condition.Argument1:x8} argument2={condition.Argument2:x8} reference={condition.Reference:x8}", error);
+            }
+        }, (_, _) => { });
+        if (context.Evaluate(nullFaction) != 0)
+            throw new InvalidDataException("Owned null-faction predicate admitted membership.");
+        var hello = FalloutDialogueTopic.Read(records, records.RuntimeFormKey(0xd2));
+        var ambient = hello.Infos.Single(info => info.Record.FormKey == records.RuntimeFormKey(0x15a548));
+        if (FalloutDialogueTopic.Type(records, hello.Topic.FormKey) != (byte)FalloutDialogueCategory.Conversation ||
+            ambient.Type != (byte)FalloutDialogueCategory.Topic || ambient.Flags != 3 || ambient.NextSpeaker != 0)
+            throw new InvalidDataException("Owned HELLO child/parent categories differ from the reached declaration.");
+        FalloutDialogueTopic.RequireFlags(ambient, randomSelection: true, npcConversation: true, immediateResults: true);
+        conversation.Start(identity.Actor, FalloutDialogueTopic.Find(records, "DIAL", "GREETING").FormKey);
+        if (conversation.Phase != "speaking" || conversation.Info is not { } selected ||
+            selected.Record.FormKey != records.RuntimeFormKey(0x107223) || selected.Quest != records.RuntimeFormKey(0x104c1c) ||
+            selected.Responses.Count == 0)
+            throw new InvalidDataException("Owned opening greeting did not select the reached psychology branch.");
+        Console.WriteLine($"OPENNV_OWNED_OPENING_CONVERSATION_PASS info={selected.Record.FormKey} phase={conversation.Phase} " +
+            "nullFaction=false helloMixedCategoryAdmitted=true resultScripts=unexecuted ambientEligibility=separate gameplay=separate");
+    }
+
     internal static void Unrecorded(string root, string savePath)
     {
         var saveBytes = File.ReadAllBytes(savePath);
@@ -47,13 +96,19 @@ internal static class OwnedDialogueVoiceProbe
             throw new InvalidDataException("Read-only speech audit changed its checkpoint.");
         Console.WriteLine(JsonSerializer.Serialize(new
         {
-            kind = "OPENNV_OWNED_UNRECORDED_SPEECH_PASS", reference = reference.ToString(),
-            actor = speaker.Actor.ToString(), traits = speaker.TraitsOwner.ToString(),
-            voice = speaker.VoiceType.ToString(), info = record.FormKey.ToString(), winner = record.Plugin.Name,
+            kind = "OPENNV_OWNED_UNRECORDED_SPEECH_PASS",
+            reference = reference.ToString(),
+            actor = speaker.Actor.ToString(),
+            traits = speaker.TraitsOwner.ToString(),
+            voice = speaker.VoiceType.ToString(),
+            info = record.FormKey.ToString(),
+            winner = record.Plugin.Name,
             sourceSha256 = Convert.ToHexString(SHA256.HashData(record.ReadData())),
-            voicePredicate = conditionOwner.FormKey.ToString(), sharedVoiceContexts = true,
+            voicePredicate = conditionOwner.FormKey.ToString(),
+            sharedVoiceContexts = true,
             checkpointSha256 = Convert.ToHexString(SHA256.HashData(saveBytes)),
-            timing = clock.State, boundary = "source-and-clock-only; ordinary speech effects and matched retail timing remain unverified"
+            timing = clock.State,
+            boundary = "source-and-clock-only; ordinary speech effects and matched retail timing remain unverified"
         }));
     }
 
@@ -97,10 +152,20 @@ internal static class OwnedDialogueVoiceProbe
             }
             catch (Exception error) when (error is InvalidDataException or NotSupportedException or KeyNotFoundException or InvalidOperationException) { Gap(error); }
         }
-        Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new { kind = "OPENNV_OWNED_DIALOGUE_VOICES", decodedInfos = decoded,
-            declaredActorBindings = scoped, distinctSpeakers = speakers.Count, voiceAndLipResources = bound, overriddenInfosWithOriginalVoices = overridden,
-            gaps = gaps.OrderByDescending(pair => pair.Value).Take(12), unresolved = gaps.Values.Sum(),
-            eligibility = "not-evaluated", audioPlayback = "not-measured", parity = "unmeasured" }));
+        Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new
+        {
+            kind = "OPENNV_OWNED_DIALOGUE_VOICES",
+            decodedInfos = decoded,
+            declaredActorBindings = scoped,
+            distinctSpeakers = speakers.Count,
+            voiceAndLipResources = bound,
+            overriddenInfosWithOriginalVoices = overridden,
+            gaps = gaps.OrderByDescending(pair => pair.Value).Take(12),
+            unresolved = gaps.Values.Sum(),
+            eligibility = "not-evaluated",
+            audioPlayback = "not-measured",
+            parity = "unmeasured"
+        }));
         if (bound == 0) throw new InvalidOperationException("No owned speaker/response binding succeeded.");
         void Gap(Exception error)
         {

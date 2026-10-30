@@ -69,6 +69,7 @@ internal partial class RuntimeNativeNpc
         : _pendingCurrentLocationSleep is not null ? throw new NotSupportedException("Sleep awaits its native package-start location.")
         : _sleepPackage is not null ? _sitting == 1 && _seat?.Sleeping == true ? 8 :
             _nativeMarkerTravel is not null ? 0 : throw new NotSupportedException("Sleep transition has no admitted native procedure phase.")
+        : _eatPackage is not null ? CurrentEatAiProcedure
         : _escortPackage is not null ? _escortProgress?.Complete == true ? 17 : _escortStatus switch
         {
             "ApproachTarget" => 19,
@@ -370,6 +371,12 @@ internal partial class RuntimeNativeNpc
         var package = _aiStack!.GetEffective(assignment.Package);
         if (package.Signature != "PACK") return;
         var declaration = FalloutScriptPackage.Read(package);
+        if (declaration.Procedure == 3 && state.FurnitureContinuation is null && state.PackageMotion?.EatPackage is { } eating)
+        {
+            FalloutEatPackage.Read(package).Validate(_aiStack!, _aiWorld!, Appearance.Reference!.Value, eating);
+            assignment.Bind(_aiStack!, _packageEvents!);
+            return;
+        }
         if (declaration.Procedure == 4 && state.FurnitureContinuation is null && state.PackageMotion?.Sleep is { } sleep)
         {
             _ = FalloutPackageTravelGoal.Read(_aiStack!, _aiWorld!, Appearance.Reference!.Value, package, sleep);
@@ -516,7 +523,7 @@ internal partial class RuntimeNativeNpc
             if (_sitting is 2 or 4)
             {
                 _pendingPackage = selected;
-                if (_furnitureSandboxActivity || _sleepPackage is not null)
+                if (_furnitureSandboxActivity || _sleepPackage is not null || _eatPackage is not null)
                 {
                     _furniturePendingSelection = selection with { Forced = forced };
                     if (_furnitureSandboxActivity && _sitting == 4) _sandboxFurniturePackageExit = true;
@@ -529,7 +536,7 @@ internal partial class RuntimeNativeNpc
                 if (_seat is not null && !_furnitureApproaching)
                 {
                     _pendingPackage = selected;
-                    if (_furnitureSandboxActivity || _sleepPackage is not null) _furniturePendingSelection = selection with { Forced = forced };
+                    if (_furnitureSandboxActivity || _sleepPackage is not null || _eatPackage is not null) _furniturePendingSelection = selection with { Forced = forced };
                     CancelIdle();
                     _sandboxFurniturePackageExit = _furnitureSandboxActivity;
                     _furnitureOccupied = Transform;
@@ -555,6 +562,8 @@ internal partial class RuntimeNativeNpc
                 _guardPackage = null; _guardProgress = null;
                 _sandboxPackage = null; _sandboxWander = null; _pendingCurrentLocationSandbox = null;
                 _sleepPackage = null; _sleepProgress = null; _sleepBeds = null; _pendingCurrentLocationSleep = null;
+                CancelProcedureIdle("eat");
+                _eatPackage = null; _eatProgress = null; _pendingCurrentLocationEat = null;
                 if (_aiReferenceState?.ProcedureCaptureBlocker?.StartsWith(FalloutSandboxPackage.CaptureBlockerPrefix, StringComparison.Ordinal) == true)
                     _aiReferenceState.ProcedureCaptureBlocker = null;
                 if ((_escortPackage is not null || _editorTravel is not null) && _aiWorld is { } escortWorld)
@@ -574,6 +583,7 @@ internal partial class RuntimeNativeNpc
             if (_packageIdleSource.Procedure == 12) { BeginSandbox(selected, initializing); return; }
             if (_packageIdleSource.Procedure == 2) { BeginEscort(selected, initializing); return; }
             if (_packageIdleSource.Procedure == 4) { BeginSleep(selected, initializing); return; }
+            if (_packageIdleSource.Procedure == 3) { BeginEat(selected, initializing); return; }
             if (_packageIdleSource.Procedure == 13) { BeginPatrol(selected); return; }
             if (_packageIdleSource.Procedure == 14) { BeginGuard(selected, initializing); return; }
             if (_packageIdleSource is { Procedure: 6, LocationType: 3 }) { BeginEditorTravel(selected, initializing); return; }
