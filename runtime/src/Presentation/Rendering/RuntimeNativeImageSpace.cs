@@ -10,6 +10,7 @@ internal partial class RuntimeNativeImageSpace : Node
     private FalloutImageSpaceState _state = null!;
     private RetailHdrCompositorEffect _effect = null!;
     private FalloutGameTime? _gameTime;
+    private Func<IReadOnlyList<FalloutWeatherImageModifier>>? _weather;
     private string _unbound = string.Empty;
     private FalloutImageSpaceFrame? _menuBackground;
     private long _menuSerial;
@@ -17,12 +18,13 @@ internal partial class RuntimeNativeImageSpace : Node
     internal RetailHdrCompositorEffect Effect => _effect;
 
     internal void Configure(FalloutImageSpace source, FalloutImageSpaceState state, RetailHdrCompositorEffect effect,
-        FalloutGameTime? gameTime = null)
+        FalloutGameTime? gameTime = null, Func<IReadOnlyList<FalloutWeatherImageModifier>>? weather = null)
     {
         Name = "NativeImageSpace";
         ProcessMode = ProcessModeEnum.Always;
         ProcessPriority = 100;
         _source = source; _state = state; _effect = effect; _gameTime = gameTime;
+        _weather = weather;
         SetMeta("opennv_image_space_program_source", effect.SourceProgramIdentity);
         SetMeta("opennv_image_space_kernel_sha256", effect.SourceKernelSha256);
         if (effect.DoubleVisionPhaseError is { } error)
@@ -48,7 +50,7 @@ internal partial class RuntimeNativeImageSpace : Node
         var source = RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("Menu background has no owned content source.");
         var declarations = FalloutExecutableStringTable.ReadMenuBackgroundDeclarations(source.FalloutExecutablePath);
         var modifier = FalloutImageSpaceModifierReader.Read(records.GetEffective(records.RuntimeFormKey(declarations.Form(kind))));
-        var frame = _state.Compose(_source, _gameTime?.Hour, _effect.DoubleVisionPhase, modifier);
+        var frame = _state.Compose(_source, _gameTime?.Hour, _effect.DoubleVisionPhase, modifier, _weather?.Invoke());
         var serial = checked(++_menuSerial);
         _effect.SetMenuBackground(serial, frame);
         _menuBackground = frame;
@@ -77,7 +79,7 @@ internal partial class RuntimeNativeImageSpace : Node
 
     private void Publish(double delta)
     {
-        var gameplay = _state.Compose(_source, _gameTime?.Hour, _effect.DoubleVisionPhase);
+        var gameplay = _state.Compose(_source, _gameTime?.Hour, _effect.DoubleVisionPhase, weather: _weather?.Invoke());
         Frame = _menuBackground ?? gameplay;
         _effect.SetSourceFrame(gameplay, (float)delta);
         SetMeta("opennv_image_space_operational", _effect.Operational);

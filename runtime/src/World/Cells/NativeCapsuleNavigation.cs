@@ -216,30 +216,10 @@ internal static partial class NativeCapsuleNavigation
                 }
                 else
                 {
-                    // Ordinary sliding can climb a walkable contact, including
-                    // the rounded capsule's curb contact. Sweep the full body
-                    // along its observed floor tangent; maximum step lift is
-                    // not a prerequisite for that supported motion.
-                    var bestDot = float.PositiveInfinity;
-                    var bestNormal = Vector3.Zero;
-                    var found = false;
-                    var count = hit.GetCollisionCount();
-                    for (var index = 0; index < count; index++)
-                    {
-                        var normal = hit.GetCollisionNormal(index);
-                        if (!(normal.Dot(Vector3.Up) >= floorCosine)) continue;
-                        var dot = normal.Dot(motion);
-                        if (!(dot < -.000001f) || !(dot < bestDot)) continue;
-                        found = true; bestDot = dot; bestNormal = normal;
-                    }
-                    if (!found) return Reject("walkable-contact-without-forward-tangent", FirstContact(hit, from, desired));
-                    var rise = -bestDot / bestNormal.Y + body.SafeMargin * 4;
-                    if (rise > stepHeight + body.SafeMargin * 8) return Reject("slope-height");
-                    var tangent = motion + Vector3.Up * rise;
-                    if (Sweep(from, tangent)) return Reject("slope-clearance",
-                        Contact(hit, from, from + tangent, floorCosine) ?? FirstContact(hit, from, from + tangent));
-                    supportedFrom = from + tangent;
-                    drop += rise;
+                    if (!NativeCharacterStep.TrySlope(body, new(basis, from), motion, stepHeight, query, hit,
+                        out var sloped, out var reason, out var contact)) return Reject(reason!, contact);
+                    supportedFrom = sloped;
+                    drop += sloped.Y - from.Y;
                 }
             }
             var downward = Vector3.Down * drop;

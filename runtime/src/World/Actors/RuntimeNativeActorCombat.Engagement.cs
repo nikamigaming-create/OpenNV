@@ -104,6 +104,8 @@ internal sealed partial class RuntimeNativeActorCombat
 
     private FalloutActorEngagement? CaptureEngagement()
     {
+        if (!Dead && _hitKnockbackError is { } knockbackFailure)
+            throw new NotSupportedException($"Living actor hit knockback continuation remains unowned: {knockbackFailure}");
         if (_state.Engagement is not { } state) return null;
         if (!Dead && (Error ?? _engagementError ?? _assistanceError) is { } failure)
             throw new NotSupportedException($"Living actor combat continuation remains unowned: {failure}");
@@ -184,6 +186,12 @@ internal sealed partial class RuntimeNativeActorCombat
 
     public override void _PhysicsProcess(double delta)
     {
+        try { AdvanceCombatPhysics(delta); }
+        finally { FinishHitKnockbackPhysics(delta); }
+    }
+
+    private void AdvanceCombatPhysics(double delta)
+    {
         using var frameWork = OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Measure(OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Owner.Combat);
         _enemyMuzzle?.Advance(delta);
         if (_state.ProjectileLaunch is { } launch && EffectiveEnabled)
@@ -222,7 +230,7 @@ internal sealed partial class RuntimeNativeActorCombat
                 _launchRefusalOwnsError = false;
             }
         }
-        if (AdvanceKnockdown() || AdvanceHitReaction(delta) || _state.Restrained || _engagementError is not null) return;
+        if (AdvanceEssentialKnockdown(delta) || AdvanceKnockdown() || AdvanceHitReaction(delta) || _state.Restrained || _engagementError is not null) return;
         try
         {
             if (_state.Engagement is null && !TryCompanionCombat())
@@ -267,6 +275,7 @@ internal sealed partial class RuntimeNativeActorCombat
             _engagementError = error.Message;
             _launchRefusalOwnsError = error is LaunchAdmissionException admission && ReferenceEquals(admission.Refusal, _launchRefusal);
             if (_actor is CharacterBody3D body) body.Velocity = Vector3.Zero;
+            _previousKnockbackVertical = 0;
             GD.PushError($"OPENNV_ACTOR_COMBAT_UNBOUND reference={_state.Reference} {error}");
         }
     }

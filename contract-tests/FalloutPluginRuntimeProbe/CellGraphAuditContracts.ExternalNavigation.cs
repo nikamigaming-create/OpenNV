@@ -66,6 +66,13 @@ internal static partial class CellGraphAuditContracts
                     "Repeated valid/refused targets reparsed the same winning mesh or selected a foreign decoy.");
                 using (var other = FalloutPluginStack.Load(source.PluginSources))
                 {
+                    var retainedRecord = other.GetEffective(Key(0x810)); var retainedMesh = FalloutNavigationMesh.Read(retainedRecord);
+                    Require(ReferenceEquals(retainedRecord, records.GetEffective(Key(0x810))),
+                        "An unchanged source selection discarded its immutable retained record index.");
+                    _ = cache.Inspect(retainedRecord, retainedMesh, []);
+                }
+                using (var other = FalloutPluginStack.Load(data, [Plugin]))
+                {
                     var foreignRecord = other.GetEffective(Key(0x810)); var foreignMesh = FalloutNavigationMesh.Read(foreignRecord);
                     Reject(() => cache.Inspect(foreignRecord, foreignMesh, []), "another source-stack record owner");
                     Require(cache.TargetQueries == 1 && cache.TargetEntries == 1,

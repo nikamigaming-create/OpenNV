@@ -24,7 +24,7 @@ public partial class RuntimeCoordinator
             NativeAimedTarget, () => _nativeXr is null && _nativePlayer is { ModalInput: false } &&
                 !_nativeDoorLoading && !GetTree().Paused, () => _nativeOpeningStageDriver!.Vitals,
             () => _nativePlayer?.AmmunitionHud, () => _nativePlayer?.WeaponActionNotice, _nativeUi,
-            () => _nativePlayer!.SourceControls);
+            () => _nativePlayer!.SourceControls, NativeCompass);
         layer.AddChild(_nativeGameplayHud);
         _nativeHudMessages = new(_nativePluginStack!, _nativeInventory.Notifications,
             () => _nativeXr is null && _nativePlayer is { ModalInput: false } && !_nativeDoorLoading && !GetTree().Paused, _nativeQuestState,
@@ -54,7 +54,9 @@ public partial class RuntimeCoordinator
                     _nativeReferenceEvents.AimedPresentation(collider) is not { } root) return null;
                 var record = _nativePluginStack!.GetEffective(reference.Base);
                 var full = record.ReadSubrecords().SingleOrDefault(field => field.Signature == "FULL").Data;
-                return new(root, full.IsEmpty ? reference.FormKey.ToString() : FalloutDialogueTopic.Text(full.Span),
+                var name = record.Signature == "DOOR" ? NativeDoorDestinationName(reference) : null;
+                name ??= full.IsEmpty ? reference.FormKey.ToString() : FalloutDialogueTopic.Text(full.Span);
+                return new(root, name,
                     FalloutReferenceWorld.IsInventoryItem(record.Signature));
             };
             _nativeXr.Modal = () => _nativePlayer.ModalInput || GetTree().Paused || _nativeDoorLoading;
@@ -133,8 +135,9 @@ public partial class RuntimeCoordinator
         if (_nativeReferenceEvents?.AimedReference(collider) is not { } reference) return null;
         var source = _nativePluginStack!.GetEffective(reference.Base);
         var full = source.ReadSubrecords().SingleOrDefault(field => field.Signature == "FULL").Data;
-        if (full.IsEmpty) return null;
-        var name = FalloutDialogueTopic.Text(full.Span);
+        var name = source.Signature == "DOOR" ? NativeDoorDestinationName(reference) : null;
+        if (name is null && full.IsEmpty) return null;
+        name ??= FalloutDialogueTopic.Text(full.Span);
         var action = source.Signature switch
         {
             "DOOR" => _nativeReferences!.Get(reference.FormKey).DoorOpen ? "sCloseButton" : "sTargetTypeOpenDoor",

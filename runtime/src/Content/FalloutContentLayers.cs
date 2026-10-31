@@ -5,7 +5,8 @@ namespace OpenNV.Runtime.Content;
 /// <summary>One case-insensitive resource namespace over ordered, read-only folders.</summary>
 internal sealed class FalloutContentLayers
 {
-    private readonly ConcurrentDictionary<string, IReadOnlyDictionary<string, string>> _directories =
+    private sealed record DirectoryEntries(long WrittenTicks, IReadOnlyDictionary<string, string> Files);
+    private readonly ConcurrentDictionary<string, DirectoryEntries> _directories =
         new(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
 
     internal FalloutContentLayers(IEnumerable<string> roots)
@@ -19,6 +20,9 @@ internal sealed class FalloutContentLayers
 
     // Later roots override earlier roots. A selected folder is never copied into the game.
     internal IReadOnlyList<string> Roots { get; }
+
+    internal bool IsCurrent => _directories.All(pair => Directory.Exists(pair.Key) &&
+        Directory.GetLastWriteTimeUtc(pair.Key).Ticks == pair.Value.WrittenTicks);
 
     internal string? ResolveFile(string logicalPath)
     {
@@ -84,10 +88,13 @@ internal sealed class FalloutContentLayers
 
     private IReadOnlyDictionary<string, string> Entries(string directory) => _directories.GetOrAdd(directory, path =>
     {
+        var written = Directory.GetLastWriteTimeUtc(path).Ticks;
         var entries = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var entry in Directory.EnumerateFileSystemEntries(path))
             if (!entries.TryAdd(Path.GetFileName(entry), entry))
                 throw new InvalidDataException($"Ambiguous case-insensitive resource name in {path}: {Path.GetFileName(entry)}");
-        return entries;
-    });
+        if (Directory.GetLastWriteTimeUtc(path).Ticks != written)
+            throw new IOException($"Owned resource directory changed while indexing: {path}");
+        return new(written, entries);
+    }).Files;
 }

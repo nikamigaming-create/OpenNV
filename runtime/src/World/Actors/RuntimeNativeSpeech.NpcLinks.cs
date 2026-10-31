@@ -46,8 +46,12 @@ internal partial class RuntimeNativeSpeech
         if (speaker == target || target == _stack.RuntimeFormKey(0x14)) return false;
         var references = _references ?? throw new NotSupportedException("Ambient conversation has no reference owner.");
         var source = references.Get(speaker);
+        // A retained Sandbox dialogue selection can call again before its
+        // source-owned suppression expires. Refuse before consuming another
+        // timer draw, partner-history entry or INFO selection.
         using (RuntimeFrameWork.Measure(RuntimeFrameWork.Owner.AmbientAdmission))
-            if (references.BlocksAmbientConversation(speaker) || references.BlocksAmbientConversationTarget(target) ||
+            if (source.ConversationSuppressionSeconds is > 0 ||
+                references.BlocksAmbientConversation(speaker) || references.BlocksAmbientConversationTarget(target) ||
                 IsDialogueBusy(speaker) || IsDialogueBusy(target)) return false;
         using (RuntimeFrameWork.Measure(RuntimeFrameWork.Owner.AmbientRelationship))
             if (references.BlocksAmbientConversationRelationship(speaker, target)) return false;

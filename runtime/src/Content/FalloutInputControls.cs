@@ -13,6 +13,19 @@ internal sealed class FalloutInputControls(Func<string, string?> source, string?
 {
     private FalloutControlBinding[]? _bindings;
     private bool _dirty;
+    private bool? _alwaysRun;
+    internal bool AlwaysRun => _alwaysRun ?? throw new InvalidOperationException("Always-run preference has no source owner.");
+    internal void ConfigureAlwaysRun(bool sourceDefault)
+    {
+        _ = Load();
+        _alwaysRun ??= sourceDefault;
+    }
+    internal void ToggleAlwaysRun()
+    {
+        _alwaysRun = !AlwaysRun;
+        Revision++;
+        _dirty = true;
+    }
     internal long Revision { get; private set; }
     internal event Action? Changed;
     internal const int Count = 28;
@@ -27,6 +40,7 @@ internal sealed class FalloutInputControls(Func<string, string?> source, string?
         initialized = _bindings is not null,
         Revision,
         dirty = _dirty,
+        alwaysRun = _alwaysRun,
         bindings = _bindings?.Select((value, control) => new { control, keyboard = Code(value.Keyboard, 0), mouse = Code(value.Mouse, 1) }).ToArray(),
         persistence = "user-profile-overlay",
         unbound = "joystick,gamepad"
@@ -71,7 +85,7 @@ internal sealed class FalloutInputControls(Func<string, string?> source, string?
         var temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try
         {
-            File.WriteAllText(temporary, JsonSerializer.Serialize(new Persisted("opennv-input-controls/v1", newVegas, Load())));
+            File.WriteAllText(temporary, JsonSerializer.Serialize(new Persisted("opennv-input-controls/v1", newVegas, Load(), _alwaysRun)));
             File.Move(temporary, path, true);
             _dirty = false;
         }
@@ -88,6 +102,7 @@ internal sealed class FalloutInputControls(Func<string, string?> source, string?
                 throw new InvalidDataException("Control profile is empty.");
             if (saved.Schema != "opennv-input-controls/v1" || saved.NewVegas != newVegas || saved.Bindings?.Length != Count)
                 throw new InvalidDataException("Control profile identity or binding table is invalid.");
+            _alwaysRun = saved.AlwaysRun;
             return _bindings = saved.Bindings;
         }
         // The eight-hex-digit Controls value contains a keyboard byte followed
@@ -116,5 +131,5 @@ internal sealed class FalloutInputControls(Func<string, string?> source, string?
     internal static uint Index(double value) => double.IsFinite(value) && value >= 0 && value <= uint.MaxValue && value == Math.Truncate(value)
         ? (uint)value : throw new InvalidDataException("Control arguments require unsigned integers.");
     private sealed record Persisted([property: JsonRequired] string Schema, [property: JsonRequired] bool NewVegas,
-        [property: JsonRequired] FalloutControlBinding[] Bindings);
+        [property: JsonRequired] FalloutControlBinding[] Bindings, bool? AlwaysRun = null);
 }

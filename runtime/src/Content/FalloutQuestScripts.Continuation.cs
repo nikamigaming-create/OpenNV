@@ -52,11 +52,16 @@ internal sealed partial class FalloutQuestScripts
         }
         // Admission is capability-specific, never quest/location-specific.
         // Non-missing failures and unowned operations remain latched. The
-        // newly bound command still validates its reference, SOUN and media.
-        if (!Sounds.IsBound || !Regex.IsMatch(error,
+        // newly bound command still validates its source operands. Actor-flag
+        // repair requires an exact saved instruction; it never replays the
+        // script prefix or guesses an instruction from an older error string.
+        var soundReady = Sounds.IsBound && Regex.IsMatch(error,
             @"^Reached (?:native script|object-script) command (?:\w+\.)?playSound3D \(1 arguments\) has no owner\.$",
-            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant) ||
-            instance.PendingCommand is { GameMode: false }) return;
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        var actorFlagsReady = References is not null && instance.PendingCommand is { GameMode: true } &&
+            Regex.IsMatch(error, @"^Reached (?:native script|object-script) command SetEssential \(2 arguments\) has no owner\.$",
+                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        if ((!soundReady && !actorFlagsReady) || instance.PendingCommand is { GameMode: false }) return;
         bool Fixed(string token) => double.TryParse(token, NumberStyles.Float, CultureInfo.InvariantCulture, out var number)
             ? double.IsFinite(number) :
             token.Length >= 2 && token[0] == '"' && token[^1] == '"' ||

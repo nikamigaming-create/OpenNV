@@ -77,6 +77,8 @@ internal sealed partial class RuntimeNativeActorCombat
         crippledLegs = _crippledLegCount,
         crippledLegSpeedMultiplier = _crippledLegSpeedMultiplier,
         limbMovementError = _crippledLegMovementError,
+        hitKnockback = _state.HitKnockback,
+        hitKnockbackError = _hitKnockbackError,
         source = "source-BBX-envelope,KF-accumulation,NAVM,BPTD-limb-thresholds;Godot-capsule-or-cylinder-and-step-resolver"
     };
 
@@ -166,14 +168,19 @@ internal sealed partial class RuntimeNativeActorCombat
         // long animation step must not overshoot a corner onto nearby furniture.
         if (waypoint is { } destination)
             motion = NativeCapsuleNavigation.RouteMotion(body.GlobalPosition, motion, destination);
+        var knockback = AdvanceHitKnockbackMotion(delta);
+        motion += new Vector3(knockback.X, 0, knockback.Z) * (float)delta;
         if (!_context!.Resident(body.GlobalPosition + motion)) { _movementBlock = "unloaded-collision"; return; }
         var velocity = delta > 0 ? motion / (float)delta : Vector3.Zero;
-        velocity.Y = body.IsOnFloor() ? Math.Min(body.Velocity.Y, 0) : body.Velocity.Y - _context.Gravity * (float)delta;
+        velocity.Y = (body.IsOnFloor() ? Math.Min(body.Velocity.Y, 0) :
+            body.Velocity.Y - _previousKnockbackVertical - _context.Gravity * (float)delta) + knockback.Y;
+        _previousKnockbackVertical = knockback.Y;
         body.Velocity = velocity;
         if (NativeCharacterStep.TryStep(body, motion, _context.StepHeight, out _stepBlock,
                 _stepQueries ??= new(body)))
-        { body.Velocity = Vector3.Down * .01f; body.MoveAndSlide(); }
+        { body.Velocity = Vector3.Down * .01f; _previousKnockbackVertical = 0; body.MoveAndSlide(); }
         else body.MoveAndSlide();
+        if (body.IsOnFloor() || body.IsOnCeiling()) _previousKnockbackVertical = 0;
         _movementBlock = null;
         if (body.IsOnWall() && body.GetSlideCollisionCount() > 0 && body.GetSlideCollision(0).GetCollider() is Node collider)
         {

@@ -134,7 +134,7 @@ internal sealed partial class RuntimeNativeActorCombat
         49 => _world.GetSleeping(_state.Reference),
         72 => _state.Base == condition.FormArgument1 ? 1 : 0,
         77 => _state.HitReactionRandom.NextBounded(100),
-        107 => _state.KnockedDown ? 2 : 0,
+        (ushort)OpenNV.Runtime.Content.Definitions.FalloutConditionFunction.GetKnockedState => _world.GetKnockedState(_state.Reference),
         159 => _actor is RuntimeNativeNpc npc ? npc.SittingState : 0,
         286 => Activity.Sneaking ? 1 : 0,
         391 => hitLocation,
@@ -188,6 +188,7 @@ internal sealed partial class RuntimeNativeActorCombat
             {
                 _state.HitReaction = null; _hitReactionClip = null; _hitReactionsCompleted++;
                 _state.KnockedDown = false;
+                _state.EssentialKnockout = null;
                 GD.Print($"OPENNV_ACTOR_HIT_REACTION_END reference={_state.Reference} idle={state.Idle}");
             }
         }

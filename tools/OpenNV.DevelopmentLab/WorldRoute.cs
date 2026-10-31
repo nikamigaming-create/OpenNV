@@ -9,8 +9,15 @@ internal static class WorldRoute
     {
         using var request = JsonDocument.Parse(File.ReadAllText(requestPath));
         var data = request.RootElement;
-        var world = records.RuntimeFormKey(Convert.ToUInt32(data.GetProperty("world").GetString(), 16));
-        if (records.GetEffective(world).Signature != "WRLD") throw new InvalidDataException("Route world is not WRLD.");
+        var hasWorld = data.TryGetProperty("world", out var worldValue);
+        var hasCell = data.TryGetProperty("cell", out var cellValue);
+        if (hasWorld == hasCell) throw new InvalidDataException("Route requires exactly one source world or cell.");
+        FalloutFormKey? world = hasWorld ? records.RuntimeFormKey(Convert.ToUInt32(worldValue.GetString(), 16)) : null;
+        FalloutFormKey? cell = hasCell ? records.RuntimeFormKey(Convert.ToUInt32(cellValue.GetString(), 16)) : null;
+        if (world is { } worldKey && records.GetEffective(worldKey).Signature != "WRLD")
+            throw new InvalidDataException("Route world is not WRLD.");
+        if (cell is { } cellKey && records.GetEffective(cellKey).Signature != "CELL")
+            throw new InvalidDataException("Route cell is not CELL.");
         Vector3 Point(string name)
         {
             var value = data.GetProperty(name).EnumerateArray().Select(component => component.GetSingle()).ToArray();
@@ -18,8 +25,9 @@ internal static class WorldRoute
                 throw new InvalidDataException("Route points require three finite game-unit coordinates.");
             return new(value[0], value[1], value[2]);
         }
-        var cells = records.EffectiveRecords("CELL").Where(record => FalloutCellSceneReader.ParentWorldspace(record) == world)
-            .Select(record => record.FormKey).ToHashSet();
+        var cells = cell is { } selectedCell ? new HashSet<FalloutFormKey> { selectedCell } :
+            records.EffectiveRecords("CELL").Where(record => FalloutCellSceneReader.ParentWorldspace(record) == world)
+                .Select(record => record.FormKey).ToHashSet();
         var unavailable = new Dictionary<string, string>();
         var graph = CellNavigationGraph.LoadOwned(records, cells, (key, error) => unavailable.Add(key.ToString(), error.Message));
         var start = Point("start"); var end = Point("end");
@@ -27,7 +35,8 @@ internal static class WorldRoute
         Console.WriteLine(JsonSerializer.Serialize(new
         {
             schema = "opennv-owned-world-route/v1",
-            world = world.ToString(),
+            world = world?.ToString(),
+            cell = cell?.ToString(),
             meshes = graph.NavMeshes,
             triangles = graph.Triangles,
             unavailable,

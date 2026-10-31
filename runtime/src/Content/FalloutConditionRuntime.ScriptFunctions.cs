@@ -52,6 +52,15 @@ internal sealed partial class FalloutConditionRuntime
             "getitemcount" => Form(Function.GetItemCount),
             "isequipped" or "getequipped" => Form(Function.GetEquipped),
             "getdistance" => Form(Function.GetDistance),
+            "getpos" => new([FalloutScriptArgumentKind.Identifier], arguments =>
+                Call(Function.GetPos, number: arguments[0].Identifier!.ToUpperInvariant() switch
+                {
+                    "X" => 'X',
+                    "Y" => 'Y',
+                    "Z" => 'Z',
+                    _ => throw new InvalidDataException("GetPos axis is not X, Y or Z."),
+                }))
+            { ReadOnly = true },
             "getinsamecell" => Form(Function.GetInSameCell),
             "getincell" => Form(Function.GetInCell),
             "getinzone" => Form(Function.GetInZone),
@@ -66,6 +75,8 @@ internal sealed partial class FalloutConditionRuntime
             "getdisabled" => None(Function.GetDisabled),
             "getdead" => None(Function.GetDead),
             "getunconscious" => None(Function.GetUnconscious),
+            "getknockedstate" => None(Function.GetKnockedState),
+            "isessential" => None(Function.IsEssential),
             "gethealthpercentage" => None(Function.GetHealthPercentage),
             "isincombat" => None(Function.IsInCombat),
             "isininterior" => None(Function.IsInInterior),

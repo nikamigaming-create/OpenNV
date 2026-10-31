@@ -6,10 +6,11 @@ namespace OpenNV.Runtime.World.Actors;
 
 internal sealed partial class RuntimeNativeActorCombat
 {
-    private sealed class RouteDoor(NativeNavigationContact contact, FalloutFormKey reference)
+    private sealed class RouteDoor(NativeNavigationContact contact, FalloutFormKey reference, bool portal)
     {
         internal NativeNavigationContact Contact { get; } = contact;
         internal FalloutFormKey Reference { get; } = reference;
+        internal bool Portal { get; } = portal;
         internal bool Requested;
         internal double Seconds;
         internal string? Error;
@@ -19,6 +20,7 @@ internal sealed partial class RuntimeNativeActorCombat
     private object DoorNavigationObservation => new
     {
         reference = _routeDoor?.Reference.ToString(),
+        portal = _routeDoor?.Portal,
         collider = _routeDoor?.Contact.Collider,
         requested = _routeDoor?.Requested,
         seconds = _routeDoor?.Seconds,
@@ -28,7 +30,7 @@ internal sealed partial class RuntimeNativeActorCombat
         rejectedContact = ContactObservation(_routeProbe?.RejectedContact),
         rejectedContacts = _routeProbe?.RejectedContacts.Select(ContactObservation).ToArray(),
         rejectedEdges = _routeProbe?.RejectedEdges,
-        boundary = "exact-corridor-contact;unlocked-resident-NPC-ordinary-door;retail-reach-timing-unmatched"
+        boundary = "exact-corridor-contact;ordinary-door-animation-or-matching-XTEL-parent-activation;retail-reach-timing-unmatched"
     };
     private static object? ContactObservation(NativeNavigationContact? contact) => contact is null ? null : new
     {
@@ -56,12 +58,14 @@ internal sealed partial class RuntimeNativeActorCombat
         if (_context?.RouteDoor is null || _routeProbe is not { RejectedContact: { } contact } probe) return;
         var door = _context.RouteDoor(_state.Reference, contact.Collider, false);
         if (door.Reference is not { } reference) return;
-        _routeDoor = new(contact, reference) { Error = door.Error };
+        _routeDoor = new(contact, reference, door.Portal) { Error = door.Error };
         _pursuitPath = door.Error is null ? probe.Approach : [];
         _pursuitCursor = 0;
         _waypointDistance = float.PositiveInfinity;
         _routeStall = 0;
         _routeError = door.Error;
+        if (door.Portal && door.Error is null)
+            GD.Print($"OPENNV_NATIVE_PORTAL_APPROACH reference={_state.Reference} door={reference} waypoints={_pursuitPath.Length} owner=collision-validated-parent-package-approach");
     }
 
     // Returns ownership while approaching, awaiting the source event/motion,
@@ -70,8 +74,23 @@ internal sealed partial class RuntimeNativeActorCombat
     {
         var procedure = _routeDoor!;
         var door = _context!.RouteDoor!(_state.Reference, procedure.Contact.Collider, false);
-        if (door.Reference != procedure.Reference || door.Error is not null)
+        if (door.Reference != procedure.Reference || door.Portal != procedure.Portal || door.Error is not null)
             procedure.Error ??= door.Error ?? "Route door collision lost its resident source binding.";
+        if (procedure.Portal)
+        {
+            if (procedure.Error is not null) { _routeError = procedure.Error; _pursuitPath = []; return true; }
+            if (_pursuitCursor < _pursuitPath.Length && _routeStall >= .75)
+            {
+                procedure.Error = _routeError = "NPC cannot reach the collision-validated portal approach.";
+                _pursuitPath = [];
+            }
+            // Walk only the capsule-validated prefix up to the portal contact.
+            // Its owning Travel/Eat/Sleep procedure checks actual interaction
+            // reach and visibility each frame and commits the normal source
+            // activation. Never wait for an XTEL door to animate open, or
+            // manufacture an ordinary-door activation/completion here.
+            return true;
+        }
         if (door.Open && !door.Moving && !door.Pending && door.Error is null)
         {
             ResetDoorNavigation();

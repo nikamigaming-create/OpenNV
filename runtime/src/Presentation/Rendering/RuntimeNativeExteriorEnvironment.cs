@@ -14,6 +14,7 @@ internal partial class RuntimeNativeExteriorEnvironment : Node
     private float _units;
     private RuntimeNativeSkyLayers _layers = null!;
     private DirectionalLight3D _sun = null!;
+    private FalloutExteriorSun _sunSource = null!;
     private Godot.Environment _environment = null!;
     private readonly HashSet<GeometryInstance3D> _meshes = [];
     private Node _scene = null!;
@@ -43,6 +44,7 @@ internal partial class RuntimeNativeExteriorEnvironment : Node
         if (!float.IsFinite(shadowDistance) || shadowDistance <= 0)
             throw new InvalidDataException("Exterior shadow distance must cover a positive finite region.");
         _records = records; _sky = sky; _hour = hour; _units = units; _sceneRoot = sceneRoot; _shadowDistance = shadowDistance;
+        _sunSource = FalloutExteriorSun.Read(records);
     }
 
     internal void Register(Node root)
@@ -110,11 +112,11 @@ internal partial class RuntimeNativeExteriorEnvironment : Node
         Color ColorAt(int kind) { var rgb = weather.Sample(weights, kind); return new(rgb[0], rgb[1], rgb[2]); }
         var ambient = ColorAt(3); var fog = ColorAt(1);
         _layers.Sample(_records, weather, weights, ImageSpace?.RawTraits[8] ?? 1f);
-        var solarAngle = (hour - 6) * MathF.PI / 12;
-        var direction = new Vector3(MathF.Cos(solarAngle), MathF.Sin(solarAngle), 0).Normalized();
+        var ray = _sunSource.RayDirection(_sky.Climate, hour);
+        var direction = -GamebryoCoordinate.ConvertVector(new Vector3(ray.X, ray.Y, ray.Z));
         _sun.Basis = RetailLighting.DirectionalLightBasis(direction);
         _sun.LightColor = RetailLighting.GodotLightColor(ColorAt(4));
-        _sun.LightEnergy = direction.Y > 0 ? ImageSpace?.RawTraits[11] ?? 1 : 0;
+        _sun.LightEnergy = ImageSpace?.RawTraits[11] ?? 1;
         _environment.AmbientLightColor = ambient;
         _environment.FogLightColor = fog;
         var declaration = _records.GetEffective(weather.Form).ReadSubrecords().Single(field => field.Signature == "FNAM").Data;

@@ -267,6 +267,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
             FalloutBodyPartData.Read(pluginStack.GetEffective(pluginStack.RuntimeFormKey(0x1d))),
             _playerSkills.Value, _playerSkills.HasPerk, () => _scripts.Session.Hardcore, _playerActorValues);
         if (restore?.State.Ingestibles is { } ingestibles) _ingestibles.Restore(ingestibles);
+        _player.ConfigureHitKnockback(_pluginStack, _pluginStack.GetEffective(_raceSexContract.Player), restore?.State.PlayerHitKnockback);
         _player.ConfigureExplosionExposure(() => _activeCell, amount =>
         {
             var resistance = Math.Min(_playerSkills.Value(20), FalloutGameSettingFloats.Read(pluginStack, "fPlayerMaxResistance"));

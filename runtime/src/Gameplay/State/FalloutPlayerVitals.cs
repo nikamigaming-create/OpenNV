@@ -127,10 +127,11 @@ internal sealed partial class FalloutPlayerVitals
         if (source.PlayerSha256 != actorValues.Source.PlayerSha256 || source.StatsSha256 != actorValues.Source.StatsSha256)
             throw new InvalidDataException("Player vitals and actor values have different sources.");
         _actorValues = actorValues;
-        // The player's HP formula uses permanent Endurance and the player
-        // offset/multiplier; AP uses bounded current Agility. NPC DATA health
-        // does not replace this engine-created player formula.
-        _baseHealth = FalloutGameSettingFloats.ReadRetained(records, "fAVDHealthEnduranceOffset", nameof(FalloutPlayerVitals)) * _healthEndurance;
+        // The Endurance/level formula is a contribution to the authored base
+        // health, not its replacement. HP uses permanent Endurance; AP uses
+        // bounded current Agility. Retain the DATA health read by the common
+        // constructor, then fold the source Endurance offset into that base.
+        _baseHealth += FalloutGameSettingFloats.ReadRetained(records, "fAVDHealthEnduranceOffset", nameof(FalloutPlayerVitals)) * _healthEndurance;
         _state = restore ?? GameplayVitals.Derive(_baseHealth, actorValues.Source.Level, actorValues.ReadPermanent(7),
                 actorValues.ReadBoundedCurrent(10), _healthEndurance, _healthLevel, _apBase, _apAgility, 0, _xpBase, _xpBump);
         _state.Validate();

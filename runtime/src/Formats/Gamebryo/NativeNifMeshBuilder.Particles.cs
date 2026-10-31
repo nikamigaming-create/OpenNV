@@ -74,10 +74,11 @@ internal static partial class RuntimeNativeNifMeshBuilder
                     (controller.MaximumEmitters is null or 0 || controller.Master < 0 ||
                         _source.ReadNode(controller.Master).ParticleMaster is not { } master || !master.ParticleSystems.Contains(source.Block.Index)))
                     throw new InvalidDataException("Multi-target emitter has no matching source master/capacity.");
-                // Gravity scalar owners must bind or refuse through the
+                // Scalar owners must bind or refuse through the
                 // scalar sampler; an incompatible interpolator must never
                 // silently remove a reached direct controller.
-                if (controller.Block.TypeName == "NiPSysGravityStrengthCtlr" && (controller.Time.Flags & 0x20) == 0)
+                if (controller.Block.TypeName is "NiPSysGravityStrengthCtlr" or "NiPSysEmitterInitialRadiusCtlr" &&
+                    (controller.Time.Flags & 0x20) == 0)
                     directEmitters.Add(controller);
                 else if (controller.Block.TypeName is "NiPSysEmitterCtlr" or "BSPSysMultiTargetEmitterCtlr" or "NiPSysEmitterSpeedCtlr" or "NiPSysEmitterLifeSpanCtlr" && (controller.Time.Flags & 0x20) == 0 &&
                     _source.ReadObject(controller.Interpolator) is FalloutNifFloatInterpolator)
@@ -102,7 +103,8 @@ internal static partial class RuntimeNativeNifMeshBuilder
                 // Effects can author dormant clocks. They are bound here,
                 // and their impact/sever event explicitly starts playback.
                 FalloutNifControllerClock.Validate(controller.Time, requireActive: false);
-                var scalar = controller.Block.TypeName is "NiPSysEmitterSpeedCtlr" or "NiPSysEmitterLifeSpanCtlr" or "NiPSysGravityStrengthCtlr";
+                var scalar = controller.Block.TypeName is "NiPSysEmitterSpeedCtlr" or "NiPSysEmitterLifeSpanCtlr" or
+                    "NiPSysEmitterInitialRadiusCtlr" or "NiPSysGravityStrengthCtlr";
                 var type = controller.Block.TypeName == "BSPSysMultiTargetEmitterCtlr" ? "NiPSysEmitterCtlr" : controller.Block.TypeName;
                 RuntimeNifControllerChannel Channel(string variable, int interpolator) => runtime.Bind(_source,
                     new FalloutNifControllerLink(source.Geometry.Name, "", type, controller.Modifier,

@@ -77,6 +77,7 @@ internal sealed partial class RuntimeNifControllerPlayer : Node
         awaitingSelection = _active is null && _sequences.Count > 1,
         sourceTimeSeconds = SourceTimeSeconds,
         elapsedSeconds = _elapsedSeconds,
+        clockOwner = _active?.ApplicationTime is null ? "sequence" : "application-active-time",
         textKeyCount = _textKeyCount,
         lastTextKey = _lastTextKey,
         unboundTextKeys = _unboundTextKeys.ToArray(),
@@ -111,6 +112,9 @@ internal sealed partial class RuntimeNifControllerPlayer : Node
                 !float.IsFinite(sequence.StopTime) || sequence.StopTime <= sequence.StartTime ||
                 !float.IsFinite(sequence.Frequency) || sequence.Frequency <= 0 || sequence.CycleType is not (0 or 2))
                 throw new InvalidDataException("NIF source sequence clock is invalid.");
+            if (sequence.ApplicationTime is not null && (sequence.DirectClock is not { } direct ||
+                (direct.Flags & 1) != 0 || sequence.TextKeys.Count != 0))
+                throw new NotSupportedException("Application-time channels require a direct APP_TIME controller without sequence text keys.");
             if (_sequences.TryGetValue(sequence.Name, out var previous) &&
                 !previous.Name.Equals(sequence.Name, StringComparison.Ordinal))
                 throw new InvalidDataException(
@@ -139,10 +143,10 @@ internal sealed partial class RuntimeNifControllerPlayer : Node
         _boundaries = sequence.Channels.SelectMany(channel => channel.BoundaryTimes).Concat(sequence.TextKeys.Select(key => key.Time))
             .Where(time => time >= sequence.StartTime && time <= sequence.StopTime).Distinct().Order().ToArray();
         _textKeys = new(sequence.TextKeys, sequence.StartTime, sequence.StopTime, sequence.CycleType, sequence.Frequency);
-        _elapsedSeconds = 0.0;
+        _elapsedSeconds = sequence.ApplicationTime?.Invoke() ?? 0.0;
         _includeStart = true;
         _generation++;
-        Apply(ResolveSourceTime(sequence, 0));
+        Apply(ResolveSourceTime(sequence, _elapsedSeconds));
         SetProcess(true);
     }
 
@@ -157,6 +161,8 @@ internal sealed partial class RuntimeNifControllerPlayer : Node
     {
         if (_active is null)
             throw new InvalidOperationException("NIF controller player has no active sequence.");
+        if (_active.ApplicationTime is not null)
+            throw new NotSupportedException("An instance cannot seek the shared application animation clock.");
         if (!double.IsFinite(sourceSeconds))
             throw new ArgumentOutOfRangeException(nameof(sourceSeconds));
         _elapsedSeconds = _active.DirectClock is { } clock ? FalloutNifControllerClock.ElapsedAt(clock, sourceSeconds) : Math.Max(
@@ -212,8 +218,9 @@ internal sealed partial class RuntimeNifControllerPlayer : Node
     private bool Advance(double delta, bool finishCycle = false)
     {
         var previous = _elapsedSeconds;
-        _elapsedSeconds += delta;
-        if (!double.IsFinite(_elapsedSeconds)) throw new InvalidDataException("NIF animation clock overflowed.");
+        _elapsedSeconds = _active!.ApplicationTime?.Invoke() ?? previous + delta;
+        if (!double.IsFinite(_elapsedSeconds) || _elapsedSeconds < previous)
+            throw new InvalidDataException("NIF animation clock overflowed or moved backwards.");
         var sequence = _active!;
         var generation = _generation;
         Apply(finishCycle ? sequence.StopTime : ResolveSourceTime(sequence, _elapsedSeconds));
@@ -275,6 +282,7 @@ internal sealed record RuntimeNifControllerSequence(
     internal int SourceSequence { get; init; } = -1;
     internal IReadOnlyList<FalloutNifTextKey> TextKeys { get; init; } = [];
     internal FalloutNifTimeController? DirectClock { get; init; }
+    internal Func<double>? ApplicationTime { get; init; }
 }
 
 internal sealed class RuntimeNifControllerChannel

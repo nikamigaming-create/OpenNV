@@ -3,13 +3,15 @@ using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using OpenNV.Runtime.Diagnostics.Parity;
 
 namespace OpenNV.LiveHarness;
 
 internal sealed record SequentialInputReceipt(long Request, long SentMicroseconds, long ObservedMicroseconds,
     bool Delivered, string Message, long? LoopNotification, JsonElement State,
     long SentMonotonicTicks, long ObservedMonotonicTicks, long Frequency,
-    bool RecipientExited = false, bool? CursorSettled = null, int? RecipientExitCode = null);
+    bool RecipientExited = false, bool? CursorSettled = null, int? RecipientExitCode = null,
+    RecordedInputCommit? AdapterCommit = null);
 
 // The separate private adapter owns retail device input. This client knows
 // only its public command/log envelope; it never calls a retail UI or engine API.
@@ -24,8 +26,10 @@ internal sealed class SequentialInputCommandClient : IDisposable
     private long _nextRequest, _retailLogOffset;
     private bool _disposed;
     private readonly long? _keyboardDropped, _mouseDropped;
+    private bool? _nativeCommitClock;
     internal int ProcessId => _processId;
     internal string Directory => _directory;
+    internal bool UsesNativeCommitClock => _nativeCommitClock == true;
 
     internal SequentialInputCommandClient(string directory, string engine, int processId, int timeoutMilliseconds, Func<long> clock)
     {
@@ -86,6 +90,7 @@ internal sealed class SequentialInputCommandClient : IDisposable
 
     private static readonly Regex Returned = new("^returned request=([0-9]+) consoleAccepted=([01])$", RegexOptions.CultureInvariant);
     private static readonly Regex Dispatched = new("^dispatch request=([0-9]+) loopNotification=([0-9]+)$", RegexOptions.CultureInvariant);
+    private static readonly Regex Committed = new("^device-commit request=([0-9]+) process=([0-9]+) beginTicks=([0-9]+) endTicks=([0-9]+) frequency=([0-9]+)$", RegexOptions.CultureInvariant);
     private sealed class InputRecipientRetiredException() : IOException("The actual input process has retired.") { }
 
     internal JsonElement ReadState()
@@ -113,6 +118,10 @@ internal sealed class SequentialInputCommandClient : IDisposable
             if (state.GetProperty("schema").GetString() != "opennv-private-native-bridge-state/v1" ||
                 state.GetProperty("engine").GetString() != "retail" || state.GetProperty("inputProvider").GetString() != "harness-native-device")
                 throw new NotSupportedException("Retail input has no admitted ordinary native-device adapter.");
+            var nativeClock = state.TryGetProperty("inputCommitClock", out var commitClock);
+            if (nativeClock && commitClock.GetString() != "qpc/v1" || _nativeCommitClock is { } expectedClock && nativeClock != expectedClock)
+                throw new InvalidDataException("The native input commit clock is unsupported or changed during this segment.");
+            _nativeCommitClock = nativeClock;
             var age = DateTime.UtcNow - File.GetLastWriteTimeUtc(path);
             if (age < TimeSpan.FromSeconds(-1) || age > TimeSpan.FromSeconds(5))
                 throw new IOException("Retail native input state is stale; callback/loop counters cannot supply a missing clock.");
@@ -158,6 +167,7 @@ internal sealed class SequentialInputCommandClient : IDisposable
         _nextRequest = checked(request + 1);
         var timeout = Stopwatch.StartNew();
         long? loop = null;
+        RecordedInputCommit? commit = null;
         var echoed = false;
         var scannedBytes = _retailLogOffset;
         while (timeout.ElapsedMilliseconds < _timeoutMilliseconds)
@@ -231,15 +241,30 @@ internal sealed class SequentialInputCommandClient : IDisposable
                             loop = long.Parse(dispatch.Groups[2].Value, CultureInfo.InvariantCulture);
                         }
                         else if (line == command && loop is not null && !echoed) echoed = true;
+                        else if (line.StartsWith("device-commit", StringComparison.Ordinal))
+                        {
+                            var match = Committed.Match(line);
+                            if (!UsesNativeCommitClock || !match.Success || commit is not null || loop is null || !echoed)
+                                throw new InvalidDataException("Native commit evidence is malformed, duplicate or has no matching command dispatch.");
+                            commit = new(long.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture),
+                                int.Parse(match.Groups[2].Value, CultureInfo.InvariantCulture),
+                                long.Parse(match.Groups[3].Value, CultureInfo.InvariantCulture),
+                                long.Parse(match.Groups[4].Value, CultureInfo.InvariantCulture),
+                                long.Parse(match.Groups[5].Value, CultureInfo.InvariantCulture));
+                        }
                         else if (Returned.Match(line) is { Success: true } returned)
                         {
                             if (long.Parse(returned.Groups[1].Value, CultureInfo.InvariantCulture) != request || loop is null || !echoed)
                                 throw new InvalidDataException("Native acknowledgement has no matching actual command dispatch/echo.");
                             _retailLogOffset = scannedBytes;
                             var accepted = returned.Groups[2].Value == "1";
+                            var observedTicks = Stopwatch.GetTimestamp();
+                            if (UsesNativeCommitClock && commit is null)
+                                throw new InvalidDataException("The adapter acknowledged input without its declared native commit clock.");
+                            commit?.Validate(request, _processId, sentTicks, observedTicks, Stopwatch.Frequency);
                             return new(request, sent, _clock(), accepted,
                                 accepted ? "Native adapter returned accepted ordinary device input; gameplay consumption is observed separately." : "Native adapter refused ordinary input.", loop, state,
-                                sentTicks, Stopwatch.GetTimestamp(), Stopwatch.Frequency);
+                                sentTicks, observedTicks, Stopwatch.Frequency, AdapterCommit: commit);
                         }
                         else if (line.StartsWith("command rejected:", StringComparison.Ordinal))
                             throw new InvalidDataException("The native adapter rejected the complete command envelope.");

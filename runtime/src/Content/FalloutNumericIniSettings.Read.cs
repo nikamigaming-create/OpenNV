@@ -18,6 +18,14 @@ internal sealed partial class FalloutNumericIniSettings
         return (float)(value.Number ?? throw new InvalidDataException($"INI setting {value.Declaration.Name} has no numeric payload."));
     }
 
+    internal bool Boolean(string name)
+    {
+        var value = Require(name);
+        if (value.Declaration.Kind != 'b' || value.Number is not (0 or 1))
+            throw new InvalidDataException($"INI setting {value.Declaration.Name} is not a Boolean.");
+        return value.Number == 1;
+    }
+
     private FalloutIniValue Require(string name) => Resolve(name) ??
         throw new NotSupportedException($"Owned numeric INI setting is unbound: {name}.");
 

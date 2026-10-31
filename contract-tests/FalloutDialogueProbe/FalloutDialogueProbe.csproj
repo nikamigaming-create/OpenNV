@@ -77,6 +77,7 @@
     <Compile Include="../../runtime/src/Content/FalloutActorIdleSource.cs" Link="FalloutActorIdleSource.cs" />
     <Compile Include="../../runtime/src/Content/FalloutPluginReader.cs" Link="FalloutPluginReader.cs" />
     <Compile Include="../../runtime/src/Content/FalloutPluginStack.cs" Link="FalloutPluginStack.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutPluginStack.SharedSource.cs" Link="FalloutPluginStack.SharedSource.cs" />
     <Compile Include="../../runtime/src/Content/FalloutQuestObjectFlags.cs" Link="FalloutQuestObjectFlags.cs" />
     <Compile Include="../../runtime/src/Content/FalloutSoundVoices.cs" Link="FalloutSoundVoices.cs" />
     <Compile Include="../../runtime/src/Content/FalloutFiniteSoundVoice.cs" Link="FalloutFiniteSoundVoice.cs" />
@@ -88,6 +89,7 @@
     <Compile Include="../../runtime/src/Content/FalloutCellScene.cs" Link="FalloutCellScene.cs" />
     <Compile Include="../../runtime/src/Content/FalloutDialogueTopic.cs" Link="FalloutDialogueTopic.cs" />
     <Compile Include="../../runtime/src/Content/RuntimeLiveContentSource.cs" Link="RuntimeLiveContentSource.cs" />
+    <Compile Include="../../runtime/src/Content/RuntimeLiveContentSource.Reuse.cs" Link="RuntimeLiveContentSource.Reuse.cs" />
     <Compile Include="../../runtime/src/Content/FalloutContentLayers.cs" Link="FalloutContentLayers.cs" />
     <Compile Include="../../runtime/src/Content/NativeGameInstallation.cs" Link="NativeGameInstallation.cs" />
     <Compile Include="../../runtime/src/Content/FalloutBsaArchive.cs" Link="FalloutBsaArchive.cs" />

@@ -7,7 +7,7 @@ namespace OpenNV.Runtime.Content;
 internal sealed record FalloutFindPackage(FalloutScriptPackage Source, FalloutPackageData Data, FalloutPackageTarget Target)
 {
     internal bool AllowKilling => (Data.SpecificFlags.GetValueOrDefault() & 0x0200) != 0;
-    internal bool AllowFalls => (Data.Flags & 0x00080000) != 0;
+    internal bool AllowFalls => (Data.Flags & FalloutScriptPackage.AllowFallsFlag) != 0;
 
     internal static FalloutFindPackage Read(FalloutPluginRecord record)
     {

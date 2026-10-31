@@ -3,9 +3,14 @@ using System.Numerics;
 namespace OpenNV.Runtime.Content;
 
 internal sealed record FalloutActiveImageModifier(FalloutImageSpaceModifier Source, double ElapsedSeconds);
+internal sealed record FalloutWeatherImageModifier(int Slot, FalloutImageSpaceModifier? Source, float Strength)
+{
+    internal bool EngineDefault => Source is null;
+}
+
 internal sealed record FalloutImageSpaceFrame(float TargetLuminance, Vector4 Cinematic, Vector4 Tint, Vector4 Fade,
     IReadOnlyList<FalloutActiveImageModifier> Active, IReadOnlyList<string> UnboundChannels, float BlurRadius = 0,
-    Vector2 DoubleVisionOffset = default);
+    Vector2 DoubleVisionOffset = default, IReadOnlyList<FalloutWeatherImageModifier>? Weather = null);
 
 /// <summary>Gameplay-clock IMAD lifetime and source IMGS/IMAD composition, independent of captured state.</summary>
 internal sealed class FalloutImageSpaceState
@@ -37,7 +42,7 @@ internal sealed class FalloutImageSpaceState
     }
 
     internal FalloutImageSpaceFrame Compose(FalloutImageSpace source, float? gameHour = null, FalloutDoubleVisionPhase? phase = null,
-        FalloutImageSpaceModifier? presentationModifier = null)
+        FalloutImageSpaceModifier? presentationModifier = null, IReadOnlyList<FalloutWeatherImageModifier>? weather = null)
     {
         if (gameHour is { } hour && !float.IsFinite(hour)) throw new ArgumentOutOfRangeException(nameof(gameHour));
         // Static menu backgrounds temporarily apply an IMAD while drawing the
@@ -66,6 +71,52 @@ internal sealed class FalloutImageSpaceState
         var blurRadius = 0f;
         var doubleVision = 0f;
         var unbound = new HashSet<string>(StringComparer.Ordinal);
+        // Native weather instances first aggregate straight RGBA. Only that
+        // aggregate enters the ordinary premultiplied/max-strength accumulator.
+        // Applying the ordinary maximum independently to weather slots loses
+        // tint when two slots select the same source during a time blend.
+        var weatherTint = Vector4.Zero;
+        var weatherFade = Vector4.Zero;
+        foreach (var contribution in weather ?? [])
+        {
+            var modifier = contribution.Source;
+            var strength = contribution.Strength;
+            if (!float.IsFinite(strength) || strength < 0 || strength > 1 || modifier?.Animated == true)
+                throw new NotSupportedException("Weather modifier percentage or instance lifetime is unbound.");
+            if (modifier is null)
+            {
+                // The reserved default has identity scalar curves and straight
+                // white RGB with zero alpha. Its RGB still participates when
+                // another weather slot contributes nonzero tint/fade alpha.
+                weatherTint += new Vector4(1, 1, 1, 0) * strength;
+                weatherFade += new Vector4(1, 1, 1, 0) * strength;
+                continue;
+            }
+            for (var index = 0; index < 21; index++)
+            {
+                var multiplier = FalloutImageSpaceModifier.Sample(modifier.Multiply[index], 0, 1);
+                var add = FalloutImageSpaceModifier.Sample(modifier.Add[index], 0, 0);
+                multipliers[index] += (multiplier - 1) * strength;
+                adds[index] += add * strength;
+                if (strength > 0 && index is not (4 or 17 or 18 or 19 or 20) && (multiplier != 1 || add != 0))
+                    unbound.Add($"{modifier.Form}/{index}IAD");
+            }
+            weatherTint += FalloutImageSpaceModifier.Sample(modifier.Tint, 0, new Vector4(1, 1, 1, 0)) * strength;
+            weatherFade += FalloutImageSpaceModifier.Sample(modifier.Fade, 0, Vector4.Zero) * strength;
+            foreach (var effect in modifier.Effects)
+                if (strength > 0 && FalloutImageSpaceModifier.Sample(effect.Value, 0, 0) != 0)
+                    unbound.Add($"{modifier.Form}/weather-{effect.Key}");
+            if (modifier.RadialFlags != 0 || modifier.DepthUsesTarget) unbound.Add($"{modifier.Form}/target");
+            if (modifier.IntroSound is not null || modifier.OutroSound is not null) unbound.Add($"{modifier.Form}/audio");
+        }
+        var weatherTintStrength = MathF.Max(0, weatherTint.W);
+        tintNumerator += new Vector3(weatherTint.X, weatherTint.Y, weatherTint.Z) * weatherTintStrength;
+        tintWeight += weatherTintStrength;
+        strongestTint = MathF.Max(strongestTint, weatherTintStrength);
+        var weatherFadeStrength = MathF.Max(0, weatherFade.W);
+        fadeNumerator += new Vector3(weatherFade.X, weatherFade.Y, weatherFade.Z) * weatherFadeStrength;
+        fadeWeight += weatherFadeStrength;
+        strongestFade = MathF.Max(strongestFade, weatherFadeStrength);
         foreach (var active in activeModifiers)
         {
             var modifier = active.Source;
@@ -111,6 +162,6 @@ internal sealed class FalloutImageSpaceState
         var angle = phase?.Angle(gameHour.GetValueOrDefault()) ?? 0;
         var doubleVisionOffset = new Vector2((float)(Math.Cos(angle) * doubleVision), (float)(Math.Sin(angle) * doubleVision));
         return new(traits[4], new Vector4(traits[25], traits[26], traits[27], traits[28]), finalTint, finalFade,
-            activeModifiers, unbound.Order(StringComparer.Ordinal).ToArray(), blurRadius, doubleVisionOffset);
+            activeModifiers, unbound.Order(StringComparer.Ordinal).ToArray(), blurRadius, doubleVisionOffset, weather);
     }
 }

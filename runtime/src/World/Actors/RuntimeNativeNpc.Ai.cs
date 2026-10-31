@@ -383,9 +383,10 @@ internal partial class RuntimeNativeNpc
             assignment.Bind(_aiStack!, _packageEvents!);
             return;
         }
-        if (declaration.Procedure != 6 || declaration.LocationType is not (0 or 2) ||
-            declaration.LocationType == 0 && _aiStack.GetEffective(_aiWorld!.Get(declaration.LocationReference!.Value).Base).Signature == "FURN") return;
-        _ = FalloutTravelPackage.Read(package, ownsIdleCollection: true);
+        if (declaration.Procedure != 6 || declaration.LocationType is not (0 or 2)) return;
+        if (declaration.LocationType == 0 && _aiStack.GetEffective(_aiWorld!.Get(declaration.LocationReference!.Value).Base).Signature == "FURN" &&
+            state.PackageMotion?.Travel is null) return;
+        _ = FalloutPackageTravelGoal.Read(_aiStack!, _aiWorld!, Appearance.Reference!.Value, package);
         assignment.Bind(_aiStack!, _packageEvents!);
     }
 
@@ -487,7 +488,7 @@ internal partial class RuntimeNativeNpc
         var forced = acceptedSelection?.Forced == true;
         try
         {
-            var selection = acceptedSelection ?? SelectSourcePackage();
+            var selection = ReconcileRestoredPackageSelection(acceptedSelection ?? SelectSourcePackage(), forced);
             _requestedSelection = null;
             _furniturePendingSelection = null;
             if (_aiReferenceState is { } requestedState) requestedState.PendingPackageSelection = null;
@@ -588,9 +589,13 @@ internal partial class RuntimeNativeNpc
             if (_packageIdleSource.Procedure == 14) { BeginGuard(selected, initializing); return; }
             if (_packageIdleSource is { Procedure: 6, LocationType: 3 }) { BeginEditorTravel(selected, initializing); return; }
             if (_packageIdleSource is { Procedure: 6, LocationType: 2 }) { BeginMarkerTravel(selected, initializing); return; }
-            if (_packageIdleSource is { Procedure: 6, LocationType: 0, LocationReference: { } marker } &&
-                _aiStack.GetEffective(_aiWorld!.Get(marker).Base).Signature != "FURN")
-            { BeginMarkerTravel(selected, initializing); return; }
+            if (_packageIdleSource is { Procedure: 6, LocationType: 0, LocationReference: { } marker })
+            {
+                if (_aiStack.GetEffective(_aiWorld!.Get(marker).Base).Signature == "FURN")
+                    BeginFurnitureTravel(selected, marker, initializing);
+                else BeginMarkerTravel(selected, initializing);
+                return;
+            }
             if (_packageIdleSource.Procedure == 15)
             {
                 FalloutPlacedReference? wait = null;
@@ -660,7 +665,8 @@ internal partial class RuntimeNativeNpc
         Function.GetAttacked => Activity.Attacked ? 1 : 0,
         Function.GetAlerted => Activity.Alerted ? 1 : 0,
         Function.IsWeaponOut => WeaponDrawn ? 1 : 0,
-        Function.GetKnockedState => Combat?.KnockedDown == true ? 2 : 0,
+        Function.GetKnockedState => (_aiWorld ?? throw new NotSupportedException("Knockdown query has no reference world."))
+            .GetKnockedState(Appearance?.Reference ?? throw new NotSupportedException("Knockdown query has no placed actor.")),
         Function.GetWeaponAnimType => Combat?.ScriptWeaponAnimationType ?? 0,
         Function.GetCurrentAIPackage => CurrentAiPackage,
         Function.GetCurrentAIProcedure => CurrentAiProcedure,

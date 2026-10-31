@@ -17,8 +17,7 @@ public partial class RuntimeCoordinator
         {
             try
             {
-                if (!content.TryRead(path, null, out var bytes, out _)) return (Path: path, Nif: (FalloutNifFile?)null);
-                var nif = FalloutNifFile.Read(bytes);
+                var nif = NativeOwnedNifCache.Read(content, path, out _);
                 var visitedAddons = new HashSet<uint>();
                 void Prepare(FalloutNifFile model)
                 {

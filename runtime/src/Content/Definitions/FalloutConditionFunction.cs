@@ -7,6 +7,7 @@ internal enum FalloutConditionFunction : ushort
 {
     GetDistance = 1,
     GetLocked = 5,
+    GetPos = 6,
     GetActorValue = 14,
     GetCurrentTime = 18,
     IsMoving = 25,
@@ -37,6 +38,7 @@ internal enum FalloutConditionFunction : ushort
     GetDeadCount = 84,
     GetAlerted = 91,
     IsWeaponOut = 101,
+    IsFacingUp = 106,
     GetKnockedState = 107,
     GetWeaponAnimType = 108,
     GetCurrentAIPackage = 110,
@@ -59,6 +61,7 @@ internal enum FalloutConditionFunction : ushort
     IsInCombat = 289,
     IsInInterior = 300,
     IsXBox = 309,
+    IsEssential = 354,
     IsChild = 365,
     IsInList = 372,
     GetHasNote = 382,

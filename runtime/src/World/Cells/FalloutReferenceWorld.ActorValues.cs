@@ -1,6 +1,7 @@
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Content.Definitions;
 using OpenNV.Runtime.World.Actors;
+using System.Buffers.Binary;
 
 namespace OpenNV.Runtime.World.Cells;
 
@@ -45,6 +46,12 @@ internal sealed partial class FalloutReferenceWorld
         if (index == 54) return 0; // Accumulated radiation starts in an empty engine value pool.
         if (index < 0) return 0; // Declared user slots have zero initial pools.
         var source = FalloutActorTemplateOwner.Resolve(records, records.GetEffective(actor.Base), 2, actor.Templates);
+        if (index == (int)FalloutActorValueId.SpeedMult)
+        {
+            var configuration = source.ReadSubrecords().Single(field => field.Signature == "ACBS").Data.Span;
+            if (configuration.Length != 24) throw new InvalidDataException("Actor speed multiplier ACBS extent is invalid.");
+            return BinaryPrimitives.ReadUInt16LittleEndian(configuration[14..]);
+        }
         var data = source.ReadSubrecords().Single(field => field.Signature == "DATA").Data.Span;
         if (source.Signature == "NPC_")
         {

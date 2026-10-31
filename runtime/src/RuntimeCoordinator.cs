@@ -64,6 +64,7 @@ public partial class RuntimeCoordinator : Node3D
 
     public override void _Ready()
     {
+        AddChild(new Formats.Gamebryo.RuntimeNifApplicationClock());
         BeginLoadingScreen("Starting OpenNV");
         Callable.From(StartRuntimeAfterLoadingFrame).CallDeferred();
     }
@@ -123,7 +124,8 @@ public partial class RuntimeCoordinator : Node3D
                 harness.Configure(harnessDirectory, CaptureParityFrame, () => CaptureNativeDriveState(), () => _nativePluginStack,
                     () => CaptureNativeDriveState(false), () => (ParityStateKey, _parityObservations.Coverage().EventOrdinal),
                     CaptureNativePerformanceContext);
-                harness.ConfigureBot(ObserveNativeBot, FindNativeNavigationRoute, _configuration.Player.MouseSensitivityRadiansPerPixel,
+                harness.ConfigureBot(ObserveNativeBot, FindNativeNavigationRoute,
+                    () => (_nativePlayer ?? throw new InvalidOperationException("Bot look has no active native player.")).FlatMouseLookScale,
                     Enum.Parse<Key>(_configuration.Player.DesktopInput.MoveForward.PhysicalKey),
                     Enum.Parse<Key>(_configuration.Player.DesktopInput.Activate.PhysicalKey),
                     ApplyNativeBotSimulatorInput, () => _botSimulatorInput?.Pump(), AdvanceNativeReferenceApproachRoute, CancelNativeBotRoute,

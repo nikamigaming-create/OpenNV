@@ -52,7 +52,8 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
     FalloutActorIdleRequestsSnapshot? IdleRequests = null,
     FalloutActorSandboxMarkerContinuation? SandboxMarker = null,
     FalloutSandboxIdleSelectionSnapshot? SandboxIdleSelection = null,
-    FalloutActorLastIdleRequest? LastIdleRequest = null)
+    FalloutActorLastIdleRequest? LastIdleRequest = null, bool ReferenceEssential = false, FalloutActorEssentialKnockout? EssentialKnockout = null,
+    FalloutHitKnockback? HitKnockback = null)
 {
     internal static void Validate(IReadOnlyList<FalloutReferenceSnapshot> snapshots)
     {
@@ -70,6 +71,7 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
                 (snapshot.Script is null ? snapshot.ScriptSha256 is not null || snapshot.Variables.Count != 0 :
                     !ValidKey(snapshot.Script.Value) || snapshot.ScriptSha256 is not { Length: 64 } || !snapshot.ScriptSha256.All(Uri.IsHexDigit)))
                 throw new InvalidDataException("Saved reference state is invalid or duplicated.");
+            FalloutHitKnockback.Validate(snapshot.HitKnockback);
             foreach (var (name, value) in snapshot.ActorValues ?? new Dictionary<string, FalloutActorValue>())
                 if ((name != "health" && FalloutActorValue.SourceSlot(name) != name) || value is null || !value.IsFinite)
                     throw new InvalidDataException("Saved actor value is invalid.");
@@ -196,6 +198,10 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
             if (snapshot.AnimationSoundEvents is { } sounds && sounds.Reference != snapshot.Reference ||
                 snapshot.HitReactionFaults is { } faults && faults.Reference != snapshot.Reference)
                 throw new InvalidDataException("Saved native event history belongs to a different reference.");
+            snapshot.EssentialKnockout?.Validate();
+            if (snapshot.EssentialKnockout is not null && snapshot.Injury is not { Dead: false } ||
+                snapshot.EssentialKnockout is { Unconscious: true } && (!snapshot.KnockedDown || snapshot.Ragdoll is null))
+                throw new InvalidDataException("Saved essential knockout has no matching living physical owner.");
             snapshot.HitReaction?.Validate();
             if (snapshot.KnockedDown && (snapshot.Injury is not { Dead: false } || snapshot.Ragdoll is null && snapshot.HitReaction is null))
                 throw new InvalidDataException("Knockdown requires a living actor and a retained physical or recovery pose.");
@@ -302,8 +308,11 @@ internal sealed partial class FalloutReferenceInstance
     internal FalloutTerminalHackState? TerminalHackState { get; set; }
     internal bool Unconscious { get; set; }
     internal bool KnockedDown { get; set; }
+    internal FalloutHitKnockback? HitKnockback { get; set; }
     internal bool Restrained { get; set; }
     internal bool PlayerTeammate { get; set; }
+    internal bool ReferenceEssential { get; set; }
+    internal FalloutActorEssentialKnockout? EssentialKnockout { get; set; }
     internal bool TalkedToPlayer { get; set; }
     internal bool? BroadcastState { get; set; }
     internal FalloutFormKey? TalkingActivatorActor { get; set; }
@@ -573,7 +582,8 @@ internal sealed partial class FalloutReferenceInstance
             IdleMarkerUsedMask: IdleMarkerUsedMask == 0 ? null : IdleMarkerUsedMask,
             IdleRequests: CaptureIdleRequests is { } captureIdles ? captureIdles() : IdleRequests?.Copy(),
             SandboxMarker: CaptureSandboxMarker is { } captureMarker ? captureMarker() : SandboxMarker?.Copy(),
-            SandboxIdleSelection: SandboxIdleSelection, LastIdleRequest: LastIdleRequest);
+            SandboxIdleSelection: SandboxIdleSelection, LastIdleRequest: LastIdleRequest, ReferenceEssential: ReferenceEssential, EssentialKnockout: EssentialKnockout,
+            HitKnockback: HitKnockback);
     }
 }
 
@@ -850,6 +860,7 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
         FalloutReferenceSnapshot.Validate(snapshots);
         using var validated = new FalloutReferenceWorld(records);
         if (_formLists is not null) validated.FormLists.Restore(_formLists.Capture());
+        if (_actorBaseFlags is not null) validated.ActorBaseFlags.Restore(_actorBaseFlags.Capture());
         foreach (var snapshot in snapshots)
         {
             if (snapshot is null || validated._instances.ContainsKey(snapshot.Reference))
@@ -941,11 +952,13 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
                 validated.SetBroadcastState(snapshot.Reference, broadcast ? 1 : 0);
             var talkingActivator = snapshot.TalkedToPlayer && records.GetEffective(instance.Base).Signature == "TACT";
             if (talkingActivator) _ = FalloutDialogueSpeaker.Read(records, instance.Base);
-            if (snapshot.Restrained || snapshot.PlayerTeammate || snapshot.TalkedToPlayer && !talkingActivator || snapshot.PackageMotion is not null ||
+            if (snapshot.Restrained || snapshot.PlayerTeammate || snapshot.ReferenceEssential || snapshot.EssentialKnockout is not null || snapshot.TalkedToPlayer && !talkingActivator || snapshot.PackageMotion is not null ||
                 snapshot.HitReaction is not null || snapshot.HitReactionRandomState is not null || snapshot.AttackRandomState is not null)
                 _ = validated.Actor(snapshot.Reference);
             instance.Restrained = snapshot.Restrained;
             instance.PlayerTeammate = snapshot.PlayerTeammate;
+            instance.ReferenceEssential = snapshot.ReferenceEssential;
+            instance.EssentialKnockout = snapshot.EssentialKnockout;
             instance.TalkedToPlayer = snapshot.TalkedToPlayer;
             if (snapshot.PackageAssignment is { } assignment)
             {
@@ -1110,6 +1123,15 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
             }
             instance.Ragdoll = snapshot.Ragdoll;
             instance.KnockedDown = snapshot.KnockedDown;
+            if (snapshot.HitKnockback is not null)
+            {
+                _ = validated.Actor(snapshot.Reference);
+                var basis = FalloutActorTemplateOwner.Resolve(records, records.GetEffective(instance.Base),
+                    (ushort)OpenNV.Runtime.Content.Definitions.FalloutActorTemplateGroup.BaseData, instance.Templates);
+                if (snapshot.Injury?.Dead == true || FalloutHitKnockback.NotPushable(basis))
+                    throw new InvalidDataException("A dead or non-pushable actor has saved hit knockback.");
+            }
+            instance.HitKnockback = snapshot.HitKnockback;
             instance.Engagement = snapshot.Engagement;
             instance.GrabEvents = snapshot.GrabEvents;
             if (snapshot.AggroWarning is { } warning)

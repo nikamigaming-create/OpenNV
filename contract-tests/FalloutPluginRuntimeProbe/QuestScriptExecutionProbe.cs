@@ -125,9 +125,12 @@ internal static class QuestScriptExecutionProbe
         var savedQuests = JsonSerializer.Serialize(quests.Capture());
         var detailed = JsonSerializer.SerializeToElement(scripts.State);
         var summary = JsonSerializer.SerializeToElement(scripts.Observe(detailed: false));
-        foreach (var field in new[] { "quests", "unbound", "newlyParsedOnRestore", "events", "session", "strings", "menus" })
+        foreach (var field in new[] { "quests", "unbound", "newlyParsedOnRestore", "session", "menus" })
             Require(detailed.GetProperty(field).GetRawText() == summary.GetProperty(field).GetRawText(),
-                "Periodic script observation lost identities, errors, clocks or event state: " + field);
+                "Periodic script observation lost fault identities, errors, clocks or session state: " + field);
+        foreach (var field in new[] { "events", "strings" })
+            Require(summary.GetProperty(field).ValueKind == JsonValueKind.Null && detailed.GetProperty(field).ValueKind != JsonValueKind.Null,
+                "Routine observation materialized full storage or explicit detail lost it: " + field);
         Require(summary.GetProperty("detail").GetString()!.Contains("request-state", StringComparison.Ordinal) &&
             summary.GetProperty("variables").GetProperty("detail").GetString()!.Contains("request-state", StringComparison.Ordinal) &&
             summary.GetProperty("objectives").GetProperty("detail").GetString()!.Contains("request-state", StringComparison.Ordinal),

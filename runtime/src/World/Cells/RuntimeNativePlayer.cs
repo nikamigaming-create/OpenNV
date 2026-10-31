@@ -29,6 +29,10 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
     private float _jumpHeightMeters;
     private NativeCharacterStep.QueryResources? _stepQueries;
     private FalloutInputControls? _inputControls;
+    private FalloutFlatMouseLook? _flatMouseLook;
+    internal FalloutMouseLookScale FlatMouseLookScale => _flatMouseLook?.Resolve(
+        new FalloutCameraProjection(_camera.Fov, _camera.Near / UnitsToMeters).ReferenceHorizontalFovDegrees)
+        ?? throw new InvalidOperationException("Flat mouse look has no owned settings.");
 
     internal void ConfigureInputControls(FalloutInputControls controls, Func<int, bool> physicalKeyPressed)
     {
@@ -83,11 +87,16 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
         if (!float.IsFinite(_jumpHeightMeters) || _jumpHeightMeters <= 0)
             throw new InvalidDataException("Source jump height must be finite and positive.");
         ConfigureLimbLocomotion(records, vitals);
+        ConfigureFlatMouseLook(records.IniSettings);
+        _inputControls?.ConfigureAlwaysRun(records.IniSettings.Boolean("bAlwaysRunByDefault:Controls"));
         SetMeta("opennv_jump_height_meters", _jumpHeightMeters);
-        SetMeta("opennv_run_policy", "Source autorun; retained Sprint action selects walking");
+        SetMeta("opennv_run_policy", "Owned always-run preference XOR remappable Run control");
     }
 
     internal Camera3D Camera => _camera;
+    internal void ConfigureFlatMouseLook(FalloutNumericIniSettings settings) =>
+        _flatMouseLook = new(settings,
+            new FalloutCameraProjection(_camera.Fov, _camera.Near / UnitsToMeters).ReferenceHorizontalFovDegrees);
     internal float ViewPitchRadians => _pitchRadians;
     internal FalloutActorActivityState Activity { get; } = new();
     internal bool RolloverTextEnabled { get; private set; } = true;
@@ -96,6 +105,7 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
     internal Func<Node, bool>? ActivateReference { get; set; }
     internal Action? NoActivationFeedback { get; set; }
     internal Action? SaveGame { get; set; }
+    internal Action? LoadGame { get; set; }
 
     internal void ApplySourceCamera(Transform3D transformFromFeet)
     {
@@ -182,6 +192,7 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
             _weaponTriggerHeld = false;
             _pendingShotCount = 0;
             Velocity = Vector3.Zero;
+            _previousKnockbackVertical = 0;
             _aiming = false;
             _reloadPressed = false; _holdHandled = false; CancelWeaponAction();
             if (_firstPersonPixels is not null) _firstPersonPixels.Visible = false;
@@ -197,7 +208,10 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
         if (!_activationEnabled) ReleaseGrab();
         RolloverTextEnabled = state.RolloverText;
         if (!_movementEnabled)
+        {
             Velocity = Vector3.Zero;
+            _previousKnockbackVertical = 0;
+        }
         SetMeta("opennv_source_movement_enabled", state.Movement);
         SetMeta("opennv_source_pipboy_enabled", state.PipBoy);
         SetMeta("opennv_source_fighting_enabled", state.Fighting);
@@ -267,6 +281,7 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
         _pitchRadians = 0.0f;
         if (_xr is null) _camera.Rotation = Vector3.Zero;
         Velocity = Vector3.Zero;
+        _previousKnockbackVertical = 0;
         _xrBodyAlignmentPending = _xr is not null;
     }
 
@@ -288,6 +303,7 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
         _pitchRadians = viewPitchRadians;
         if (_xr is null) _camera.Rotation = new Vector3(_pitchRadians, 0, 0);
         Velocity = Vector3.Zero;
+        _previousKnockbackVertical = 0;
         _xrBodyAlignmentPending = _xr is not null;
     }
 
@@ -304,6 +320,13 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
         if (InventoryHotkeyInput(inputEvent)) { GetViewport().SetInputAsHandled(); return; }
         if (_xr is not null) return;
         var input = _configuration.Player.DesktopInput;
+        if (_inputControls is not null && !_modalInput && _movementEnabled && _furniturePhase == 0 &&
+            inputEvent.IsActionPressed(RuntimeNativeInputControls.Action(10), allowEcho: false))
+        {
+            _inputControls.ToggleAlwaysRun();
+            GetViewport().SetInputAsHandled();
+            return;
+        }
         if (GrabInput(inputEvent)) { GetViewport().SetInputAsHandled(); return; }
         if (_inputControls is null && !_modalInput && _movementEnabled && _furniturePhase == 0 && _sourceCamera is null &&
             inputEvent is InputEventKey { Pressed: true, Echo: false, PhysicalKeycode: Key.Q or Key.H } wheel)
@@ -327,6 +350,13 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
             ObserveSaveInput(inputEvent, "dispatch");
             SaveGame?.Invoke();
             ObserveSaveInput(inputEvent, "returned");
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+        if (_inputControls is not null && !_modalInput && _furniturePhase == 0 &&
+            inputEvent.IsActionPressed(RuntimeNativeInputControls.Action(26), allowEcho: false))
+        {
+            LoadGame?.Invoke();
             GetViewport().SetInputAsHandled();
             return;
         }
@@ -368,11 +398,12 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
         if (Input.MouseMode != Input.MouseModeEnum.Captured &&
             !OpenNV.Runtime.Diagnostics.Parity.RuntimeLiveHarness.IsHeadlessLookInput(motion)) return;
         if (_furniturePhase is 1 or 2 or 4) return;
-        if (_furniturePhase == 3) _furnitureLookYaw -= motion.Relative.X * _configuration.Player.MouseSensitivityRadiansPerPixel;
-        else RotateY(-motion.Relative.X * _configuration.Player.MouseSensitivityRadiansPerPixel);
+        var look = FlatMouseLookScale;
+        if (_furniturePhase == 3) _furnitureLookYaw -= motion.Relative.X * look.Horizontal;
+        else RotateY(-motion.Relative.X * look.Horizontal);
         _pitchRadians = Math.Clamp(
             _pitchRadians - motion.Relative.Y *
-                _configuration.Player.MouseSensitivityRadiansPerPixel,
+                look.Vertical,
             -_configuration.Player.VerticalLookLimitRadians,
             _configuration.Player.VerticalLookLimitRadians);
         if (_furniturePhase == 3) PublishFurnitureCamera();
@@ -392,7 +423,7 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
         AdvanceGrab();
         if (_xr is not null && GetTree().Paused) return;
         AdvanceExplosionExposure(delta);
-        if (_furniturePhase != 0) { AdvanceFurniture(delta); return; }
+        if (_furniturePhase != 0) { _ = AdvanceHitKnockback(delta); AdvanceFurniture(delta); return; }
         var input = _configuration.Player.DesktopInput;
         var alive = IsDefeated?.Invoke() != true;
         var movement = alive && _movementEnabled && !_modalInput && !VatsExecuting
@@ -407,13 +438,17 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
         forward.Y = 0.0f;
         right.Y = 0.0f;
         var direction = right.Normalized() * movement.X + forward.Normalized() * movement.Y;
-        Running = movement.LengthSquared() > 0 && !(_xr?.Sprint ?? Input.IsActionPressed(input.Sprint.Action));
+        var requestedRunning = _xr is not null ? !_xr.Sprint : _inputControls is not null
+            ? _inputControls.AlwaysRun ^ Input.IsActionPressed(RuntimeNativeInputControls.Action(9))
+            : !Input.IsActionPressed(input.Sprint.Action);
+        Running = movement.LengthSquared() > 0 && requestedRunning;
         var speed = movement.LengthSquared() > 0 ? MovementSpeed(Running) : 0;
         Activity.SetMovement(Running, Activity.Sneaking);
+        var knockback = AdvanceHitKnockback(delta);
         var velocity = direction * speed;
         velocity.Y = IsOnFloor()
             ? MathF.Min(Velocity.Y, 0.0f)
-            : NativeCharacterGravity.AirVelocity(Velocity.Y,
+            : NativeCharacterGravity.AirVelocity(Velocity.Y - _previousKnockbackVertical,
                 _configuration.Simulation.GravityMetersPerSecondSquared, (float)delta);
         if (alive && _movementEnabled && !_modalInput && !VatsExecuting && IsOnFloor() && _jumpHeightMeters > 0 &&
             (_xr?.ConsumeJump() ?? Input.IsActionJustPressed(input.Jump.Action)))
@@ -422,6 +457,8 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
             ++JumpCount;
             GD.Print($"OPENNV_NATIVE_PLAYER_JUMP heightMeters={_jumpHeightMeters:R} count={JumpCount}");
         }
+        velocity += knockback;
+        _previousKnockbackVertical = knockback.Y;
         var horizontalMotion = new Vector3(velocity.X, 0, velocity.Z) * (float)delta;
         CollisionResident = CanOccupyPosition?.Invoke(GlobalPosition + horizontalMotion) != false;
         if (!CollisionResident)
@@ -440,6 +477,7 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
             Velocity = Vector3.Down * 0.01f;
             MoveAndSlide();
             Velocity = new(velocity.X, 0, velocity.Z);
+            _previousKnockbackVertical = 0;
         }
         else MoveAndSlide();
         // At a convex edge the solver can stop downward travel while reporting
@@ -449,8 +487,12 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
         {
             var actualVerticalSpeed = Math.Min(0, (GlobalPosition.Y - positionBeforeMotion.Y) / (float)delta);
             if (actualVerticalSpeed > Velocity.Y + .01f)
+            {
                 Velocity = new(Velocity.X, actualVerticalSpeed, Velocity.Z);
+                _previousKnockbackVertical = 0;
+            }
         }
+        if (IsOnFloor() || IsOnCeiling()) _previousKnockbackVertical = 0;
         PushContactProps(velocity, (float)delta);
         BlockingShape = IsOnWall() && GetSlideCollisionCount() > 0
             ? (GetSlideCollision(GetSlideCollisionCount() - 1).GetCollider() as Node)?.GetPath().ToString() : null;
@@ -490,12 +532,20 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
     {
         alive = IsDefeated?.Invoke() != true,
         sneaking = Activity.Sneaking,
+        hitKnockback = _hitKnockback,
         sneakingBoundary = "source-activity-movement-and-shot-modifiers;camera-capsule-and-body-posture-unbound",
         forward = Input.GetActionStrength(_configuration.Player.DesktopInput.MoveForward.Action),
         backward = Input.GetActionStrength(_configuration.Player.DesktopInput.MoveBackward.Action),
         left = Input.GetActionStrength(_configuration.Player.DesktopInput.MoveLeft.Action),
         right = Input.GetActionStrength(_configuration.Player.DesktopInput.MoveRight.Action),
         controls = _inputControls?.State,
+        mouseLook = _flatMouseLook is null ? null : new
+        {
+            sourceSensitivity = _flatMouseLook.Sensitivity,
+            invertY = _flatMouseLook.InvertY,
+            defaultReferenceFov = _flatMouseLook.DefaultReferenceFov,
+            scale = FlatMouseLookScale,
+        },
         grab = GrabState,
         saveControl = SaveInputState,
     };

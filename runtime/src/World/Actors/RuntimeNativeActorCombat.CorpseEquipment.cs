@@ -32,6 +32,7 @@ internal sealed partial class RuntimeNativeActorCombat
         _pursuitPath = []; _pursuitCursor = 0; _routeClock = 0; _routeStall = 0;
         PackageOwnsPose = false; PackageMoving = false;
         if (_actor is CharacterBody3D body) body.Velocity = Vector3.Zero;
+        _previousKnockbackVertical = 0;
         Activity.SetMovement(false, false);
         RetainCorpseVisualBoundary();
     }

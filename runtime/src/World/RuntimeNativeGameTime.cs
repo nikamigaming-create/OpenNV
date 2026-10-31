@@ -14,6 +14,8 @@ internal sealed partial class RuntimeNativeGameTime : Node
         hourBits = BitConverter.SingleToInt32Bits(_clock.Hour),
         timeScale = _clock.TimeScale,
         daysPassed = _clock.DaysPassed,
+        year = _clock.Year,
+        calendar = _clock.ScheduleTime(),
         clock = _clock.Capture(),
         error = _error,
     };

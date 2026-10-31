@@ -107,7 +107,7 @@ internal sealed record FalloutActorSandboxMotionFailure(FalloutFormKey Reference
             actor.DeferredPackageContinuation is not null || actor.SelectionFailure is not null ||
             actor.PendingPackageSelection is not null || actor.StoppedRetirement is not null ||
             actor.FurnitureContinuation is not null || actor.DialogueContinuation is not null || actor.PackageIdle is not null ||
-            actor.Engagement is not null || actor.Unconscious || actor.Restrained || actor.KnockedDown ||
+            actor.Engagement is not null || actor.Unconscious || actor.Restrained || actor.KnockedDown || actor.HitKnockback is not null ||
             actor.PackageAssignment is { } assignment && (assignment.Package != Package || assignment.Done ||
                 !assignment.Sha256.Equals(PackageSha256, StringComparison.OrdinalIgnoreCase)))
             throw new InvalidDataException("Stopped Sandbox motion conflicts with its actor or procedure owners.");

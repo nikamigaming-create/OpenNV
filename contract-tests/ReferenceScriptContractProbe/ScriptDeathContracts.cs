@@ -4,7 +4,7 @@ using System.Text.Json;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.World.Cells;
 
-internal static class ScriptDeathContracts
+internal static partial class ScriptDeathContracts
 {
     internal static void Run()
     {
@@ -19,20 +19,24 @@ internal static class ScriptDeathContracts
             UInt(group, 4, (uint)group.Length); UInt(group, 8, 0x80); UInt(group, 12, 6); references.CopyTo(group, 24);
             var entry = new byte[12]; entry[0] = 1; UInt(entry, 4, 0x30); entry[8] = 2;
             var part = new byte[84]; BinaryPrimitives.WriteSingleLittleEndian(part, 1); part[5] = 0; part[6] = 25;
-            var questHeader = new byte[20]; UInt(questHeader, 12, 1); questHeader[16] = 1;
+            var questHeader = new byte[20]; UInt(questHeader, 12, 2); questHeader[16] = 1;
             File.WriteAllBytes(Path.Combine(directory, "Death.esm"), Join(Record("TES4", 0, Field("HEDR", header)),
                 Creature(1, 0x50), Creature(2, 0x51), Creature(3, 0x52), Creature(4, 0x53, flags: 2),
                 Creature(5, 0x53, flags: 0x40000000), Creature(6, 0x53, deathItem: 0x20), Creature(7, 0x53, health: 0), Creature(8, 0, template: 1),
+                Record("GMST", 0x70, Field("EDID", Text("fEssentialDeathTime")), Field("DATA", BitConverter.GetBytes(2f))),
+                Record("GMST", 0x71, Field("EDID", Text("fEssentialHealthPercentReGain")), Field("DATA", BitConverter.GetBytes(.1f))),
                 Record("BPTD", 0x20, Field("BPNN", Text("Root")), Field("BPNT", Text("Root")), Field("BPND", part)),
                 Record("MISC", 0x30, Field("EDID", Text("SourceDeathLoot")), Field("DATA", new byte[8])),
                 Record("LVLI", 0x31, Field("LVLD", [0]), Field("LVLF", [0]), Field("LVLO", entry)),
                 Script(0x50, "Kill"), Script(0x51, "KillActor player"), Script(0x52, "set loaded to loaded + 1\nKill"),
                 Script(0x53, "Kill"), Record("QUST", 0x60, Field("DATA", [1, 0]), Field("SCRI", BitConverter.GetBytes(0x54u))),
-                Record("SCPT", 0x54, Field("SCHR", questHeader), Local(1, "count"),
+                Record("SCPT", 0x54, Field("SCHR", questHeader), Local(1, "count"), Local(2, "essential"),
                     Field("SCRO", BitConverter.GetBytes(1u)), Field("SCRO", BitConverter.GetBytes(0x90u)),
-                    Field("SCTX", Text("float count\nbegin GameMode\nset count to GetDeadCount DeathActor1\nend"))),
+                    Field("SCRO", BitConverter.GetBytes(4u)), Field("SCRO", BitConverter.GetBytes(0x93u)),
+                    Field("SCTX", Text("float count\nfloat essential\nbegin GameMode\nSetEssential DeathActor4 0\nCreatureRef93.SetActorRefEssential 1\n" +
+                        "set essential to CreatureRef93.IsActorRefEssential\nset count to GetDeadCount DeathActor1\nend"))),
                 Record("CELL", 0x80, Field("DATA", [1])), group));
-            using var records = FalloutPluginStack.Load(directory, ["Death.esm"]);
+            using var records = LoadEssentialFixture(directory, true);
             var cell = FalloutCellSceneReader.Read(records, Key(0x80));
             using var world = new FalloutReferenceWorld(records); world.LoadCell(cell);
             world.InitializeActorTemplates(Key(0x97), 1);
@@ -83,8 +87,9 @@ internal static class ScriptDeathContracts
             using var consumed = new FalloutReferenceWorld(records); consumed.Restore(Snapshot(cold)); consumed.LoadCell(cell);
             Require(!consumed.AdvanceDeathEvent(Key(0x90), 10, 2, false) &&
                 consumed.Inventory(Key(0x90), 1).Contents.Item(Key(0x30))?.Count == 1, "Cold corpse repeated event or loot.");
-            Reject(() => cold.KillActor(Key(0x93), null, 1));
-            Require(!cold.IsDead(Key(0x93)) && cold.Get(Key(0x93)).Inventory is null, "Essential boundary mutated health/inventory.");
+            Require(!cold.KillActor(Key(0x93), null, 1) && !cold.IsDead(Key(0x93)) && cold.Get(Key(0x93)).Inventory is null &&
+                cold.Get(Key(0x93)).EssentialKnockout is { RemainingSeconds: 2, RecoveryRequested: false },
+                "Essential Kill must enter a living knockout without death inventory.");
             Require(cold.KillActor(Key(0x94), null, 1), "Direct script death was treated as an invulnerable weapon hit.");
             Reject(() => cold.KillActor(Key(0x95), null, 1));
             Require(!cold.IsDead(Key(0x95)) && cold.Health(Key(0x95)).Current == 50, "Failed loot published partial death.");
@@ -113,6 +118,8 @@ internal static class ScriptDeathContracts
             Require(history.GetDeadCount(Key(1)) == 2, "Unloaded/cold death history lost a prior lifetime.");
             foreach (var shared in new[] { false, true })
             {
+                history.SetActorRefEssential(Key(0x93), false);
+                history.ActorBaseFlags.SetEssential(Key(4), true);
                 var countedQuests = new FalloutQuestState(records);
                 var executor = Scripts(records, history, countedQuests);
                 var questScripts = new FalloutQuestScripts(records, countedQuests, new HashSet<FalloutFormKey>(), new(),
@@ -122,7 +129,10 @@ internal static class ScriptDeathContracts
                         shared ? executor.ExecuteProgram : null)
                 };
                 questScripts.Advance(0);
-                Require(countedQuests.Variable(Key(0x60), 1) == 2, "Shared/fallback script query lost cumulative typed-base history.");
+                Require(questScripts.Capture().Instances.All(snapshot => snapshot.Error is null) && countedQuests.Variable(Key(0x60), 1) == 2,
+                    "Shared/fallback essential/death handler failed: " + JsonSerializer.Serialize(questScripts.State));
+                Require(countedQuests.Variable(Key(0x60), 2) == 1 && history.IsActorRefEssential(Key(0x93)) &&
+                    !history.ActorBaseFlags.Essential(Key(4), true), "Shared/fallback script host lost base/ref essential ownership.");
                 Reject(() => executor.ExecuteProgram(records.GetEffective(Key(0x60)), records.GetEffective(Key(0x54)),
                     FalloutGameModeProgram.Read("begin GameMode\nset count to GetDeadCount CreatureRef90\nend"), 0));
                 Require(countedQuests.Variable(Key(0x60), 1) == 2, "Wrong-type death query consumed its result write.");
@@ -137,6 +147,7 @@ internal static class ScriptDeathContracts
             using var migrated = new FalloutReferenceWorld(records); migrated.Restore(legacy);
             Require(migrated.GetDeadCount(Key(1)) == 1 && migrated.GetDeadCount(Key(7)) == 0,
                 "Legacy supported death/corpse evidence did not restore its consumed transition.");
+            RunEssentialOwners(records, directory);
             Console.WriteLine("OPENNV_DEATH_COUNT_PASS cumulative=true childTemplateIdentity=true repeatedCorpse=false " +
                 "initialCorpseNotKilled=true failedLootAtomic=true unloadedAndCold=true laterLifetime=true legacyConsumedDeath=true invalidAtomic=true");
             Console.WriteLine("OPENNV_SCRIPT_DEATH_CONTRACT_PASS aliases=true inheritedAndQualifiedLocals=true unknownKiller=true filteredEvents=true lootOnce=true coldState=true recoveryBeforeMutation=true unsupportedBeforeMutation=true");

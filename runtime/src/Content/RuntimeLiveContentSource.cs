@@ -25,6 +25,7 @@ internal sealed partial class RuntimeLiveContentSource : IDisposable
     private readonly object _retirementGate = new();
     private readonly List<Action> _retirement = [];
     private bool _retired;
+    private readonly string _reuseSettingsIdentity;
     private readonly ConcurrentDictionary<string, string> _archiveWinners =
         new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, LoosePayload> _loosePayloads =
@@ -43,6 +44,7 @@ internal sealed partial class RuntimeLiveContentSource : IDisposable
     {
         ContentRoot = contentRoot;
         _layers = layers;
+        _reuseSettingsIdentity = ReuseSettingsIdentity(contentRoot, game);
         Settings = settings?.ToArray() ?? [];
         PluginSources = Array.AsReadOnly(pluginSources.Select(source => source with { OwnedSource = this }).ToArray());
         _archivePaths = archivePaths;
@@ -118,7 +120,7 @@ internal sealed partial class RuntimeLiveContentSource : IDisposable
         foreach (var (file, saved) in _loosePayloads)
         {
             var current = new FileInfo(file);
-            if (current.Length != saved.Bytes || new DateTimeOffset(current.LastWriteTimeUtc).ToUnixTimeMilliseconds() != saved.MtimeMilliseconds)
+            if (current.Length != saved.Bytes || current.LastWriteTimeUtc.Ticks != saved.MtimeTicks)
                 throw new InvalidDataException($"Loaded owned resource changed before its diagnostic read: {file}");
             yield return (file, _payloads.GetOrAdd(saved.CacheKey, _ => File.ReadAllBytes(file)));
         }
@@ -136,10 +138,15 @@ internal sealed partial class RuntimeLiveContentSource : IDisposable
         IReadOnlyList<string>? additionalContentRoots = null, IReadOnlyList<string>? activePlugins = null,
         IReadOnlyList<FalloutInstallationSetting>? settings = null, bool includeImplicitPlugins = true)
     {
-        Current?.Dispose();
-        Current = null;
-        Current = Open(selectedRoot, expectedCampaign, additionalContentRoots, activePlugins, settings: settings,
-            includeImplicitPlugins: includeImplicitPlugins);
+        var previous = Current;
+        var selected = OpenCore(selectedRoot, expectedCampaign, additionalContentRoots, activePlugins, null, settings,
+            includeImplicitPlugins, previous);
+        if (!ReferenceEquals(previous, selected))
+        {
+            try { previous?.Dispose(); }
+            catch { selected.Dispose(); throw; }
+        }
+        Current = selected;
     }
 
     // Donor libraries have their own lifetime. Opening another owned game must
@@ -148,6 +155,13 @@ internal sealed partial class RuntimeLiveContentSource : IDisposable
         IReadOnlyList<string>? additionalContentRoots = null, IReadOnlyList<string>? activePlugins = null,
         string? archiveIniPath = null, IReadOnlyList<FalloutInstallationSetting>? settings = null,
         bool includeImplicitPlugins = true)
+        => OpenCore(selectedRoot, expectedCampaign, additionalContentRoots, activePlugins, archiveIniPath, settings,
+            includeImplicitPlugins, null);
+
+    private static RuntimeLiveContentSource OpenCore(string selectedRoot, string expectedCampaign,
+        IReadOnlyList<string>? additionalContentRoots, IReadOnlyList<string>? activePlugins,
+        string? archiveIniPath, IReadOnlyList<FalloutInstallationSetting>? settings, bool includeImplicitPlugins,
+        RuntimeLiveContentSource? reusable)
     {
         var installation = NativeGameInstallation.Detect(selectedRoot);
         if (installation.Game is not (NativeGame.FalloutNewVegas or NativeGame.Fallout3))
@@ -190,6 +204,8 @@ internal sealed partial class RuntimeLiveContentSource : IDisposable
         var edition = campaign;
         var build = installation.Game == NativeGame.Fallout3 ? "1.7.0.4" : "1.4.0.525";
         var identity = ComputeLiveIdentity(plugins, archives, layers.Roots.Count > 1 ? layers.Roots : []);
+        if (reusable is not null && reusable.CanReuse(installation.ContentRoot, campaign, identity, layers, plugins, archives, settings))
+            return reusable;
         return new RuntimeLiveContentSource(
             installation.ContentRoot,
             plugins,
@@ -219,11 +235,11 @@ internal sealed partial class RuntimeLiveContentSource : IDisposable
         if (TryResolveLoose(logicalPath, out var loosePath))
         {
             var info = new FileInfo(loosePath);
-            var mtime = new DateTimeOffset(info.LastWriteTimeUtc).ToUnixTimeMilliseconds();
+            var mtime = info.LastWriteTimeUtc.Ticks;
             var payload = _loosePayloads.AddOrUpdate(
                 loosePath,
                 _ => new LoosePayload(info.Length, mtime, $"{loosePath}|{info.Length}|{mtime}"),
-                (_, existing) => existing.Bytes == info.Length && existing.MtimeMilliseconds == mtime
+                (_, existing) => existing.Bytes == info.Length && existing.MtimeTicks == mtime
                     ? existing
                     : new LoosePayload(info.Length, mtime, $"{loosePath}|{info.Length}|{mtime}"));
             data = _payloads.GetOrAdd(payload.CacheKey, _ => File.ReadAllBytes(loosePath));
@@ -342,16 +358,16 @@ internal sealed partial class RuntimeLiveContentSource : IDisposable
             _retired = true;
             retirement = [.. _retirement]; _retirement.Clear();
         }
-        try
-        {
-            foreach (var release in retirement) release();
-        }
-        finally
-        {
-            _payloads.Clear();
-            foreach (var archive in _openArchives.Values)
-                if (archive.IsValueCreated) archive.Value.Dispose();
-        }
+        List<Exception> errors = [];
+        foreach (var release in retirement)
+            try { release(); }
+            catch (Exception error) { errors.Add(error); }
+        _payloads.Clear();
+        foreach (var archive in _openArchives.Values)
+            if (archive.IsValueCreated)
+                try { archive.Value.Dispose(); }
+                catch (Exception error) { errors.Add(error); }
+        if (errors.Count != 0) throw new AggregateException("Owned source retirement failed.", errors);
     }
 
     // Dependents release retained references, never scene/GPU objects here:
@@ -561,7 +577,7 @@ internal sealed partial class RuntimeLiveContentSource : IDisposable
 
     private readonly record struct LoosePayload(
         long Bytes,
-        long MtimeMilliseconds,
+        long MtimeTicks,
         string CacheKey);
 
     internal readonly record struct SourcePayload(byte[] Data, FalloutBsaMemberEncoding? ArchiveEncoding);

@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 
 namespace OpenNV.Runtime.Gameplay.State;
@@ -16,6 +17,7 @@ internal sealed class RuntimeSaveSlotCatalog
     internal const string SlotDirectorySuffix = ".slots-v1";
     private readonly string _canonicalSavePath;
     private readonly string _slotDirectory;
+    private readonly string _quickSaveIdentityPath;
     private readonly Action<JsonElement> _validate;
 
     internal RuntimeSaveSlotCatalog(
@@ -26,6 +28,7 @@ internal sealed class RuntimeSaveSlotCatalog
             throw new ArgumentException("A canonical save path is required.", nameof(canonicalSavePath));
         _canonicalSavePath = Path.GetFullPath(canonicalSavePath);
         _slotDirectory = _canonicalSavePath + SlotDirectorySuffix;
+        _quickSaveIdentityPath = Path.Combine(_slotDirectory, "quicksave.slot");
         _validate = validate ?? throw new ArgumentNullException(nameof(validate));
     }
 
@@ -51,7 +54,7 @@ internal sealed class RuntimeSaveSlotCatalog
     internal RuntimeSaveSlotMetadata Create(Action writeAuthoritativeSave) =>
         Create(Guid.NewGuid(), writeAuthoritativeSave);
 
-    internal RuntimeSaveSlotMetadata Create(Guid slotId, Action writeAuthoritativeSave)
+    internal RuntimeSaveSlotMetadata Create(Guid slotId, Action writeAuthoritativeSave, bool quickSave = false)
     {
         if (slotId == Guid.Empty) throw new ArgumentException("Save-slot identity is empty.", nameof(slotId));
         ArgumentNullException.ThrowIfNull(writeAuthoritativeSave);
@@ -59,6 +62,8 @@ internal sealed class RuntimeSaveSlotCatalog
         if (File.Exists(target)) throw new InvalidOperationException("Save-slot identity already exists.");
         var previous = File.Exists(_canonicalSavePath) ? File.ReadAllBytes(_canonicalSavePath) : null;
         var previousWrittenUtc = previous is null ? (DateTime?)null : File.GetLastWriteTimeUtc(_canonicalSavePath);
+        var previousQuickSave = quickSave && File.Exists(_quickSaveIdentityPath) ? File.ReadAllBytes(_quickSaveIdentityPath) : null;
+        var quickSavePublished = false;
         var committed = false;
         try
         {
@@ -68,6 +73,13 @@ internal sealed class RuntimeSaveSlotCatalog
             Directory.CreateDirectory(_slotDirectory);
             RuntimeAtomicSaveFile.Write(target, bytes, overwrite: false);
             committed = true;
+            // The quicksave identity names an actual committed slot. Continue
+            // and later ordinary/manual saves do not change this identity.
+            if (quickSave)
+            {
+                RuntimeAtomicSaveFile.Write(_quickSaveIdentityPath, Encoding.UTF8.GetBytes(slotId.ToString("N")));
+                quickSavePublished = true;
+            }
             return ReadMetadata(target);
         }
         catch (Exception failure)
@@ -85,11 +97,29 @@ internal sealed class RuntimeSaveSlotCatalog
             catch (Exception rollback) { rollbackErrors.Add(rollback); }
             try { if (committed) File.Delete(target); }
             catch (Exception rollback) { rollbackErrors.Add(rollback); }
+            try
+            {
+                if (quickSavePublished)
+                {
+                    if (previousQuickSave is null) File.Delete(_quickSaveIdentityPath);
+                    else AtomicWrite(_quickSaveIdentityPath, previousQuickSave);
+                }
+            }
+            catch (Exception rollback) { rollbackErrors.Add(rollback); }
             if (rollbackErrors.Count != 0)
                 throw new IOException("Complete save failed and its previous Continue/slot rollback also failed.",
                     new AggregateException(new[] { failure }.Concat(rollbackErrors)));
             throw;
         }
+    }
+
+    internal RuntimeSaveSlotMetadata? ReadQuickSave()
+    {
+        if (!File.Exists(_quickSaveIdentityPath)) return null;
+        var identity = File.ReadAllText(_quickSaveIdentityPath, Encoding.UTF8);
+        if (!Guid.TryParseExact(identity, "N", out var id) || id == Guid.Empty)
+            throw new InvalidDataException("Quicksave has an invalid committed slot identity.");
+        return ReadSlot(identity);
     }
 
     internal RuntimeSaveSlotMetadata ReadSlot(string slotId) => slotId == "current" ? ReadMetadata(_canonicalSavePath) :

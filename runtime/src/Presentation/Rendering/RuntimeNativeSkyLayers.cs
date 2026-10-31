@@ -37,7 +37,8 @@ internal partial class RuntimeNativeSkyLayers : Node3D
     {
         var content = RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("Sky has no owned source.");
         if (!content.TryRead(path, null, out var bytes, out var identity)) throw new FileNotFoundException(path);
-        var scene = RuntimeNativeNifMeshBuilder.Build(bytes, units);
+        var source = FalloutNifFile.Read(bytes);
+        var scene = RuntimeNativeNifMeshBuilder.Build(source, units);
         scene.Root.SetMeta("opennv_source_model", path);
         scene.Root.SetMeta("opennv_source_resource", identity);
         AddChild(scene.Root);
@@ -55,23 +56,20 @@ internal partial class RuntimeNativeSkyLayers : Node3D
                     case 5: _stars.Add(material); break;
                     case 3:
                         if (mesh.Mesh.GetSurfaceCount() != 1) throw new NotSupportedException("Cloud layer has multiple material surfaces.");
-                        _clouds.Add((mesh, material, 0));
-                        for (var layer = 1; layer < 4; layer++)
-                        {
-                            var layerMaterial = (ShaderMaterial)material.Duplicate();
-                            layerMaterial.RenderPriority = -126 + layer;
-                            var layerMesh = new MeshInstance3D
-                            {
-                                Name = $"WeatherCloudLayer{layer}",
-                                Mesh = mesh.Mesh,
-                                Transform = mesh.Transform,
-                                MaterialOverride = layerMaterial,
-                                CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
-                                ExtraCullMargin = mesh.ExtraCullMargin
-                            };
-                            mesh.GetParent().AddChild(layerMesh);
-                            _clouds.Add((layerMesh, layerMaterial, layer));
-                        }
+                        if (source.Roots.Count() != 1)
+                            throw new NotSupportedException("Cloud layers require one authored root child array.");
+                        var block = mesh.GetMeta("opennv_nif_geometry_block").AsInt32();
+                        var layer = source.ReadNode(source.Roots.Single()).Children.ToList().IndexOf(block);
+                        if (layer is < 0 or >= 4)
+                            throw new NotSupportedException("Cloud geometry has no supported authored root child slot.");
+                        // The source already contains the layer geometries.
+                        // Its root child slot selects the WTHR texture, tint and
+                        // motion; neither traversal order nor a name suffix does.
+                        var layerMaterial = (ShaderMaterial)material.Duplicate();
+                        layerMaterial.RenderPriority = -126 + layer;
+                        mesh.MaterialOverride = layerMaterial;
+                        mesh.SetMeta("opennv_weather_cloud_layer", layer);
+                        _clouds.Add((mesh, layerMaterial, layer));
                         break;
                 }
             }

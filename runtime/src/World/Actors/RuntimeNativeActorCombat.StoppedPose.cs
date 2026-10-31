@@ -62,6 +62,8 @@ internal sealed partial class RuntimeNativeActorCombat
         Refuse(PackageOwnsPose, "package-owns-pose");
         Refuse(PackageMoving, "package-moving");
         Refuse(_state.KnockedDown, "knocked-down");
+        Refuse(_state.HitKnockback is not null, "active-hit-knockback");
+        Refuse(_hitKnockbackError is not null, "hit-knockback-error", _hitKnockbackError);
         Refuse(_state.Unconscious, "unconscious");
         Refuse(ReactingToHit, "active-hit-reaction");
         Refuse(Error is not null, "combat-error", Error);
@@ -114,6 +116,7 @@ internal sealed partial class RuntimeNativeActorCombat
     private bool ReadLiveStoppedAiPoseCaptureReady(bool allowFiniteSoundWait)
     {
         if (PackageOwnsPose || PackageMoving || _state.KnockedDown || _state.Unconscious ||
+            _state.HitKnockback is not null || _hitKnockbackError is not null ||
             ReactingToHit || Error is not null || _engagementError is not null || _assistanceError is not null ||
             _pendingHitscanImpacts != 0 || _routeSearch is not null || _routeDoor is not null ||
             _enemyMuzzle?.CaptureReady == false || _enemyShotEffects?.CaptureReadyWithFiniteSoundWait(allowFiniteSoundWait) == false ||

@@ -10,8 +10,8 @@ internal static class FalloutActorStoppedPose
         if (snapshot.PackageBindingFailure?.IndependentIdle is not null &&
             (snapshot.Injury?.Dead == true || snapshot.Engagement is not null || snapshot.Ragdoll is not null))
             throw new NotSupportedException("Stopped independent IDLE cannot replace an active combat or physical pose owner.");
-        if (snapshot.KnockedDown || snapshot.HitReaction is not null)
-            throw new InvalidDataException("Stopped AI has an unowned knockdown or hit-reaction composition.");
+        if (snapshot.KnockedDown || snapshot.HitReaction is not null || snapshot.HitKnockback is not null)
+            throw new InvalidDataException("Stopped AI has an unowned knockdown, hit-reaction or knockback composition.");
         if (snapshot.Injury?.Dead == true && snapshot.Ragdoll is null)
             throw new InvalidDataException("Stopped dead AI requires its complete physical corpse capture.");
         if (snapshot.Injury?.Dead == true && snapshot.Engagement?.WeaponHandling is not null && snapshot.CorpseEquipment is null)

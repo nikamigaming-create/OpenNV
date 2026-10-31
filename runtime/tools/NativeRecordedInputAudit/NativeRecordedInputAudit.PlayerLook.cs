@@ -18,10 +18,13 @@ public partial class NativeRecordedInputAudit
         try
         {
             player.Configure(configuration, Transform3D.Identity, FalloutCameraProjection.FromReferenceFov(75, 1));
+            const float sensitivity = .003f;
+            player.ConfigureFlatMouseLook(new FalloutNumericIniSettings(
+                [new("fMouseSensitivity:Controls", FalloutIniCollection.Main, BitConverter.SingleToUInt32Bits(sensitivity)),
+                 new("bInvertYValues:Controls", FalloutIniCollection.Main, 0)], [], "synthetic-input-profile"));
             AddChild(player); player.SetProcess(false); player.SetPhysicsProcess(false);
             Require(player.IsProcessingUnhandledInput(), "Actual player unhandled-input callback is disabled.");
             Input.MouseMode = Input.MouseModeEnum.Visible;
-            var sensitivity = configuration.Player.MouseSensitivityRadiansPerPixel;
             var yaw = 0f; var pitch = 0f;
             await Look(17, -11);
             yaw -= 17 * sensitivity; pitch += 11 * sensitivity;

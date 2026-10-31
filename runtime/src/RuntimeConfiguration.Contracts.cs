@@ -23,8 +23,7 @@ internal sealed record ConfigurationProvenance(
 
 internal sealed record WorldConfiguration(
     ConfigurationProvenance Provenance,
-    float GameUnitsToMeters,
-    int MinimumExteriorGridDiameter = 7);
+    float GameUnitsToMeters);
 
 internal sealed record SimulationConfiguration(
     ConfigurationProvenance Provenance,

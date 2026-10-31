@@ -60,6 +60,7 @@ internal sealed partial class RuntimeNativeActorCombat : Node
         casingPresentationError = _casingPresentationError,
         beamPresentationError = _beamPresentationError,
         engagement = EngagementObservation,
+        packageAnimation = PackageAnimationSelection,
         hitReaction = HitReactionObservation,
         unbound = "critical,sneak,conditional-resistance-modifiers,armor-wear,forced-hit-reactions,combat-AI-tactics,confidence-threat-ratios,target-priority,hit-script-events,death-XP,exploded-limbs,source-corpse-weapon-drop-and-dynamic-equipment"
     };
@@ -259,6 +260,7 @@ internal sealed partial class RuntimeNativeActorCombat : Node
 
     private void BeginDeath()
     {
+        _state.HitKnockback = null;
         _state.AggroWarning = null;
         _deathPresentationAttempted = true;
         RetireDeathPursuit();

@@ -9,7 +9,7 @@ internal static partial class RuntimeNativeNifMeshBuilder
         private readonly List<(RuntimeNifEmbeddedSkin Skeleton, FalloutNifSkinInstance Source)> _embeddedSkins = [];
 
         private Node3D BuildEmbeddedSkin(FalloutNifGeometry geometry, FalloutNifMeshData data,
-            FalloutNifSkinInstance instance, FalloutNifCollisionObject? collision)
+            FalloutNifSkinInstance instance, FalloutNifCollisionObject? collision, FalloutNifMorphGeometry? morph)
         {
             var skinData = (FalloutNifSkinData)_source.ReadObject(instance.Data);
             var partitions = FalloutNifHardwareSkin.Read(instance, skinData,
@@ -25,6 +25,7 @@ internal static partial class RuntimeNativeNifMeshBuilder
                 for (var bone = 0; bone < instance.Bones.Length; bone++)
                     skeleton.AddBone($"SourceBone{instance.Bones[bone]}");
                 var material = BuildMaterial(geometry);
+                var morphMeshes = new List<MeshInstance3D>();
                 foreach (var partition in partitions)
                 {
                     var skin = new Skin();
@@ -55,10 +56,12 @@ internal static partial class RuntimeNativeNifMeshBuilder
                     rendered.SetMeta("opennv_nif_skin_partition", partition.PartitionIndex);
                     rendered.SetMeta("opennv_nif_skin_vertex_map", partition.VertexMap.Select(value => (int)value).ToArray());
                     result.AddChild(rendered);
+                    if (morph is not null) morphMeshes.Add(rendered);
                     SurfaceCount++; VertexCount += partition.VertexMap.Length;
                     TriangleCount += arrays[(int)Mesh.ArrayType.Index].AsInt32Array().Length / 3;
                 }
                 _nodes.Add(geometry.Block.Index, result);
+                if (morph is not null) RegisterGeometryMorph(geometry, morph, morphMeshes.ToArray());
                 _embeddedSkins.Add((skeleton, instance));
                 PreserveExtraDataMetadata(result, geometry.ExtraData);
                 PreserveCollisionMetadata(result, collision); AddCollision(result, collision);

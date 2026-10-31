@@ -366,7 +366,7 @@ public partial class RuntimeCoordinator
                     sourceCompatibilityId = content.SaveCompatibilityId,
                     sourceStackId = content.StackId,
                     runtimeBuild = typeof(RuntimeCoordinator).Assembly.ManifestModule.ModuleVersionId,
-                    runtimeSha256 = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(ProjectSettings.GlobalizePath("res://.godot/mono/temp/bin/Debug/OpenNV.dll")))),
+                    runtimeSha256 = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(typeof(RuntimeCoordinator).Assembly.Location))),
                     configurationSha256 = _configuration.Sha256,
                     manifestSha256 = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(manifestPath))),
                     renderingMethod = RenderingServer.GetCurrentRenderingMethod(),

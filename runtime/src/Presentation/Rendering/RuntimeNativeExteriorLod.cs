@@ -373,12 +373,19 @@ internal partial class RuntimeNativeExteriorLod : Node3D
     private void Commit()
     {
         ++_generation;
-        var terrainCover = _catalog.ResidentCover(_selected, _cache.Where(pair => pair.Value.Terrain is not null).Select(pair => pair.Key).ToHashSet()).ToHashSet();
-        var objectCover = _catalog.ResidentCover(_selected, _cache.Where(pair => pair.Value.Objects is not null).Select(pair => pair.Key).ToHashSet()).ToHashSet();
-        _completeTerrainCover = _catalog.HasCompleteCover(_selected,
-            _cache.Where(pair => pair.Value.TerrainComplete).Select(pair => pair.Key).ToHashSet());
-        _completeObjectCover = _catalog.HasCompleteCover(_selected,
-            _cache.Where(pair => pair.Value.ObjectsComplete).Select(pair => pair.Key).ToHashSet());
+        var completeTerrain = _cache.Where(pair => pair.Value.TerrainComplete).Select(pair => pair.Key).ToHashSet();
+        var completeObjects = _cache.Where(pair => pair.Value.ObjectsComplete).Select(pair => pair.Key).ToHashSet();
+        // A decoded root can still be missing source draws. Such a child must
+        // not retire a complete ancestor. Retain partial source geometry where
+        // no complete ancestor exists, with its original divergence still visible.
+        var terrainCover = _catalog.ResidentCover(_selected, _cache.Where(pair => pair.Value.Terrain is not null &&
+            (pair.Value.TerrainComplete || !completeTerrain.Any(parent => parent.Contains(pair.Key))))
+            .Select(pair => pair.Key).ToHashSet()).ToHashSet();
+        var objectCover = _catalog.ResidentCover(_selected, _cache.Where(pair => pair.Value.Objects is not null &&
+            (pair.Value.ObjectsComplete || !completeObjects.Any(parent => parent.Contains(pair.Key))))
+            .Select(pair => pair.Key).ToHashSet()).ToHashSet();
+        _completeTerrainCover = _catalog.HasCompleteCover(_selected, completeTerrain);
+        _completeObjectCover = _catalog.HasCompleteCover(_selected, completeObjects);
         foreach (var (block, resident) in _cache)
         {
             if (resident.Terrain is { } terrain) terrain.Visible = terrainCover.Contains(block);

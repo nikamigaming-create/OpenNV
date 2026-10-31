@@ -105,6 +105,12 @@ internal sealed partial class FalloutConditionRuntime(FalloutPluginStack records
                 var separation = Distance is { } distance ? distance(subject, condition.FormArgument1) :
                     Required(world, "spatial state").Distance(subject, condition.FormArgument1, PlayerPlacement?.Invoke(), UnitsToMetres());
                 return separation >= 0 ? separation : throw new InvalidDataException("Condition spatial owner returned a negative distance.");
+            case Function.GetPos:
+                SecondUnused(condition);
+                if (condition.Argument1 is < 'X' or > 'Z')
+                    throw new InvalidDataException("GetPos axis is not X, Y or Z.");
+                return Required(world, "spatial state").SpatialPlacement(subject, PlayerPlacement?.Invoke(), UnitsToMetres())
+                    .Position[checked((int)(condition.Argument1 - 'X'))];
             case Function.GetInSameCell:
                 SecondUnused(condition); RequireReference(condition.FormArgument1);
                 return (SameCell is { } same ? same(subject, condition.FormArgument1) :
@@ -161,6 +167,11 @@ internal sealed partial class FalloutConditionRuntime(FalloutPluginStack records
                 return FalloutAiPackages.IsCurrentPackage(records, subject, Form(condition, "PACK"),
                     CurrentPackage ?? Required(world, "package state").CurrentPackage) ? 1 : 0;
             case Function.GetEquipped: SecondUnused(condition); return Equipped?.Invoke(subject, condition.FormArgument1) is { } equipped ? equipped ? 1 : 0 : NativeValue(subject, condition);
+            case Function.GetKnockedState:
+                NoArguments(condition); return subject == records.RuntimeFormKey(0x14) ? NativeValue(subject, condition) :
+                    Required(world, "actor knockdown process").GetKnockedState(subject);
+            case Function.IsEssential:
+                NoArguments(condition); return Required(world, "actor flags").IsEssential(subject) ? 1 : 0;
             case Function.GetUnconscious: NoArguments(condition); return subject == records.RuntimeFormKey(0x14) ? NativeValue(subject, condition) : Required(world, "unconscious state").IsUnconscious(subject) ? 1 : 0;
             case Function.GetRestrained: NoArguments(condition); return Required(world, "restraint state").Get(subject).Restrained ? 1 : 0;
             case Function.IsWeaponOut: NoArguments(condition); return WeaponOut is { } weaponOut ? weaponOut(subject) ? 1 : 0 : NativeValue(subject, condition);

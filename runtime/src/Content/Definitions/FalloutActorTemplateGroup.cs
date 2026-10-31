@@ -5,4 +5,5 @@ namespace OpenNV.Runtime.Content.Definitions;
 internal enum FalloutActorTemplateGroup : ushort
 {
     AiData = 1 << 4,
+    BaseData = 1 << 7,
 }

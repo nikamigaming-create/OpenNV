@@ -35,7 +35,49 @@ internal static class FalloutExteriorClimate
     {
         var record = records.GetEffective(climate);
         if (record.Signature is not ("CLMT" or "REGN")) throw new InvalidDataException("Weather selection requires CLMT or REGN.");
-        var data = record.ReadSubrecords().Single(field => field.Signature == (record.Signature == "CLMT" ? "WLST" : "RDWT")).Data;
+        var data = record.Signature == "CLMT"
+            ? record.ReadSubrecords().Single(field => field.Signature == "WLST").Data
+            : RegionWeatherList(record) ?? throw new InvalidDataException("Region has no weather declaration.");
+        return SelectWeather(records, record, data, globals, random);
+    }
+
+    internal static FalloutFormKey? SelectRegionWeather(FalloutPluginStack records, FalloutFormKey region,
+        FalloutGlobalState? globals, FalloutSoundRandomState random)
+    {
+        var record = records.GetEffective(region);
+        var data = RegionWeatherList(record);
+        return data is null || data.Value.IsEmpty ? null : SelectWeather(records, record, data.Value, globals, random);
+    }
+
+    // RDAT begins a typed region-data group. RDWT belongs to its type-three
+    // declaration, independently of spatial polygons or material consumers.
+    private static ReadOnlyMemory<byte>? RegionWeatherList(FalloutPluginRecord record)
+    {
+        if (record.Signature != "REGN") throw new InvalidDataException("Region weather requires REGN.");
+        var inWeather = false;
+        var declared = false;
+        ReadOnlyMemory<byte>? data = null;
+        foreach (var field in record.ReadSubrecords())
+        {
+            if (field.Signature == "RDAT")
+            {
+                if (field.Data.Length != 8) throw new InvalidDataException("Region data declaration requires eight bytes.");
+                inWeather = BinaryPrimitives.ReadUInt32LittleEndian(field.Data.Span) == 3;
+                if (inWeather && declared) throw new InvalidDataException("Region repeats its weather declaration.");
+                declared |= inWeather;
+            }
+            else if (field.Signature == "RDWT")
+            {
+                if (!inWeather || data is not null) throw new InvalidDataException("Region weather list has no unique weather declaration.");
+                data = field.Data;
+            }
+        }
+        return data;
+    }
+
+    private static FalloutFormKey SelectWeather(FalloutPluginStack records, FalloutPluginRecord record,
+        ReadOnlyMemory<byte> data, FalloutGlobalState? globals, FalloutSoundRandomState random)
+    {
         if (data.Length == 0 || data.Length % 12 != 0) throw new InvalidDataException("Climate weather list has an invalid extent.");
         var choices = new List<(FalloutFormKey Form, double Weight)>();
         for (var offset = 0; offset < data.Length; offset += 12)

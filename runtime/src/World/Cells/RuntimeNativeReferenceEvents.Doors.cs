@@ -5,7 +5,7 @@ using OpenNV.Runtime.World.Actors;
 namespace OpenNV.Runtime.World.Cells;
 
 internal sealed record NativeRouteDoorStatus(FalloutFormKey? Reference, bool Open = false, bool Moving = false,
-    bool Pending = false, string? Error = null, bool Admitted = false)
+    bool Pending = false, string? Error = null, bool Admitted = false, bool Portal = false)
 {
     internal bool RequiresInteraction => !Open || Moving || Pending;
 }
@@ -104,6 +104,16 @@ internal partial class RuntimeNativeReferenceEvents
             return new(null, Error: "Source corridor collision is not a resident door.");
         try
         {
+            if (binding.Reference.Teleport is not null)
+            {
+                // A matching package portal is an approach/activation goal,
+                // not a door whose collision must animate open for walking.
+                // The parent procedure retains the normal physical reach,
+                // ray and XTEL commit owner; this query cannot activate it.
+                RequireNpcDoor(binding, actor, portal: true);
+                if (activate) throw new NotSupportedException("Portal activation belongs to its source package approach owner.");
+                return new(reference.FormKey, Pending: binding.PendingActivation is not null, Portal: true);
+            }
             RequireNpcDoor(binding, actor);
             var motion = binding.Node?.GetChildren().OfType<RuntimeNativeDoorMotion>().SingleOrDefault() ??
                 throw new NotSupportedException("Route door has no resident source motion owner.");
@@ -121,7 +131,7 @@ internal partial class RuntimeNativeReferenceEvents
         }
         catch (Exception error) when (error is InvalidOperationException or InvalidDataException or NotSupportedException)
         {
-            return new(reference.FormKey, Error: error.Message);
+            return new(reference.FormKey, Error: error.Message, Portal: binding.Reference.Teleport is not null);
         }
     }
 }

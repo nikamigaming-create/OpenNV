@@ -69,7 +69,7 @@ internal sealed class FalloutPluginContext
 // or native presentation resources. The reader need not depend on those owners.
 internal interface IFalloutSourceIndex { }
 
-internal sealed class FalloutPluginStack : IDisposable
+internal sealed partial class FalloutPluginStack : IDisposable
 {
     private const int MaximumPluginCount = 256;
     private const int Sha256HexCharacterCount = SHA256.HashSizeInBytes * 2;
@@ -158,6 +158,16 @@ internal sealed class FalloutPluginStack : IDisposable
         IReadOnlyList<FalloutPluginSource> sources,
         bool loadAllSignatureIndexesForAudit,
         out FalloutPluginStackLoadMetrics metrics, FalloutInstallationSettings? installationSettings = null)
+    {
+        ArgumentNullException.ThrowIfNull(sources);
+        return sources.Count != 0 && sources[0].OwnedSource is { } owner && installationSettings is null
+            ? LoadOwnedSession(sources, owner, loadAllSignatureIndexesForAudit, out metrics)
+            : LoadCore(sources, loadAllSignatureIndexesForAudit, out metrics, installationSettings);
+    }
+
+    private static FalloutPluginStack LoadCore(IReadOnlyList<FalloutPluginSource> sources,
+        bool loadAllSignatureIndexesForAudit, out FalloutPluginStackLoadMetrics metrics,
+        FalloutInstallationSettings? installationSettings = null)
     {
         ArgumentNullException.ThrowIfNull(sources);
         if (sources.Count == 0)
@@ -408,7 +418,7 @@ internal sealed class FalloutPluginStack : IDisposable
             // This source-only scalar is shared by independently owned menu and
             // restored script clocks. Reuse never outlives the original files.
             ValidateIndexSources(cancellation);
-            if (_embeddedQuestScripts is { } cached) return cached;
+            if ((_sharedSource?.EmbeddedQuestScripts ?? _embeddedQuestScripts) is { } cached) return cached;
             var count = 0L;
             foreach (var record in EffectiveRecords())
             {
@@ -418,7 +428,8 @@ internal sealed class FalloutPluginStack : IDisposable
                         if (IsQuestScriptHeader(header.Data.Span)) count = checked(count + 1);
             }
             cancellation.ThrowIfCancellationRequested();
-            _embeddedQuestScripts = count;
+            if (_sharedSource is { } backing) backing.EmbeddedQuestScripts = count;
+            else _embeddedQuestScripts = count;
             return count;
         }
     }
@@ -507,11 +518,17 @@ internal sealed class FalloutPluginStack : IDisposable
         try { _soundVoices?.Retire(); }
         finally
         {
-            lock (_sourceIndexGate)
+            // The owned source, rather than a campaign/session wrapper, retires
+            // shared immutable readers/indexes. Mutable sound/settings owners
+            // remain local to this wrapper and are never handed to a new game.
+            if (_sharedSource is null)
             {
-                _embeddedQuestScripts = null;
-                _sourceIndexes.Clear();
-                foreach (var context in _plugins) context.Plugin.Dispose();
+                lock (_sourceIndexGate)
+                {
+                    _embeddedQuestScripts = null;
+                    _sourceIndexes.Clear();
+                    foreach (var context in _plugins) context.Plugin.Dispose();
+                }
             }
         }
     }

@@ -7,6 +7,7 @@ internal static class NativeNavigationSchedulingContracts
     {
         OverBudgetFirstCaller();
         ProcessAndPhysicsPhases();
+        CatchUpSharesProcessBudget();
         AbsentAndCancelledOwners();
         CursorLifetime();
         ThreadAndReentry();
@@ -28,7 +29,7 @@ internal static class NativeNavigationSchedulingContracts
                 schedule.Finish(searches[index], 2.4);
             }
             Require(granted == 1 && schedule.UsedMilliseconds == 2.4,
-                "An indivisible over-budget query received additional work in the same physics frame.");
+                "An indivisible over-budget query received additional work in the same process phase.");
         }
         Require(winners.SequenceEqual(Enumerable.Range(0, 12).Select(index => index % 3)) &&
             searches.All(search => search.Snapshot.Grants == 4) && searches[0].Snapshot.DeniedTurn > 0 &&
@@ -45,16 +46,48 @@ internal static class NativeNavigationSchedulingContracts
         Require(!schedule.TryBegin(bot, 10, 100), "Bot exceeded the already consumed budget.");
         Require(!schedule.TryBegin(actor, 11, 100) && !schedule.TryBegin(actor, 12, 100),
             "Extra physics ticks stole a late Process caller's reserved turn.");
-        Require(schedule.TryBegin(bot, 12, 100), "Late Process caller never received its reserved turn.");
+        Require(!schedule.TryBegin(bot, 12, 100), "Physics catch-up replenished the process planning budget.");
+        Require(schedule.TryBegin(bot, 13, 101), "Late Process caller lost its reserved turn in the next phase.");
         schedule.Finish(bot, .5);
-        Require(schedule.TryBegin(actor, 12, 100), "Remaining budget was not available to the next owner.");
+        Require(schedule.TryBegin(actor, 14, 101), "Remaining budget was not available to the next owner.");
         schedule.Finish(actor, .75);
         Require(schedule.UsedMilliseconds == 1.25 && schedule.Count == 2, "Sharing a frame changed the global budget or retired a live cursor.");
         using var json = JsonDocument.Parse(JsonSerializer.Serialize(bot.Snapshot));
-        Require(json.RootElement.GetProperty("DeniedBudget").GetInt64() == 1 &&
+        Require(json.RootElement.GetProperty("DeniedBudget").GetInt64() == 2 &&
             json.RootElement.GetProperty("Grants").GetInt64() == 1,
             "Read-only telemetry hid actual budget denial or progress.");
         actor.Retire("cancelled"); bot.Retire("cancelled");
+    }
+
+    private static void CatchUpSharesProcessBudget()
+    {
+        var schedule = new NativeNavigationWorkSchedule();
+        var owners = Enumerable.Range(0, 3).Select(_ => schedule.Register()).ToArray();
+        var winners = new List<int>();
+        for (ulong process = 1; process <= 9; process++)
+        {
+            var grants = 0;
+            for (ulong tick = 0; tick < 8; tick++)
+                for (var owner = 0; owner < owners.Length; owner++)
+                {
+                    if (!schedule.TryBegin(owners[owner], process * 8 + tick, process)) continue;
+                    grants++;
+                    winners.Add(owner);
+                    schedule.Finish(owners[owner], 2.1);
+                }
+            Require(grants == 1 && schedule.UsedMilliseconds == 2.1,
+                "Catch-up multiplied discretionary planning work within a single process phase.");
+        }
+        Require(winners.SequenceEqual(Enumerable.Range(0, 9).Select(index => index % 3)) &&
+            owners.All(owner => owner.Snapshot.Grants == 3),
+            "Catch-up admission lost round-robin progress for a retained query.");
+        foreach (var owner in owners) owner.Retire("cancelled");
+        // Process can advance without a physics tick, including headless or
+        // paused callers. Its new phase must still permit retained work.
+        var sameTick = schedule.Register();
+        Require(schedule.TryBegin(sameTick, 79, 10), "New process phase with no physics step lost its budget.");
+        schedule.Finish(sameTick, .25);
+        sameTick.Retire("cancelled");
     }
 
     private static void AbsentAndCancelledOwners()

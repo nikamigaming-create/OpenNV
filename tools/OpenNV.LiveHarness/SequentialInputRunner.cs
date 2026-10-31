@@ -64,6 +64,13 @@ internal static class SequentialInputRunner
         return json.Deserialize<T>(RecordedInputTape.Json) ?? throw new InvalidDataException("Sequential input configuration is absent.");
     }
 
+    private static object HarnessIdentity()
+    {
+        var path = typeof(SequentialInputRunner).Assembly.Location;
+        return new { path, sha256 = HashFile(path), targetFramework = AppContext.TargetFrameworkName,
+            runtime = System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription };
+    }
+
     private static async Task<object> SendOrdinaryAsync(OrdinaryInputDeliveryConfiguration configuration, CancellationToken cancellation)
     {
         RecordedInputTape.ValidateInput(configuration.Input);
@@ -77,7 +84,7 @@ internal static class SequentialInputRunner
                 JsonSerializer.Serialize(configuration.Input, Program.Json);
             var receipt = await client.SendAsync(command, cancellation, configuration.ExpectedRecipientExit).ConfigureAwait(false);
             return new { schema = "opennv-ordinary-input-delivery/v1", engine = configuration.Engine,
-                process = configuration.ProcessId, input = configuration.Input, receipt,
+                process = configuration.ProcessId, input = configuration.Input, receipt, harness = HarnessIdentity(),
                 ordinaryInput = true, gameplayEffect = "unverified", framesRecorded = false };
         }
         catch
@@ -116,14 +123,15 @@ internal static class SequentialInputRunner
                 throw new InvalidDataException("The actual initial neutral retail scene differs from the prepared OpenNV checkpoint scene.");
         }
         var header = new RecordedInputHeader(binding is null ? RecordedInputTape.UnjoinedSchema : RecordedInputTape.Schema,
-            "retail", binding, checkpointHash, "receipt-observed", executableHash);
+            "retail", binding, checkpointHash, retail.UsesNativeCommitClock ? "adapter-commit-monotonic" : "receipt-observed", executableHash);
+        var nativeTiming = retail.UsesNativeCommitClock ? "device adapter commit bracket; game consumption unverified" : "unavailable";
         var started = Microseconds();
         long SegmentClock() => Microseconds() - started;
         using var journal = new RecordedInputDeliveryJournal(configuration.ReceiptJournalPath, new
         {
-            engine = "retail", configuration.RetailProcessId, executableHash, checkpointHash, exportedBinding,
-            alignment = configuration.Alignment, timing = "receipt-observed; true delivery lies within sent/observed interval",
-            nativeTimestamp = "unavailable", retailCheckpointLoad = "unverified", gameplayStateAlignment = "unverified",
+            engine = "retail", configuration.RetailProcessId, executableHash, checkpointHash, exportedBinding, harness = HarnessIdentity(),
+            alignment = configuration.Alignment, timing = header.Timing,
+            nativeTimestamp = nativeTiming, retailCheckpointLoad = "unverified", gameplayStateAlignment = "unverified",
             clockOriginTicks = clockOrigin, frequency = Stopwatch.Frequency, segmentOffsetMicroseconds = started,
             actualExecutablePath = actualExecutable, initialAdapterState = retail.ReadState(), inputAdapter = "separate native device command bridge",
             limits = new { configuration.MaximumDispatchLatenessMicroseconds, configuration.MaximumDeliveryWindowMicroseconds }
@@ -132,6 +140,7 @@ internal static class SequentialInputRunner
         var held = new Dictionary<string, JsonElement>(StringComparer.OrdinalIgnoreCase);
         var completed = 0L;
         var maximumWindow = 0L;
+        var maximumCommitWindow = 0L;
         try
         {
             var file = configuration.ActionsPath == "-" ? Console.In :
@@ -173,7 +182,7 @@ internal static class SequentialInputRunner
                 configuration.RetailCheckpointPath is { } original && HashFile(original) != checkpointHash)
                 throw new InvalidDataException("An original executable/checkpoint changed during the private input segment.");
             journal.Finish(SegmentClock(), null, new { acknowledgedInputs = completed, maximumReceiptWindowMicroseconds = maximumWindow,
-                actualDeliveryTimestamp = "unavailable", adapterHeldKeys = held.Count });
+                maximumAdapterCommitWindowMicroseconds = maximumCommitWindow, actualDeliveryTimestamp = nativeTiming, adapterHeldKeys = held.Count });
             writer.Finish(SegmentClock());
         }
         catch (Exception failure)
@@ -191,7 +200,7 @@ internal static class SequentialInputRunner
             configuration.Alignment, inputTape = configuration.InputTapePath, inputTapeSha256 = HashFile(configuration.InputTapePath),
             receiptJournal = configuration.ReceiptJournalPath, receiptJournalSha256 = HashFile(configuration.ReceiptJournalPath),
             header, maximumReceiptWindowMicroseconds = maximumWindow, framesRecorded = false,
-            nativeDeliveryTime = "bounded by receipt interval, not measured", gameplayParity = "unverified" };
+            maximumAdapterCommitWindowMicroseconds = maximumCommitWindow, nativeDeliveryTime = nativeTiming, gameplayParity = "unverified" };
 
         async Task Deliver(JsonElement input, string command, long requested)
         {
@@ -202,11 +211,14 @@ internal static class SequentialInputRunner
             var observed = receipt.ObservedMicroseconds - started;
             var sent = receipt.SentMicroseconds - started;
             maximumWindow = Math.Max(maximumWindow, observed - sent);
+            var recorded = receipt.AdapterCommit?.SegmentMicroseconds(clockOrigin, started) ?? observed;
+            var evidenceWindow = receipt.AdapterCommit?.DurationMicroseconds ?? observed - sent;
+            if (receipt.AdapterCommit is not null) maximumCommitWindow = Math.Max(maximumCommitWindow, evidenceWindow);
             // Append only after the actual acknowledgement. Even a subsequent
             // evidence-window refusal retains this genuine committed prefix.
             if (receipt.Delivered)
             {
-                writer.Append(observed, before, input); ++completed;
+                writer.Append(recorded, before, input); ++completed;
                 if (input.GetProperty("op").GetString() is "key" or "mouse")
                 {
                     var operation = input.GetProperty("op").GetString()!;
@@ -222,11 +234,12 @@ internal static class SequentialInputRunner
             journal.Append("adapter-returned", observed, new { ordinal = receipt.Delivered ? completed : completed + 1,
                 input, receipt.Request, sentMicroseconds = sent, observedMicroseconds = observed,
                 deliveryIntervalMicroseconds = observed - sent, receipt.Delivered, receipt.Message,
+                recordedMicroseconds = recorded, adapterCommit = receipt.AdapterCommit, timestampUncertaintyMicroseconds = evidenceWindow,
                 receipt.LoopNotification, receipt.SentMonotonicTicks, receipt.ObservedMonotonicTicks, receipt.Frequency,
                 stateBefore = before, adapterState = receipt.State, consumerDelivery = "unverified" });
             if (!receipt.Delivered) throw new InvalidOperationException(receipt.Message);
-            if (observed - sent > configuration.MaximumDeliveryWindowMicroseconds)
-                throw new TimeoutException("A native input was acknowledged outside the declared delivery interval; its prefix is retained and the segment refuses completion.");
+            if (evidenceWindow > configuration.MaximumDeliveryWindowMicroseconds)
+                throw new TimeoutException("A native input timestamp exceeds the declared uncertainty interval; its prefix is retained and the segment refuses completion.");
         }
     }
 
@@ -246,7 +259,7 @@ internal static class SequentialInputRunner
             configuration.OpenNvProcessId, configuration.ReceiptTimeoutMilliseconds, Microseconds);
         using var journal = new RecordedInputDeliveryJournal(configuration.TransportJournalPath, new
         {
-            engine = "opennv", configuration.OpenNvProcessId, tape = tape.Header, tapeDigest = tape.Footer.Sha256,
+            engine = "opennv", configuration.OpenNvProcessId, tape = tape.Header, tapeDigest = tape.Footer.Sha256, harness = HarnessIdentity(),
             alignment = diagnostic ? "unjoined-diagnostic" : "checkpoint-bound; retail-state-alignment-unverified",
             clockOriginTicks = clockOrigin, frequency = Stopwatch.Frequency,
             retailStateAuthority = false, framesRecorded = false
@@ -355,7 +368,7 @@ internal static class SequentialInputRunner
 
     // Physical DirectInput scan codes, matching the runtime's NativeScriptKeys.
     // Accept both digit spelling and Godot's KeyN spelling used in recordings.
-    private static readonly Dictionary<string, int> RetailKeys = new(StringComparer.OrdinalIgnoreCase)
+    internal static readonly IReadOnlyDictionary<string, int> RetailKeys = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
     {
         ["Escape"] = 1,
         ["1"] = 2, ["2"] = 3, ["3"] = 4, ["4"] = 5, ["5"] = 6,
@@ -385,7 +398,7 @@ internal static class SequentialInputRunner
         ["Down"] = 208, ["Pagedown"] = 209, ["Insert"] = 210, ["Delete"] = 211
     };
 
-    private static string RetailCommand(JsonElement input)
+    internal static string RetailCommand(JsonElement input)
     {
         RecordedInputTape.ValidateInput(input);
         switch (input.GetProperty("op").GetString())

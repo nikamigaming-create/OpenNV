@@ -64,7 +64,8 @@ internal sealed record FalloutNativeCampaignState(
     bool PlayerSneaking = false, FalloutPlayerCaravanCardsSnapshot? PlayerCaravanCards = null,
     IReadOnlyList<FalloutDroppedReferenceSnapshot>? DroppedItems = null,
     FalloutActorProjectileLaunch? PlayerProjectileLaunch = null,
-    FalloutFormListsSnapshot? FormLists = null);
+    FalloutFormListsSnapshot? FormLists = null, FalloutActorBaseFlagsSnapshot? ActorBaseFlags = null,
+    FalloutHitKnockback? PlayerHitKnockback = null);
 
 internal sealed record FalloutNativeCampaignRestore(
     FalloutNativeCampaignState State,
@@ -385,6 +386,7 @@ internal static class FalloutNativeCampaignSave
             progress?.Invoke(FalloutNativeCampaignReadPhase.NavigationReady);
             using var references = new FalloutReferenceWorld(stack, validatedValues);
             if (state.FormLists is { } formLists) references.FormLists.Restore(formLists);
+            if (state.ActorBaseFlags is { } baseFlags) references.ActorBaseFlags.Restore(baseFlags);
             references.TransientExplosions.Restore(state.TransientExplosions);
             references.RestoreEncounterZones(state.EncounterZones);
             references.Restore(state.References);
@@ -845,6 +847,9 @@ internal static class FalloutNativeCampaignSave
             throw new InvalidDataException("Saved campaign is missing encounter-zone state.");
         if (state.Ingestibles is { } ingestibles) FalloutPlayerIngestibles.Validate(ingestibles);
         if (state.WeaponHandling is { } handling) FalloutWeaponHandling.Validate(handling);
+        FalloutHitKnockback.Validate(state.PlayerHitKnockback);
+        if (state.PlayerHitKnockback is not null && state.Vitals is { HitPoints: <= 0 })
+            throw new InvalidDataException("A defeated player cannot retain hit knockback.");
         if ((state.Schema != ExpectedSchema && state.Schema != RadioSchema && state.Schema != DialoguePackageSchema && state.Schema != EditorTravelSchema && state.Schema != SignedRaceSchema && state.Schema != ReferenceAccessSchema && state.Schema != ReferenceAccessLegacySchema && state.Schema != RaceOverridesSchema && state.Schema != ScriptValuesSchema && state.Schema != ObjectAnimationSchema && state.Schema != DestructionSchema && state.Schema != HitReactionSchema && state.Schema != DeathEventSchema && state.Schema != PatrolSchema && state.Schema != EncounterZoneSchema && state.Schema != ActorOverridesSchema && state.Schema != PackageMotionSchema && state.Schema != IngestiblesSchema && state.Schema != ViewPitchSchema && state.Schema != ReferenceStateSchema && state.Schema != QuestClockSchema && state.Schema != SkyLightingSchema && state.Schema != GlobalClockSchema && state.Schema != QuestScriptsSchema && state.Schema != FeetAnchoredSchema && state.Schema != CapsuleCenteredSchema) ||
             (state.Scripts is null) != (state.Quests is null) ||
             (state.Globals is null) != (state.GameTime is null) ||
