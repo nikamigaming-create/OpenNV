@@ -347,7 +347,7 @@ if (args.Length is 2 or 3)
     using var archive = new FalloutBsaArchive(Path.Combine(args[0], "Fallout - Meshes.bsa"));
     var ownedBytes = archive.Read(args[1]);
     var source = FalloutNifFile.Read(ownedBytes);
-    if (source.UserVersion2 == 27) AnimationNotesLayoutContracts.Audit(ownedBytes);
+    if (source.UserVersion2 is 24 or 25 or 27 or 28) AnimationNotesLayoutContracts.Audit(ownedBytes);
     FalloutNifFloatExtraDataState? ownedFloats = null;
     if (args.Length == 3)
     {

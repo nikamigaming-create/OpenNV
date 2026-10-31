@@ -62,6 +62,7 @@ internal partial class RuntimeNativeNpc
     private Func<FalloutActorIdleRequestsSnapshot?>? _idleRequestsCapture;
     private bool _restoringIdleRequests;
     private bool _processingIdleRequest;
+    private object? _failedIdleRequest;
     private readonly List<(FalloutPluginStack Stack, FalloutFormKey Form, string Owner,
         FalloutActorPackageIdleAnimation? Saved, bool CompletePose)> _deferredIdleInputs = [];
     private bool IdleRequestsReady => _queuedIdleRequest is null &&
@@ -104,6 +105,24 @@ internal partial class RuntimeNativeNpc
             if (_currentIdleRequest is { Procedure: not null }) _currentIdleRequest = null;
             ActivateIdleRequest(stack ?? _aiStack ?? throw new InvalidOperationException("Queued idle has no source stack."),
                 request.Idle, request.Owner, request, request.Saved, request.RestoreCompletePose);
+            _failedIdleRequest = null;
+        }
+        catch (Exception error) when (error is InvalidDataException or NotSupportedException or InvalidOperationException or FileNotFoundException)
+        {
+            // A failed promotion is terminal for this request. Keep its source
+            // history/error visible, but never retry binding on every frame.
+            request.Inactivate();
+            if (ReferenceEquals(_queuedIdleRequest, request)) _queuedIdleRequest = null;
+            AnimationError = error.Message;
+            _failedIdleRequest = new
+            {
+                idle = request.Idle.ToString(),
+                request.Owner,
+                sourceHash = FalloutActorFurnitureContinuation.RecordHash(request.Stack.GetEffective(request.Idle)),
+                error = error.Message,
+                terminal = true
+            };
+            throw;
         }
         finally { _processingIdleRequest = false; }
     }
@@ -158,7 +177,7 @@ internal partial class RuntimeNativeNpc
                 _outgoingIdles.Remove(outgoing);
                 continue;
             }
-            outgoing.Clock.Advance(delta, interval => PublishIdleTextKeys(outgoing.Animation, interval, outgoing.Request.Idle, outgoing.Clock));
+            outgoing.Clock.Advance(delta, interval => PublishIdleTextKeys(outgoing.Animation, interval, outgoing.Request.Idle, outgoing.Clock), processGroup: false);
         }
     }
 
@@ -192,13 +211,16 @@ internal partial class RuntimeNativeNpc
     private void PublishIdleRequestLayers()
     {
         var layers = new List<(RuntimeNativeNifAnimation Animation, float Time, float Ease)>();
-        if (Combat?.PackageOwnsPose != true && _baseAnimation is { } background)
-            layers.Add((background, _baseAnimationSeconds, 1));
         foreach (var outgoing in _outgoingIdles)
             layers.Add((outgoing.Animation, outgoing.Clock.SourceSeconds, outgoing.Deactivation.Weight));
         if (_animation is { } current)
             layers.Add((current, _animationSeconds, _currentIdleEaseOut?.Weight ?? (_idleEaseIn is { } incoming ? 1 - incoming.Weight : 1)));
-        RuntimeNativeNifAnimation.ApplyWeightedLayers(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(layers));
+        if (Combat is { } combat) combat.ComposeIdleLayers(layers, _baseAnimation, _baseAnimationSeconds);
+        else
+        {
+            if (_baseAnimation is { } background) layers.Insert(0, (background, _baseAnimationSeconds, 1));
+            RuntimeNativeNifAnimation.ApplyWeightedLayers(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(layers));
+        }
     }
 
     private void BeginCurrentIdleDeactivation()
@@ -217,8 +239,8 @@ internal partial class RuntimeNativeNpc
     private void AdvanceInterruptedMarkerIdle(double delta)
     {
         if (_animation is not { } animation || _idlePlayback is not { } clock) return;
-        clock.Advance(delta, interval => PublishIdleTextKeys(animation, interval));
+        clock.Advance(delta, interval => PublishIdleTextKeys(animation, interval), processGroup: _currentIdleRequest?.SequenceState == 1);
         _animationSeconds = clock.SourceSeconds;
-        if (_idleNaturalEndPending) BeginCurrentIdleDeactivation();
+        if (_idleNaturalEndPending || clock.HasGroupTiming && clock.Complete) BeginCurrentIdleDeactivation();
     }
 }

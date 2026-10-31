@@ -75,6 +75,16 @@ internal sealed partial class CellNavigationGraph
         out Func<Vector3, int, float, float, Func<Vector3, bool>> prefixRegion,
         Func<Vector3, bool>? permittedPortal = null,
         float destinationRadiusGameUnits = 0, Func<Vector3, float>? portalPenalty = null)
+        => FindPath(startGameUnits, destinationGameUnits, out prefixRegion, out _, permittedPortal,
+            destinationRadiusGameUnits, portalPenalty);
+
+    internal IReadOnlyList<Vector3> FindPath(
+        Vector3 startGameUnits,
+        Vector3 destinationGameUnits,
+        out Func<Vector3, int, float, float, Func<Vector3, bool>> prefixRegion,
+        out Func<float, float, Func<Vector3, bool>> corridorFloor,
+        Func<Vector3, bool>? permittedPortal = null,
+        float destinationRadiusGameUnits = 0, Func<Vector3, float>? portalPenalty = null)
     {
         if (_navmeshes.Count == 0)
             throw new InvalidOperationException(
@@ -96,6 +106,7 @@ internal sealed partial class CellNavigationGraph
         result.Add(endpoint);
         prefixRegion = (target, resume, horizontal, height) =>
             PrefixRegion(startGameUnits, result, trianglePath, target, resume, horizontal, height);
+        corridorFloor = (horizontal, height) => ReachableCorridorFloor(start.Node, trianglePath, permittedPortal, horizontal, height);
         return result;
     }
 

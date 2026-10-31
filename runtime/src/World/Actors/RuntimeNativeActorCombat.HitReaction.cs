@@ -8,6 +8,10 @@ namespace OpenNV.Runtime.World.Actors;
 
 internal sealed partial class RuntimeNativeActorCombat
 {
+    // The process query exists only while its actual hit receiver runs.
+    // Injury history and a playing reaction are not a retained hit-data scope.
+    private int _hitConditionLocation = -1;
+    internal int CurrentHitLocation => _hitConditionLocation;
     private FalloutHitReactionTree? _hitReactionTree;
     private NativeActorCombatAnimation? _hitReactionClip;
     private NativeOwnedAnimationSoundPlayer? _hitReactionSounds;
@@ -165,7 +169,8 @@ internal sealed partial class RuntimeNativeActorCombat
             var clip = _hitReactionClip;
             if (_hitReactionSounds is null)
             {
-                _hitReactionSounds = new(_records, _content, _actor, _skeleton.UnitsToMetres, _state.SoundRandom, _state.AnimationSoundEvents);
+                _hitReactionSounds = new(_records, _content, _actor, _skeleton.UnitsToMetres, _state.SoundRandom, _state.AnimationSoundEvents,
+                (_actor as RuntimeNativeCreature)?.Appearance.Creature);
                 _actor.AddChild(_hitReactionSounds);
             }
             PrepareMovement();

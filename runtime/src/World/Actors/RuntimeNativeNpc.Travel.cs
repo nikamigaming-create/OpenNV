@@ -243,8 +243,13 @@ internal partial class RuntimeNativeNpc
                 state.ProcedureCaptureBlocker = null;
             else state.ProcedureCaptureBlocker = MarkerTravelCaptureBlocker;
             _nativeMarkerTravelRestored = true;
-            if (reached && progress.PortalDoor is { } door)
+            if (progress.PortalDoor is { } door && IsOnFloor() &&
+                (reached || Combat.PackagePortalContactInReach(door)))
             {
+                // A broad door's checked collision surface can be in genuine
+                // interaction reach before its authored pivot is. This only
+                // attempts the ordinary fresh range/ray activation below; it
+                // does not complete Travel or bypass the blocking collision.
                 // Keep publishing the ordinary idle clock while finite source
                 // audio retires. No event or placement is admitted early.
                 if (PortalPlaybackReady())

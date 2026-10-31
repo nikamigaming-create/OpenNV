@@ -106,9 +106,12 @@ internal partial class RuntimeNativeNpc
         if (!ReferenceEquals(_animation, _idleSnapshotAnimation) || _idlePlayback is not { } clock)
             throw new InvalidOperationException("Idle snapshot lost its incoming presentation binding.");
         var factors = transition.Factors;
-        _idleSnapshotAnimation!.ApplySnapshotTransition(clock.SourceSeconds, _idleSnapshotSamples!,
-            factors.SnapshotWeight, factors.IncomingWeight, Combat?.PackageOwnsPose == true ? null : _baseAnimation,
-            _baseAnimationSeconds, _idleSnapshotTargets, _idleSnapshotScalars);
+        if (Combat is { } combat)
+            combat.ComposeIdleLayers([(_idleSnapshotAnimation!, clock.SourceSeconds, 1)], _baseAnimation, _baseAnimationSeconds,
+                new(_idleSnapshotAnimation!, _idleSnapshotSamples!, _idleSnapshotTargets!, _idleSnapshotScalars!,
+                    factors.SnapshotWeight, factors.IncomingWeight));
+        else _idleSnapshotAnimation!.ApplySnapshotTransition(clock.SourceSeconds, _idleSnapshotSamples!,
+            factors.SnapshotWeight, factors.IncomingWeight, _baseAnimation, _baseAnimationSeconds, _idleSnapshotTargets, _idleSnapshotScalars);
     }
 
     private FalloutActorIdleSnapshotTransition? CaptureIdleSnapshot() => _idleSnapshotTransition is { } transition

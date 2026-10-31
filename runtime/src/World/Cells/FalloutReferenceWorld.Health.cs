@@ -165,6 +165,7 @@ internal sealed partial class FalloutReferenceWorld
         actor.KnockedDown = false;
         actor.HitReaction = null;
         actor.HitKnockback = null;
+        if (actor.CreatureScriptIdle?.Owner == "ambient") actor.CreatureScriptIdle = null;
         return injury with
         {
             Dead = true,

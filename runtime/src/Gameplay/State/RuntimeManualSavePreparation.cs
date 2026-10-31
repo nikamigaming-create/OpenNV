@@ -2,7 +2,7 @@ using OpenNV.Runtime.Content;
 
 namespace OpenNV.Runtime.Gameplay.State;
 
-internal enum RuntimeManualSaveOrigin { PlayerInput, SessionMenu }
+internal enum RuntimeManualSaveOrigin { PlayerInput, SessionMenu, DiagnosticCheckpoint }
 internal enum RuntimeManualSavePreparationPhase { DrainingFiniteNativeAudio, Capturing, Completed, Failed, Cancelled, Writing }
 internal static class RuntimeManualSaveAdmissionWait
 {

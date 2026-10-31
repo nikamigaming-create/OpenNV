@@ -7,6 +7,7 @@
     <Compile Include="../../runtime/src/Formats/Gamebryo/FalloutNifFile.Particles.cs" Link="FalloutNifFile.Particles.cs" />
     <Compile Include="../../runtime/src/Formats/Gamebryo/FalloutNifFile.ParticleShapesColors.cs" Link="FalloutNifFile.ParticleShapesColors.cs" />
     <Compile Include="../../runtime/src/Content/FalloutAnimationSound.cs" Link="FalloutAnimationSound.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutCreatureAnimationSounds.cs" Link="FalloutCreatureAnimationSounds.cs" />
     <Compile Include="../../runtime/src/Content/FalloutSoundRecord.cs" Link="FalloutSoundRecord.cs" />
     <Compile Include="../../runtime/src/Content/FalloutPluginReader.cs" Link="FalloutPluginReader.cs" />
     <Compile Include="../../runtime/src/Content/FalloutPluginStack.cs" Link="FalloutPluginStack.cs" />

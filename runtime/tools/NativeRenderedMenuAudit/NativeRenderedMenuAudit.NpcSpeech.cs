@@ -95,6 +95,14 @@ public partial class NativeRenderedMenuAudit
             speech.ExecuteResults = scripts.ExecuteResult;
             speech.SayToCompleted += _ => throw new InvalidDataException("Package NPC speech invented scripted SayToDone.");
             fixture.AddChild(speech);
+            if (world.IsTalking(speaker.FormKey) || world.IsTalking(listener.FormKey))
+                throw new InvalidDataException("Idle speech owner invented an active speaker.");
+            speech.BeginPlayerDialogue(speaker.FormKey);
+            if (!world.IsTalking(speaker.FormKey) || world.IsTalking(listener.FormKey) || speech.IsTalking(speaker.FormKey))
+                throw new InvalidDataException("Quiet player-dialogue speaker was confused with a voice reservation or unrelated listener.");
+            speech.EndPlayerDialogue(speaker.FormKey);
+            if (world.IsTalking(speaker.FormKey) || world.IsTalking(listener.FormKey))
+                throw new InvalidDataException("Closing player dialogue retained its speaker flag.");
             if (ambientFailure)
             {
                 NpcSpeechAmbientFailure(speech, scripts, world, speaker.FormKey, listener.FormKey, topic, divergences,
@@ -120,11 +128,17 @@ public partial class NativeRenderedMenuAudit
             {
                 if (speech.IsNpcDialogueActive(speaker.FormKey) || speech.IsNpcDialogueActive(listener.FormKey))
                     throw new InvalidDataException("NPC source terminal callback retained active participants.");
+                if (world.IsTalking(speaker.FormKey) || world.IsTalking(listener.FormKey))
+                    throw new InvalidDataException("Completed NPC exchange retained a talking actor.");
                 ++terminalPrefix;
                 if (failCompletion) throw new NotSupportedException("NPC terminal completion fixture stopped after its prefix.");
             });
             if (!speech.Active || !speech.IsNpcDialogueActive(speaker.FormKey) || terminalPrefix != 0 || settled != 0)
                 throw new InvalidDataException("NPC source audio/exchange did not begin its actual continuation.");
+            if (world.IsGreetingPlayer(speaker.FormKey) || world.IsGreetingPlayer(listener.FormKey))
+                throw new InvalidDataException("An actual NPC-to-NPC exchange was mistaken for a player greeting.");
+            if (!world.IsTalking(speaker.FormKey) || world.IsTalking(listener.FormKey))
+                throw new InvalidDataException("Actual source utterance failed to distinguish the NPC speaker from its reserved listener.");
             var deadline = Time.GetTicksMsec() + 60000;
             while (speech.Active && speech.Error is null && Time.GetTicksMsec() < deadline)
                 await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
@@ -139,8 +153,17 @@ public partial class NativeRenderedMenuAudit
             if (terminalPrefix != 1 || settled != (failCompletion ? 0 : 1) ||
                 !sourceHash.AsSpan().SequenceEqual(SHA256.HashData(topic.Topic.ReadData())))
                 throw new InvalidDataException("Settled/failed NPC speech replayed or changed owned source bytes.");
+            if (!failCompletion && (world.IsTalking(speaker.FormKey) || world.IsTalking(listener.FormKey)))
+                throw new InvalidDataException("Settled speech retained a stale talking query.");
+            speech.Free();
+            try
+            {
+                world.IsTalking(speaker.FormKey);
+                throw new InvalidDataException("Retired speech owner silently answered a talking query.");
+            }
+            catch (NotSupportedException) { }
             GD.Print($"OPENNV_NATIVE_NPC_SPEECH_SETTLED_PASS sourceBodies=true sourceAudio=true linkedNotifications={linkedNotifications} " +
-                $"terminalPrefixOnce=true notificationAfterRetirement=true failureFixture={failCompletion} noReplay=true sourceUnchanged=true recording=false campaignAndParity=unverified");
+                $"terminalPrefixOnce=true notificationAfterRetirement=true failureFixture={failCompletion} talkingSpeakerLifecycle=true noReplay=true sourceUnchanged=true recording=false campaignAndParity=unverified");
         }
         finally { fixture?.Free(); RuntimeLiveContentSource.Clear(); }
     }

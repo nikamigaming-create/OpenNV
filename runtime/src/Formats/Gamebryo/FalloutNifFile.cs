@@ -21,8 +21,11 @@ internal sealed partial class FalloutNifFile
     private const uint UnsizedUserVersion2 = 11;
     private const uint GeometryVersion2Early = 14;
     private const uint GeometryVersion2Legacy = 21;
+    private const uint AnimationVersion2NotesEarly = 24;
+    private const uint AnimationVersion2NotesMiddle = 25;
     private const uint GeometryVersion2MaterialTransition = 26;
     private const uint AnimationVersion2Notes = 27;
+    private const uint AnimationVersion2NotesLate = 28;
     private const uint RefractionVersion2Minimum = 15;
     private const uint ParallaxVersion2Minimum = 25;
     private const uint WideAvFlagsVersion2Minimum = 27;
@@ -42,8 +45,8 @@ internal sealed partial class FalloutNifFile
     private const int HavokUnknownSixFloatBytes = 24;
     private const int HavokTransformMatrixValues = 16;
     private static readonly HashSet<uint> SupportedUserVersion2 =
-        [GeometryVersion2Early, GeometryVersion2Legacy, GeometryVersion2MaterialTransition,
-            AnimationVersion2Notes, AnimationVersion2Legacy, AnimationVersion2Minimum, GeometryVersion2Minimum,
+        [GeometryVersion2Early, GeometryVersion2Legacy, AnimationVersion2NotesEarly, AnimationVersion2NotesMiddle, GeometryVersion2MaterialTransition,
+            AnimationVersion2Notes, AnimationVersion2NotesLate, AnimationVersion2Legacy, AnimationVersion2Minimum, GeometryVersion2Minimum,
             AnimationVersion2Alternate, GeometryVersion2Current];
 
     private readonly ReadOnlyMemory<byte> _payload;
@@ -308,6 +311,7 @@ internal sealed partial class FalloutNifFile
             "bhkConvexListShape" => ReadConvexListShape(block, ref cursor),
             "bhkConvexTransformShape" or "bhkTransformShape" => ReadConvexTransformShape(block, ref cursor),
             "BSShaderNoLightingProperty" => ReadNoLightingProperty(block, ref cursor),
+            "TallGrassShaderProperty" => ReadTallGrassShaderProperty(block, ref cursor),
             "TileShaderProperty" => ReadTileShaderProperty(block, ref cursor),
             "SkyShaderProperty" => ReadSkyShaderProperty(block, ref cursor),
             "BSMultiBound" => new FalloutNifMultiBound(block, ReadReference(ref cursor, "multi-bound data")),
@@ -1604,6 +1608,16 @@ internal sealed partial class FalloutNifFile
             cursor.ReadSizedUtf8("tile texture", checked((uint)cursor.Remaining)));
     }
 
+    private FalloutNifTallGrassShaderProperty ReadTallGrassShaderProperty(FalloutNifBlock block, ref NifCursor cursor)
+    {
+        var net = ReadObjectNet(ref cursor, block.TypeName);
+        return new(block, net.Name, net.ExtraData, net.Controller,
+            cursor.ReadUInt16("grass smooth flags"), cursor.ReadUInt32("grass shader type"),
+            cursor.ReadUInt32("grass shader flags"), cursor.ReadUInt32("grass shader flags 2"),
+            cursor.ReadFiniteSingle("grass environment scale"),
+            cursor.ReadSizedUtf8("grass texture", checked((uint)cursor.Remaining)));
+    }
+
     private FalloutNifSkyShaderProperty ReadSkyShaderProperty(FalloutNifBlock block, ref NifCursor cursor)
     {
         var net = ReadObjectNet(ref cursor, block.TypeName);
@@ -2432,6 +2446,11 @@ internal sealed record FalloutNifTileShaderProperty(
     FalloutNifBlock Block, string Name, int[] ExtraData, int Controller,
     ushort Smooth, uint ShaderType, uint ShaderFlags, uint ShaderFlags2,
     float EnvironmentMapScale, uint TextureClampMode, string FileName) : FalloutNifObject(Block);
+
+internal sealed record FalloutNifTallGrassShaderProperty(
+    FalloutNifBlock Block, string Name, int[] ExtraData, int Controller,
+    ushort Smooth, uint ShaderType, uint ShaderFlags, uint ShaderFlags2,
+    float EnvironmentMapScale, string FileName) : FalloutNifObject(Block);
 
 internal sealed record FalloutNifSkyShaderProperty(
     FalloutNifBlock Block, string Name, int[] ExtraData, int Controller,

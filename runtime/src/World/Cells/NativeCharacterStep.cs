@@ -92,15 +92,16 @@ internal static partial class NativeCharacterStep
         using var normalKey = Variant.From("normal");
         using var positionKey = Variant.From("position");
         blocked = "landing-support";
+        var contactOffset = resources?.ContactOffset ?? RootContactOffset(body);
         for (var probe = 0; probe < 4; probe++)
         {
             var reach = probe == 0 ? body.SafeMargin * 4 : maximumHeight / (1 << (3 - probe));
             var ahead = point + forward * reach;
-            ahead.Y = from.Origin.Y + maximumHeight + body.SafeMargin;
+            ahead.Y = from.Origin.Y + contactOffset + maximumHeight + body.SafeMargin;
             ray.From = ahead; ray.To = ahead - Vector3.Up * maximumHeight;
             using var landing = QuerySupport(body, ray);
             if (landing.Count == 0 || landing[normalKey].AsVector3().Dot(Vector3.Up) < floorCosine) continue;
-            var up = landing[positionKey].AsVector3().Y - from.Origin.Y + body.SafeMargin;
+            var up = landing[positionKey].AsVector3().Y - (from.Origin.Y + contactOffset) + body.SafeMargin;
             blocked = "step-height";
             if (up <= body.SafeMargin * 2 || up > maximumHeight + body.SafeMargin) continue;
             parameters.From = from;
@@ -136,7 +137,11 @@ internal static partial class NativeCharacterStep
         contact = null;
         var reach = Math.Min(maximumHeight, body.FloorSnapLength);
         if (!from.IsFinite() || !float.IsFinite(reach) || reach <= 0) return false;
-        var rayFrom = from + Vector3.Up * body.SafeMargin; var rayTo = from - Vector3.Up * reach;
+        // The actual collider may have a positive bottom-to-root offset. A
+        // settled root can therefore be below its supporting plane; anchor the
+        // ray interval at the published collider's contact plane, not at rootY.
+        var surface = from + Vector3.Up * (resources?.ContactOffset ?? RootContactOffset(body));
+        var rayFrom = surface + Vector3.Up * body.SafeMargin; var rayTo = surface - Vector3.Up * reach;
         using var ownedRay = resources is null ? CreateSupportRay(rayFrom, rayTo, body.CollisionMask, body.GetRid()) : null;
         var ray = resources?.SupportRay(body) ?? ownedRay!;
         if (resources is not null) { ray.From = rayFrom; ray.To = rayTo; }

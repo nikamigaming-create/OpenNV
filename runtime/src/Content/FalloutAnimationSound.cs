@@ -37,6 +37,17 @@ internal static class FalloutAnimationSound
         return paths;
     }
 
+    internal static FalloutAnimationSoundSelection WithTextKeyContext(FalloutAnimationSoundSelection selected, string textKey)
+    {
+        if (!textKey.TrimStart().StartsWith("Enum:", StringComparison.OrdinalIgnoreCase) ||
+            !FalloutCreatureAnimationSounds.TryType(textKey, out var type) || type > 3) return selected;
+        return selected with
+        {
+            Unbound = Array.AsReadOnly(selected.Unbound.Concat(
+            ["source-creature-footstep-additional-volume-and-distance-gates"]).ToArray())
+        };
+    }
+
     internal static IReadOnlyList<string> PartialLanes(FalloutSoundRecord source, bool stereoOutput)
     {
         var unbound = new List<string>();

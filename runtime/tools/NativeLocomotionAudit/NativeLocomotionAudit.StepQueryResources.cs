@@ -2,6 +2,7 @@ using System.Reflection;
 using Godot;
 using OpenNV.Runtime.Diagnostics;
 using OpenNV.Runtime.World.Cells;
+using OpenNV.Runtime.World.Actors;
 
 public partial class NativeLocomotionAudit
 {
@@ -88,6 +89,24 @@ public partial class NativeLocomotionAudit
             try { _ = NativeCharacterStep.TrySupport(other, other.GlobalPosition, .4f, out _, resources); }
             catch (InvalidOperationException) { mismatchRefused = true; }
             if (!mismatchRefused) throw new InvalidDataException("Another body borrowed a planner's step query resources.");
+            var offsetBody = new CharacterBody3D { Position = new(-1, .01f, 2), FloorSnapLength = .3f, FloorMaxAngle = FloorAngle };
+            var envelope = NativeActorMovementEnvelope.Horizontal(new(0, 0, 35), new(30, 63, 35), 1, .0142875f)!;
+            var offsetShape = new CollisionShape3D(); envelope.Capsules[0].Publish(offsetShape, 1);
+            offsetBody.AddChild(offsetShape);
+            NativeCharacterStep.SetRootContactOffset(offsetBody, envelope.RootContactOffset);
+            scene.AddChild(offsetBody);
+            await SettleCorridorBody(offsetBody);
+            using (var offsetResources = new NativeCharacterStep.QueryResources(offsetBody))
+            using (var edge = new NativeCapsuleNavigation.EdgeQuery(offsetBody, .4f, .3f, _ => true))
+            {
+                if (offsetBody.GlobalPosition.Y >= 0 ||
+                    !NativeCharacterStep.TrySupport(offsetBody, offsetBody.GlobalPosition, .4f, out _, offsetResources) ||
+                    !edge.ValidateSegment(offsetBody.GlobalPosition, offsetBody.GlobalPosition + Vector3.Back * .1f, _ => true, out _, out _))
+                    throw new InvalidDataException("Source-offset controller lost its real floor when its settled root was below that floor.");
+                offsetBody.CollisionMask = 0;
+                if (NativeCharacterStep.TrySupport(offsetBody, offsetBody.GlobalPosition, .4f, out _, offsetResources))
+                    throw new InvalidDataException("Source root contact offset fabricated missing floor support.");
+            }
             isolatedWorld = new World3D();
             var isolated = new SubViewport { Size = new(16, 16), World3D = isolatedWorld }; scene.AddChild(isolated);
             var previousWorld = body.GetWorld3D().GetInstanceId();
@@ -104,7 +123,7 @@ public partial class NativeLocomotionAudit
             if (!disposedRefused || GodotObject.IsInstanceValid(parameters) || GodotObject.IsInstanceValid(result) || GodotObject.IsInstanceValid(ray))
                 throw new InvalidDataException("Retired step resources retained query wrappers or allowed reuse.");
             GD.Print($"OPENNV_NATIVE_STEP_QUERY_REUSE_PASS exactOutcomes=true exactContact=true exactQueryCounts=true supportedStep=true " +
-                $"unsupportedRefused=true lowCeilingRefused=true liveMaskMargin=true changedWorldRefused=true bodyMismatchRefused=true disposed=true " +
+                $"sourceOffsetRootSupport=true unsupportedRefused=true lowCeilingRefused=true liveMaskMargin=true changedWorldRefused=true bodyMismatchRefused=true disposed=true " +
                 $"warmedQueries=256 freshBytes={freshBytes} reusedBytes={reusedBytes} fixture=synthetic-native-component gameplay=separate");
         }
         finally { scene.Free(); isolatedWorld?.Dispose(); }

@@ -503,7 +503,7 @@ public partial class NativeNifInstanceAudit : Node
         GD.Print($"OPENNV_NATIVE_PLACEMENT_AUDIT_PASS nodes={compared} comparison=converted-transform-approximate pixels=unverified");
     }
 
-    private static byte[] Synthetic(bool animated = true)
+    private static byte[] Synthetic(bool animated = true, float? accumulationDistance = null)
     {
         var blocks = new (string Type, byte[] Bytes)[]
         {
@@ -526,6 +526,15 @@ public partial class NativeNifInstanceAudit : Node
             })),
             ("NiTransformData", Bytes(writer =>
             {
+                if (accumulationDistance is { } distance)
+                {
+                    writer.Write(0U);
+                    writer.Write(2U); writer.Write(1U);
+                    foreach (var time in new[] { 0f, 1f })
+                    { writer.Write(time); writer.Write(0f); writer.Write(time * distance); writer.Write(0f); }
+                    writer.Write(0U);
+                    return;
+                }
                 writer.Write(1); writer.Write(4U);
                 for (var axis = 0; axis < 3; axis++)
                 {

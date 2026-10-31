@@ -130,8 +130,12 @@ public partial class RuntimeCoordinator : Node3D
                     Enum.Parse<Key>(_configuration.Player.DesktopInput.Activate.PhysicalKey),
                     ApplyNativeBotSimulatorInput, () => _botSimulatorInput?.Pump(), AdvanceNativeReferenceApproachRoute, CancelNativeBotRoute,
                     NativeBotPlanningProgress);
-                harness.ConfigureCheckpoints(CreateNativeCheckpoint, LoadNativeCheckpoint, () => _nativeSessionTransitioning,
-                    () => _restoredNativeCheckpoint);
+                harness.ConfigureCheckpoints(CreateNativeCheckpoint, LoadNativeCheckpoint,
+                    () => _nativeSessionTransitioning || _nativeManualSaves.Pending,
+                    () => _restoredNativeCheckpoint,
+                    id => RequestNativeManualSave(RuntimeManualSaveOrigin.DiagnosticCheckpoint, id),
+                    id => _nativeManualSaves.History.SingleOrDefault(receipt => receipt.Slot == id));
+                harness.ConfigureRig(ResolveNativeRigReference, ControlNativeRig);
                 harness.ConfigureCampaign(ObserveNativeCampaign, _configuration.Player.DesktopInput.Save.Action,
                     _configuration.Player.DesktopInput.Cancel.Action);
                 AddChild(harness);

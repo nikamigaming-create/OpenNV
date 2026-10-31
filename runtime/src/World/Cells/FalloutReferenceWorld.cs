@@ -53,7 +53,7 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
     FalloutActorSandboxMarkerContinuation? SandboxMarker = null,
     FalloutSandboxIdleSelectionSnapshot? SandboxIdleSelection = null,
     FalloutActorLastIdleRequest? LastIdleRequest = null, bool ReferenceEssential = false, FalloutActorEssentialKnockout? EssentialKnockout = null,
-    FalloutHitKnockback? HitKnockback = null)
+    FalloutHitKnockback? HitKnockback = null, FalloutAmbientIdleSnapshot? AmbientIdle = null)
 {
     internal static void Validate(IReadOnlyList<FalloutReferenceSnapshot> snapshots)
     {
@@ -140,11 +140,12 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
                  !assignment.Sha256.Equals(interrupted.PackageSha256, StringComparison.OrdinalIgnoreCase)))
                 throw new InvalidDataException("Interrupted Sandbox history requires its dead actor, captured body and unchanged source assignment.");
             snapshot.SandboxMotionFailure?.Validate();
+            snapshot.AmbientIdle?.Validate();
             snapshot.CreatureScriptIdle?.Validate();
-            if (snapshot.CreatureScriptIdle is { } scriptIdle && (scriptIdle.Owner != "script" ||
+            if (snapshot.CreatureScriptIdle is { } scriptIdle && (scriptIdle.Owner is not ("script" or "ambient") ||
                 scriptIdle.Transition is null ||
                 snapshot.Animation is null || snapshot.SoundRandomState is null || snapshot.PackageIdle is not null ||
-                snapshot.Engagement is not null || snapshot.Ragdoll is not null || snapshot.Injury?.Dead == true))
+                scriptIdle.Owner == "script" && (snapshot.Engagement is not null || snapshot.Ragdoll is not null) || snapshot.Injury?.Dead == true))
                 throw new InvalidDataException("Creature script idle has conflicting or missing continuation owners.");
             if (snapshot.SandboxMotionFailure is not null && (snapshot.Animation is null || snapshot.SoundRandomState is null ||
                 snapshot.SandboxAdmissionFailure is not null || snapshot.PackageBindingFailure is not null ||
@@ -343,6 +344,7 @@ internal sealed partial class FalloutReferenceInstance
     internal Func<FalloutActorPendingSandboxStart>? CapturePendingSandboxStart { get; set; }
     internal bool PendingSandboxStartCaptureReady => CanCapturePendingSandboxStart?.Invoke() ??
         PendingSandboxStart is not null && ProcedureCaptureBlocker == FalloutActorPendingSandboxStart.CaptureBlocker;
+    internal FalloutAmbientIdleState? AmbientIdle { get; set; }
     internal FalloutActorStoppedIdleAnimation? CreatureScriptIdle { get; set; }
     internal Func<bool>? CanCaptureCreatureScriptIdle { get; set; }
     internal Func<FalloutActorStoppedIdleAnimation?>? CaptureCreatureScriptIdle { get; set; }
@@ -583,7 +585,7 @@ internal sealed partial class FalloutReferenceInstance
             IdleRequests: CaptureIdleRequests is { } captureIdles ? captureIdles() : IdleRequests?.Copy(),
             SandboxMarker: CaptureSandboxMarker is { } captureMarker ? captureMarker() : SandboxMarker?.Copy(),
             SandboxIdleSelection: SandboxIdleSelection, LastIdleRequest: LastIdleRequest, ReferenceEssential: ReferenceEssential, EssentialKnockout: EssentialKnockout,
-            HitKnockback: HitKnockback);
+            HitKnockback: HitKnockback, AmbientIdle: AmbientIdle?.Capture());
     }
 }
 
@@ -1071,6 +1073,12 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
                 if (hitFaults.Faults.Any(fault => !validated.BodyParts(snapshot.Reference).Parts.Any(part => part.Type == fault.Part)))
                     throw new InvalidDataException("Saved hit-reaction fault has no source anatomy.");
                 instance.HitReactionFaults.Restore(hitFaults, records);
+            }
+            if (snapshot.AmbientIdle is { } ambient)
+            {
+                if (records.GetEffective(instance.Base).Signature is not ("CREA" or "NPC_"))
+                    throw new InvalidDataException("Automatic idle state belongs to a non-actor reference.");
+                instance.AmbientIdle = new(); instance.AmbientIdle.Restore(ambient, records);
             }
             if (snapshot.Animation is { } animation) instance.Animation.Restore(animation);
             if (snapshot.CreatureScriptIdle is { } scriptIdle)

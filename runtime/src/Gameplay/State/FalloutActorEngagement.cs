@@ -5,10 +5,14 @@ namespace OpenNV.Runtime.Gameplay.State;
 internal sealed record FalloutActorEngagement(FalloutFormKey Target, string Action = "pursue", double Seconds = 0,
     bool StartPending = true, string? Animation = null, string? AnimationHash = null,
     IReadOnlyList<float>? Position = null, IReadOnlyList<float>? Rotation = null,
-    FalloutWeaponHandlingSnapshot? WeaponHandling = null, ulong? AttackRandomState = null)
+    FalloutWeaponHandlingSnapshot? WeaponHandling = null, ulong? AttackRandomState = null,
+    FalloutActorPathTurn? PathTurn = null)
 {
     internal void Validate()
     {
+        PathTurn?.Validate();
+        if (PathTurn is not null && Action is not ("pursue" or "flee"))
+            throw new InvalidDataException("Saved actor path turn has no movement action.");
         if (Target.ObjectId == 0 || string.IsNullOrWhiteSpace(Target.OwnerPlugin) ||
             Action is not ("pursue" or "attack" or "reload" or "flee" or "idle") || !double.IsFinite(Seconds) || Seconds < 0 ||
             StartPending && Seconds != 0 || (Animation is null) != (AnimationHash is null) ||
@@ -21,5 +25,5 @@ internal sealed record FalloutActorEngagement(FalloutFormKey Target, string Acti
     }
 
     internal FalloutActorEngagement Transition(string action) => this with
-    { Action = action, Seconds = 0, StartPending = true, Animation = null, AnimationHash = null };
+    { Action = action, Seconds = 0, StartPending = true, Animation = null, AnimationHash = null, PathTurn = null };
 }

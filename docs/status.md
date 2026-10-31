@@ -15,6 +15,24 @@ reproduced severe slowdown, but its checkpoint is unmatched and recording
 amplifies the cost. Scene parity and faster-than-retail performance remain open.
 See current-work.md for the measured limits and active repair batch.
 
+The local batch now completes Cheyenne's resident Accompany door transfer and
+persists her enabled exterior placement with the source door receipt. Both games
+have also walked from the saloon to Doc Mitchell's exterior door. Static managed
+animation startup and saved implicit-loop correction remove the observed pool
+bulb pulse; absolute brightness still differs. Fresh interior save/load restores
+the exact player position at a capture-off 60 FPS snapshot. Cached follower
+execution, NPC Follow/Accompany and broad scene/action parity remain incomplete.
+The final required gate and selected 46-file, 3,465-block owned audit passed.
+
+The current source repairs creature movement beneath grazing poses by sharing
+source-priority root accumulation with the displayed animation. Three paired
+bighorner takes completed; all205 sampled stationary grazing/Forward intervals
+had zero body travel. Exact magnitude and full skeleton parity remain unverified.
+Grass color and atlas-edge fragments were repaired, and a fresh outdoor save
+cold-loaded with exact saved position. The full required runtime gate and44-file,
+3288-block owned animation decode passed. Broad creature, room, audio, combat and
+campaign coverage remain open; these checks do not establish tester readiness.
+
 The current Release work includes owned Idle fallback, compass strip,
 regional weather caches, dedicated F5/F9 save identity, source resource reuse,
 and NPC furniture/package repairs. Ordinary quicksave/move/quickload and

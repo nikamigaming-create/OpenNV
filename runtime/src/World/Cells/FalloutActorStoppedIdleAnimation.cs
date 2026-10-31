@@ -13,14 +13,16 @@ internal sealed record FalloutActorStoppedIdleAnimation(string Owner, FalloutAct
 
     internal void Validate()
     {
-        if (Owner is not ("script" or "dialogue-response" or "package-event") || Animation is null)
+        if (Owner is not ("script" or "ambient" or "dialogue-response" or "package-event") || Animation is null)
             throw new InvalidDataException("Stopped source IDLE has an invalid independent owner.");
         Animation.Validate(allowCompleted: OwnsCompletedClock);
         Transition?.Validate();
         ScriptPhase?.Validate(Transition);
-        if (ScriptPhase is not null && Owner != "script")
+        if (ScriptPhase?.Interrupted == true && Owner != "ambient")
+            throw new InvalidDataException("Only an automatic idle retains this source interruption receipt.");
+        if (ScriptPhase is not null && Owner is not ("script" or "ambient"))
             throw new InvalidDataException("Creature return phase belongs to a script idle owner.");
-        if (Transition is not null && Owner != "script")
+        if (Transition is not null && Owner is not ("script" or "ambient"))
             throw new InvalidDataException("Snapshot transition belongs to a script idle owner.");
         if (Transition is { Phase.Complete: false } && (Animation.Clock.SourceSeconds != 0 || Animation.Clock.CompletedRepeats != 0))
             throw new InvalidDataException("Snapshot transition advanced its held incoming source phase.");
@@ -42,14 +44,17 @@ internal sealed record FalloutActorStoppedIdleAnimation(string Owner, FalloutAct
 // The request stays active through ordinary sequence ease-out. Its finite KF
 // clock may already be clamped while this independent deactivation owns pose.
 internal sealed record FalloutCreatureScriptIdlePhase(int RequestState, int SequenceState,
-    FalloutIdleDeactivationSnapshot? Deactivation = null)
+    FalloutIdleDeactivationSnapshot? Deactivation = null, bool Interrupted = false, float? AccumulationTime = null)
 {
     internal void Validate(FalloutActorIdleSnapshotTransition? transition)
     {
         if (RequestState != 2 || SequenceState is not (1 or 3 or 5) || transition is null ||
             SequenceState != 5 && !transition.Phase.Complete ||
+            Interrupted && SequenceState != 3 ||
             (SequenceState == 3) != (Deactivation is not null))
             throw new InvalidDataException("Creature script request, sequence and transition phases disagree.");
+        if (AccumulationTime is { } accumulation && !float.IsFinite(accumulation))
+            throw new InvalidDataException("Creature accumulation phase is not finite.");
         Deactivation?.Validate();
         if (Deactivation is { } fade && (!fade.Started || fade.DurationSeconds <= 0 || fade.ElapsedSeconds >= fade.DurationSeconds))
             throw new InvalidDataException("An inactive creature sequence cannot retain its execution slot.");

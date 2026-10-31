@@ -157,7 +157,7 @@ internal static partial class RuntimeNativeNifMeshBuilder
         string? preferredTextureArchive = null,
         RuntimeLiveContentSource? contentSource = null,
         Action<FalloutNifGeometry>? unboundPropertyFreeLod = null,
-        IReadOnlySet<string>? externalTransformTargets = null, HashSet<uint>? addonAncestors = null)
+        IReadOnlySet<string>? externalTransformTargets = null, HashSet<uint>? addonAncestors = null, bool autoStartManagedLoops = true)
     {
         if (!float.IsFinite(unitsToMetres) || unitsToMetres <= 0.0f)
             throw new ArgumentOutOfRangeException(
@@ -170,7 +170,7 @@ internal static partial class RuntimeNativeNifMeshBuilder
             root.Name = "NativeNif";
             root.SetMeta("opennv_nif_fixed_strings", source.Strings.ToArray());
             var state = new BuildState(source, unitsToMetres, preferredTextureArchive, externalSkeleton: externalTransformTargets is not null, contentSource: contentSource)
-            { UnboundPropertyFreeLod = unboundPropertyFreeLod, ExternalTransformTargets = externalTransformTargets, AddonAncestors = addonAncestors ?? [] };
+            { AutoStartManagedLoops = autoStartManagedLoops, UnboundPropertyFreeLod = unboundPropertyFreeLod, ExternalTransformTargets = externalTransformTargets, AddonAncestors = addonAncestors ?? [] };
             foreach (var rootIndex in source.Roots)
                 if (unboundPropertyFreeLod is not null && source.Blocks[rootIndex].TypeName is ("NiTriShape" or "NiTriStrips" or "BSSegmentedTriShape") &&
                     source.ReadGeometry(rootIndex) is { } unbound && unbound.Properties.All(index => index == -1))
@@ -371,6 +371,8 @@ internal static partial class RuntimeNativeNifMeshBuilder
         private readonly Func<FalloutNifFile, FalloutNifGeometry, Material?>? _materialOverride;
         private readonly Func<FalloutNifFile, FalloutNifGeometry, FalloutNifMeshData, FalloutNifMeshData>? _geometryOwner;
         internal Func<FalloutNifFile, FalloutNifGeometry, FalloutNifMeshData, IReadOnlyDictionary<string, System.Numerics.Vector3[]>>? MorphOwner { get; init; }
+
+        internal bool AutoStartManagedLoops { get; init; } = true;
 
         internal BuildState(
             FalloutNifFile source,
@@ -1221,7 +1223,7 @@ internal static partial class RuntimeNativeNifMeshBuilder
                 };
                 // Own the node before source validation can reject its configuration.
                 root.AddChild(player);
-                player.Configure(sequences);
+                player.Configure(sequences, autoStartManagedLoops: AutoStartManagedLoops);
                 player.SetMeta("opennv_nif_controller_manager", manager.Block.Index);
                 player.SetMeta("opennv_nif_source_sequences", sequences.Select(value => value.Name).ToArray());
             }
@@ -2302,15 +2304,12 @@ internal static partial class RuntimeNativeNifMeshBuilder
             var texturePath = shader.FileName;
             if (texturing is not null)
             {
-                var legacyPath = ValidateLegacyTexturing(texturing);
+                _ = ValidateLegacyTexturing(texturing);
                 // The shader owns its texture and sampler. A dormant legacy
                 // declaration is not a fallback for an empty shader filename.
-                // Legacy texture animation requires the matching shader slot;
-                // keep an unmatched active owner visible rather than redirect it.
-                if ((texturing.Controller != -1 || texturing.BaseTexture!.Transform is not null) &&
-                    !legacyPath.Equals(texturePath, StringComparison.OrdinalIgnoreCase))
-                    throw new NotSupportedException(
-                        $"NIF animated legacy texturing property {texturing.Block.Index} has no matching no-lighting shader texture.");
+                // Base-slot UV animation binds this property/UV set independently
+                // of pixel identity. Owned models deliberately name a different
+                // texture in their no-lighting shader and legacy descriptor.
             }
             using var result = new StandardMaterial3D
             {
@@ -2746,23 +2745,24 @@ internal sealed class RuntimeNativeNifPrototype
         _requiresFreshOwners = Scene.Root.FindChildren("*", "", true, false).Any(node => node is RuntimeNifControllerPlayer or RuntimeNifParticleSystem or NativeNifBillboard or RuntimeNifHingeJoint);
     }
 
-    internal Node3D Instantiate()
+    internal Node3D Instantiate(bool autoStartManagedLoops = true)
     {
         // Godot Duplicate copies engine properties, not configured C# delegates
         // and their target objects. Reuse the decoded source, but create fresh
         // controllers/material/joint owners for each reference.
-        if (_requiresFreshOwners) return RuntimeNativeNifMeshBuilder.Build(_source, _unitsToMetres).Root;
+        if (_requiresFreshOwners) return RuntimeNativeNifMeshBuilder.Build(_source, _unitsToMetres,
+            autoStartManagedLoops: autoStartManagedLoops).Root;
         // Dynamic-body scripts bind their cloned visual parent on tree entry;
         // no configured delegates or source-instance references are copied.
         return Scene.Root.Duplicate((int)(Node.DuplicateFlags.UseInstantiation | Node.DuplicateFlags.Scripts)) as Node3D ??
             throw new InvalidOperationException("Could not instantiate a static native NIF.");
     }
 
-    internal Node3D InstantiatePlaced(Transform3D placement)
+    internal Node3D InstantiatePlaced(Transform3D placement, bool autoStartManagedLoops = true)
     {
         if (_source.Roots.Count != 1)
             throw new NotSupportedException("Placed multi-root NIF ownership has not been established.");
-        return PlaceOwnedRoot(Instantiate(), _source, placement);
+        return PlaceOwnedRoot(Instantiate(autoStartManagedLoops), _source, placement);
     }
 
     // Transfer a fully assembled, independently owned tree into one placed

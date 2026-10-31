@@ -47,6 +47,7 @@ internal partial class RuntimeNativeNpc
             _furnitureApproaching && _furnitureApproachFloor is { } floor ? [floor.X, floor.Y, floor.Z] : null,
             _furniturePendingSelection is not null, _furniturePendingSelection?.Forced == true, _sleepPackage is not null, _eatPackage is not null);
         state.Validate();
+        state.ValidateClock(_baseClock.Capture());
         return state;
     }
 

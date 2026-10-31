@@ -14,7 +14,7 @@ internal static class FalloutCreatureAnimationSounds
     {
         internal Selection Select(Func<uint, uint> sharedNextBounded)
         {
-            if (Creature.ObjectId == 0 || Type is not (12 or 13 or 14) || Chance > 100 ||
+            if (Creature.ObjectId == 0 || !SupportedType(Type) || Chance > 100 ||
                 Sound is { ObjectId: 0 })
                 throw new InvalidDataException("Creature sound selection has an invalid source declaration.");
             // The source tests the candidate pointer before touching shared RNG.
@@ -32,15 +32,9 @@ internal static class FalloutCreatureAnimationSounds
     {
         ArgumentNullException.ThrowIfNull(records);
         ArgumentNullException.ThrowIfNull(enumName);
+        if (!TryType(enumName, out var type))
+            throw new NotSupportedException($"Creature animation enum {enumName} has no source sound owner.");
         var name = enumName.Trim();
-        if (name.StartsWith("Enum:", StringComparison.OrdinalIgnoreCase)) name = name[5..].Trim();
-        var type = name.ToUpperInvariant() switch
-        {
-            "AUXILIARY1" => 12u,
-            "AUXILIARY2" => 13u,
-            "AUXILIARY3" => 14u,
-            _ => throw new NotSupportedException($"Creature animation enum {enumName} has no single-candidate sound owner.")
-        };
         var record = records.GetEffective(creature);
         var visited = new HashSet<FalloutFormKey>();
         FalloutPluginSubrecord[] fields;
@@ -72,7 +66,7 @@ internal static class FalloutCreatureAnimationSounds
             if (start >= 0) throw new InvalidDataException($"CREA {creature} repeats sound type {type} ({name}).");
             start = index + 1;
         }
-        if (start < 0) throw new NotSupportedException($"CREA {creature} has no sound type {type} ({name}).");
+        if (start < 0) return new(creature, type, null, 0);
         var selected = fields[start..end];
         if (selected.Any(field => field.Signature.StartsWith("CSD", StringComparison.Ordinal) &&
             field.Signature is not ("CSDI" or "CSDC")))
@@ -81,6 +75,7 @@ internal static class FalloutCreatureAnimationSounds
             .Where(value => value.Field.Signature == "CSDI").ToArray();
         var chances = selected.Select((field, index) => (Field: field, Index: index))
             .Where(value => value.Field.Signature == "CSDC").ToArray();
+        if (sounds.Length == 0 && chances.Length == 0) return new(creature, type, null, 0);
         if (sounds.Length != 1 || chances.Length != 1)
             throw new NotSupportedException($"CREA {creature} sound type {type} requires exactly one CSDI/CSDC pair; " +
                 $"found {sounds.Length}/{chances.Length}. Candidate selection is unqualified.");
@@ -96,4 +91,32 @@ internal static class FalloutCreatureAnimationSounds
         return new(creature, type, sound, chance);
 
     }
+    private static bool SupportedType(uint type) => type <= 6 || type is >= 12 and <= 19;
+
+    internal static bool TryType(string text, out uint type)
+    {
+        var name = text.Trim();
+        if (name.StartsWith("Enum:", StringComparison.OrdinalIgnoreCase)) name = name[5..].Trim();
+        type = name.ToUpperInvariant() switch
+        {
+            "LEFT" => 0,
+            "RIGHT" => 1,
+            "BACKLEFT" => 2,
+            "BACKRIGHT" => 3,
+            "IDLE" => 4,
+            "AWARE" => 5,
+            "ATTACK" => 6,
+            "AUXILIARY1" => 12,
+            "AUXILIARY2" => 13,
+            "AUXILIARY3" => 14,
+            "AUXILIARY4" => 15,
+            "AUXILIARY5" => 16,
+            "AUXILIARY6" => 17,
+            "AUXILIARY7" => 18,
+            "AUXILIARY8" => 19,
+            _ => uint.MaxValue
+        };
+        return type != uint.MaxValue;
+    }
+
 }

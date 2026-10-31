@@ -90,6 +90,94 @@ internal static partial class SharedConditionContracts
             };
             FalloutCondition Query(Function function, uint argument = 0, uint runOn = 0, uint reference = 0) =>
                 new(owner, 0, 0, (ushort)function, argument, 0, runOn, reference);
+            Require(runtime.Evaluate(Query(Function.MenuMode), scope) == 0,
+                "Gameplay invented an active source menu.");
+            using (world.Menus.Enter(1009))
+            {
+                Require(runtime.Evaluate(Query(Function.MenuMode), scope) == 1 &&
+                    runtime.Evaluate(Query(Function.MenuMode, 1009), scope) == 1 &&
+                    runtime.Evaluate(Query(Function.MenuMode, 2), scope) == 1 &&
+                    runtime.Evaluate(Query(Function.MenuMode, 1), scope) == 0 &&
+                    world.QueryNativeCondition(Key(0x200), Query(Function.MenuMode, 1009)) == 1,
+                    "Filtered CTDA menu query diverged from the shared script/UI identity without an actor process.");
+            }
+            using (world.Menus.Enter(1003))
+                Require(runtime.Evaluate(Query(Function.MenuMode, 1), scope) == 1 &&
+                    runtime.Evaluate(Query(Function.MenuMode, 1009), scope) == 0,
+                    "Menu category query used a generic modal-input flag.");
+            world.Menus.Publish(false);
+            Require(runtime.Evaluate(Query(Function.MenuMode), scope) == 1,
+                "Known menu mode lost its unfiltered identity.");
+            Reject(() => runtime.Evaluate(Query(Function.MenuMode, 1009), scope));
+            world.Menus.Publish(true);
+            Reject(() => new FalloutConditionRuntime(records, quests).Evaluate(Query(Function.MenuMode), scope));
+            Reject(() => runtime.Evaluate(Query(Function.MenuMode) with { Argument2 = 1 }, scope));
+            Reject(() => runtime.Evaluate(Query(Function.IsGreetingPlayer), scope));
+            FalloutFormKey? greeting = null;
+            Func<FalloutFormKey, bool> greetingQuery = actor => actor == greeting;
+            world.BindGreetingPlayer(greetingQuery);
+            try
+            {
+                world.BindGreetingPlayer(_ => false);
+                throw new InvalidDataException("A competing greeting process replaced its live owner.");
+            }
+            catch (InvalidOperationException) { }
+            Require(runtime.Evaluate(Query(Function.IsGreetingPlayer), scope) == 0,
+                "An initialized speech owner invented an active greeting.");
+            greeting = Key(0x200);
+            var greetingScript = runtime.ScriptFunction("isgreetingplayer", owner, () => Key(0x200),
+                _ => throw new InvalidDataException("Greeting has no form operand."),
+                _ => throw new InvalidDataException("Greeting has no variable operand."))!;
+            Require(runtime.Evaluate(Query(Function.IsGreetingPlayer), scope) == 1 && greetingScript.Invoke([]) == 1 &&
+                runtime.Evaluate(Query(Function.IsGreetingPlayer, runOn: 1), scope) == 0,
+                "Greeting CTDA/script/run-on queries did not use the actual subject's speech owner.");
+            greeting = null;
+            Require(greetingScript.Invoke([]) == 0, "Greeting completion retained a stale query result.");
+            Reject(() => runtime.Evaluate(Query(Function.IsGreetingPlayer, 1), scope));
+            world.UnbindGreetingPlayer(greetingQuery);
+            Reject(() => runtime.Evaluate(Query(Function.IsGreetingPlayer), scope));
+            foreach (var (function, scriptName) in new[]
+                { (Function.GetSandman, "getsandman"), (Function.GetCannibal, "getcannibal") })
+            {
+                Require(runtime.Evaluate(Query(function), scope) == 0 &&
+                    runtime.Evaluate(Query(function, runOn: 1), scope) == 0,
+                    "A player-only action query required a process owner for an NPC or creature.");
+                var actionScript = runtime.ScriptFunction(scriptName, owner, () => Key(0x200),
+                    _ => throw new InvalidDataException("Player action query has no form operand."),
+                    _ => throw new InvalidDataException("Player action query has no variable operand."))!;
+                Require(actionScript.Invoke([]) == 0, "Script and CTDA player-action subject guards disagree.");
+                Reject(() => runtime.Evaluate(Query(function), scope with { Caller = Key(0x14) }));
+                Reject(() => runtime.Evaluate(Query(function, 1), scope));
+            }
+            Reject(() => runtime.Evaluate(Query(Function.IsTalking), scope));
+            FalloutFormKey? talking = null;
+            Func<FalloutFormKey, bool> talkingQuery = actor => actor == talking;
+            Func<FalloutFormKey, bool> otherTalkingQuery = _ => false;
+            world.BindTalking(talkingQuery);
+            world.BindTalking(talkingQuery);
+            try
+            {
+                world.BindTalking(otherTalkingQuery);
+                throw new InvalidDataException("A competing talking process replaced its live owner.");
+            }
+            catch (InvalidOperationException) { }
+            world.UnbindTalking(otherTalkingQuery);
+            var talkingScript = runtime.ScriptFunction("istalking", owner, () => Key(0x200),
+                _ => throw new InvalidDataException("Talking has no form operand."),
+                _ => throw new InvalidDataException("Talking has no variable operand."))!;
+            Require(talkingScript.Invoke([]) == 0, "Initialized speech query invented a talking actor.");
+            talking = Key(0x200);
+            Require(runtime.Evaluate(Query(Function.IsTalking), scope) == 1 && talkingScript.Invoke([]) == 1 &&
+                runtime.Evaluate(Query(Function.IsTalking, runOn: 1), scope) == 0,
+                "Talking CTDA/script queries confused speaker and listener or lost the bound owner.");
+            talking = Key(0x201);
+            Require(talkingScript.Invoke([]) == 0 && runtime.Evaluate(Query(Function.IsTalking, runOn: 1), scope) == 1,
+                "Talking retained the previous speaker instead of the actual creature subject.");
+            talking = null;
+            Require(talkingScript.Invoke([]) == 0, "Talking completion retained stale state.");
+            Reject(() => runtime.Evaluate(Query(Function.IsTalking, 1), scope));
+            world.UnbindTalking(talkingQuery);
+            Reject(() => runtime.Evaluate(Query(Function.IsTalking), scope));
             Require(runtime.Evaluate(Query(Function.GetIsVoiceType, 0x01000031), scope) == 1 &&
                 runtime.Evaluate(Query(Function.GetIsVoiceType, 0x01000031, 1), scope) == 1 &&
                 runtime.Evaluate(Query(Function.GetIsID, 0x01000021, 1), scope) == 1 &&

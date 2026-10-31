@@ -347,6 +347,7 @@ internal partial class RuntimeNativeNpc
             _aiScheduleTime = bindingFailure.ScheduleTime;
         }
         _bindingInitialBase = false;
+        RestorePackageBaseClockBinding();
         _baseClock.Bind(_baseResource, _baseHash);
         ResumeBaseClock();
         _restoringIdleRequests = false;
@@ -663,6 +664,7 @@ internal partial class RuntimeNativeNpc
     {
         Function.IsMoving => _travelActive || Combat?.PackageMoving == true ? 1 : 0,
         Function.GetAttacked => Activity.Attacked ? 1 : 0,
+        Function.GetHitLocation => (Combat ?? throw new NotSupportedException("Hit-location query has no actor process owner.")).CurrentHitLocation,
         Function.GetAlerted => Activity.Alerted ? 1 : 0,
         Function.IsWeaponOut => WeaponDrawn ? 1 : 0,
         Function.GetKnockedState => (_aiWorld ?? throw new NotSupportedException("Knockdown query has no reference world."))

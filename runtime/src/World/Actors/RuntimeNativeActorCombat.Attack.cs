@@ -115,7 +115,7 @@ internal sealed partial class RuntimeNativeActorCombat
             {
                 requestedPursuit = true;
                 destination = PursuitTarget(TargetPosition(player), delta, Ranged ? _radius * 2 + TargetRadius(player) : reach);
-                if (destination is null) action = "idle";
+                if (destination is null && state.PathTurn is null) action = "idle";
             }
             if (action == "attack" && _enemyWeapon?.IsMeleeWeapon == true && !_enemyWeaponHandling!.CanUse(_enemyWeapon))
                 throw new NotSupportedException("Actor's broken melee weapon requires its unarmed attack owner.");
@@ -135,7 +135,16 @@ internal sealed partial class RuntimeNativeActorCombat
             _state.AttackRandom.Restore(state.AttackRandomState!.Value);
             _state.Engagement = state;
         }
-        var path = state.Action switch
+        FalloutActorPathTurn? pathTurn = null;
+        var turnLeft = false;
+        var headingTarget = destination;
+        if (headingTarget is null && state.Action == "pursue" && state.PathTurn is { } pendingTurn)
+            headingTarget = new Vector3(pendingTurn.TargetX, pendingTurn.TargetY, pendingTurn.TargetZ);
+        var turning = state.Action == "pursue" && headingTarget is { } facingTarget &&
+            FacePath(facingTarget, delta, state.PathTurn, out pathTurn, out turnLeft);
+        if (state.Action != "pursue" || headingTarget is null)
+        { _routeTurning = false; TurnToward(TargetPosition(player), delta); }
+        var path = turning ? PathTurnClip(turnLeft).Path : state.Action switch
         {
             "pursue" => _movementPath,
             "attack" => _attackPath,
@@ -144,10 +153,17 @@ internal sealed partial class RuntimeNativeActorCombat
             _ => throw new InvalidDataException("Actor engagement action is invalid.")
         };
         var clip = Clip(path, state.Action is "pursue" or "idle");
+        if (state.Action == "pursue" && state.Animation is { } previous &&
+            !previous.Equals(path, StringComparison.OrdinalIgnoreCase))
+        {
+            if (!IsPathClip(previous) || !state.AnimationHash!.Equals(Clip(previous, true).Hash, StringComparison.OrdinalIgnoreCase))
+                throw new NotSupportedException("Saved pursuit animation differs from the winning source.");
+            state = state.Transition("pursue");
+        }
         if (state.Animation is not null && (!state.Animation.Equals(path, StringComparison.OrdinalIgnoreCase) ||
             !state.AnimationHash!.Equals(clip.Hash, StringComparison.OrdinalIgnoreCase)))
             throw new NotSupportedException("Saved combat animation differs from the winning source.");
-        state = state with { Animation = path, AnimationHash = clip.Hash };
+        state = state with { Animation = path, AnimationHash = clip.Hash, PathTurn = pathTurn };
         if (state.Action == "attack") _attackHitCount = clip.Events.Discharges;
         double factor = state.Action is "attack" or "reload" ? _enemyWeapon?.AnimationMultiplier ?? 1 : 1;
         if (state.Action == "attack" && _enemyWeapon?.Automatic == true)
@@ -167,8 +183,7 @@ internal sealed partial class RuntimeNativeActorCombat
             next = Math.Min(next, clip.Duration);
         // Inside weapon range is not arrival when the target is occluded.
         // Waiting to face a visible target uses the idle, never a running clip.
-        var moving = state.Action == "pursue";
-        TurnToward(destination ?? TargetPosition(player), delta);
+        var moving = state.Action == "pursue" && destination.HasValue && !turning;
         Activity.SetMovement(running: moving, sneaking: false);
         MoveActor(moving ? clip.RootDisplacement(state.Seconds, next) : Vector3.Zero, delta, destination);
         foreach (var key in clip.Events.Crossed(state.Seconds, next, state.StartPending))

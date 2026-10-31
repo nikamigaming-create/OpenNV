@@ -18,8 +18,24 @@ internal sealed class NativeActorCombatAnimation
         NativeActorWeaponAttachment? weapon, bool loop, bool weaponCadence = false, NativeActorIdleObjects? objects = null)
     {
         Path = path; _loop = loop;
-        var source = NativeAnimationResources.For(content).Read(path);
+        var (source, selected) = ReadSource(path, content);
         Hash = source.Sha256.ToUpperInvariant();
+        var root = selected.ControlledBlocks.SingleOrDefault(link => link.NodeName == selected.TargetName && link.ControllerType == "NiTransformController");
+        _root = root is null ? null : new(source, root.Interpolator);
+        var external = new HashSet<string>(weapon is null ? Array.Empty<string>() : weapon.Targets, StringComparer.Ordinal);
+        if (objects is not null) external.UnionWith(objects.Targets);
+        Animation = new(source, selected, skeleton, link => objects?.Bind(link) ?? weapon?.Bind(source, link),
+            externalObjectTargets: external, externalAccumulationRoot: true);
+        if (Animation.UnboundChannels.Count != 0) throw new NotSupportedException("Actor combat channels are unbound: " +
+            string.Join("; ", Animation.UnboundChannels.Select(channel => channel.Source.NodeName + "/" + channel.Reason)));
+        Events = new(Animation.TextKeys, selected.StartTime, selected.StopTime, selected.Frequency, loop,
+            weaponCadence && selected.CycleType == 0);
+        Duration = (selected.StopTime - selected.StartTime) / selected.Frequency;
+    }
+
+    internal static (FalloutNifFile Source, FalloutNifControllerSequence Sequence) ReadSource(string path, RuntimeLiveContentSource content)
+    {
+        var source = NativeAnimationResources.For(content).Read(path);
         var sequences = source.Roots.Select(source.ReadObject).OfType<FalloutNifControllerSequence>().ToArray();
         var name = System.IO.Path.GetFileNameWithoutExtension(path);
         var declared = content.ActorAnimations.SelectedGroup(path);
@@ -28,17 +44,7 @@ internal sealed class NativeActorCombatAnimation
             : name.EndsWith(sequence.Name, StringComparison.OrdinalIgnoreCase)).ToArray();
         var selected = declared is null && sequences.Length == 1 ? sequences[0] : matching.Length == 1 ? matching[0] :
             throw new NotSupportedException("Actor combat animation has no unique requested sequence.");
-        var root = selected.ControlledBlocks.SingleOrDefault(link => link.NodeName == selected.TargetName && link.ControllerType == "NiTransformController");
-        _root = root is null ? null : new(source, root.Interpolator);
-        var external = new HashSet<string>(weapon is null ? Array.Empty<string>() : weapon.Targets, StringComparer.Ordinal);
-        if (objects is not null) external.UnionWith(objects.Targets);
-        Animation = new(source, selected, skeleton, link => objects?.Bind(link) ?? weapon?.Bind(source, link), accumulationRoot: _ => { },
-            externalObjectTargets: external);
-        if (Animation.UnboundChannels.Count != 0) throw new NotSupportedException("Actor combat channels are unbound: " +
-            string.Join("; ", Animation.UnboundChannels.Select(channel => channel.Source.NodeName + "/" + channel.Reason)));
-        Events = new(Animation.TextKeys, selected.StartTime, selected.StopTime, selected.Frequency, loop,
-            weaponCadence && selected.CycleType == 0);
-        Duration = (selected.StopTime - selected.StartTime) / selected.Frequency;
+        return (source, selected);
     }
 
     internal float Time(double elapsed)

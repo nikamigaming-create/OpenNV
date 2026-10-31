@@ -19,7 +19,8 @@ internal sealed partial class RuntimeNativeActorCombat
     {
         if (_packageSounds is not null) return _packageSounds;
         _packageSounds = new(_records, _content, _actor, _skeleton.UnitsToMetres,
-            _state.SoundRandom, _state.AnimationSoundEvents);
+            _state.SoundRandom, _state.AnimationSoundEvents,
+                (_actor as RuntimeNativeCreature)?.Appearance.Creature);
         _actor.AddChild(_packageSounds); return _packageSounds;
     }
 
@@ -152,6 +153,7 @@ internal sealed partial class RuntimeNativeActorCombat
 
     internal void StopPackageMotion()
     {
+        _packageLayerPosePublished = false;
         if (OwnsPose) InvalidatePackageRouteReceipt();
         _eatObjects?.SetVisible(false);
         PackageOwnsPose = false;
@@ -244,6 +246,7 @@ internal sealed partial class RuntimeNativeActorCombat
         _actor.GlobalTransform = new(new Basis(new Quaternion(motion.Rotation[0], motion.Rotation[1],
             motion.Rotation[2], motion.Rotation[3])).Scaled(_actor.Scale),
             new(motion.Position[0], motion.Position[1], motion.Position[2]));
+        RestorePackageAnimationLayers(motion);
     }
 
     internal bool AdvancePackageMotion(FalloutPluginRecord package, Vector3 target, float distance,
@@ -293,24 +296,38 @@ internal sealed partial class RuntimeNativeActorCombat
         using (OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Measure(OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Owner.PackagePursuit))
             destination = moving ? PursuitTarget(target, delta, distance, package.FormKey, navigationSha256) : null;
         moving &= destination.HasValue;
+        var retained = deferred is null ? _state.PackageMotion : null;
+        FalloutActorPathTurn? pathTurn = null;
+        var turnLeft = false;
+        var headingTarget = destination;
+        if (headingTarget is null && movementRequested && retained?.Package == package.FormKey && retained.PathTurn is { } pendingTurn)
+            headingTarget = new Vector3(pendingTurn.TargetX, pendingTurn.TargetY, pendingTurn.TargetZ);
+        var turning = headingTarget is { } facingTarget &&
+            FacePath(facingTarget, delta, retained?.Package == package.FormKey ? retained.PathTurn : null,
+                out pathTurn, out turnLeft);
+        if (headingTarget is null) _routeTurning = false;
+        moving &= !turning;
         // A pending route or observed arrival needs only an idle. Missing
         // locomotion must not prevent that real observation, nor leave an
         // idle cached as a false indication that every movement clip loaded.
-        var clip = SelectPackageMotionClip(moving, running, sneaking);
+        var requestedClip = turning ? PathTurnClip(turnLeft, sneaking) : SelectPackageMotionClip(moving, running, sneaking);
+        var movementSelection = PackageAnimationSelection;
+        var idleClip = SelectPackageMotionClip(false, false, sneaking);
+        PackageAnimationSelection = movementSelection;
+        _packageLayerClips.TryAdd(idleClip.Path, idleClip);
+        if (turning) PackageAnimationSelection = null;
         _ = PackageSounds();
         PreparePackageWeapon(package, weaponDrawn, sneaking);
         PackageMoving = moving;
-        var retained = deferred is null ? _state.PackageMotion : null;
-        var same = retained?.Package == package.FormKey && retained.Animation.Equals(clip.Path, StringComparison.OrdinalIgnoreCase);
-        if (same && (!retained!.PackageSha256.Equals(hash, StringComparison.OrdinalIgnoreCase) ||
-            !retained.AnimationSha256.Equals(clip.Hash, StringComparison.OrdinalIgnoreCase)))
-            throw new NotSupportedException("Saved package animation differs from its winning source.");
-        var seconds = same ? retained!.Seconds : 0;
-        var includeStart = !same || retained!.StartPending;
-        var next = seconds + delta;
-        if (destination is { } waypoint) TurnToward(waypoint, delta);
+        if (retained?.Package == package.FormKey && !retained.PackageSha256.Equals(hash, StringComparison.OrdinalIgnoreCase))
+            throw new NotSupportedException("Saved package differs from its winning source.");
+        var playback = AdvancePackageAnimationLayers(retained, turning || moving ? requestedClip : null, delta, idleClip);
+        var clip = playback.Clip; var next = playback.To;
         Activity.SetMovement(running && moving, sneaking);
-        MoveActor(moving ? clip.RootDisplacement(seconds, next) : Vector3.Zero, delta, destination);
+        var rootMotion = ConsumePackageAccumulation();
+        // The latched source turn handler explicitly clears translation even
+        // while old manager sequences continue their actual accumulation.
+        MoveActor(turning ? Vector3.Zero : rootMotion, delta, destination);
         var nativeArrival = false;
         if (navigationSha256 is { } sourceHash && _routeSearch is null && _routeDoor is null && _routeError is null)
         {
@@ -319,21 +336,19 @@ internal sealed partial class RuntimeNativeActorCombat
                 _pursuitPath, _actor.GlobalPosition, _mover!.IsOnFloor(), _pursuitCursor) == true;
             if (nativeArrival) ++_packageRouteArrivals;
         }
-        foreach (var key in clip.Events.Crossed(seconds, next, includeStart)) _packageSounds!.Dispatch(key);
+        DispatchPackageLayerEvents();
         using (OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Measure(OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Owner.PackagePose))
             if (!_headless)
             {
-                _skeleton.ResetSourceBonePoses();
-                var root = _skeleton.BoneIndex(clip.Animation.Sequence.TargetName);
-                if (root >= 0) _skeleton.Node.SetBonePose(root, Transform3D.Identity);
-                clip.Animation.ApplySourceTime(clip.Time(next));
+                PublishPackageAnimationLayers();
                 if (weaponDrawn) { _packageAim?.Animation.ApplySourceTime(_packageAim.Time(next)); _packageGrip?.Animation.ApplySourceTime(_packageGrip.Time(next)); }
             }
         using var snapshotWork = OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Measure(OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Owner.PackageSnapshot);
         var position = _actor.GlobalPosition; var rotation = _actor.GlobalBasis.Orthonormalized().GetRotationQuaternion();
         // A committed Accompany portal receipt ends at this first actual
         // destination-body observation, without repeating its source event.
-        _state.PackageMotion = new(package.FormKey, hash, clip.Path, clip.Hash, next, false,
+        _state.PackageMotion = new(package.FormKey, hash, clip.Path, clip.Hash, next,
+            (_packageMovementLayer ?? _packageIdleLayer)!.StartPending,
             [position.X, position.Y, position.Z], [rotation.X, rotation.Y, rotation.Z, rotation.W],
             retained?.Package == package.FormKey ? retained.Patrol : null,
             retained?.Package == package.FormKey ? retained.Escort : null,
@@ -343,7 +358,8 @@ internal sealed partial class RuntimeNativeActorCombat
             retained?.Package == package.FormKey ? retained.Guard : null,
             Wander: retained?.Package == package.FormKey ? retained.Wander : null,
             Sandbox: retained?.Package == package.FormKey ? retained.Sandbox : null,
-            Sleep: retained?.Package == package.FormKey ? retained.Sleep : null);
+            Sleep: retained?.Package == package.FormKey ? retained.Sleep : null,
+            PathTurn: pathTurn, AnimationLayers: CapturePackageAnimationLayers());
         if (deferred is not null)
         {
             _state.DeferredPackageContinuation = null;

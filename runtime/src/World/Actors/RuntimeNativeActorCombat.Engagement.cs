@@ -8,7 +8,8 @@ namespace OpenNV.Runtime.World.Actors;
 internal sealed record NativeActorNavigationRoute(Vector3[] Points,
     NativeNavigationProjectionRegion? Projection = null, Func<Vector3, bool>? Arrival = null,
     Func<Vector3, int, Func<Vector3, bool>>? PrefixArrival = null,
-    string? SourceSha256 = null, Func<Vector3, bool>? TerminalFloor = null)
+    string? SourceSha256 = null, Func<Vector3, bool>? TerminalFloor = null,
+    Func<Vector3, bool>? CorridorFloor = null)
 {
     internal static Func<Vector3, bool> ReadTerminalFloor(IReadOnlyList<Vector3> path,
         Func<Vector3, int, Func<Vector3, bool>> prefix)
@@ -186,7 +187,7 @@ internal sealed partial class RuntimeNativeActorCombat
 
     public override void _PhysicsProcess(double delta)
     {
-        try { AdvanceCombatPhysics(delta); }
+        try { AdvanceCombatPhysics(delta); AdvanceRetiringPackageAnimationLayers(delta); }
         finally { FinishHitKnockbackPhysics(delta); }
     }
 
@@ -325,12 +326,18 @@ internal sealed partial class RuntimeNativeActorCombat
         if (offset.IsZeroApprox()) offset = _actor.GlobalBasis.Z;
         var target = _actor.GlobalPosition + offset.Normalized() * _detectRange;
         var destination = PursuitTarget(target, delta, 0);
-        var clip = destination.HasValue ? Clip(_movementPath, true) : _combatIdle!;
         if (state.Action != "flee") state = state.Transition("flee");
+        FalloutActorPathTurn? pathTurn = null;
+        var turnLeft = false;
+        var headingTarget = destination;
+        if (headingTarget is null && state.PathTurn is { } pendingTurn)
+            headingTarget = new Vector3(pendingTurn.TargetX, pendingTurn.TargetY, pendingTurn.TargetZ);
+        var turning = headingTarget is { } facingTarget && FacePath(facingTarget, delta, state.PathTurn, out pathTurn, out turnLeft);
+        if (headingTarget is null) _routeTurning = false;
+        var clip = turning ? PathTurnClip(turnLeft) : destination.HasValue ? Clip(_movementPath, true) : _combatIdle!;
         if (state.Animation is { } previous && !previous.Equals(clip.Path, StringComparison.OrdinalIgnoreCase))
         {
-            if (!previous.Equals(_movementPath, StringComparison.OrdinalIgnoreCase) &&
-                !previous.Equals(_combatIdle!.Path, StringComparison.OrdinalIgnoreCase) ||
+            if (!IsPathClip(previous) ||
                 !state.AnimationHash!.Equals(Clip(previous, true).Hash, StringComparison.OrdinalIgnoreCase))
                 throw new NotSupportedException("Saved flee animation differs from the winning source.");
             state = state.Transition("flee");
@@ -338,11 +345,10 @@ internal sealed partial class RuntimeNativeActorCombat
         if (state.Animation is not null && (!state.Animation.Equals(clip.Path, StringComparison.OrdinalIgnoreCase) ||
             !state.AnimationHash!.Equals(clip.Hash, StringComparison.OrdinalIgnoreCase)))
             throw new NotSupportedException("Saved flee animation differs from the winning source.");
-        state = state with { Animation = clip.Path, AnimationHash = clip.Hash };
+        state = state with { Animation = clip.Path, AnimationHash = clip.Hash, PathTurn = pathTurn };
         var next = state.Seconds + delta;
-        if (destination is { } waypoint) TurnToward(waypoint, delta);
-        Activity.SetMovement(running: destination.HasValue, sneaking: false);
-        MoveActor(destination.HasValue ? clip.RootDisplacement(state.Seconds, next) : Vector3.Zero, delta, destination);
+        Activity.SetMovement(running: destination.HasValue && !turning, sneaking: false);
+        MoveActor(destination.HasValue && !turning ? clip.RootDisplacement(state.Seconds, next) : Vector3.Zero, delta, destination);
         foreach (var key in clip.Events.Crossed(state.Seconds, next, state.StartPending))
             _enemySounds!.Dispatch(key);
         PublishCombatPose(clip, clip.Time(next), next);
@@ -380,6 +386,7 @@ internal sealed partial class RuntimeNativeActorCombat
             if (_state.CaptureCorpseEquipmentForFiniteWait == CaptureCorpseEquipmentForFiniteWait) _state.CaptureCorpseEquipmentForFiniteWait = null;
             DisposeRouteSearch();
             _stepQueries?.Dispose(); _stepQueries = null;
+            _movementEdge?.Dispose(); _movementEdge = null;
             _eatObjects?.Dispose(); _eatObjects = null;
         }
     }

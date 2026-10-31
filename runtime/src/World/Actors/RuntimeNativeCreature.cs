@@ -1,4 +1,3 @@
-using System.Security.Cryptography;
 using System.Diagnostics;
 using Godot;
 using OpenNV.Runtime.Content;
@@ -126,7 +125,6 @@ internal sealed partial class RuntimeNativeCreature : CharacterBody3D
             }
             var parts = actor.Parts;
             var idle = preparedGeometry.Source.Idle;
-            var bytes = preparedGeometry.Source.IdleBytes;
             var animation = preparedGeometry.Source.Animation;
             var sequence = preparedGeometry.Source.Sequence;
             Mark("prepared-geometry");
@@ -139,17 +137,27 @@ internal sealed partial class RuntimeNativeCreature : CharacterBody3D
             var sourceTargets = attachments.Keys.ToHashSet(StringComparer.Ordinal);
             sourceTargets.UnionWith(sequence.ControlledBlocks.Select(link => link.NodeName).Where(name =>
                 actor.Skeleton.HasSourceTarget(name) || actor.Skeleton.MaterialChannels.HasSourceTarget(name)));
-            actor._animation = new(animation, sequence, actor.Skeleton, link => actor.BindAttachment(animation, link, attachments),
+            if (actor._clock.Resource.Length != 0 && !actor._clock.Resource.Equals(idle, StringComparison.OrdinalIgnoreCase))
+            {
+                // The family clock remains authoritative after walking yields
+                // to another procedure; optional walking layers are not its identity.
+                var restored = new NativeActorCombatAnimation(actor._clock.Resource, content, actor.Skeleton, null, true);
+                if (!restored.Hash.Equals(actor._clock.Sha256, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidDataException("Retained creature base differs from its winning animation.");
+                actor._animation = restored.Animation; idle = restored.Path;
+                animation = restored.Animation.Source; sequence = restored.Animation.Sequence;
+            }
+            else actor._animation = new(animation, sequence, actor.Skeleton, link => actor.BindAttachment(animation, link, attachments),
                 externalObjectTargets: sourceTargets);
             actor._textKeys = new(actor._animation.TextKeys, sequence.StartTime, sequence.StopTime, sequence.CycleType, sequence.Frequency);
-            actor._clock.Bind(idle, Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant());
-            if (sequence.CycleType == 0)
+            actor._clock.Bind(idle, animation.Sha256);
+            if (sequence.CycleType == 0 && state.PackageMotion?.AnimationLayers is not { OwnsIdleClock: true })
                 actor._clock.StartAmbientLoop(reference.FormKey, (sequence.StopTime - sequence.StartTime) / sequence.Frequency);
             actor.Skeleton.Node.SetBonePose(actor.Skeleton.BoneIndex(sequence.TargetName), Transform3D.Identity);
             actor._animation.ApplySourceTime(actor.SourceSeconds);
             Mark("animation-binding");
             actor.Skeleton.BindSoundSource(actor);
-            actor._sounds = new(stack, content, actor, unitsToMetres, state.SoundRandom, state.AnimationSoundEvents);
+            actor._sounds = new(stack, content, actor, unitsToMetres, state.SoundRandom, state.AnimationSoundEvents, appearance.Creature);
             actor.AddChild(actor._sounds);
             Mark("sound-owner");
             actor._unbound.UnionWith(["creature-package-procedures-and-special-idle-selection", "combat-and-actor-controller-dynamics",
@@ -165,12 +173,15 @@ internal sealed partial class RuntimeNativeCreature : CharacterBody3D
     public override void _Process(double delta)
     {
         using var frameWork = OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Measure(OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Owner.CreatureAnimation);
+        if (AmbientIdleActive && (Combat?.Dead == true || Combat?.OwnsPose == true))
+        { ObserveAmbientInterruption(delta); return; }
         if (HasDetachedPendingSandboxStart || Combat?.Dead == true || Combat?.OwnsPose == true) return;
         if (Error is not null) return;
         if (_aiState?.ScriptError is not null) return;
         try
         {
             AdvanceConversationFacing((float)delta);
+            AdvanceAutomaticIdle(delta);
             if (AdvanceScriptIdle(delta)) return;
             if (AdvanceEventIdle(delta)) return;
             if (Combat?.PackageOwnsPose == true) return;
@@ -187,11 +198,11 @@ internal sealed partial class RuntimeNativeCreature : CharacterBody3D
     {
         var from = _clock.ElapsedSeconds;
         var include = _clock.StartPending;
-        _clock.Advance(delta);
+        if (_packageBaseAdoptFrame != Engine.GetProcessFrames()) _clock.Advance(delta);
         foreach (var key in _textKeys.Crossed(from, _clock.ElapsedSeconds, include))
         {
             _animation.ApplySourceTime(key.SourceSeconds);
-            var disposition = IsCreatureAuxiliarySound(key.Text) ? DispatchCreatureTextKey(key.Text) : _sounds.Dispatch(key);
+            var disposition = _sounds.Dispatch(key);
             if (disposition.Contains("unbound", StringComparison.Ordinal)) _unbound.Add("source-event:" + key.Text);
             _lastEvent = new { ordinal = ++_eventCount, key, disposition };
             RuntimeNifControllerPlayer.TextKeyObserver?.Invoke(new

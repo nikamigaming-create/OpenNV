@@ -66,6 +66,7 @@ internal sealed partial class FalloutConditionRuntime(FalloutPluginStack records
         switch (condition.Kind)
         {
             case Function.GetCurrentTime: NoArguments(condition); return Hour is { } hour ? hour() : GlobalValue(condition);
+            case Function.MenuMode: return Required(world, "active menu identity").QueryMenuMode(condition);
             case Function.GetGlobalValue: return Globals is { } globals ? globals.Get(Form(condition, "GLOB")) : GlobalValue(condition);
             case Function.GetScriptVariable:
                 return world is not null ? (float)world.ReadVariable(quests, condition.FormArgument1, condition.Argument2) :
@@ -208,6 +209,16 @@ internal sealed partial class FalloutConditionRuntime(FalloutPluginStack records
                 if (OpenState is { } open && (world is null || world.IsResident(subject))) return PhysicalPhase(open(subject));
                 return subject != records.RuntimeFormKey(0x14) && world?.Get(subject).DoorMotion is { } motion ?
                     PhysicalPhase(motion.OpenState) : NativeValue(subject, condition);
+            case Function.GetHitLocation: NoArguments(condition); return NativeValue(subject, condition);
+            case Function.IsGreetingPlayer:
+                NoArguments(condition); return Required(world, "actor speech process").IsGreetingPlayer(subject) ? 1 : 0;
+            case Function.IsTalking:
+                NoArguments(condition); return Required(world, "actor speech process").IsTalking(subject) ? 1 : 0;
+            case Function.GetSandman or Function.GetCannibal:
+                NoArguments(condition);
+                // These are player action queries. Retail returns zero for any
+                // other subject before consulting the player's action process.
+                return subject == records.RuntimeFormKey(0x14) ? NativeValue(subject, condition) : 0;
             case Function.GetMapMarkerVisible: NoArguments(condition); return Required(world, "map marker state").MapMarkerVisibility(subject);
             default: return NativeValue(subject, condition);
         }

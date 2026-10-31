@@ -63,7 +63,8 @@ internal sealed partial class RuntimeNativeCreature : INativeActorPortal
         Combat.AdvancePackageMotion(_aiPackage!, destination, distance, running, delta, requireArrivalHeight: true, sneaking: sneaking);
         if (_travelProgress is { } travel) Combat.SetTravelProgress(travel);
         _aiState!.ProcedureCaptureBlocker = null;
-        if (!IsOnFloor() || GlobalPosition.DistanceTo(destination) > distance + .1f) return true;
+        if (!IsOnFloor() || GlobalPosition.DistanceTo(destination) > distance + .1f &&
+            !Combat.PackagePortalContactInReach(door)) return true;
         if (!AccompanyPortalPlaybackReady()) return true;
         _accompanyPortalRequested = Combat.RequestPackagePortal(door);
         if (_accompanyPortalRequested) _aiState!.ProcedureCaptureBlocker = AccompanyPortalPending;

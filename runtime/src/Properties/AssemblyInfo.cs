@@ -1,6 +1,7 @@
 using System.Runtime.CompilerServices;
 
 [assembly: InternalsVisibleTo("OpenNV.DevelopmentLab")]
+[assembly: InternalsVisibleTo("OpenNV.AnimationCompare")]
 [assembly: InternalsVisibleTo("OpenNV.ReferenceScriptContractProbe")]
 [assembly: InternalsVisibleTo("OpenNV.FalloutPluginRuntimeProbe")]
 

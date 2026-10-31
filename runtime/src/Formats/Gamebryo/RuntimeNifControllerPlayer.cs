@@ -8,6 +8,7 @@ internal sealed partial class RuntimeNifControllerPlayer : Node
         new(StringComparer.OrdinalIgnoreCase);
     private readonly List<RuntimeNifControllerSequence> _sourceSequences = [];
     private RuntimeNifControllerSequence? _active;
+    private bool _autoStartManagedLoops = true;
     private float[] _boundaries = [];
     private double _elapsedSeconds;
     private bool _includeStart;
@@ -101,10 +102,11 @@ internal sealed partial class RuntimeNifControllerPlayer : Node
             throw new InvalidOperationException("A NIF controller entered the scene without its C# source bindings.");
     }
 
-    internal void Configure(IEnumerable<RuntimeNifControllerSequence> sequences)
+    internal void Configure(IEnumerable<RuntimeNifControllerSequence> sequences, bool autoStartManagedLoops = true)
     {
         if (_sequences.Count != 0)
             throw new InvalidOperationException("NIF controller player is already configured.");
+        _autoStartManagedLoops = autoStartManagedLoops;
         var registered = sequences.ToArray();
         foreach (var sequence in registered)
         {
@@ -125,7 +127,7 @@ internal sealed partial class RuntimeNifControllerPlayer : Node
             _sequences[sequence.Name] = sequence;
         }
         var looping = _sequences.Values.Where(sequence => sequence.CycleType == 0 &&
-            (sequence.DirectClock is null || (sequence.DirectClock.Flags & 8) != 0)).ToArray();
+            (sequence.DirectClock is null ? autoStartManagedLoops : (sequence.DirectClock.Flags & 8) != 0)).ToArray();
         // A manager can expose several alternative loops. Their cycle types
         // do not choose a group; a script/door/other source owner must do that.
         if (looping.Length == 1)

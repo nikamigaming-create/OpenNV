@@ -30,7 +30,12 @@ public partial class NativeReferenceEventsAudit
         }
         void RequireMissing(FalloutFormKey speaker, FalloutFormKey listener)
         {
-            var speech = Create(world);
+            // Each retained startup-failure probe needs its own speech process.
+            // Keep the primary world's healthy owner and counters intact, and
+            // copy applied AND queued enable state into an independent world.
+            using var isolated = new FalloutReferenceWorld(records);
+            isolated.Restore(world.Capture());
+            var speech = Create(isolated);
             try
             {
                 try { speech.SayTo(speaker, listener, topic); throw new InvalidOperationException("Missing enabled actor was accepted."); }

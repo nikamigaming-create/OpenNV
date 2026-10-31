@@ -76,6 +76,12 @@ $harnessOutput = Join-Path $repository "tmp\runtime-gate\live-harness"
 & dotnet build (Join-Path $repository "tools\OpenNV.LiveHarness\OpenNV.LiveHarness.csproj") --configuration Release --nologo --output $harnessOutput
 if ($LASTEXITCODE -ne 0) { throw "OpenNV live harness build failed." }
 
+$animationCompare = Join-Path $repository "tools\OpenNV.AnimationCompare\OpenNV.AnimationCompare.csproj"
+& dotnet build $animationCompare --configuration Release --nologo
+if ($LASTEXITCODE -ne 0) { throw "OpenNV animation comparison tool build failed." }
+& dotnet format $animationCompare --verify-no-changes --no-restore --verbosity minimal
+if ($LASTEXITCODE -ne 0) { throw "OpenNV animation comparison tool formatting failed." }
+
 $probes = @(
     "ReactiveSteeringContractProbe",
     "NativePublicationTimingContractProbe",
