@@ -12,7 +12,7 @@ internal static class AnimationNotesLayoutContracts
             w.Write(1); w.Write(-1); w.Write(2); w.Write(-1); w.Write(-1);
             w.Write(1f); w.Write(-1); w.Write(2U); w.Write(1f);
             w.Write(.25f); w.Write(1.25f); w.Write(-1); w.Write(1);
-            // Stream 27 ends in a four-byte animation-notes reference,
+            // Streams 24–28 end in a four-byte animation-notes reference,
             // unlike the two-byte trailing field of stream 30 and later.
             w.Write(2);
         });
@@ -40,6 +40,24 @@ internal static class AnimationNotesLayoutContracts
         var pose = new FalloutNifAnimationSampler(source, clip.ControlledBlocks.Single().Interpolator).Sample(.75f);
         Require(pose.Translation == new FalloutNifVector3(2, -3, 4) && pose.Scale == 1,
             "Stream 27 transform channel was not retained.");
+        foreach (uint version in new uint[] { 24, 25, 28 })
+        {
+            var qualified = bytes.ToArray();
+            System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(qualified.AsSpan(52), version);
+            var candidate = FalloutNifFile.Read(qualified, reads.Add);
+            foreach (var block in candidate.Blocks)
+            {
+                reads.Clear(); _ = candidate.ReadObject(block.Index);
+                Require(reads.Sum(read => read.Length) == block.Size && reads.First().Offset == block.Offset &&
+                    reads.Zip(reads.Skip(1)).All(pair => pair.First.Offset + pair.First.Length == pair.Second.Offset),
+                    $"Stream {version} block extents were not consumed exactly.");
+            }
+            var selected = candidate.ReadControllerSequence(0);
+            candidate.RequireNoActiveAnimationNotes(selected);
+            var sample = new FalloutNifAnimationSampler(candidate, selected.ControlledBlocks.Single().Interpolator).Sample(.75f);
+            Require(selected.AnimationNotes == 2 && selected.UnknownShort is null && sample.Translation == pose.Translation && sample.Scale == pose.Scale,
+                $"Stream {version} lost its notes layout or actual transform channel.");
+        }
         Reject(() => FalloutNifFile.Read(File(sequence[..^2], interpolator)).ReadControllerSequence(0));
         Reject(() => FalloutNifFile.Read(File([.. sequence, 0, 0], interpolator)).ReadControllerSequence(0));
         var badReference = sequence.ToArray();
@@ -51,9 +69,9 @@ internal static class AnimationNotesLayoutContracts
         var activeNotes = FalloutNifFile.Read(File(sequence, interpolator, [1, 0, 0, 0, 0, 0]));
         RejectUnowned(() => activeNotes.RequireNoActiveAnimationNotes(activeNotes.ReadControllerSequence(0)));
         var unknown = bytes.ToArray();
-        System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(unknown.AsSpan(52), 28);
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(unknown.AsSpan(52), 29);
         Reject(() => FalloutNifFile.Read(unknown));
-        Console.WriteLine("OPENNV_ANIMATION_NOTES_LAYOUT_PASS stream=27 exactExtents=true finiteClock=true transform=true wrongWidthRefused=true unknownStreamRefused=true");
+        Console.WriteLine("OPENNV_ANIMATION_NOTES_LAYOUT_PASS streams=24,25,27,28 exactExtents=true finiteClock=true transform=true wrongWidthRefused=true unknownStreamRefused=true");
     }
 
     internal static void Audit(ReadOnlyMemory<byte> bytes)

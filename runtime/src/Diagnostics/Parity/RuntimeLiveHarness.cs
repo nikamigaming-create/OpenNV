@@ -184,6 +184,9 @@ internal sealed partial class RuntimeLiveHarness : Node
                     ? "Handled by the shared save owner; cold loading and resulting gameplay state are observed separately."
                     : document.RootElement.GetProperty("op").GetString() == "bot"
                     ? "Bot policy command accepted; native gameplay receipts and evidence persistence are observed separately."
+                    : document.RootElement.GetProperty("op").GetString() is { } diagnostic &&
+                        (diagnostic.StartsWith("rig.", StringComparison.Ordinal) || diagnostic is "actor.pose" or "object.pose")
+                    ? "Diagnostic owner admitted; fresh rig/pose artifacts and resulting gameplay are observed separately."
                     : "Delivered to Godot input; resulting gameplay state is observed separately.");
             }
             catch (Exception exception) when (exception is ArgumentException or InvalidDataException or JsonException or InvalidOperationException or KeyNotFoundException or NotSupportedException or IOException or UnauthorizedAccessException)
@@ -215,6 +218,7 @@ internal sealed partial class RuntimeLiveHarness : Node
         if (_inputRecording is not null && command.GetProperty("op").GetString() is "checkpoint.load" or "checkpoint.save" or "physics.sever")
             throw new InvalidOperationException("Finish the input segment before changing authoritative state through diagnostics.");
         if (DispatchCheckpoint(command, request)) return;
+        if (DispatchRig(command, request)) return;
         if (DispatchCreaturePose(command, request)) return;
         if (DispatchProcessOwners(command, request)) return;
         if (!_deliveringReplay && command.GetProperty("op").GetString() is "key" or "mouse" or "look" or "button" or "pointer" or "text" or "bot" or "physics.sever")
@@ -543,7 +547,7 @@ internal sealed partial class RuntimeLiveHarness : Node
             campaignBot = _campaignBot.State,
             botSkillStore = BotSkillStoreState,
             physicsTest = _lastPhysicsTest,
-            checkpoint = _lastCheckpoint,
+            checkpoint = ObserveCheckpoint(),
             checkpointRestored = _restoredCheckpoint?.Invoke(),
             checkpointTransitioning = _checkpointTransitioning?.Invoke() == true,
             recordedInput = new
@@ -691,6 +695,7 @@ internal sealed partial class RuntimeLiveHarness : Node
     {
         GD.Print($"OPENNV_LIVE_HARNESS_RETIRE phase=enter stateWritePending={_stateWrite is not null}");
         _creaturePoseObservation?.Stop("harness-retired");
+        _objectPoseObservation?.Stop("harness-retired");
         RetirePipelinePhases();
         _bot?.Stop();
         _inputPlayback?.Stop("Playback ended with its runtime owner.", ReleaseAll);

@@ -7,35 +7,31 @@ public partial class NativeNifInstanceAudit
     private static void ExerciseNoLightingTextureOwner()
     {
         for (uint mode = 0; mode < 4; mode++)
-        {
-            var bytes = NoLightingTextureFixture(mode);
-            var original = bytes.ToArray();
-            var nif = FalloutNifFile.Read(bytes);
-            var source = (FalloutNifSourceTexture)nif.ReadObject(6);
-            var shader = (FalloutNifNoLightingProperty)nif.ReadObject(3);
-            var legacy = (FalloutNifTexturingProperty)nif.ReadObject(4);
-            var scene = RuntimeNativeNifMeshBuilder.Build(nif, .0142875f);
-            try
+            foreach (var transform in new[] { false, true })
             {
-                var mesh = scene.Root.FindChildren("*", "MeshInstance3D", true, false).Cast<MeshInstance3D>().Single();
-                var material = mesh.Mesh.SurfaceGetMaterial(0) as ShaderMaterial ??
-                    throw new InvalidDataException("No-lighting texture fixture lost its source shader.");
-                if (shader.FileName != "" || source.FileName != "textures/unused-legacy.dds" ||
-                    legacy.BaseTexture?.Source != 6 || legacy.BaseTexture.Flags != 0x3200 ||
-                    material.GetShaderParameter("source_has_texture").AsBool() ||
-                    material.GetMeta("opennv_nif_texture_clamp_mode").AsUInt32() != mode ||
-                    !bytes.AsSpan().SequenceEqual(original))
-                    throw new InvalidDataException("Dormant legacy texture replaced the shader texture/sampler or source bytes.");
+                var bytes = NoLightingTextureFixture(mode, transform);
+                var original = bytes.ToArray();
+                var nif = FalloutNifFile.Read(bytes);
+                var source = (FalloutNifSourceTexture)nif.ReadObject(6);
+                var shader = (FalloutNifNoLightingProperty)nif.ReadObject(3);
+                var legacy = (FalloutNifTexturingProperty)nif.ReadObject(4);
+                var scene = RuntimeNativeNifMeshBuilder.Build(nif, .0142875f);
+                try
+                {
+                    var mesh = scene.Root.FindChildren("*", "MeshInstance3D", true, false).Cast<MeshInstance3D>().Single();
+                    var material = mesh.Mesh.SurfaceGetMaterial(0) as ShaderMaterial ??
+                        throw new InvalidDataException("No-lighting texture fixture lost its source shader.");
+                    if (shader.FileName != "" || source.FileName != "textures/unused-legacy.dds" ||
+                        legacy.BaseTexture?.Source != 6 || legacy.BaseTexture.Flags != 0x3200 ||
+                        material.GetShaderParameter("source_has_texture").AsBool() ||
+                        (transform && material.GetShaderParameter("source_uv_offset").AsVector2() != new Vector2(.25f, .5f)) ||
+                        material.GetMeta("opennv_nif_texture_clamp_mode").AsUInt32() != mode ||
+                        !bytes.AsSpan().SequenceEqual(original))
+                        throw new InvalidDataException("Dormant legacy texture replaced the shader texture/sampler or source bytes.");
+                }
+                finally { scene.Root.Free(); }
             }
-            finally { scene.Root.Free(); }
-        }
-        try
-        {
-            RuntimeNativeNifMeshBuilder.Build(FalloutNifFile.Read(NoLightingTextureFixture(3, transform: true)), .0142875f).Root.Free();
-            throw new InvalidOperationException("An unmatched active legacy texture transform was admitted.");
-        }
-        catch (NotSupportedException failure) when (failure.Message.Contains("no matching no-lighting shader texture", StringComparison.Ordinal)) { }
-        GD.Print("OPENNV_NO_LIGHTING_TEXTURE_OWNER_PASS emptyShaderRetained=true dormantLegacyNotLoaded=true shaderSampler=true activeMismatchRefused=true sourceBytesPreserved=true pixels=unverified");
+        GD.Print("OPENNV_NO_LIGHTING_TEXTURE_OWNER_PASS emptyShaderRetained=true dormantLegacyNotLoaded=true shaderSampler=true independentUvBindings=true sourceBytesPreserved=true pixels=unverified");
     }
 
     private static byte[] NoLightingTextureFixture(uint mode, bool transform = false)

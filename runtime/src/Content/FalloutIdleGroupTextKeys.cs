@@ -30,7 +30,6 @@ internal sealed class FalloutIdleGroupTextKeys
         var metadata = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var synchronization = false;
         var expected = 0;
-        string[] markers = ["Start", "StartLoop", "EndLoop", "End"];
         var kinds = new List<IReadOnlyList<FalloutIdleGroupKeyKind>>(keys.Count);
         foreach (var key in keys)
         {
@@ -57,18 +56,10 @@ internal sealed class FalloutIdleGroupTextKeys
                     else blendOut = count;
                     kind = FalloutIdleGroupKeyKind.TransitionMetadata;
                 }
-                else if (specialIdle && expected < markers.Length)
+                else if (specialIdle && expected < 4)
                 {
-                    if (text.Equals(markers[expected], StringComparison.OrdinalIgnoreCase))
-                    {
-                        expected++;
+                    if (FalloutIdleGroupTiming.TryConsume(text, ref expected, out _))
                         kind = FalloutIdleGroupKeyKind.GroupMarker;
-                    }
-                    else if (expected is 1 or 2 && text.Equals("End", StringComparison.OrdinalIgnoreCase))
-                    {
-                        expected = markers.Length;
-                        kind = FalloutIdleGroupKeyKind.GroupMarker;
-                    }
                     else if (expected is 1 or 2 && text.Equals("Attach", StringComparison.OrdinalIgnoreCase))
                     {
                         // Attach is an authored marker in other group classes.

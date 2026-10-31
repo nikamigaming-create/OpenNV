@@ -38,6 +38,7 @@ internal partial class RuntimeNativeReferenceEvents : Node
     private long _frames, _executedBlocks, _recoveredReadFaults, _recoveredCommandFaults;
     private readonly Dictionary<string, long> _completedEventBlocks = new(StringComparer.OrdinalIgnoreCase);
     internal long CompletedEventBlocks(string name) => _completedEventBlocks.GetValueOrDefault(FalloutReferencePackageEvents.CanonicalName(name));
+    internal bool HasPendingActivations => _bindings.Values.Any(binding => binding.PendingActivation is not null || binding.PendingRelay is not null);
     private Func<FalloutPlacedReference, Transform3D> _transform = null!;
     private float _unitsToMeters;
     private uint _collisionMask;

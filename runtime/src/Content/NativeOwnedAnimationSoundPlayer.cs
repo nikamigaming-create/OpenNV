@@ -64,10 +64,11 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer : Node3D
     };
 
     internal NativeOwnedAnimationSoundPlayer(FalloutPluginStack records, RuntimeLiveContentSource content,
-        Node3D actor, float unitsToMetres, FalloutSoundRandomState random, FalloutAnimationSoundEvents? events = null)
+        Node3D actor, float unitsToMetres, FalloutSoundRandomState random, FalloutAnimationSoundEvents? events = null, FalloutFormKey? creatureSoundSource = null)
     {
         if (!float.IsFinite(unitsToMetres) || unitsToMetres <= 0) throw new ArgumentOutOfRangeException(nameof(unitsToMetres));
         _records = records; _content = content; _actor = actor; _unitsToMetres = unitsToMetres; _random = random; _events = events;
+        _creatureSoundSource = creatureSoundSource;
         _nativeOwner = actor.GetInstanceId();
         if (_events is not null)
         {
@@ -77,7 +78,7 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer : Node3D
         Name = "OwnedAnimationSounds";
     }
 
-    internal string Dispatch(string textKey) => Dispatch(textKey, this, ownsLoopStop: true);
+    internal string Dispatch(string textKey) => DispatchSegments(textKey);
 
     internal string DispatchSound(FalloutFormKey form, Node3D? emitter = null, Action? completed = null) =>
         Dispatch("SOUN:" + form, emitter ?? this, ownsLoopStop: true, form, completed);
@@ -122,7 +123,8 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer : Node3D
             if (editorId is null) return "unbound-runtime-event";
             var entry = Descriptor(editorId, form);
             var stereoOutput = AudioServer.GetSpeakerMode() == AudioServer.SpeakerMode.ModeStereo;
-            var selected = FalloutAnimationSound.Select(entry.Source, entry.Variants, _random, ownsLoopStop, stereoOutput);
+            var selected = FalloutAnimationSound.WithTextKeyContext(
+                FalloutAnimationSound.Select(entry.Source, entry.Variants, _random, ownsLoopStop, stereoOutput), textKey);
             generation = _events?.Begin(_records, selected, textKey, stereoOutput, entry.Variants);
             foreach (var lane in selected.Unbound) _unbound.Add(selected.Source.FormKey + ":" + lane);
             var disposition = selected.Play ? selected.Unbound.Count == 0 ? "source-sound-playing" : "source-sound-dry-playing-partial" : "source-sound-chance-skipped";
@@ -185,10 +187,12 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer : Node3D
         }
     }
 
-    internal string Dispatch(FalloutNifTextKeyEvent key)
+    internal string Dispatch(FalloutNifTextKeyEvent key) => DispatchSegments(key.Text);
+
+    private string DispatchSegments(string text)
     {
         var dispositions = new List<string>();
-        foreach (var declaration in FalloutNifTextKeyDeclarations.Read(key.Text))
+        foreach (var declaration in FalloutNifTextKeyDeclarations.Read(text))
         {
             if (declaration.DispatchOrdinal is null) continue;
             var structural = declaration.Kind == FalloutNifTextKeyDeclarationKind.SequenceBoundary;

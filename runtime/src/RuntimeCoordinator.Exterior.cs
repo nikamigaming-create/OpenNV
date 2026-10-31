@@ -556,6 +556,8 @@ public partial class RuntimeCoordinator
             _nativeLandLastUse.Remove(land.Source.ActiveCell); land.QueueFree();
         }
         Mark("terrain-residency");
+        root.GetChildren().OfType<RuntimeNativeGrassOwner>().Single().Register(
+            root.GetChildren().OfType<RuntimeNativeLandscapeTransport>().Where(land => !land.IsQueuedForDeletion()));
         _nativeReferenceEvents!.SetResidency(grid.Scene, root);
         Mark("reference-events");
         ObserveNativeResidentReferences(grid.Scene);
@@ -669,6 +671,10 @@ public partial class RuntimeCoordinator
         var shadowDistance = (diameter / 2 + 1) * 4096 * _configuration.World.GameUnitsToMeters * MathF.Sqrt(2);
         sky.Configure(_nativePluginStack!, _nativeSkyLighting!, () => _nativeGameTime!.Hour, _configuration.World.GameUnitsToMeters, this, shadowDistance);
         root.AddChild(sky);
+        var grass = new RuntimeNativeGrassOwner { Name = "OwnedTerrainGrass" };
+        grass.Configure(root, RuntimeLiveContentSource.Current!, _nativePluginStack!, sky, _configuration.World.GameUnitsToMeters);
+        grass.Register(root.GetChildren().OfType<RuntimeNativeLandscapeTransport>());
+        root.AddChild(grass);
         var wind = new RuntimeNativeWind { Name = "ExteriorWindOwner" };
         FalloutFormKey? windWeather = null;
         float windSpeed = 0;

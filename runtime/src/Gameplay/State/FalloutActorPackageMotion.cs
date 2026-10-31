@@ -1,4 +1,5 @@
 using OpenNV.Runtime.Content;
+using OpenNV.Runtime.World.Cells;
 
 namespace OpenNV.Runtime.Gameplay.State;
 
@@ -10,13 +11,15 @@ internal sealed record FalloutActorPackageMotion(FalloutFormKey Package, string 
     FalloutEditorTravelProgress? EditorTravel = null, bool DialogueCompleted = false, FalloutTravelProgress? Travel = null,
     FalloutTravelProgress? Guard = null, FalloutAccompanyPortalArrival? AccompanyPortal = null,
     FalloutWanderProgress? Wander = null, FalloutSandboxActivityProgress? Sandbox = null, FalloutActorEatProgress? Eat = null,
-    FalloutActorSleepProgress? Sleep = null, FalloutActorEatPackageProgress? EatPackage = null)
+    FalloutActorSleepProgress? Sleep = null, FalloutActorEatPackageProgress? EatPackage = null,
+    FalloutActorPathTurn? PathTurn = null, FalloutActorPackageAnimationLayers? AnimationLayers = null)
 {
     // Captures and restores must not share mutable route, pose or activity
     // buffers with the live owner or a caller retaining the snapshot.
     internal FalloutActorPackageMotion Copy() => this with
     {
         Position = (float[])Position.Clone(),
+        AnimationLayers = AnimationLayers?.Copy(),
         Rotation = (float[])Rotation.Clone(),
         EditorTravel = EditorTravel is { } editor ? editor with { Location = (float[])editor.Location.Clone() } : null,
         Travel = Travel is { } travel ? CopyTravel(travel) : null,
@@ -35,6 +38,8 @@ internal sealed record FalloutActorPackageMotion(FalloutFormKey Package, string 
 
     internal void Validate()
     {
+        PathTurn?.Validate();
+        AnimationLayers?.Validate();
         Patrol?.Validate();
         Escort?.Validate();
         EditorTravel?.Validate();

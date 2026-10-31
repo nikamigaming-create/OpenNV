@@ -236,7 +236,8 @@ internal sealed class FalloutAnimationSoundEvents(FalloutFormKey reference, Func
             var source = FalloutSoundRecordReader.Read(record) with { LogicalPath = entry.LogicalPath };
             if (!FalloutAnimationSound.Variants(source, entry.Variants).SequenceEqual(entry.Variants, StringComparer.OrdinalIgnoreCase))
                 throw new InvalidDataException("Saved sound variants are outside their source request.");
-            var selected = FalloutAnimationSound.Select(source, entry.Variants, new(entry.RandomBefore), true, entry.StereoOutput);
+            var selected = FalloutAnimationSound.WithTextKeyContext(
+                FalloutAnimationSound.Select(source, entry.Variants, new(entry.RandomBefore), true, entry.StereoOutput), entry.TextKey);
             if (selected.Play != entry.Played || selected.Path != entry.Path || selected.PitchScale != entry.PitchScale ||
                 selected.RandomAfter != entry.RandomAfter || !selected.Unbound.SequenceEqual(entry.PartialLanes))
                 throw new InvalidDataException("Saved audio selection or partial lanes differ from the consumed source request.");

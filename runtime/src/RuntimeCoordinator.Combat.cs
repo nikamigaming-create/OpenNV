@@ -38,7 +38,7 @@ public partial class RuntimeCoordinator
         var units = _configuration.World.GameUnitsToMeters;
         Vector3 Source(Vector3 point) => new Vector3(point.X, -point.Z, point.Y) / units;
         Vector3 World(Vector3 point) => new Vector3(point.X, point.Z, -point.Y) * units;
-        var path = _botNavigation!.FindPath(Source(from), Source(to), out var prefixRegion,
+        var path = _botNavigation!.FindPath(Source(from), Source(to), out var prefixRegion, out var corridorFloor,
             destinationRadiusGameUnits: radius / units);
         var points = path.Select(World).ToArray();
         Func<Vector3, bool> Prefix(Vector3 target, int resume)
@@ -47,13 +47,15 @@ public partial class RuntimeCoordinator
             return point => source(Source(point));
         }
         var terminalFloor = NativeActorNavigationRoute.ReadTerminalFloor(points, Prefix);
+        var corridor = corridorFloor(.01f / units, NativeCapsuleNavigation.SourceHeightTolerance / units);
+        bool OnCorridorFloor(Vector3 point) => corridor(Source(point));
         var sourceHash = _botNavigation.SourceSha256;
         if (radius <= 0) return new(points, PrefixArrival: Prefix,
-            SourceSha256: sourceHash, TerminalFloor: terminalFloor);
+            SourceSha256: sourceHash, TerminalFloor: terminalFloor, CorridorFloor: OnCorridorFloor);
         var region = _botNavigation.ArrivalRegion(Source(from), Source(to), path[^1], radius / units,
             .01f / units, NativeCapsuleNavigation.SourceHeightTolerance / units);
         points = NativeCapsuleNavigation.TerminalRegionCorridor(points, point => region(Source(point)));
         return new(points, new(to, points[^1], radius), point => region(Source(point)), Prefix,
-            sourceHash, terminalFloor);
+            sourceHash, terminalFloor, OnCorridorFloor);
     }
 }

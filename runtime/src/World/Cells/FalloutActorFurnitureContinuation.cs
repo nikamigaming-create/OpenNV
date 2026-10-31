@@ -151,12 +151,18 @@ internal sealed record FalloutActorFurnitureContinuation(FalloutActorPackageAssi
                 Seat.Sleeping != ((BinaryPrimitives.ReadUInt32LittleEndian(flags.Span) & 0x80000000u) != 0))
                 throw new InvalidDataException("Saved reservation has no enabled source marker.");
             RequireHash(Clip!.Idle, "IDLE", Clip.IdleSha256);
-            if (Phase != 1 && (actor.Animation.Resource.Length == 0 || !actor.Animation.Resource.Equals(Clip.Resource, StringComparison.OrdinalIgnoreCase) ||
-                !actor.Animation.Sha256.Equals(Clip.Sha256, StringComparison.OrdinalIgnoreCase)))
-                throw new InvalidDataException("Saved furniture clock differs from its selected animation.");
+            ValidateClock(actor.Animation.Capture());
         }
         if (Blink is not null && Blink.Settings != FalloutFaceBlinkSettings.Read(records))
             throw new InvalidDataException("Saved furniture blink settings differ from the winning source.");
+    }
+
+    internal void ValidateClock(FalloutActorAnimationSnapshot? clock)
+    {
+        if (Furniture is not null && Phase != 1 && (clock is null ||
+            !clock.Resource.Equals(Clip!.Resource, StringComparison.OrdinalIgnoreCase) ||
+            !clock.Sha256.Equals(Clip.Sha256, StringComparison.OrdinalIgnoreCase)))
+            throw new InvalidDataException("Saved furniture clock differs from its selected animation.");
     }
 
     internal static string RecordHash(FalloutPluginRecord record) => Convert.ToHexString(SHA256.HashData(record.ReadData()));

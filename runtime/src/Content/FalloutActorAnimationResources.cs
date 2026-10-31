@@ -180,6 +180,25 @@ internal sealed class FalloutActorAnimationResources
             "mtforward" => ["mtforward", "mtidle"],
             _ => throw new ArgumentException("An unmodified forward movement group is required.", nameof(requestedGroup)),
         };
+        return ResolveMovementCandidates(directory, requestedGroup, folders, actions);
+    }
+
+    internal FalloutActorMovementAnimation ResolveTurn(string directory, bool left, bool sneaking,
+        IReadOnlyList<string> folders)
+    {
+        var action = left ? "mtturnleft" : "mtturnright";
+        var requested = sneaking ? "sneak" + action : action;
+        // Missing stance-specific movement first tries the same action with
+        // the stance cleared. Only then does it clear the action to Idle,
+        // repeating that stance inheritance for the idle. Weapon modifiers
+        // are outside this unarmed movement selector.
+        string[] actions = sneaking ? [requested, action, "sneakmtidle", "mtidle"] : [action, "mtidle"];
+        return ResolveMovementCandidates(directory, requested, folders, actions);
+    }
+
+    private FalloutActorMovementAnimation ResolveMovementCandidates(string directory, string requestedGroup,
+        IReadOnlyList<string> folders, IReadOnlyList<string> actions)
+    {
         foreach (var action in actions)
             foreach (var folder in folders)
                 if (Find(directory, folder.Length == 0 ? action : folder + "/" + action) is { } path)

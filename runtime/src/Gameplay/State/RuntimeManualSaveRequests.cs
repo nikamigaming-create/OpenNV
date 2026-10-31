@@ -49,10 +49,12 @@ internal sealed class RuntimeManualSaveRequests
     internal bool Pending => Receipt?.Disposition == "pending";
 
     internal RuntimeManualSaveReceipt Request(Guid session, string sourceCompatibilityId, ulong phase,
-        RuntimeManualSaveOrigin origin = RuntimeManualSaveOrigin.PlayerInput)
+        RuntimeManualSaveOrigin origin = RuntimeManualSaveOrigin.PlayerInput, Guid? requestedSlot = null)
     {
         if (_advancingWork || _writing && _pendingWrite is null && _pendingCapture is null || session == Guid.Empty || string.IsNullOrWhiteSpace(sourceCompatibilityId) || !Enum.IsDefined(origin))
             throw new InvalidOperationException("Manual save has no settled engine session/source owner.");
+        if (requestedSlot is { } slot && (slot == Guid.Empty || Pending || _history.Any(receipt => receipt.Slot == slot)))
+            throw new InvalidOperationException("Explicit save identity must be fresh and cannot replace a pending save.");
         if (Pending)
         {
             var current = Receipt!;
@@ -63,7 +65,7 @@ internal sealed class RuntimeManualSaveRequests
         else
         {
             _preparation = null;
-            _history.Add(new(checked(++_generation), Guid.NewGuid(), session, sourceCompatibilityId, phase, 1, "pending", Origin: origin));
+            _history.Add(new(checked(++_generation), requestedSlot ?? Guid.NewGuid(), session, sourceCompatibilityId, phase, 1, "pending", Origin: origin));
         }
         return Receipt!;
     }

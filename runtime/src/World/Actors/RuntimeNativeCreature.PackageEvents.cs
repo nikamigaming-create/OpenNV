@@ -15,7 +15,6 @@ internal sealed partial class RuntimeNativeCreature
     private RuntimeNativeNifAnimation? _eventIdleAnimation;
     private FalloutIdleAnimationPlayback? _eventIdleClock;
     private readonly ConditionalWeakTable<RuntimeNativeNifAnimation, FalloutIdleGroupTextKeys> _idleGroupKeys = new();
-    private readonly Dictionary<string, FalloutCreatureAnimationSounds.Declaration> _creatureEnumSounds = new(StringComparer.OrdinalIgnoreCase);
     private bool PackageEndIdlePending => _aiState?.PackageIdle?.Kind == "POEA" && _eventIdleClock?.Complete == false;
 
     private void DispatchPackageEvent(FalloutScriptPackage package, string kind)
@@ -46,7 +45,7 @@ internal sealed partial class RuntimeNativeCreature
                 var source = ReadIdle(idle);
                 var clock = new FalloutIdleAnimationPlayback(source.Animation.Sequence.StartTime, source.Animation.Sequence.StopTime,
                     source.Animation.Sequence.Frequency, source.Animation.Sequence.CycleType,
-                    source.Animation.TextKeys.Select(key => (key.Time, key.Value)).ToArray(), timing.SelectAdditionalLoops(_aiState!.SoundRandom.NextBounded));
+                    source.Animation.TextKeys.Select(key => (key.Time, key.Value)).ToArray(), timing.SelectAdditionalLoops(_aiState!.SoundRandom.NextBounded), source.Animation.Sequence.Name);
                 var saved = new FalloutPackageEventIdle(package.Form, Hash(_aiRecords.GetEffective(package.Form).ReadData()), kind,
                     form, Hash(record.ReadData()), idle.AnimationPath, source.Hash, clock.Capture());
                 BindEventIdle(saved, source.Animation, clock);
@@ -60,11 +59,10 @@ internal sealed partial class RuntimeNativeCreature
         }
     }
 
-    private (RuntimeNativeNifAnimation Animation, string Hash) ReadIdle(FalloutActorIdleSource idle)
+    private (RuntimeNativeNifAnimation Animation, string Hash) ReadIdle(FalloutActorIdleSource idle, bool externalAccumulationRoot = false)
     {
         if (idle.Objects.Count != 0) throw new NotSupportedException("Creature event idle requires its ANIO attachment owner.");
-        if (!_content.TryRead(idle.AnimationPath, null, out var bytes, out _)) throw new FileNotFoundException(idle.AnimationPath);
-        var nif = FalloutNifFile.Read(bytes);
+        var nif = NativeAnimationResources.For(_content).Read(idle.AnimationPath);
         var sequences = nif.Roots.Select(nif.ReadObject).OfType<FalloutNifControllerSequence>().ToArray();
         if (sequences.Length != 1) throw new NotSupportedException("Creature event idle requires one source sequence.");
         var attachments = IndexAttachmentTargets();
@@ -72,12 +70,12 @@ internal sealed partial class RuntimeNativeCreature
         targets.UnionWith(sequences[0].ControlledBlocks.Select(link => link.NodeName).Where(name =>
             Skeleton.HasSourceTarget(name) || Skeleton.MaterialChannels.HasSourceTarget(name)));
         var animation = new RuntimeNativeNifAnimation(nif, sequences[0], Skeleton, link => BindAttachment(nif, link, attachments),
-            externalObjectTargets: targets);
+            externalObjectTargets: targets, externalAccumulationRoot: externalAccumulationRoot);
         if (animation.UnboundChannels.Count != 0)
             throw new NotSupportedException("Creature event idle has unbound source channels: " +
                 string.Join("; ", animation.UnboundChannels.Select(channel => channel.Source.NodeName + "/" + channel.Reason)));
         _ = GroupKeys(animation);
-        return (animation, Hash(bytes));
+        return (animation, nif.Sha256.ToUpperInvariant());
     }
 
     private void RestoreEventIdle()
@@ -91,7 +89,7 @@ internal sealed partial class RuntimeNativeCreature
             throw new InvalidDataException("Saved creature idle differs from its owned animation.");
         var sequence = source.Animation.Sequence;
         var clock = new FalloutIdleAnimationPlayback(sequence.StartTime, sequence.StopTime, sequence.Frequency, sequence.CycleType,
-            source.Animation.TextKeys.Select(key => (key.Time, key.Value)).ToArray(), saved.Clock.SelectedAdditionalLoops);
+            source.Animation.TextKeys.Select(key => (key.Time, key.Value)).ToArray(), saved.Clock.SelectedAdditionalLoops, sequence.Name);
         clock.Restore(saved.Clock);
         BindEventIdle(saved, source.Animation, clock);
     }
@@ -142,7 +140,8 @@ internal sealed partial class RuntimeNativeCreature
                 var structural = value.Equals("start", StringComparison.OrdinalIgnoreCase) || value.Equals("end", StringComparison.OrdinalIgnoreCase) ||
                     value.Equals("StartLoop", StringComparison.OrdinalIgnoreCase) || value.Equals("EndLoop", StringComparison.OrdinalIgnoreCase);
                 var kind = declarations.Kind(ordinal, segment);
-                if (ReferenceEquals(animation, _scriptIdleAnimation) && kind == FalloutIdleGroupKeyKind.GroupMarker &&
+                structural |= kind == FalloutIdleGroupKeyKind.GroupMarker;
+                if (ReferenceEquals(animation, _scriptIdleAnimation) && !_scriptIdleClock!.HasGroupTiming && kind == FalloutIdleGroupKeyKind.GroupMarker &&
                     value.Equals("End", StringComparison.OrdinalIgnoreCase) && _scriptIdleClock!.AdditionalLoops == 0 &&
                     _scriptIdleDeactivation is null)
                     _scriptIdleEndPending = true;
@@ -160,33 +159,7 @@ internal sealed partial class RuntimeNativeCreature
     private FalloutIdleGroupTextKeys GroupKeys(RuntimeNativeNifAnimation animation) =>
         _idleGroupKeys.GetValue(animation, static source => FalloutIdleGroupTextKeys.Read(source.Sequence.Name, source.TextKeys));
 
-    private static bool IsCreatureAuxiliarySound(string value) =>
-        value.StartsWith("Enum:", StringComparison.OrdinalIgnoreCase) &&
-        (value[5..].Trim().Equals("Auxiliary1", StringComparison.OrdinalIgnoreCase) ||
-         value[5..].Trim().Equals("Auxiliary2", StringComparison.OrdinalIgnoreCase) ||
-         value[5..].Trim().Equals("Auxiliary3", StringComparison.OrdinalIgnoreCase));
-
-    private string DispatchCreatureTextKey(string value)
-    {
-        if (!IsCreatureAuxiliarySound(value)) return _sounds.Dispatch(value);
-        var name = value[5..].Trim();
-        if (!_creatureEnumSounds.TryGetValue(name, out var declaration))
-        {
-            var records = _aiRecords ?? throw new NotSupportedException("Creature enum sound has no source record owner.");
-            declaration = FalloutCreatureAnimationSounds.ReadSingleSound(records, Appearance.Creature, name);
-            _creatureEnumSounds.Add(name, declaration);
-        }
-        // Cache declarations only. Each nonnull event makes its own decision
-        // in the shared process stream, before media or variant selection.
-        var selected = declaration.Select(FalloutSharedUnsignedRandom.Process.NextBounded);
-        if (selected.Kind == FalloutCreatureAnimationSounds.SelectionKind.DeclaredNull)
-            return "source-declared-null-creature-sound";
-        if (selected.Kind == FalloutCreatureAnimationSounds.SelectionKind.ChanceMiss)
-            return $"source-creature-sound-chance-miss roll={selected.Roll} chance={declaration.Chance}";
-        var form = selected.Sound ?? throw new InvalidDataException("Selected creature sound lost its source identity.");
-        _sounds.PrepareSound(form);
-        return _sounds.DispatchSound(form) + $";creatureChance={declaration.Chance};roll={selected.Roll}";
-    }
+    private string DispatchCreatureTextKey(string value) => _sounds.Dispatch(value);
 
     private static string Hash(ReadOnlySpan<byte> bytes) => Convert.ToHexString(SHA256.HashData(bytes));
 }

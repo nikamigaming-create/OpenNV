@@ -4,6 +4,15 @@ namespace OpenNV.Runtime.World.Cells;
 
 internal static partial class NativeCharacterStep
 {
+    private static readonly StringName RootContactOffsetKey = "source_character_root_contact_offset";
+    internal static void SetRootContactOffset(CharacterBody3D body, float offset)
+    {
+        if (!float.IsFinite(offset) || offset < 0) throw new InvalidDataException("Character root contact offset is invalid.");
+        body.SetMeta(RootContactOffsetKey, offset);
+    }
+    private static float RootContactOffset(CharacterBody3D body) => body.HasMeta(RootContactOffsetKey)
+        ? body.GetMeta(RootContactOffsetKey).AsSingle() : 0;
+
     private static PhysicsRayQueryParameters3D CreateSupportRay(Vector3 from, Vector3 to, uint mask, Rid excluded)
     {
         var exclusions = new Godot.Collections.Array<Rid>();
@@ -24,6 +33,7 @@ internal static partial class NativeCharacterStep
     // Every support query resolves the body's live world as before.
     internal sealed class QueryResources(CharacterBody3D body) : IDisposable
     {
+        internal float ContactOffset { get; } = RootContactOffset(body);
         private readonly ulong _owner = body.GetInstanceId();
         private readonly Rid _rid = body.GetRid();
         private PhysicsTestMotionParameters3D? _parameters;

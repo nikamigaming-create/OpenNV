@@ -96,10 +96,12 @@ gaps are in current-work.md; old package-route checks do not establish playabili
    expose failures but cannot certify a matched run. Sampled actor fields and a
    latest-frame video are not lossless event/frame coverage.
 3. Implement coherent shared owners using the dependency order above and measured
-   failures. Current first repair: exterior residency from owned settings and one
-   process-phase planning allowance across physics catch-up, followed by native
-   query/request lifetime and actor process/support ownership. Preserve actual
-   collision, gameplay clocks, source selection and fair retained work.
+   failures. Current first repair: signed actor root motion and persistent
+   animation layers, followed by a source-derived comparator for every distinct
+   rig, animation, weapon action and animated-object family. Controlled paired
+   rigs are authorized diagnostics; preserve actual gameplay owners and keep
+   their evidence separate from ordinary campaign execution. Retain unbound
+   cases, acquire missing observations and rerun the whole affected family.
 4. Run focused synthetic and owned-data checks, then the required full gate;
    produce an immutable build and replay/smoke it. Separate recording-free speed
    measurement from visual capture overhead. Target substantially better measured

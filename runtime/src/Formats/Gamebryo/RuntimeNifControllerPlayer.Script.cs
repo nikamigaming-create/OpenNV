@@ -58,6 +58,15 @@ internal sealed partial class RuntimeNifControllerPlayer
     internal void RestoreObjectState(FalloutObjectAnimationSnapshot state)
     {
         ValidateObjectState(state);
+        if (!_autoStartManagedLoops && !state.ScriptSelected && _sequences[state.Sequence].CycleType == 0)
+        {
+            // Older saves captured the generic sole-loop startup as if it had
+            // a playback owner. A placed static base does not authorize that
+            // implicit request. Preserve actual source-selected continuations.
+            Godot.GD.Print($"OPENNV_OBJECT_ANIMATION_STARTUP_CORRECTED model={SourceSha256} " +
+                $"controller={SourceController} sequence={state.Sequence} formerAutomaticSeconds={state.ElapsedSeconds}");
+            return;
+        }
         PlaySourceSequence(state.Sequence);
         _scriptSelected = state.ScriptSelected;
         _elapsedSeconds = state.ElapsedSeconds;

@@ -14,7 +14,20 @@ internal partial class RuntimeNativeNpc
         FalloutActorAnimationSnapshot? continuation = null, bool publishPose = true)
     {
         _baseResource = resource; _baseHash = source.Sha256; _baseAmbient = ambient;
-        if (_bindingInitialBase) return;
+        if (_bindingInitialBase)
+        {
+            // A newly selected physical procedure owns its actual base source.
+            // Retained walking Idle0 cannot override it after initial binding.
+            if (_furnitureClip is not null && !_furnitureApproaching && _aiReferenceState?.FurnitureContinuation is null)
+            {
+                if (!_baseClock.Resource.Equals(resource, StringComparison.OrdinalIgnoreCase) ||
+                    !_baseClock.Sha256.Equals(_baseHash, StringComparison.OrdinalIgnoreCase))
+                    _baseClock.Change(resource, _baseHash);
+                if (_aiReferenceState?.PackageMotion is { } prior)
+                    _aiReferenceState.PackageMotion = prior with { AnimationLayers = null };
+            }
+            return;
+        }
         _baseClock.Change(resource, _baseHash);
         if (continuation is not null) _baseClock.Restore(continuation);
         ResumeBaseClock(retainedTravel: continuation is not null, publishPose: publishPose);

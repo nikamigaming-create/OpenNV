@@ -61,6 +61,7 @@ internal sealed partial class RuntimeNativeActorCombat : Node
         beamPresentationError = _beamPresentationError,
         engagement = EngagementObservation,
         packageAnimation = PackageAnimationSelection,
+        packageAnimationHandoff = PackageAnimationHandoff,
         hitReaction = HitReactionObservation,
         unbound = "critical,sneak,conditional-resistance-modifiers,armor-wear,forced-hit-reactions,combat-AI-tactics,confidence-threat-ratios,target-priority,hit-script-events,death-XP,exploded-limbs,source-corpse-weapon-drop-and-dynamic-equipment"
     };
@@ -171,6 +172,7 @@ internal sealed partial class RuntimeNativeActorCombat : Node
         try
         {
             var part = HitPart(collider);
+            _hitConditionLocation = explosionDamage ? -1 : part;
             _world.BeforeActorHit(_state.Reference);
             var defense = _world.Defense(_state.Reference, level, globals);
             var amount = defense.Absorb(damage.Amount, FalloutGameSettingFloats.Read(_records, "fMinDamMultiplier"), damage.AmmoEffects);
@@ -194,6 +196,7 @@ internal sealed partial class RuntimeNativeActorCombat : Node
             return hit;
         }
         catch (Exception error) { Error = error.Message; throw; }
+        finally { _hitConditionLocation = -1; }
     }
 
     private void PrepareDeath()

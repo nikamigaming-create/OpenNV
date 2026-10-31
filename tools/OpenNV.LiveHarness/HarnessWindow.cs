@@ -148,8 +148,14 @@ internal sealed class HarnessWindow : Form
             watcher.Renamed += (_, e) => Post(() => ObserveFile(target, e.FullPath));
             watcher.EnableRaisingEvents = true;
             _watchers.Add(watcher);
-            foreach (var path in Directory.EnumerateFiles(directory, "*.json")) ObserveFile(target, path);
+            // Current state seeds the viewer; completed historical receipts are
+            // already in the journal. Replaying them delays the control pipe and
+            // duplicates the entire prior session into the UI on every restart.
+            foreach (var name in new[] { "live-state.json", "live-ui.json" })
+                ObserveFile(target, Path.Combine(directory, name));
         }
+        var retailLog = Path.Combine(_configuration.RetailCommandDirectory, "bridge.log");
+        _retailLogOffset = File.Exists(retailLog) ? new FileInfo(retailLog).Length : 0;
         Log("system", "both", "ready", "Live windows connected; keyboard and console share the same input bridge.");
         _ = Task.Run(ServeClients);
         if (_configuration.CompositorPreview)

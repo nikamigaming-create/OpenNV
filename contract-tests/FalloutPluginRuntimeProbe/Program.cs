@@ -2278,9 +2278,9 @@ try
         () => FalloutPlacedLightResolver.Resolve(
             cell.References[1], syntheticLightBase with
             {
-                Light = syntheticLightBase.Light! with { Flags = 0x0000_0008 },
+                Light = syntheticLightBase.Light! with { Flags = 0x0000_0001 },
             }),
-        "outside the evidenced static point-light contract");
+        "outside the qualified point-light contract");
     var parentedLight = FalloutPlacedLightResolver.Resolve(cell.References[1] with
     {
         EnableParent = new FalloutFormKey("Cell.esm", 0x130),

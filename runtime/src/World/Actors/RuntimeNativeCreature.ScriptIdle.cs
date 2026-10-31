@@ -19,20 +19,26 @@ internal sealed partial class RuntimeNativeCreature : IGamebryoReferenceEnableLi
     private Func<FalloutActorStoppedIdleAnimation?>? _scriptIdleCapture;
     private bool ScriptIdleActive => _scriptIdleClock is not null && _scriptIdleRequestState == 2 && _scriptIdleSequenceState != 0;
 
+    private bool _automaticIdleOwner;
+    private bool AmbientIdleActive => ScriptIdleActive && _automaticIdleOwner;
+
     internal void PlayIdle(FalloutPluginStack stack, string editorId)
+        => PlayCreatureIdle(stack, FalloutDialogueTopic.Find(stack, "IDLE", editorId), "script");
+
+    private void PlayCreatureIdle(FalloutPluginStack stack, FalloutPluginRecord record, string owner)
     {
         if (!ReferenceEquals(stack, _aiRecords) || _aiState is not { } state || !IsInsideTree())
             throw new InvalidOperationException("Creature script idle has no live source binding.");
         var combat = Combat ?? throw new InvalidOperationException("Creature script idle has no physical pose owner.");
         if (Error is not null || state.ScriptError is not null || _scriptIdleSourceCancelled || ScriptIdleActive ||
             _eventIdleClock is not null || _conversationTarget is not null ||
-            combat is not { Dead: false, OwnsPose: false, PackageMoving: false, AnimationWeapon: null } ||
+            combat is not { Dead: false, OwnsPose: false } ||
+            owner != "ambient" && (combat.PackageMoving || combat.AnimationWeapon is not null) ||
             state.Unconscious || state.Restrained || state.KnockedDown || !_aiWorld!.IsEnabled(state.Reference))
             throw new NotSupportedException("Creature script idle cannot compose its current pose or failed source owner.");
-        var record = FalloutDialogueTopic.Find(stack, "IDLE", editorId);
         state.RecordIdleRequest(stack, record.FormKey);
         var idle = FalloutActorIdleSource.Resolve(stack, record);
-        var source = ReadIdle(idle);
+        var source = ReadIdle(idle, externalAccumulationRoot: owner == "ambient");
         var timing = FalloutIdleAnimationData.Read(record);
         var transition = PrepareScriptIdleTransition(source.Animation, timing);
         var snapshotPose = CaptureScriptIdlePose();
@@ -43,21 +49,25 @@ internal sealed partial class RuntimeNativeCreature : IGamebryoReferenceEnableLi
         var sequence = source.Animation.Sequence;
         var clock = new FalloutIdleAnimationPlayback(sequence.StartTime, sequence.StopTime, sequence.Frequency,
             sequence.CycleType, source.Animation.TextKeys.Select(key => (key.Time, key.Value)).ToArray(),
-            timing.SelectAdditionalLoops(state.SoundRandom.NextBounded));
+            timing.SelectAdditionalLoops(owner == "ambient" ? FalloutSharedUnsignedRandom.Process.NextBounded : state.SoundRandom.NextBounded), sequence.Name);
         RequireScriptIdleEnd(source.Animation, clock);
-        combat.StopPackageMotion();
+        if (owner != "ambient") combat.StopPackageMotion();
+        else if (FalloutIdleTransition.ExecutionSlot.FromRecord(timing.Group).Index != 7)
+            throw new NotSupportedException("Automatic creature IDLE requires its source execution slot owner.");
         source.Animation.ApplySnapshotTransition(clock.SourceSeconds, snapshotSamples, 1, 0, scalars: snapshotScalars);
-        var saved = new FalloutActorStoppedIdleAnimation("script", new(record.FormKey, Hash(record.ReadData()),
+        var saved = new FalloutActorStoppedIdleAnimation(owner, new(record.FormKey, Hash(record.ReadData()),
             idle.AnimationPath, source.Hash, clock.Capture(), revision, CaptureScriptIdlePose(), []),
             new(transition.Capture(), ScriptIdleTransitionSettings(), snapshotPose, Scalars: snapshotScalars), new(2, 5));
         saved.Validate(stack);
         _scriptIdleAnimation = source.Animation; _scriptIdleClock = clock;
+        _automaticIdleOwner = owner == "ambient";
         _scriptIdleTransition = transition; _scriptIdleSnapshot = snapshotSamples;
         _scriptIdleSnapshotScalars = snapshotScalars;
         _scriptIdleRequestState = 2; _scriptIdleSequenceState = 5;
         _scriptIdleDeactivation = null; _scriptIdleEndPending = false;
         _scriptIdleRevision = revision; _scriptIdlePosePublished = true;
         state.CreatureScriptIdle = saved;
+        if (owner == "ambient") (state.AmbientIdle ??= new()).Started(record, timing.ReplayDelaySeconds);
     }
 
     private void BindScriptIdleCapture()
@@ -66,20 +76,28 @@ internal sealed partial class RuntimeNativeCreature : IGamebryoReferenceEnableLi
         _aiState.CaptureCreatureScriptIdle = _scriptIdleCapture = CaptureScriptIdle;
     }
 
-    private bool CanCaptureScriptIdle() => !ScriptIdleActive || IsInsideTree() && !_sourceBindingsRetired &&
-        _scriptIdlePosePublished && _aiState is { CreatureScriptIdle.Owner: "script", ScriptError: null, Deleted: false } state &&
+    // This owns animation values, not complete audio capture. Exact retained
+    // finite voices keep their separate global ledger/save wait admission.
+    private bool CanCaptureScriptIdle() => CanCaptureScriptIdle(retiring: false);
+
+    private bool CanCaptureScriptIdle(bool retiring) => !ScriptIdleActive || IsInsideTree() && !_sourceBindingsRetired &&
+        _scriptIdlePosePublished && _aiState is { CreatureScriptIdle.Owner: "script" or "ambient", ScriptError: null, Deleted: false } state &&
         _aiWorld!.IsEnabled(state.Reference) &&
         Error is null && _eventIdleClock is null && _conversationTarget is null &&
-        Combat is { Dead: false, OwnsPose: false, PackageMoving: false, PackageOwnsPose: false, AnimationWeapon: null, StoppedAiPoseCaptureReady: true } &&
+        Combat is { Dead: false } &&
+        (AmbientIdleActive || Combat is { OwnsPose: false, PackageMoving: false, PackageOwnsPose: false, AnimationWeapon: null, StoppedAiPoseCaptureReady: true }) &&
         (_scriptIdleClock is { Complete: false } || _scriptIdleDeactivation is { Complete: false }) && _scriptIdleAnimation is not null &&
         _scriptIdleTransition is not null && _scriptIdleSnapshot is not null && _scriptIdleSnapshotScalars is not null &&
         state.CreatureScriptIdle.Transition is not null &&
         OpenNV.Runtime.SceneGraph.NodeTraversal.SelfAndDescendants<NativeOwnedAnimationSoundPlayer>(this)
-            .All(sound => sound.CanCaptureSilent);
+            .All(sound => retiring ? sound.CanRetainFiniteForEmitterRetirement :
+                sound.CanCaptureSilent || sound.CanRetainFiniteForEmitterRetirement);
 
-    private FalloutActorStoppedIdleAnimation? CaptureScriptIdle()
+    private FalloutActorStoppedIdleAnimation? CaptureScriptIdle() => CaptureScriptIdle(retiring: false);
+
+    private FalloutActorStoppedIdleAnimation? CaptureScriptIdle(bool retiring)
     {
-        if (!CanCaptureScriptIdle()) throw new NotSupportedException("Creature script idle retains an independent continuation owner.");
+        if (!CanCaptureScriptIdle(retiring)) throw new NotSupportedException("Creature script idle retains an independent continuation owner.");
         if (!ScriptIdleActive) return null;
         var saved = _aiState!.CreatureScriptIdle ?? throw new InvalidDataException("Creature script idle lost its source receipt.");
         var result = saved with
@@ -156,10 +174,10 @@ internal sealed partial class RuntimeNativeCreature : IGamebryoReferenceEnableLi
     {
         if (_aiState?.CreatureScriptIdle is not { } saved) return;
         saved.Validate(_aiRecords!);
-        if (saved.Owner != "script" || ScriptIdleActive || _eventIdleClock is not null || _conversationTarget is not null)
+        if (saved.Owner is not ("script" or "ambient") || ScriptIdleActive || _eventIdleClock is not null || _conversationTarget is not null)
             throw new InvalidDataException("Creature script idle has a conflicting restoration owner.");
         var idle = FalloutActorIdleSource.Resolve(_aiRecords!, _aiRecords!.GetEffective(saved.Animation.Idle));
-        var source = ReadIdle(idle);
+        var source = ReadIdle(idle, externalAccumulationRoot: saved.Owner == "ambient");
         if (!source.Hash.Equals(saved.Animation.Sha256, StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException("Creature script idle differs from its winning KF.");
         ValidateScriptIdlePose(saved);
@@ -172,15 +190,16 @@ internal sealed partial class RuntimeNativeCreature : IGamebryoReferenceEnableLi
         var sequence = source.Animation.Sequence;
         var clock = new FalloutIdleAnimationPlayback(sequence.StartTime, sequence.StopTime, sequence.Frequency,
             sequence.CycleType, source.Animation.TextKeys.Select(key => (key.Time, key.Value)).ToArray(),
-            saved.Animation.Clock.SelectedAdditionalLoops);
+            saved.Animation.Clock.SelectedAdditionalLoops, sequence.Name);
         clock.Restore(saved.Animation.Clock);
         RequireScriptIdleEnd(source.Animation, clock);
         _scriptIdleAnimation = source.Animation; _scriptIdleClock = clock;
+        _automaticIdleOwner = saved.Owner == "ambient";
         _scriptIdleTransition = restoredTransition; _scriptIdleSnapshot = ReadScriptIdleSnapshot(snapshot.Pose);
         _scriptIdleSnapshotScalars = scalars;
         _scriptIdleRevision = saved.Animation.Revision;
         RestoreScriptIdlePhase(saved);
-        Combat?.StopPackageMotion();
+        if (saved.Owner != "ambient") Combat?.StopPackageMotion();
         if (IsNodeReady()) PublishScriptIdlePose();
     }
 
@@ -213,12 +232,13 @@ internal sealed partial class RuntimeNativeCreature : IGamebryoReferenceEnableLi
         try
         {
             var transition = _scriptIdleTransition ?? throw new InvalidDataException("Script idle has no transition phase owner.");
-            AdvanceBaseSource(delta);
+            if (!AmbientIdleActive || Combat?.PackageOwnsPose != true) AdvanceBaseSource(delta);
             if (_scriptIdleDeactivation is { } deactivation)
             {
                 deactivation.Advance(delta);
                 if (deactivation.Complete) { CompleteScriptIdle(); return true; }
-                clock.Advance(delta, interval => DispatchIdleInterval(animation, interval, saved.Animation.Idle));
+                if (!_ambientIdleInterrupted || transition.Capture().Complete)
+                    clock.Advance(delta, interval => DispatchIdleInterval(animation, interval, saved.Animation.Idle), processGroup: false);
             }
             else
             {
@@ -229,7 +249,7 @@ internal sealed partial class RuntimeNativeCreature : IGamebryoReferenceEnableLi
                     _scriptIdleSequenceState = 1;
                     clock.Advance(delta, interval => DispatchIdleInterval(animation, interval, saved.Animation.Idle));
                 }
-                if (_scriptIdleEndPending)
+                if (_scriptIdleEndPending || clock.HasGroupTiming && clock.Complete)
                 {
                     if (held) throw new NotSupportedException("Creature idle End during a held snapshot requires its transition interruption owner.");
                     BeginScriptIdleDeactivation();
@@ -293,8 +313,9 @@ internal sealed partial class RuntimeNativeCreature : IGamebryoReferenceEnableLi
         var retained = false;
         try
         {
+            if (AmbientIdleActive && state.Injury?.Dead == true) ClearScriptIdleOwner();
             CancelDisabledScriptIdle();
-            state.CreatureScriptIdle = CaptureScriptIdle();
+            state.CreatureScriptIdle = CaptureScriptIdle(retiring: true);
             retained = true;
         }
         finally

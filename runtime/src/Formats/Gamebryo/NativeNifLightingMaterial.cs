@@ -192,7 +192,9 @@ internal static class NativeNifLightingMaterial
                     ALBEDO = lit;
                     vec3 glow = use_emissive_map ? texture(emissive_map, UV).rgb : vec3(1.0);
                     EMISSION = lit * (owned_environment_ambient() + owned_point_irradiance(VERTEX, NORMAL, VIEW, false));
-                    if (!use_hair) EMISSION += glow * owned_emissive_color(emissive_color * emissive_multiple, emissive_multiple);
+                    // Source SLS applies diffuse/vertex colour to the complete
+                    // ambient + emittance + lighting sum, including glow.
+                    if (!use_hair) EMISSION += base.rgb * glow * owned_emissive_color(emissive_color * emissive_multiple, emissive_multiple);
                     if (!environment_light_fade) EMISSION += reflection;
                     EMISSION = owned_output_color(EMISSION);
                     FOG = vec4(owned_environment_fog_color(), source_fog_factor);

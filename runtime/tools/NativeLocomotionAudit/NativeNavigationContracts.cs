@@ -24,6 +24,7 @@ internal static partial class NativeNavigationContracts
 
     internal static void Run()
     {
+        CheckSourceCharacterEnvelopes();
         CheckWanderSelection();
         CheckElevatedPackageMarker();
         CheckProjectionBounds();

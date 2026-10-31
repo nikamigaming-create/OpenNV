@@ -109,6 +109,37 @@ public partial class NativeActorPerformanceAudit
                 throw new InvalidDataException("Source fixture did not reach the required owned checkpoint continuation.");
             if (expected == "furniture")
             {
+                using (var newProcedureWorld = new FalloutReferenceWorld(records))
+                {
+                    newProcedureWorld.LoadCell(cell);
+                    newProcedureWorld.SetEnabled(rootReference, enabled);
+                    newProcedureWorld.AdvanceEnableChanges(0, new(1, 1), _ => false);
+                    newProcedureWorld.Get(caller).TalkedToPlayer = true;
+                    var directory = warm.Appearance.SkeletonPath.Replace('\\', '/');
+                    directory = directory[..directory.LastIndexOf('/')];
+                    var previousPath = directory + "/locomotion/mtidle.kf";
+                    var previousSource = NativeAnimationResources.For(content).Read(previousPath);
+                    newProcedureWorld.Get(caller).Animation.Change(previousPath, previousSource.Sha256);
+                    newProcedureWorld.Get(caller).Animation.Advance(2.5);
+                    var selectedProcedure = Assemble(newProcedureWorld);
+                    using var selectedLifetime = new PackageFixtureLifetime(selectedProcedure);
+                    selectedProcedure._Process(.125);
+                    var selectedState = newProcedureWorld.Get(caller).Capture();
+                    var selectedFurniture = selectedState.FurnitureContinuation ??
+                        throw new InvalidDataException("Fresh source furniture did not retain its selected procedure.");
+                    selectedFurniture.ValidateClock(selectedState.Animation);
+                    if (selectedState.Animation?.Resource.Equals(previousPath, StringComparison.OrdinalIgnoreCase) != false)
+                        throw new InvalidDataException("Retained locomotion replaced newly selected furniture base ownership.");
+                    using var restoredProcedureWorld = new FalloutReferenceWorld(records);
+                    restoredProcedureWorld.Restore(newProcedureWorld.Capture());
+                    restoredProcedureWorld.LoadCell(cell);
+                    var restoredProcedure = Assemble(restoredProcedureWorld);
+                    using var restoredLifetime = new PackageFixtureLifetime(restoredProcedure);
+                    if (restoredProcedureWorld.Get(caller).Animation.Capture() != selectedState.Animation ||
+                        restoredProcedure.SittingState != selectedProcedure.SittingState)
+                        throw new InvalidDataException("Selected furniture source/phase changed on cold restore.");
+                    GD.Print("OPENNV_FURNITURE_BASE_HANDOFF_PASS actualProcedure=true priorWalkingClock=true cold=true");
+                }
                 using var handoffWorld = new FalloutReferenceWorld(records);
                 handoffWorld.Restore(saved); handoffWorld.LoadCell(cell);
                 RuntimeNativeNpc AssembleHandoff()

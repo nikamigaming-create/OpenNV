@@ -71,6 +71,38 @@ public partial class NativeNifInstanceAudit
             var nif = FalloutNifFile.Read(bytes);
             foreach (var block in nif.Blocks) _ = nif.ReadObject(block.Index);
             GD.Print($"OPENNV_OWNED_NIF_DECODE_PASS source={identity} sha256={nif.Sha256} stream={nif.UserVersion2} blocks={nif.Blocks.Count}");
+            if (model.EndsWith(".kf", StringComparison.OrdinalIgnoreCase))
+            {
+                // KF is an authored animation resource, not a stand-alone mesh.
+                // The existing owned-resource audit checks the actual reader
+                // without inventing a skeleton or instancing proxy geometry.
+                var sequences = nif.Blocks.Where(block => block.TypeName == "NiControllerSequence")
+                    .Select(block => (FalloutNifControllerSequence)nif.ReadObject(block.Index)).ToArray();
+                if (sequences.Length == 0) throw new InvalidDataException("Owned KF has no decoded controller sequence.");
+                GD.Print(JsonSerializer.Serialize(new
+                {
+                    kind = "owned-kf-decode",
+                    source = identity,
+                    nif.Sha256,
+                    nif.UserVersion2,
+                    blocks = nif.Blocks.Count,
+                    sequences = sequences.Select(sequence => new
+                    {
+                        sequence.Name,
+                        sequence.StartTime,
+                        sequence.StopTime,
+                        sequence.Frequency,
+                        sequence.CycleType,
+                        channels = sequence.ControlledBlocks.Length,
+                        sequence.AnimationNotes,
+                        sequence.UnknownShort,
+                        notes = sequence.AnimationNotes < 0 ? (int?)null :
+                            ((FalloutNifAnimationNotes)nif.ReadObject(sequence.AnimationNotes)).Notes.Count
+                    }).ToArray(),
+                    acceptance = "Every actual source block decoded; skeleton binding, note execution, pose, audio and pixels unverified."
+                }));
+                continue;
+            }
             foreach (var manager in nif.Blocks.Where(block => block.TypeName == "NiControllerManager")
                 .Select(block => (FalloutNifControllerManager)nif.ReadObject(block.Index)))
                 GD.Print(JsonSerializer.Serialize(new

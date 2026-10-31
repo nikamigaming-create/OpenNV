@@ -10,6 +10,8 @@ internal static class NativeActorPosedBounds
     private sealed record Sphere(int Bone, Vector3 Center, float Radius);
     private sealed record Geometry(RuntimeNativeNifSkeleton Skeleton, IReadOnlyList<Sphere> Spheres);
     private static readonly ConditionalWeakTable<MeshInstance3D, Geometry> GeometryCache = new();
+    private sealed record PartMeshes(string Path, IReadOnlyList<MeshInstance3D> Meshes);
+    private static readonly ConditionalWeakTable<RuntimeNativeNifScene, PartMeshes> PartCache = new();
 
     internal static FalloutNifSphereBound Current(IReadOnlyList<RuntimeNativeNifScene> parts,
         RuntimeNativeNifSkeleton skeleton, RuntimeLiveContentSource content, IDictionary<string, FalloutNifFile> sources)
@@ -25,15 +27,20 @@ internal static class NativeActorPosedBounds
         FalloutNifSphereBound? result = null;
         foreach (var part in parts)
         {
-            var path = part.Root.GetMeta("opennv_source_model").AsString();
+            var prepared = PartCache.GetValue(part, scene => new(scene.Root.GetMeta("opennv_source_model").AsString(),
+                scene.Root.FindChildren("*", "", true, false).OfType<MeshInstance3D>()
+                    .Where(mesh => mesh.HasMeta("opennv_nif_geometry_block")).ToArray()));
+            var path = prepared.Path;
             if (!sources.TryGetValue(path, out var source))
             {
                 if (!content.TryRead(path, null, out var bytes, out _)) throw new FileNotFoundException(path);
                 sources.Add(path, source = FalloutNifFile.Read(bytes));
             }
-            foreach (var mesh in part.Root.FindChildren("*", "", true, false).OfType<MeshInstance3D>()
-                .Where(mesh => mesh.Visible && mesh.HasMeta("opennv_nif_geometry_block")))
+            foreach (var mesh in prepared.Meshes)
             {
+                if (!GodotObject.IsInstanceValid(mesh) || mesh.IsQueuedForDeletion())
+                    throw new InvalidOperationException("Posed source bounds retain a retired part mesh.");
+                if (!mesh.Visible) continue;
                 var geometry = GeometryCache.GetValue(mesh, item => Prepare(item, source, skeleton));
                 if (!ReferenceEquals(geometry.Skeleton, skeleton)) throw new InvalidOperationException("Posed bounds changed their skeleton owner.");
                 foreach (var sphere in geometry.Spheres)

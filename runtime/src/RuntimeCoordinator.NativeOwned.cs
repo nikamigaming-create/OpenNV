@@ -150,6 +150,7 @@ public partial class RuntimeCoordinator
             loadingFeedback = _loadingScreen?.State ?? _nativeLoadingProgress?.State,
             cell = _nativeActiveCell?.Cell.FormKey.ToString(),
             exteriorLod = cellNodes.OfType<RuntimeNativeExteriorLod>().SingleOrDefault()?.State,
+            exteriorGrass = !detailed ? null : cellNodes.OfType<RuntimeNativeGrassOwner>().SingleOrDefault()?.State,
             exteriorStreaming = NativeStreamingState,
             resourceCache = RuntimeLiveContentSource.Current?.CacheState,
             player = _nativePlayer is null ? null : new
@@ -1191,10 +1192,14 @@ public partial class RuntimeCoordinator
                 $"collisionBodies={built.CollisionBodies} collisionShapes={built.CollisionShapes} " +
                 $"collisionTriangles={built.CollisionTriangles}");
         }
+        // A static base registers managed groups without requesting playback.
+        // Direct active controllers keep their authored clock; explicit source
+        // PlayGroup requests remain available after placement.
         var instance = preparedStaticRoot is not null
             ? RuntimeNativeNifPrototype.PlaceOwnedRoot(preparedStaticRoot, preparedModel ??
                 throw new InvalidDataException("Prepared static root has no source model."), ReferenceTransform(reference))
-            : _nativeNifPrototypes[baseObject.ModelPath].InstantiatePlaced(ReferenceTransform(reference));
+            : _nativeNifPrototypes[baseObject.ModelPath].InstantiatePlaced(ReferenceTransform(reference),
+                autoStartManagedLoops: baseObject.Signature != "STAT");
         instance.Name = $"Reference_{reference.FormKey}";
         instance.SetMeta("opennv_reference_form_key", reference.FormKey.ToString());
         instance.SetMeta("opennv_source_model", baseObject.ModelPath);

@@ -64,8 +64,11 @@ internal static class PlacedLightEnableContracts
             var first = lights[0];
             Reject(() => FalloutPlacedLightResolver.Resolve(first, source with { ModelPath = "meshes/source-light.nif" }), "light/model/controller owner");
             Reject(() => FalloutPlacedLightResolver.Resolve(first with { Scale = 1.39f }, source), "unsupported XSCL");
-            foreach (var flags in new uint[] { 1, 8, 0x600, 0x80000000 })
-                Reject(() => FalloutPlacedLightResolver.Resolve(first, source with { Light = source.Light! with { Flags = flags } }), "static point-light contract");
+            foreach (var flags in new uint[] { 1, 0x600, 0x80000000 })
+                Reject(() => FalloutPlacedLightResolver.Resolve(first, source with { Light = source.Light! with { Flags = flags } }), "qualified point-light contract");
+            foreach (var flags in new uint[] { 8, 0x40, 0x48 })
+                Require(FalloutPlacedLightResolver.Resolve(first, source with { Light = source.Light! with { Flags = flags } }).AnimationFlags == flags,
+                    "Placed light lost its qualified source flicker flags.");
             Reject(() => FalloutPlacedLightResolver.Resolve(first with { RadiusAdjustmentGameUnits = -200 }, source), "invalid effective radius");
             Reject(() => FalloutPlacedLightResolver.Resolve(first with { RadiusAdjustmentGameUnits = float.NaN }, source), "invalid effective radius");
 

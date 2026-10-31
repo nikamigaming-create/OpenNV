@@ -7,12 +7,12 @@ internal sealed record FalloutPlacedLight(
     byte[] ColorRgb,
     float Intensity,
     float[] ShaderColorRgb,
-    FalloutFormKey? Emittance);
+    FalloutFormKey? Emittance,
+    uint AnimationFlags);
 
 internal static class FalloutPlacedLightResolver
 {
     private const int StaticDuration = -1;
-    private const uint StaticPointFlags = 0;
     private const float StaticFalloff = 1.0f;
     private const float StaticFieldOfViewDegrees = 90.0f;
     private const uint StaticNearClip = 0;
@@ -34,7 +34,7 @@ internal static class FalloutPlacedLightResolver
         if (reference.Scale != 1.0f)
             throw new NotSupportedException(
                 $"Native light reference {reference.FormKey} has unsupported XSCL {reference.Scale:R}.");
-        RequireStaticPoint(source, baseObject.FormKey);
+        RequirePoint(source, baseObject.FormKey);
         if (baseObject.ModelPath is not null)
             throw new NotSupportedException(
                 $"Native LIGH {baseObject.FormKey} source model {baseObject.ModelPath} requires a light/model/controller owner.");
@@ -53,18 +53,25 @@ internal static class FalloutPlacedLightResolver
             emittance = new FalloutExternalEmittance(records, form, regionEmittance).Sample();
         }
         return new FalloutPlacedLight(reference.FormKey, baseObject.FormKey, radius, source.ColorRgb,
-            source.Intensity, ModulateColor(source.ColorRgb, emittance), reference.Emittance);
+            source.Intensity, ModulateColor(source.ColorRgb, emittance), reference.Emittance, source.Flags);
     }
 
+    // Existing non-placed consumers must opt into their actual animation owner.
     internal static void RequireStaticPoint(FalloutLightDefinition source, FalloutFormKey form)
     {
-        if (source.Duration != StaticDuration || source.Flags != StaticPointFlags ||
+        RequirePoint(source, form);
+        if (source.Flags != 0) throw new NotSupportedException($"Animated LIGH {form} requires its point-light lifetime owner.");
+    }
+
+    internal static void RequirePoint(FalloutLightDefinition source, FalloutFormKey form)
+    {
+        if (source.Duration != StaticDuration || (source.Flags & ~FalloutLightFlicker.Flags) != 0 ||
             source.Falloff != StaticFalloff ||
             source.FieldOfViewDegrees != StaticFieldOfViewDegrees ||
             source.NearClip != StaticNearClip || source.Period != StaticPeriod ||
             source.ColorAlpha != StaticColorAlpha)
             throw new NotSupportedException(
-                $"Native LIGH {form} is outside the evidenced static point-light contract: " +
+                $"Native LIGH {form} is outside the qualified point-light contract: " +
                 $"duration={source.Duration} flags=0x{source.Flags:x8} falloff={source.Falloff:R} " +
                 $"fov={source.FieldOfViewDegrees:R} near={source.NearClip} period={source.Period:R} " +
                 $"alpha={source.ColorAlpha}.");

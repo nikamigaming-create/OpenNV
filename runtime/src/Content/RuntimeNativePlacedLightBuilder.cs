@@ -24,6 +24,13 @@ internal static class RuntimeNativePlacedLightBuilder
         var source = FalloutPlacedLightResolver.Resolve(reference, baseObject, records, regionEmittance);
         var color = new Color(
             source.ShaderColorRgb[0], source.ShaderColorRgb[1], source.ShaderColorRgb[2]);
+        float? flickerMovement = null;
+        if (source.AnimationFlags != 0)
+        {
+            var content = RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("Animated light has no mounted owned source.");
+            flickerMovement = FalloutInstallationSettings.Read(content).Number("bLightAttenuation", "fFlickerMovement");
+            if (!float.IsFinite(flickerMovement.Value)) throw new InvalidDataException("Source flicker movement is nonfinite.");
+        }
         var light = new RuntimeNativePlacedLight
         {
             Name = $"LIGH_{reference.FormKey}",
@@ -36,6 +43,8 @@ internal static class RuntimeNativePlacedLightBuilder
             OmniAttenuation = RetailLighting.GodotOmniDecayForRetailRemap,
             ShadowEnabled = shadows,
         };
+        if (flickerMovement is { } movement)
+            light.ConfigureFlicker(source, gameUnitsToMeters, movement, energyScale, minimumEnergy);
         light.SetMeta("opennv_ligh_reference", reference.FormKey.ToString());
         light.SetMeta("opennv_ligh_base", baseObject.FormKey.ToString());
         light.SetMeta("opennv_ligh_source_rgb", source.ColorRgb);

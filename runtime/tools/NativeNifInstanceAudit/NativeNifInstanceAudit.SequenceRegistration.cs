@@ -7,6 +7,32 @@ public partial class NativeNifInstanceAudit
 {
     private void ExerciseRepeatedManagedSequences()
     {
+        // Managed group registration is not a placed static playback request.
+        // Direct active source clocks retain their independent startup lane.
+        var inactive = new RuntimeNifControllerPlayer { SourceController = 1, SourceSha256 = new string('0', 64) };
+        var direct = new RuntimeNifControllerPlayer();
+        try
+        {
+            inactive.Configure([new("Idle", 0, 1, 0, 3, [])], autoStartManagedLoops: false);
+            inactive._Process(.5);
+            RequireEmptySequence(inactive.ActiveSequence is null,
+                "A registered static managed loop started without a source playback owner.");
+            inactive.RestoreObjectState(new(1, new string('0', 64), "Idle", 1, false, null, false));
+            RequireEmptySequence(inactive.ActiveSequence is null,
+                "A formerly implicit saved loop bypassed static startup admission.");
+            inactive.RequestSourceSequence("Idle", 1);
+            RequireEmptySequence(inactive.ActiveSequence == "Idle",
+                "Static startup admission prevented a later explicit source group request.");
+            var explicitClock = inactive.CaptureScriptState()! with { ElapsedSeconds = 1 };
+            inactive.RestoreObjectState(explicitClock);
+            RequireEmptySequence(inactive.SourceTimeSeconds == 1,
+                "Static startup correction discarded a real source-selected saved phase.");
+            direct.Configure([new("Direct", 0, 1, 0, 3, [])
+            { DirectClock = new(-1, 0x4c, 1, 0, 0, 3, -1, 0) }], autoStartManagedLoops: false);
+            RequireEmptySequence(direct.ActiveSequence == "Direct",
+                "Static managed startup admission suppressed an active direct source controller.");
+        }
+        finally { inactive.Free(); direct.Free(); }
         var nif = FalloutNifFile.Read(EmptyManagedSequenceFixture("duplicate"));
         var prototype = new RuntimeNativeNifPrototype(nif, .02f);
         Node3D? first = null; Node3D? second = null;

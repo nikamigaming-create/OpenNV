@@ -53,6 +53,7 @@ internal sealed record NativePackageRouteReceipt(NativePackageRouteRequest Reque
 internal sealed partial class RuntimeNativeActorCombat
 {
     private Vector3[] _pursuitPath = [];
+    private Func<Vector3, bool>? _movementCorridorFloor;
     private int _pursuitCursor, _routeRequests, _routeFailures;
     private Vector3 _routeTarget;
     private double _routeClock, _routeStall, _routeMilliseconds, _routeSourceMilliseconds, _routeMaximumSliceMilliseconds;
@@ -100,6 +101,8 @@ internal sealed partial class RuntimeNativeActorCombat
         NativePackageRouteRequest? request, FalloutFormKey? package)
     {
         _pursuitPath = []; _pursuitCursor = 0;
+        _routeFacingPending = true;
+        _routeTurning = false;
         _waypointDistance = float.PositiveInfinity; _routeStall = 0;
         _packageRouteRequest = request; _packageRouteReceipt = null;
         _routePackage = package;
@@ -111,7 +114,7 @@ internal sealed partial class RuntimeNativeActorCombat
         _routeProbe = new(NativeCapsuleNavigation.FirstCorridorContact(_mover!, _actor.GlobalPosition, prefix), _context!.CollisionReference);
         _routeSearch = NativeCapsuleNavigation.Search(_mover!, _actor.GlobalPosition, intent.Target,
             _context.StepHeight, _routeSpacing, _context.Resident, 512, _routeProbe, intent.ArrivalRadius,
-            intent.Corridor, arrival).GetEnumerator();
+            intent.Corridor, arrival, sourceFloor: _movementCorridorFloor).GetEnumerator();
         _routeClock = .5;
     }
     private void DisposeRouteSearch()
@@ -137,8 +140,12 @@ internal sealed partial class RuntimeNativeActorCombat
         {
             var offset = _pursuitPath[_pursuitCursor] - _actor.GlobalPosition;
             var distance = new Vector2(offset.X, offset.Z).Length();
-            _routeStall = distance < _waypointDistance - .001f ? 0 : _routeStall + delta;
-            _waypointDistance = distance;
+            if (_routeTurning || PackageAccumulationAwaitingTranslation || distance < _waypointDistance - .001f)
+            {
+                _routeStall = 0;
+                _waypointDistance = distance;
+            }
+            else _routeStall += delta;
         }
         if (_routeDoor is not null)
         {
@@ -180,6 +187,7 @@ internal sealed partial class RuntimeNativeActorCombat
                 // destination-region search on every short movement slice.
                 var source = context.RouteRegion?.Invoke(_actor.GlobalPosition, target,
                     _state.Engagement is not null ? stoppingDistance : 0);
+                _movementCorridorFloor = source?.CorridorFloor;
                 var coarse = source?.Points ?? context.Route(_actor.GlobalPosition, target);
                 if (coarse.Length == 0) throw new InvalidOperationException("No source navigation corridor.");
                 var intent = NativeCapsuleNavigation.Intent(_actor.GlobalPosition, coarse, target, stoppingDistance,
@@ -279,7 +287,7 @@ internal sealed partial class RuntimeNativeActorCombat
                 _routeRefinementRequests++;
                 _routeSearch = NativeCapsuleNavigation.Search(_mover!, _actor.GlobalPosition, _routeEnd,
                     _context!.StepHeight, _routeSpacing, _context.Resident, 512, _routeProbe, _routeArrivalRadius,
-                    _routeIntent!.Corridor, _routeArrival).GetEnumerator();
+                    _routeIntent!.Corridor, _routeArrival, sourceFloor: _movementCorridorFloor).GetEnumerator();
                 return;
             }
             BeginDoorNavigation();

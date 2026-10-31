@@ -7,7 +7,7 @@ namespace OpenNV.Runtime.Formats.Gamebryo;
 // action clocks, sound events and random selection remain actor-local.
 internal sealed class NativeAnimationResources
 {
-    private sealed record Entry(FalloutNifFile Source, long Bytes) { internal long LastUse; }
+    private sealed record Entry(FalloutNifFile Source, long Bytes, string Identity) { internal long LastUse; }
     private static readonly ConditionalWeakTable<RuntimeLiveContentSource, NativeAnimationResources> Libraries = new();
     private readonly RuntimeLiveContentSource _source;
     private readonly object _gate = new();
@@ -26,21 +26,23 @@ internal sealed class NativeAnimationResources
     internal static NativeAnimationResources For(RuntimeLiveContentSource source)
         => Libraries.GetValue(source, value => new(value));
 
-    internal FalloutNifFile Read(string path)
+    internal FalloutNifFile Read(string path) => Read(path, out _);
+
+    internal FalloutNifFile Read(string path, out string identity)
     {
         path = FalloutBsaArchive.CanonicalPath(path);
         lock (_gate)
         {
             _cancellation.Token.ThrowIfCancellationRequested();
-            if (_entries.TryGetValue(path, out var cached)) { cached.LastUse = ++_clock; return cached.Source; }
+            if (_entries.TryGetValue(path, out var cached)) { cached.LastUse = ++_clock; identity = cached.Identity; return cached.Source; }
         }
-        if (!_source.TryRead(path, null, out var bytes, out _)) throw new FileNotFoundException("Actor animation is absent.", path);
+        if (!_source.TryRead(path, null, out var bytes, out identity)) throw new FileNotFoundException("Actor animation is absent.", path);
         var source = FalloutNifFile.Read(bytes);
         _ = source.Sha256;
         lock (_gate)
         {
             _cancellation.Token.ThrowIfCancellationRequested();
-            if (_entries.TryGetValue(path, out var cached)) { cached.LastUse = ++_clock; return cached.Source; }
+            if (_entries.TryGetValue(path, out var cached)) { cached.LastUse = ++_clock; identity = cached.Identity; return cached.Source; }
             // Conservative retained decode allowance, separate from raw BSA
             // payload caching. Live bindings retain their sources on eviction.
             var size = bytes.LongLength * 4;
@@ -51,7 +53,7 @@ internal sealed class NativeAnimationResources
                     if (_bytes + size <= Budget) break;
                     _entries.Remove(candidate.Key); _bytes -= candidate.Value.Bytes;
                 }
-                _entries.Add(path, new(source, size) { LastUse = ++_clock }); _bytes += size;
+                _entries.Add(path, new(source, size, identity) { LastUse = ++_clock }); _bytes += size;
             }
             return source;
         }

@@ -25,6 +25,7 @@ internal partial class RuntimeNativeSpeech : Node
         internal FalloutUnrecordedSpeech? Unrecorded;
         internal string? LipSha256;
         internal bool Advance;
+        internal bool UtteranceActive;
         internal FaceGenLipAnimation? Lip;
         internal float[] LipWeights = [];
         internal RuntimeNativeNpc? Speaker;
@@ -101,6 +102,26 @@ internal partial class RuntimeNativeSpeech : Node
     internal bool IsTalking(FalloutFormKey reference)
     {
         return _channels.TryGetValue(reference, out var voice) && voice.Info is not null;
+    }
+
+    private bool QueryIsTalking(FalloutFormKey reference)
+    {
+        if (Error is not null) throw new InvalidOperationException(Error);
+        // The native query includes the current dialogue speaker and actual
+        // speech, but not every listener or deferred/busy participant. Keep
+        // the INFO reservation used for request arbitration separate.
+        if (_playerDialogueSpeaker == reference) return true;
+        return _channels.TryGetValue(reference, out var voice) &&
+            (voice.UtteranceActive || voice.NpcExchange is not null && voice.Info is not null);
+    }
+
+    // This is the active utterance and its actual dialogue target, not the
+    // presence of a dialogue menu or a topic whose editor name is GREETING.
+    internal bool IsGreetingPlayer(FalloutFormKey reference)
+    {
+        if (Error is not null) throw new InvalidOperationException(Error);
+        return _channels.TryGetValue(reference, out var voice) && !voice.TalkingActivator && voice.UtteranceActive &&
+            voice.Radio is null && voice.Listener == _stack.RuntimeFormKey(0x14);
     }
     internal void SkipResponse()
     {
@@ -201,6 +222,7 @@ internal partial class RuntimeNativeSpeech : Node
         completedCommands = voice.CompletedCommands,
         generation = voice.Generation,
         active = voice.Info is not null,
+        utteranceActive = voice.UtteranceActive,
         playing = voice.Player.Playing,
         voiceBinding = voice.Binding,
         unrecordedResponse = voice.Unrecorded?.State,
@@ -251,7 +273,11 @@ internal partial class RuntimeNativeSpeech : Node
         _deadCount = deadCount;
         _isDead = isDead;
         _dialogueRandom = dialogueRandom;
+        _references?.UnbindGreetingPlayer(IsGreetingPlayer);
+        _references?.UnbindTalking(QueryIsTalking);
         _references = references;
+        _references?.BindGreetingPlayer(IsGreetingPlayer);
+        _references?.BindTalking(QueryIsTalking);
         _conditionContext = conditionContext;
         _templates = templates;
         _soundRandom = soundRandom; _unitsToMetres = unitsToMetres;
@@ -478,6 +504,7 @@ internal partial class RuntimeNativeSpeech : Node
 
     private void PlayResponse(Voice voice, FalloutActiveRadioVoiceSnapshot? cold = null, bool start = true)
     {
+        voice.UtteranceActive = false;
         var info = voice.Info ?? throw new InvalidOperationException("Source INFO was lost.");
         var response = info.Responses[voice.ResponseIndex];
         if (SubtitleFor(voice) is { } subtitle)
@@ -512,6 +539,7 @@ internal partial class RuntimeNativeSpeech : Node
             if (disposition == "unbound-source-sound")
                 throw new NotSupportedException(string.Join("; ", voice.ResponseSound.Unbound));
             foreach (var lane in voice.ResponseSound.Unbound) _unbound.Add(lane);
+            voice.UtteranceActive = true;
             GD.Print($"OPENNV_NATIVE_SPEECH_BEGIN info={info.Record.FormKey} response={response.Number} sound={sound} owner=source-SOUN disposition={disposition}");
             return;
         }
@@ -522,6 +550,7 @@ internal partial class RuntimeNativeSpeech : Node
             if (cold is not null) throw new InvalidDataException("Recorded radio continuation lost its original source audio.");
             voice.Player.Stop(); voice.Player.Stream = null;
             voice.Unrecorded = new(response.Text, FalloutGameSettingFloats.Read(_stack, "fAIDefaultSpeechMult"));
+            voice.UtteranceActive = true;
             GD.Print($"OPENNV_NATIVE_SPEECH_BEGIN info={info.Record.FormKey} response={response.Number} " +
                 $"speaker={voice.Reference} owner=source-unrecorded-text-timer textBytes={voice.Unrecorded.TextBytes} " +
                 $"duration={voice.Unrecorded.DurationSeconds} audio=absent lip=absent parity=unmeasured");
@@ -557,6 +586,7 @@ internal partial class RuntimeNativeSpeech : Node
         }
         if (!start) return;
         voice.Player.Play();
+        voice.UtteranceActive = true;
         GD.Print($"OPENNV_NATIVE_SPEECH_{(cold is null ? "BEGIN" : "RESTORE")} info={info.Record.FormKey} response={response.Number} " +
             $"speaker={voice.Command!.SpeakerEditorId} voice={voice.Binding.AudioPath} lip={lipPath} voiceType={voice.Binding.VoiceType} " +
             $"speakerIdle={response.SpeakerAnimation} lipLoaded={voice.Lip is not null} facePose={(voice.TalkingActivator ? "talking-activator-unbound" : voice.Speaker is null ? "creature-unbound" : !IsInstanceValid(voice.Speaker) ? "speaker-presentation-unloaded" : "owned-tri-lip-morphs")} headMotion=unbound spatialAudio=unbound parity=unmeasured");
@@ -604,6 +634,7 @@ internal partial class RuntimeNativeSpeech : Node
             if (IsInstanceValid(voice.Speaker)) voice.Speaker!.ApplySpeechFace(_lipConfiguration, voice.LipWeights);
         }
         if (!voice.Advance) return;
+        voice.UtteranceActive = false;
         voice.Advance = false;
         var completionOwner = voice.Unrecorded is null ? "audio-finished" : "source-unrecorded-text-timer";
         voice.Unrecorded = null;
@@ -693,12 +724,18 @@ internal partial class RuntimeNativeSpeech : Node
         ReportDivergence($"OPENNV_NATIVE_SPEECH_DIVERGENCE {error.Message}");
     }
 
-    public override void _ExitTree() => StopVoices();
+    public override void _ExitTree()
+    {
+        _references?.UnbindGreetingPlayer(IsGreetingPlayer);
+        _references?.UnbindTalking(QueryIsTalking);
+        StopVoices();
+    }
     private void StopVoices()
     {
         _npcDialogueParticipants.Clear();
         foreach (var voice in _channels.Values)
         {
+            voice.UtteranceActive = false;
             voice.Player.Stop(); ClearResponseSound(voice); RetireRadioPcm(voice);
             EndListenerAnimation(voice);
             if (IsInstanceValid(voice.Speaker))

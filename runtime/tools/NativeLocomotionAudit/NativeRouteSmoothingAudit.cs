@@ -65,7 +65,10 @@ public partial class NativeLocomotionAudit
                     route[cursor].Z - body.GlobalPosition.Z).Length() <= body.SafeMargin * 8) cursor++;
                 if (cursor == route.Count) break;
                 var delta = (float)GetPhysicsProcessDeltaTime();
-                var motion = NativeCapsuleNavigation.RouteMotion(body.GlobalPosition, Vector3.Forward * delta * 2, route[cursor]);
+                var facing = route[cursor] - body.GlobalPosition; facing.Y = 0;
+                body.GlobalBasis = Basis.LookingAt(facing.Normalized(), Vector3.Up);
+                var motion = NativeCapsuleNavigation.RouteMotion(body.GlobalPosition,
+                    body.GlobalBasis * Vector3.Forward * delta * 2, route[cursor]);
                 body.Velocity = motion / delta + Vector3.Up *
                     (body.IsOnFloor() ? Math.Min(body.Velocity.Y, 0) : body.Velocity.Y - 9.81f * delta);
                 if (NativeCharacterStep.TryStep(body, motion, .4f)) body.Velocity = Vector3.Down * .01f;

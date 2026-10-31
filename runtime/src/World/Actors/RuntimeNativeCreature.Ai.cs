@@ -210,8 +210,8 @@ internal sealed partial class RuntimeNativeCreature
     private float EvaluateNativeCondition(FalloutConditionQuery condition) => condition.Kind switch
     {
         Function.IsMoving => Combat?.PackageMoving == true ? 1 : 0,
-        Function.MenuMode when condition.Argument1 == 0 => Combat!.PackagePlayer?.ModalInput == true ? 1 : 0,
         Function.GetAttacked => Activity.Attacked ? 1 : 0,
+        Function.GetHitLocation => (Combat ?? throw new NotSupportedException("Hit-location query has no actor process owner.")).CurrentHitLocation,
         Function.GetAlerted => Activity.Alerted ? 1 : 0,
         Function.IsWeaponOut => Activity.WeaponDrawn ? 1 : 0,
         Function.GetKnockedState => (_aiWorld ?? throw new NotSupportedException("Knockdown query has no reference world."))
@@ -379,7 +379,7 @@ internal sealed partial class RuntimeNativeCreature
         using var frameWork = OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Measure(OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Owner.CreaturePackages);
         Combat?.StopPackageMotion();
         _waitingForTarget = null;
-        if (ScriptIdleActive) { ObserveScriptIdleInterruption(); return; }
+        if (ScriptIdleActive && !AmbientIdleActive) { ObserveScriptIdleInterruption(); return; }
         if (SandboxMotionError is not null) return;
         if (SandboxAdmissionError is not null || HasDetachedSandboxAdmission || HasDetachedPendingSandboxStart) return;
         if (_aiRecords is null || Combat is null || Combat.OwnsPose ||

@@ -23,6 +23,7 @@ internal partial class RuntimeNativeNpc : CharacterBody3D
     private FalloutIdleAnimationData? _idleData;
     private FalloutIdleAnimationPlayback? _idlePlayback;
     private readonly FalloutIdleReplayState _idleReplays = new();
+    private readonly System.Runtime.CompilerServices.ConditionalWeakTable<RuntimeNativeNifAnimation, FalloutIdleGroupTextKeys> _idleGroupKeys = new();
     private readonly List<object> _idleTextKeyEvents = [];
     private readonly List<Node3D> _animationObjects = [];
     private IReadOnlyList<FalloutActorIdleObjectBinding>? _idleObjectBindings = [];
@@ -66,6 +67,7 @@ internal partial class RuntimeNativeNpc : CharacterBody3D
         absentBaseTargets = _baseAnimation?.AbsentSourceTargets.Select(link => new { node = link.NodeName, controller = link.ControllerType }).ToArray(),
         absentIdleTargets = _animation?.AbsentSourceTargets.Select(link => new { node = link.NodeName, controller = link.ControllerType }).ToArray(),
         error = AnimationError,
+        failedIdleRequest = _failedIdleRequest,
         combat = Combat?.Observation,
         appearance = new { race = Appearance.Race.ToString(), _appearanceRevision, error = AppearanceError },
     };
@@ -109,9 +111,7 @@ internal partial class RuntimeNativeNpc : CharacterBody3D
         var timing = FalloutIdleAnimationData.Read(record);
         var path = idle.AnimationPath;
         var content = RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("Owned source is absent.");
-        if (!content.TryRead(path, null, out var bytes, out var identity))
-            throw new FileNotFoundException($"Source IDLE animation is absent: {path}");
-        var source = FalloutNifFile.Read(bytes);
+        var source = NativeAnimationResources.For(content).Read(path, out var identity);
         if (saved is not null && (!source.Sha256.Equals(saved.Sha256, StringComparison.OrdinalIgnoreCase) ||
             !path.Equals(saved.Resource, StringComparison.OrdinalIgnoreCase) || !timing.AdmitsAdditionalLoops(saved.Clock.SelectedAdditionalLoops)))
             throw new InvalidDataException("Saved collection KF or chosen repetitions differ from the winning source.");
@@ -199,7 +199,7 @@ internal partial class RuntimeNativeNpc : CharacterBody3D
             var clock = new FalloutIdleAnimationPlayback(selected.Sequence.StartTime, selected.Sequence.StopTime,
                 selected.Sequence.Frequency, selected.Sequence.CycleType,
                 selected.TextKeys.Select(key => (key.Time, key.Value)).ToArray(),
-                saved?.Clock.SelectedAdditionalLoops ?? timing.SelectAdditionalLoops(_aiRandom.NextBounded));
+                saved?.Clock.SelectedAdditionalLoops ?? timing.SelectAdditionalLoops(owner == "ambient" ? FalloutSharedUnsignedRandom.Process.NextBounded : _aiRandom.NextBounded), selected.Sequence.Name);
             if (saved is not null) clock.Restore(saved.Clock);
             var snapshot = !restoreCompletePose && _animation is null && _outgoingIdles.Count == 0 && BeginIdleSnapshot(selected, timing);
             RetainOutgoingIdle(selected);
@@ -277,6 +277,7 @@ internal partial class RuntimeNativeNpc : CharacterBody3D
         try
         {
             _idleReplays.Advance((float)delta);
+            AdvanceAutomaticIdle(delta);
             float Advance(RuntimeNativeNifAnimation animation, double elapsed)
             {
                 var sequence = animation.Sequence;
@@ -291,7 +292,8 @@ internal partial class RuntimeNativeNpc : CharacterBody3D
             }
             if (_baseAnimation is not null)
             {
-                _baseClock.Advance(delta);
+                if (Combat?.PackageOwnsPose != true && _packageBaseAdoptFrame != Engine.GetProcessFrames())
+                    _baseClock.Advance(delta);
                 _baseElapsedSeconds = _baseClock.ElapsedSeconds;
                 _baseAnimationSeconds = Advance(_baseAnimation, _baseElapsedSeconds);
             }
@@ -300,9 +302,10 @@ internal partial class RuntimeNativeNpc : CharacterBody3D
             while (_animation is { } idle && idleDelta > 0)
             {
                 var clock = _idlePlayback ?? throw new InvalidOperationException("The active IDLE has no source playback clock.");
-                idleDelta = clock.Advance(idleDelta, interval => PublishIdleTextKeys(idle, interval));
+                idleDelta = clock.Advance(idleDelta, interval => PublishIdleTextKeys(idle, interval),
+                    processGroup: _currentIdleRequest?.SequenceState == 1);
                 _animationSeconds = clock.SourceSeconds;
-                if (_idleNaturalEndPending) BeginCurrentIdleDeactivation();
+                if (_idleNaturalEndPending || clock.HasGroupTiming && clock.Complete) BeginCurrentIdleDeactivation();
                 if (_animation is null) break;
                 if (!clock.Complete) break;
                 // End-group handling, not the raw KF endpoint, owns stop.
@@ -312,7 +315,7 @@ internal partial class RuntimeNativeNpc : CharacterBody3D
             Skeleton.ResetMorphPublication();
             if (IdleSnapshotActive) PublishIdleSnapshot();
             else if (_outgoingIdles.Count != 0 || _idleEaseIn is not null || _currentIdleEaseOut is not null) PublishIdleRequestLayers();
-            else if (Combat?.PackageOwnsPose == true) _animation?.ApplySourceTime(_animationSeconds);
+            else if (Combat?.PackageOwnsPose == true && _animation is not null) PublishIdleRequestLayers();
             else if (_baseAnimation is not null && _animation is not null)
                 RuntimeNativeNifAnimation.ApplyLayers((_baseAnimation, _baseAnimationSeconds), (_animation, _animationSeconds));
             else if (_baseAnimation is not null) _baseAnimation.ApplySourceTime(_baseAnimationSeconds);
@@ -378,15 +381,20 @@ internal partial class RuntimeNativeNpc : CharacterBody3D
     private void PublishIdleTextKeys(RuntimeNativeNifAnimation animation, FalloutIdleAnimationInterval interval,
         FalloutFormKey? requestIdle = null, FalloutIdleAnimationPlayback? requestClock = null)
     {
-        foreach (var key in animation.TextKeys.Where(key => key.Time <= interval.To &&
-            (key.Time > interval.From || interval.IncludeFrom && key.Time == interval.From)))
+        var declarations = _idleGroupKeys.GetValue(animation, static source => FalloutIdleGroupTextKeys.Read(source.Sequence.Name, source.TextKeys));
+        for (var ordinal = 0; ordinal < animation.TextKeys.Count; ++ordinal)
         {
-            foreach (var value in key.Value.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries).Select(value => value.Trim()))
+            var key = animation.TextKeys[ordinal];
+            if (key.Time > interval.To || !(key.Time > interval.From || interval.IncludeFrom && key.Time == interval.From)) continue;
+            var values = key.Value.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
+            for (var segment = 0; segment < values.Length; ++segment)
             {
+                var value = values[segment].Trim();
                 if (ReferenceEquals(animation, _animation) && value.Equals("End", StringComparison.OrdinalIgnoreCase) &&
-                    _idlePlayback?.AdditionalLoops == 0)
+                    _idlePlayback is { HasGroupTiming: false, AdditionalLoops: 0 })
                     _idleNaturalEndPending = true;
-                var structural = value.Equals("start", StringComparison.OrdinalIgnoreCase) ||
+                var structural = declarations.Kind(ordinal, segment) is FalloutIdleGroupKeyKind.GroupMarker or
+                    FalloutIdleGroupKeyKind.NonmatchingGroupMarker || value.Equals("start", StringComparison.OrdinalIgnoreCase) ||
                     value.Equals("end", StringComparison.OrdinalIgnoreCase) ||
                     value.Equals("StartLoop", StringComparison.OrdinalIgnoreCase) ||
                     value.Equals("EndLoop", StringComparison.OrdinalIgnoreCase);

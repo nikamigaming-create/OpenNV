@@ -16,13 +16,15 @@ public partial class RuntimeCoordinator
 
     private void SaveNativeManualSlot() => RequestNativeManualSave(RuntimeManualSaveOrigin.PlayerInput);
 
-    private RuntimeManualSaveReceipt RequestNativeManualSave(RuntimeManualSaveOrigin origin)
+    private RuntimeManualSaveReceipt RequestNativeManualSave(RuntimeManualSaveOrigin origin, Guid? requestedSlot = null)
     {
+        if (requestedSlot is not null && _nativeManualSaves.Pending)
+            throw new InvalidOperationException("A diagnostic checkpoint cannot replace another pending save.");
         var source = RuntimeLiveContentSource.Current;
         var identity = source?.SaveCompatibilityId ?? "unbound-source";
         if (_nativeManualSaves.Pending && _nativeManualSaves.Receipt!.SourceCompatibilityId != identity)
             CancelNativeManualSave("The selected source stack changed before manual save committed.");
-        var receipt = _nativeManualSaves.Request(_nativeManualSaveSession, identity, Engine.GetProcessFrames(), origin);
+        var receipt = _nativeManualSaves.Request(_nativeManualSaveSession, identity, Engine.GetProcessFrames(), origin, requestedSlot);
         GD.Print($"OPENNV_NATIVE_MANUAL_SAVE_REQUEST generation={receipt.Generation} slot={receipt.Slot:N} count={receipt.RequestCount} origin={origin} disposition=pending");
         if (_nativeManualSavePreparation is not null)
         {
@@ -37,7 +39,7 @@ public partial class RuntimeCoordinator
                 throw new InvalidOperationException("Manual save has no settled native session/source owner.");
             if (_nativeOpeningStageDriver.Vitals.HitPoints <= 0)
                 throw new InvalidOperationException("Load an earlier save after death; the previous Continue save is preserved.");
-            if (origin == RuntimeManualSaveOrigin.PlayerInput && (_nativePlayer.ModalInput || GetTree().Paused) ||
+            if (origin is RuntimeManualSaveOrigin.PlayerInput or RuntimeManualSaveOrigin.DiagnosticCheckpoint && (_nativePlayer.ModalInput || GetTree().Paused) ||
                 origin == RuntimeManualSaveOrigin.SessionMenu && _nativeSessionMenu is null)
                 throw new InvalidOperationException("Manual save input has no matching player or session-menu owner.");
             var player = _nativePlayer; var driver = _nativeOpeningStageDriver; var records = _nativePluginStack;

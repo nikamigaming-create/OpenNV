@@ -41,6 +41,9 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer
                 ObserveEvent();
                 return "source-stop-sounds";
             }
+            if (_creatureSoundSource is not null && text.StartsWith("Enum:", StringComparison.OrdinalIgnoreCase) &&
+                FalloutCreatureAnimationSounds.TryType(text, out var creatureType))
+                return DispatchCreatureEnum(text, creatureType);
             return "unbound-runtime-event";
         }
         catch (Exception error) when (error is IOException or InvalidDataException or NotSupportedException)

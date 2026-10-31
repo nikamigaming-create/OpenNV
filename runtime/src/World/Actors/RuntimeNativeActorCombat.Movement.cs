@@ -10,11 +10,15 @@ internal sealed partial class RuntimeNativeActorCombat
 {
     private CharacterBody3D? _mover;
     private NativeCharacterStep.QueryResources? _stepQueries;
+    private NativeCapsuleNavigation.EdgeQuery? _movementEdge;
     private CollisionShape3D? _movementEnvelope;
+    private readonly List<CollisionShape3D> _movementEnvelopeParts = [];
+    private NativeActorMovementEnvelope? _sourceMovementEnvelope;
     private float _movementSkeletonScale, _movementActorScale;
     private Vector3 _movementWorldScale;
     private float _radius, _motionScale, _turnSpeed;
     private float? _creatureTurnDegrees;
+    private float _pathHeadingMotionScale = 1;
     private string? _movementBlock;
     private string? _stepBlock;
     private (float One, float Two)? _crippledLegSpeedSettings;
@@ -24,6 +28,7 @@ internal sealed partial class RuntimeNativeActorCombat
     private object MotionObservation => new
     {
         radius = _radius,
+        sourceEnvelope = _sourceMovementEnvelope,
         routeDoor = DoorNavigationObservation,
         waypoints = _pursuitPath.Length,
         cursor = _pursuitCursor,
@@ -72,6 +77,7 @@ internal sealed partial class RuntimeNativeActorCombat
         routeMilliseconds = _routeMilliseconds,
         routeSourceMilliseconds = _routeSourceMilliseconds,
         routeMaximumSliceMilliseconds = _routeMaximumSliceMilliseconds,
+        animationAccumulationAwaitingTranslation = PackageAccumulationAwaitingTranslation,
         blocked = _movementBlock,
         stepBlocked = _stepBlock,
         crippledLegs = _crippledLegCount,
@@ -79,7 +85,7 @@ internal sealed partial class RuntimeNativeActorCombat
         limbMovementError = _crippledLegMovementError,
         hitKnockback = _state.HitKnockback,
         hitKnockbackError = _hitKnockbackError,
-        source = "source-BBX-envelope,KF-accumulation,NAVM,BPTD-limb-thresholds;Godot-capsule-or-cylinder-and-step-resolver"
+        source = "source-BBX-horizontal-controller,KF-accumulation,NAVM,BPTD-limb-thresholds;vertical-custom-envelope-and-floor-tilt-parity-unqualified"
     };
 
     private void PrepareMovement()
@@ -95,6 +101,9 @@ internal sealed partial class RuntimeNativeActorCombat
         var scale = _skeleton.UnitsToMetres * _skeleton.Node.Scale.X;
         var radius = Math.Max(bound.Dimensions.X, bound.Dimensions.Y) * scale;
         var height = bound.Dimensions.Z * scale * 2;
+        _sourceMovementEnvelope = NativeActorMovementEnvelope.Horizontal(bound.Center, bound.Dimensions,
+            _skeleton.Node.Scale.X * _actor.Scale.X, _skeleton.UnitsToMetres);
+        if (_sourceMovementEnvelope is { } horizontal) radius = horizontal.Radius / _actor.Scale.X;
         if (!float.IsFinite(radius) || !float.IsFinite(height) || radius <= 0 || height <= 0)
             throw new InvalidDataException("Source BBX movement dimensions are invalid.");
         _radius = radius * _actor.Scale.X;
@@ -111,24 +120,46 @@ internal sealed partial class RuntimeNativeActorCombat
         else _turnSpeed = Mathf.DegToRad(FalloutGameSettingFloats.ReadRetained(_records, "fCharacterDefaultTurningSpeed", nameof(RuntimeNativeActorCombat)));
         if (_motionScale <= 0 || _turnSpeed <= 0) throw new NotSupportedException("Actor movement/turn speed is not positive.");
         GamebryoReferenceEnableRuntime.SetCollisionFilter(mover, 0, _mask);
-        mover.FloorSnapLength = radius;
+        mover.FloorSnapLength = _radius;
         mover.FloorMaxAngle = Mathf.DegToRad(_context?.MaximumWalkableSlopeDegrees ?? PlayerConfiguration.DefaultMaximumWalkableSlopeDegrees);
         if (_movementEnvelope is null)
         {
             _movementEnvelope = new() { Name = "SourceActorMovementEnvelope" };
             mover.AddChild(_movementEnvelope);
         }
-        _movementEnvelope.Position = Vector3.Up * height / 2;
-        // Squat creatures retain their authored height and footprint.
-        _movementEnvelope.Shape = height >= radius * 2
-            ? new CapsuleShape3D { Radius = radius, Height = height }
-            : new CylinderShape3D { Radius = radius, Height = height };
+        foreach (var part in _movementEnvelopeParts) part.Free();
+        _movementEnvelopeParts.Clear();
+        if (_sourceMovementEnvelope is { } sourceEnvelope)
+        {
+            sourceEnvelope.Capsules[0].Publish(_movementEnvelope, _actor.Scale.X);
+            foreach (var capsule in sourceEnvelope.Capsules.Skip(1))
+            {
+                var part = new CollisionShape3D { Name = "SourceActorMovementEnvelopePart" };
+                capsule.Publish(part, _actor.Scale.X);
+                mover.AddChild(part);
+                _movementEnvelopeParts.Add(part);
+            }
+        }
+        else
+        {
+            _movementEnvelope.Position = Vector3.Up * height / 2;
+            _movementEnvelope.Quaternion = Quaternion.Identity;
+            _movementEnvelope.Shape = height >= radius * 2
+                ? new CapsuleShape3D { Radius = radius, Height = height }
+                : new CylinderShape3D { Radius = radius, Height = height };
+        }
+        NativeCharacterStep.SetRootContactOffset(mover, _sourceMovementEnvelope?.RootContactOffset ?? 0);
+        NativeCapsuleNavigation.SetDirectionalEnvelope(mover, _sourceMovementEnvelope is not null);
         _movementSkeletonScale = _skeleton.Node.Scale.X;
         _movementActorScale = _actor.Scale.X;
         _movementWorldScale = _actor.IsInsideTree() ? _actor.GlobalBasis.Scale : _actor.Basis.Scale;
         _mover = mover;
         if (refreshing)
         {
+            _stepQueries?.Dispose(); _stepQueries = null;
+            _movementEdge?.Dispose(); _movementEdge = null;
+            _movementCorridorFloor = null;
+            _routeTurning = _routeFacingPending = false;
             ResetDoorNavigation();
             _routeSearch?.Dispose(); _routeSearch = null;
             _pursuitPath = []; _pursuitCursor = 0;
@@ -140,7 +171,10 @@ internal sealed partial class RuntimeNativeActorCombat
 
     internal float PreparePortalArrival() { PrepareMovement(); return _radius; }
 
-    private void TurnToward(Vector3 point, double delta)
+    private float SourceTurnRadians() => _creatureTurnDegrees is 0
+        ? Mathf.DegToRad(FalloutCreatureTurnSpeed.ResolveDegrees(_records, 0)) : _turnSpeed;
+
+    private void TurnToward(Vector3 point, double delta, bool stationary = true)
     {
         var direction = point - _actor.GlobalPosition; direction.Y = 0;
         if (direction.LengthSquared() < .000001f) return;
@@ -152,10 +186,19 @@ internal sealed partial class RuntimeNativeActorCombat
         var angle = current.AngleTo(destination);
         // A nonzero authored rate is immutable for this prepared appearance.
         // Zero instead follows the live game setting and must be resolved again.
-        var turnSpeed = _creatureTurnDegrees is 0
-            ? Mathf.DegToRad(FalloutCreatureTurnSpeed.ResolveDegrees(_records, 0)) : _turnSpeed;
-        _actor.GlobalBasis = new Basis(current.Slerp(destination, angle <= .00001f ? 1 :
-            Math.Min(1, turnSpeed * (float)delta / angle)).Normalized()).Scaled(_movementWorldScale);
+        var sourceRate = SourceTurnRadians();
+        // The moving path owner has a separate rate from stationary facing.
+        // Rates above 45 degrees also need its source lookahead/speed factor;
+        // retain the existing rate there until that branch is bound.
+        var movingFactor = sourceRate <= Mathf.DegToRad(45) ? 3 : 1;
+        var turnSpeed = sourceRate * (stationary ? SourceStationaryTurnScale() : movingFactor);
+        var budget = turnSpeed * (float)delta;
+        _pathHeadingMotionScale = !stationary && angle > budget
+            ? angle > 2.7f ? .05f : angle > 2 ? .1f : angle > 1.6f ? .2f : 1
+            : 1;
+        var reached = angle <= .00001f || !stationary && angle < PathTurnAdmissionRadians;
+        _actor.GlobalBasis = new Basis(current.Slerp(destination, reached ? 1 :
+            Math.Min(1, budget / angle)).Normalized()).Scaled(_movementWorldScale);
     }
 
     private void MoveActor(Vector3 localMotion, double delta, Vector3? waypoint = null)
@@ -165,12 +208,26 @@ internal sealed partial class RuntimeNativeActorCombat
         var motion = body.GlobalBasis.Orthonormalized() * localMotion * _motionScale *
             CrippledLegMovementSpeedMultiplier();
         motion.Y = 0;
-        // The source KF supplies the distance budget. Native route waypoints
-        // supply travel direction while the source turn owner rotates the body.
-        // Turning must not curve the capsule off its checked corridor, and a
-        // long animation step must not overshoot a corner onto nearby furniture.
+        // Preserve the signed KF direction after actual body yaw. Waypoints
+        // cap distance; the actual trajectory must independently pass the same
+        // whole-capsule and source-floor admission as the route that led here.
+        string? pathBlock = null;
         if (waypoint is { } destination)
+        {
+            motion *= _pathHeadingMotionScale;
             motion = NativeCapsuleNavigation.RouteMotion(body.GlobalPosition, motion, destination);
+            if (!motion.IsZeroApprox())
+            {
+                if (_movementCorridorFloor is null) pathBlock = "source-corridor-floor-unbound";
+                else
+                {
+                    _movementEdge ??= new(body, _context!.StepHeight, Math.Max(.3f, _radius * 2), _context.Resident);
+                    if (!_movementEdge.ValidateSegment(body.GlobalPosition, body.GlobalPosition + motion,
+                        _movementCorridorFloor, out _, out pathBlock)) motion = Vector3.Zero;
+                }
+                if (pathBlock is not null) motion = Vector3.Zero;
+            }
+        }
         var knockback = AdvanceHitKnockbackMotion(delta);
         motion += new Vector3(knockback.X, 0, knockback.Z) * (float)delta;
         if (!_context!.Resident(body.GlobalPosition + motion)) { _movementBlock = "unloaded-collision"; return; }
@@ -184,7 +241,7 @@ internal sealed partial class RuntimeNativeActorCombat
         { body.Velocity = Vector3.Down * .01f; _previousKnockbackVertical = 0; body.MoveAndSlide(); }
         else body.MoveAndSlide();
         if (body.IsOnFloor() || body.IsOnCeiling()) _previousKnockbackVertical = 0;
-        _movementBlock = null;
+        _movementBlock = pathBlock;
         if (body.IsOnWall() && body.GetSlideCollisionCount() > 0 && body.GetSlideCollision(0).GetCollider() is Node collider)
         {
             using var path = collider.GetPath();
