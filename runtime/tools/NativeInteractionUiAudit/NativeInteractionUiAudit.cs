@@ -46,12 +46,13 @@ public partial class NativeInteractionUiAudit : Node
                 System.Text.Json.JsonSerializer.Serialize(cold.Inventory(container.FormKey, 1, globals).Capture()) !=
                 System.Text.Json.JsonSerializer.Serialize(world.Inventory(container.FormKey, 1, globals).Capture()))
                 throw new InvalidDataException("Cold world restored a pickup or rerolled container contents.");
-            var menu = new NativeOwnedContainerMenu(records, player, contents, "Player", "Container", () => { }, () => { });
+            var menu = NativeOwnedContainerMenu.CreateComponentFixture(records, player, contents, "Container", () => { }, () => { });
             AddChild(menu);
             NativeHudTarget? target = null;
             var playerRecord = FalloutDialogueTopic.Find(records, "NPC_", "Player").FormKey;
             var vigor = FalloutNativeVigorResolver.Resolve(records, cell);
             var recipeInventory = new FalloutPlayerInventory();
+            var recipeNotes = new FalloutPlayerNotes(records);
             var perks = new List<FalloutFormKey>();
             var recipeSkills = new FalloutPlayerSkills(records, () => vigor.Initial, _ => false, () => [], globals,
                 recipeInventory, playerRecord, () => FalloutDialogueSpeaker.Read(records, playerRecord).Race!.Value,
@@ -62,13 +63,13 @@ public partial class NativeInteractionUiAudit : Node
             {
                 if (!FalloutInventoryConditions.TargetsPlayer(records, condition))
                     throw new NotSupportedException("Owned recipe fixture reached another actor's inventory condition.");
-                float? Evaluate() => FalloutInventoryConditions.Evaluate(records, recipeInventory, recipeSkills.HasPerk, condition);
+                float? Evaluate() => FalloutInventoryConditions.Evaluate(records, recipeInventory, recipeSkills.HasPerk, condition, recipeNotes);
                 if (Evaluate() != 0) throw new InvalidDataException("Absent recipe note/perk was accepted.");
                 if (condition.Function == 449) perks.Add(condition.FormArgument1);
-                else recipeInventory.Add(records, condition.FormArgument1, 1, 1, silent: true, globals);
+                else recipeNotes.AddMembership(condition.FormArgument1);
                 if (Evaluate() != 1) throw new InvalidDataException("Acquired recipe note/perk remained unavailable.");
                 perks.Clear();
-                if (condition.Function == 382) recipeInventory.Remove(condition.FormArgument1, 1, silent: true);
+                if (condition.Function == 382) recipeNotes.RemoveMembership(condition.FormArgument1);
                 if (Evaluate() != 0) throw new InvalidDataException("Removed recipe note/perk remained owned.");
                 sourceRecipeQueries++;
             }
@@ -93,7 +94,7 @@ public partial class NativeInteractionUiAudit : Node
             quantityTransfers.Add(records, item.Base, 12, 1, silent: true, globals);
             var changed = 0; var closed = false;
             menu.Free();
-            menu = new(records, player, quantityTransfers, "Player", "Quantity fixture", () => closed = true, () => changed++);
+            menu = NativeOwnedContainerMenu.CreateComponentFixture(records, player, quantityTransfers, "Quantity fixture", () => closed = true, () => changed++);
             AddChild(menu);
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
             var beforeQuantity = player.Item(item.Base)!.Count;

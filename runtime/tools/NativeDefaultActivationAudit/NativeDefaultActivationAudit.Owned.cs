@@ -124,7 +124,8 @@ public partial class NativeDefaultActivationAudit
                     if (menu is not null) return;
                     var inventory = owner.Inventory(identity, level, globals).Contents;
                     var full = records.GetEffective(placed.Base).ReadSubrecords().Single(row => row.Signature == "FULL");
-                    menu = new(records, playerInventory, inventory, saved.PlayerName, FalloutDialogueTopic.Text(full.Data.Span), () => { }, () => { });
+                    menu = NativeOwnedContainerMenu.CreateComponentFixture(records, playerInventory, inventory,
+                        FalloutDialogueTopic.Text(full.Data.Span), () => { }, () => { });
                     fixture.AddChild(menu);
                     Require(menu.Error is null, "Original container XML/font owner refused: " + menu.Error);
                     interactionCount++;

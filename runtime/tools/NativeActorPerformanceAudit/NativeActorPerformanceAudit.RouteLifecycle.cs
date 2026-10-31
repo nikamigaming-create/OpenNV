@@ -88,7 +88,7 @@ public partial class NativeActorPerformanceAudit
         foreach (var controller in controllers) controller.SetProcess(false);
         if (doorState.DoorMotion?.Moving != true) throw new InvalidDataException("Owned door has no pending source motion.");
         var procedureType = type.GetNestedType("RouteDoor", BindingFlags.NonPublic)!;
-        var procedure = Activator.CreateInstance(procedureType, flags | BindingFlags.Public, null, [contact, door.FormKey], null)!;
+        var procedure = Activator.CreateInstance(procedureType, flags | BindingFlags.Public, null, [contact, door.FormKey, false], null)!;
         procedureType.GetField("Requested", flags | BindingFlags.Public)!.SetValue(procedure, true);
         Field("_routeDoor").SetValue(combat, procedure);
         Field("_routeError").SetValue(combat, "retained-native-query-refusal");

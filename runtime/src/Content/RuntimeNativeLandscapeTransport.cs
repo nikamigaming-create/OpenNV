@@ -319,12 +319,26 @@ internal static class RuntimeNativeLandscapeTransportBuilder
                 var lowerRight = lowerLeft + 1;
                 var upperLeft = lowerLeft + FalloutLandscapeTransportResolver.QuadrantVertexSide;
                 var upperRight = upperLeft + 1;
-                indices[cursor++] = lowerLeft;
-                indices[cursor++] = upperLeft;
-                indices[cursor++] = lowerRight;
-                indices[cursor++] = lowerRight;
-                indices[cursor++] = upperLeft;
-                indices[cursor++] = upperRight;
+                // Source LAND height queries alternate the diagonal by square parity.
+                // Keep the mesh and its collision faces on that same piecewise plane.
+                if (((x + y) & 1) == 0)
+                {
+                    indices[cursor++] = lowerLeft;
+                    indices[cursor++] = upperLeft;
+                    indices[cursor++] = upperRight;
+                    indices[cursor++] = lowerLeft;
+                    indices[cursor++] = upperRight;
+                    indices[cursor++] = lowerRight;
+                }
+                else
+                {
+                    indices[cursor++] = lowerLeft;
+                    indices[cursor++] = upperLeft;
+                    indices[cursor++] = lowerRight;
+                    indices[cursor++] = lowerRight;
+                    indices[cursor++] = upperLeft;
+                    indices[cursor++] = upperRight;
+                }
             }
         }
         return new(vertices, normals, colors, uvs, indices);

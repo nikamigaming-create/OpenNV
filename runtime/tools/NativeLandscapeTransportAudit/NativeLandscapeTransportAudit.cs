@@ -107,6 +107,7 @@ public partial class NativeLandscapeTransportAudit : Node3D
                 var hit = GetWorld3D().DirectSpaceState.IntersectRay(PhysicsRayQueryParameters3D.Create(point + Vector3.Up * 20, point + Vector3.Down * 20, 1));
                 if (hit.Count == 0 || hit["normal"].AsVector3().Y <= 0 || Math.Abs(hit["position"].AsVector3().Y - point.Y) > .02f)
                     throw new InvalidDataException($"LAND {source.Landscape} has no upward collision at its authored height.");
+                VerifyInteriorTriangleHeights(source, units);
                 var shape = land.FindChildren("*", "", true, false).OfType<CollisionShape3D>().Single();
                 var materials = shape.GetMeta("opennv_havok_face_materials").AsInt32Array();
                 var faces = ((ConcavePolygonShape3D)shape.Shape).Data;
@@ -183,5 +184,53 @@ public partial class NativeLandscapeTransportAudit : Node3D
         finally { foreach (var root in roots) root.Free(); isolated.Free(); }
         if (environment.RegisteredSurfaces != before) throw new InvalidOperationException("Expired effects remained in the world lighting registry.");
         GD.Print("OPENNV_LATE_EFFECT_ENVIRONMENT_PASS casings=true particles=true isolatedViewport=preserved teardown=released");
+    }
+
+    private void VerifyInteriorTriangleHeights(FalloutLandscapeTransport source, float units)
+    {
+        const int side = FalloutLandscapeTransportResolver.VertexSide;
+        const float u = .25f, v = .5f;
+        for (var parity = 0; parity < 2; parity++)
+        {
+            var selectedX = parity;
+            var selectedY = 0;
+            var greatestDifference = -1f;
+            for (var y = 0; y < side - 1; y++)
+            {
+                for (var x = 0; x < side - 1; x++)
+                {
+                    if (((x + y) & 1) != parity) continue;
+                    var index = y * side + x;
+                    var difference = MathF.Abs(source.Heights[index] + source.Heights[index + side + 1] -
+                        source.Heights[index + 1] - source.Heights[index + side]) * u * units;
+                    if (difference <= greatestDifference) continue;
+                    greatestDifference = difference;
+                    selectedX = x;
+                    selectedY = y;
+                }
+            }
+            var corner = selectedY * side + selectedX;
+            var lowerLeft = source.Heights[corner];
+            var lowerRight = source.Heights[corner + 1];
+            var upperLeft = source.Heights[corner + side];
+            var upperRight = source.Heights[corner + side + 1];
+            // Independent native surface equations at u < v and u + v < 1.
+            // Authored-vertex rays alone cannot distinguish the two diagonals.
+            var expectedHeight = parity == 0
+                ? lowerLeft + (upperLeft - lowerLeft) * v + (upperRight - upperLeft) * u
+                : lowerLeft + (lowerRight - lowerLeft) * u + (upperLeft - lowerLeft) * v;
+            var point = new Vector3(
+                source.ActiveCoordinates.X * FalloutLandscapeTransportResolver.ExteriorCellSideGameUnits +
+                (selectedX + u) * FalloutLandscapeTransportResolver.VertexSpacingGameUnits,
+                expectedHeight,
+                -(source.ActiveCoordinates.Y * FalloutLandscapeTransportResolver.ExteriorCellSideGameUnits +
+                (selectedY + v) * FalloutLandscapeTransportResolver.VertexSpacingGameUnits)) * units;
+            using var ray = PhysicsRayQueryParameters3D.Create(point + Vector3.Up * 20, point + Vector3.Down * 20, 1);
+            var hit = GetWorld3D().DirectSpaceState.IntersectRay(ray);
+            if (hit.Count == 0 || hit["normal"].AsVector3().Y <= 0 ||
+                MathF.Abs(hit["position"].AsVector3().Y - point.Y) > .02f)
+                throw new InvalidDataException($"LAND {source.Landscape} interior triangle height disagrees at parity {parity}.");
+            GD.Print($"OPENNV_LAND_INTERIOR_HEIGHT cell={source.ActiveCell} parity={parity} diagonalDifferenceMeters={greatestDifference}");
+        }
     }
 }

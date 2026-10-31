@@ -18,9 +18,15 @@ public partial class NativeActorPerformanceAudit
         var savedBytes = File.ReadAllBytes(checkpoint);
         try
         {
-            var setup = new FalloutModStackSelection([new(mod, root, dependencies)]).Resolve(game);
-            RuntimeLiveContentSource.Configure(game, RuntimeLiveContentSource.FalloutNewVegasGame,
-                setup.ContentRoots.Skip(1).ToArray(), setup.ActivePlugins, setup.Settings);
+            if (mod == "vanilla")
+                RuntimeLiveContentSource.Configure(game, RuntimeLiveContentSource.FalloutNewVegasGame,
+                    activePlugins: RuntimeLiveContentSource.ResolveVanillaPlugins(game), includeImplicitPlugins: false);
+            else
+            {
+                var setup = new FalloutModStackSelection([new(mod, root, dependencies)]).Resolve(game);
+                RuntimeLiveContentSource.Configure(game, RuntimeLiveContentSource.FalloutNewVegasGame,
+                    setup.ContentRoots.Skip(1).ToArray(), setup.ActivePlugins, setup.Settings);
+            }
             var content = RuntimeLiveContentSource.Current!;
             using var records = FalloutPluginStack.Load(content.PluginSources);
             var controls = FalloutOpeningPlayerControlResolver.Resolve(records, ["VCG00", "VCG01"]);
@@ -81,6 +87,37 @@ public partial class NativeActorPerformanceAudit
             state.AttackRandom.Restore(17);
             state.Engagement = new(records.RuntimeFormKey(0x14), AttackRandomState: 17);
             var actor = Assemble(world); using var lifetime = new PackageFixtureLifetime(actor);
+            // A restored/standing procedure may face before any motion has
+            // prepared its turn rate/world scale. Exercise that public entry
+            // before the existing movement preparation and cold-save proofs.
+            var mover = typeof(RuntimeNativeActorCombat).GetField("_mover", flags)!;
+            if (mover.GetValue(actor.Combat) is not null)
+                throw new InvalidDataException("Cold facing fixture already prepared movement.");
+            var originalPose = actor.GlobalTransform;
+            try
+            {
+                actor.Scale *= 1.25f;
+                var scale = actor.GlobalBasis.Scale;
+                var beforeFacing = actor.GlobalBasis.Orthonormalized();
+                const double step = 1d / 60;
+                actor.Combat!.FacePackageDirection(beforeFacing.X, step);
+                var afterFacing = actor.GlobalBasis;
+                var turned = beforeFacing.GetRotationQuaternion().AngleTo(afterFacing.Orthonormalized().GetRotationQuaternion());
+                var limit = Mathf.DegToRad(FalloutGameSettingFloats.Read(records, "fCharacterDefaultTurningSpeed")) * (float)step;
+                if (!afterFacing.X.IsFinite() || !afterFacing.Y.IsFinite() || !afterFacing.Z.IsFinite() ||
+                    afterFacing.Determinant() <= 0 || !afterFacing.Scale.IsEqualApprox(scale) ||
+                    turned <= 0 || turned > limit + .001f || actor.GlobalPosition != originalPose.Origin ||
+                    mover.GetValue(actor.Combat) is null)
+                    throw new InvalidDataException("Cold standing facing lost source scale, turn limit or physical movement ownership.");
+            }
+            finally
+            {
+                actor.GlobalTransform = originalPose;
+                actor.Combat!.RefreshAppearanceMovement();
+            }
+            _ = state.Capture();
+            GD.Print("OPENNV_NATIVE_COLD_FACING_PASS faceBeforeMovement=true nonunitScalePreserved=true " +
+                "sourceTurnBounded=true movementPrepared=true retainedCaptureValid=true fixture=owned-actor-component gameplay=separate");
             prepare.Invoke(actor.Combat, null);
             if (state.Engagement!.AttackRandomState != 17 || state.Engagement.Animation is not null)
                 throw new InvalidDataException("Native attack preparation selected a KF or consumed a variant draw.");
