@@ -65,7 +65,7 @@ public partial class NativeLandscapeTransportAudit
             Engine.PhysicsTicksPerSecond = configuration.Simulation.PhysicsTicksPerSecond;
             var units = configuration.World.GameUnitsToMeters;
             var settings = FalloutInstallationSettings.Read(content);
-            var diameter = Math.Max(checked((int)settings.Unsigned("General", "uGridsToLoad")), configuration.World.MinimumExteriorGridDiameter);
+            var diameter = checked((int)settings.Unsigned("General", "uGridsToLoad"));
             var exterior = new FalloutExteriorGrid(records);
             var grid = exterior.Resolve(worldspace, exterior.PersistentCell(worldspace), entry.Position[0], entry.Position[1], diameter);
             if (grid.Scene.Cell.FormKey != exterior.SpatialCell(worldspace, entry.Position[0], entry.Position[1]) ||

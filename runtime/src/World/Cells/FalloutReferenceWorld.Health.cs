@@ -104,7 +104,6 @@ internal sealed partial class FalloutReferenceWorld
         var source = HealthSource(reference);
         var part = BodyParts(reference).Parts.SingleOrDefault(value => value.Type == partType) ??
             throw new InvalidDataException("Hit body part is absent from the actor's source table.");
-        if (source.Essential) throw new NotSupportedException("Essential actor knockdown/recovery is not bound.");
         var actor = Actor(reference);
         var health = Health(reference);
         var injury = actor.Injury!;
@@ -115,12 +114,15 @@ internal sealed partial class FalloutReferenceWorld
         limbs[partType] = limbs.GetValueOrDefault(partType) + limbDamage;
         if (!changed.IsFinite || !float.IsFinite(limbs[partType])) throw new InvalidDataException("Actor damage exceeds finite storage.");
         var died = !injury.Dead && changed.Current <= 0;
+        injury = injury with { LimbDamage = limbs };
+        if (died && EssentialProtection(reference))
+        {
+            changed = EssentialSuppressedDeath(actor, changed, ref injury);
+            died = false;
+        }
         if (died) injury = BeginActorDeath(actor, source, injury, attacker, level, globals);
         actor.ActorValues["health"] = changed;
-        actor.Injury = injury with
-        {
-            LimbDamage = limbs
-        };
+        actor.Injury = injury;
         return new(reference, partType, health.Current, changed.Current, healthDamage, limbDamage, died, actor.Injury.Dead, source.ImpactMaterial);
     }
 
@@ -129,7 +131,6 @@ internal sealed partial class FalloutReferenceWorld
         if (level < 1) throw new ArgumentOutOfRangeException(nameof(level));
         var actor = Actor(reference);
         var source = HealthSource(reference);
-        if (source.Essential) throw new NotSupportedException("Essential actor knockdown/recovery is not bound.");
         if (killer is { } known && records.RuntimeFormId(known) != 0x14) _ = Actor(known);
         var health = Health(reference);
         var injury = actor.Injury!;
@@ -138,6 +139,13 @@ internal sealed partial class FalloutReferenceWorld
         // limb damage and does not generate hit effects or destruction damage.
         var changed = health with { Damage = -(health.Base + health.Permanent + health.Temporary) };
         if (!changed.IsFinite) throw new InvalidDataException("Script death exceeds finite health storage.");
+        if (EssentialProtection(reference))
+        {
+            changed = EssentialSuppressedDeath(actor, changed, ref injury);
+            actor.ActorValues["health"] = changed;
+            actor.Injury = injury;
+            return false;
+        }
         injury = BeginActorDeath(actor, source, injury, killer, level, globals);
         actor.ActorValues["health"] = changed;
         actor.Injury = injury;
@@ -153,7 +161,10 @@ internal sealed partial class FalloutReferenceWorld
         if (!injury.DeathInventoryGranted && source.DeathItem is { } item)
             Inventory(actor.Reference, level, globals).Contents.Add(records, item, 1, level, true, globals);
         actor.DeathCount = deathCount;
+        actor.EssentialKnockout = null;
+        actor.KnockedDown = false;
         actor.HitReaction = null;
+        actor.HitKnockback = null;
         return injury with
         {
             Dead = true,

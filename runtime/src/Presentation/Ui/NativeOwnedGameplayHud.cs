@@ -38,22 +38,26 @@ internal partial class NativeOwnedGameplayHud : Control
         notice = _lastNotice,
         error = Error,
         targetError = TargetError,
+        compass = _lastCompass,
+        compassError = _compassError,
         scriptUiRevision = _uiRevision,
         sourceControls = _lastControls,
         hitPointsVisible = _hp is not null && _tiles.Number(_hp, "visible") > 0,
         actionPointsVisible = _ap is not null && _tiles.Number(_ap, "visible") > 0,
         reticleVisible = _tiles.Number(_reticle, "visible") > 0,
         rolloverVisible = _tiles.Number(_info, "visible") > 0,
-        source = "HUDMainMenu/ReticleCenter/Info/HitPoints/ActionPoints"
+        source = "HUDMainMenu/ReticleCenter/Info/HitPoints/ActionPoints/compass_window"
     };
 
     internal NativeOwnedGameplayHud(FalloutPluginStack records, string activateKey, Func<NativeHudTarget?> target, Func<bool> shown,
         Func<GameplayVitals>? vitals = null, Func<NativeHudAmmo?>? ammunition = null, Func<string?>? notice = null,
-        FalloutUiComponentStore? scriptUi = null, Func<FalloutPlayerControlState>? controls = null)
+        FalloutUiComponentStore? scriptUi = null, Func<FalloutPlayerControlState>? controls = null,
+        Func<float, OpenNV.Runtime.World.Cells.FalloutCompassFrame>? compass = null)
     {
         Name = "HUDMainMenuGameplay"; MouseFilter = MouseFilterEnum.Ignore; ProcessMode = ProcessModeEnum.Always;
         _target = target; _shown = shown; _vitals = vitals; _ammunition = ammunition; _notice = notice;
         _scriptUi = scriptUi;
+        _compassSnapshot = compass;
         _controls = controls ?? (() => FalloutPlayerControlState.AllEnabled);
         var source = FalloutMenuXml.Expand(FalloutMenuXml.Read("menus/main/hud_main_menu.xml")).Elements("menu").Single();
         var menu = new XElement(source.Name, source.Attributes(),
@@ -96,6 +100,7 @@ internal partial class NativeOwnedGameplayHud : Control
             _warning = Template("template_justify_center_text", menu);
             _tiles.Bind(_warning, "visible", 0); _tiles.Bind(_warning, "alpha", 255); _tiles.Bind(_warning, "y", 55);
         }
+        if (compass is not null && _hp is not null) InitializeCompass(source, _hp);
         (XElement Branch, XElement Meter) Meter(string branchName, string labelSetting, bool right)
         {
             var branch = Branch(branchName);
@@ -110,7 +115,7 @@ internal partial class NativeOwnedGameplayHud : Control
             return (branch, meter);
         }
         SetMeta("opennv_ui_source", "menus/main/hud_main_menu.xml; source-Info-and-reticle-templates");
-        SetMeta("opennv_ui_unverified", "retail-placement,compass,combat-effects");
+        SetMeta("opennv_ui_unverified", "retail-placement,compass-unbound-classes-in-state,combat-effects");
     }
     public override void _Ready() { Layout(); }
     private NativeViewportLayout? _viewportLayout;
@@ -138,6 +143,7 @@ internal partial class NativeOwnedGameplayHud : Control
         {
             Visible = _shown();
             if (!Visible) return;
+            UpdateCompass();
             var controls = _controls();
             if (controls != _lastControls)
             {

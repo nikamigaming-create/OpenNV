@@ -10,6 +10,8 @@ namespace OpenNV.Runtime.World.Actors;
 internal sealed partial class RuntimeNativeActorCombat
 {
     private NativeActorCombatAnimation? _packageWalk, _packageRun, _packageIdle;
+    private readonly Dictionary<string, FalloutActorMovementAnimation> _packageMovementSelections = [];
+    internal FalloutActorMovementAnimation? PackageAnimationSelection { get; private set; }
     private NativeActorCombatAnimation? _packageSneakWalk, _packageSneakRun, _packageSneakIdle;
     private NativeOwnedAnimationSoundPlayer? _packageSounds;
     private readonly Dictionary<FalloutFormKey, string> _packageHashes = [];
@@ -154,6 +156,7 @@ internal sealed partial class RuntimeNativeActorCombat
         _eatObjects?.SetVisible(false);
         PackageOwnsPose = false;
         PackageMoving = false;
+        PackageAnimationSelection = null;
         _packageWeapon?.Root.Hide();
         if (!OwnsPose && _mover is not null) _mover.Velocity = Vector3.Up * _mover.Velocity.Y;
     }
@@ -355,6 +358,7 @@ internal sealed partial class RuntimeNativeActorCombat
 
     private NativeActorCombatAnimation SelectPackageMotionClip(bool moving, bool running, bool sneaking)
     {
+        PackageAnimationSelection = null;
         if (sneaking)
         {
             if (!moving) return _packageSneakIdle ??= Load("sneakmtidle");
@@ -362,13 +366,21 @@ internal sealed partial class RuntimeNativeActorCombat
             return _packageSneakWalk ??= Load("sneakmtforward");
         }
         if (!moving) return _packageIdle ??= Load("mtidle", "locomotion/mtidle");
-        if (running) return _packageRun ??= LoadMovement("mtfastforward");
-        return _packageWalk ??= LoadMovement("mtforward");
+        var group = running ? "mtfastforward" : "mtforward";
+        var clip = running ? (_packageRun ??= LoadMovement(group)) : (_packageWalk ??= LoadMovement(group));
+        PackageAnimationSelection = _packageMovementSelections[group];
+        return clip;
 
         NativeActorCombatAnimation LoadMovement(string group)
         {
-            var gender = _actor is RuntimeNativeNpc npc && npc.Appearance.Female ? "female" : "male";
-            return Load(group, $"locomotion/{gender}/{group}", $"locomotion/{group}");
+            string[] folders = _actor is RuntimeNativeNpc npc
+                ? ["", "locomotion/" + (npc.Appearance.Female ? "female" : "male"), "locomotion"]
+                : ["", "locomotion"];
+            var selection = _content.ActorAnimations.ResolveUnmodifiedMovement(
+                _skeletonPath[.._skeletonPath.LastIndexOf('/')], group, folders);
+            var animation = new NativeActorCombatAnimation(selection.Path, _content, _skeleton, null, true);
+            _packageMovementSelections.Add(group, selection);
+            return animation;
         }
         NativeActorCombatAnimation Load(params string[] groups) =>
             new(SelectPath(_skeletonPath[.._skeletonPath.LastIndexOf('/')], groups), _content, _skeleton, null, true);

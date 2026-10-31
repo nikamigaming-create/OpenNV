@@ -22,6 +22,7 @@ internal sealed record FalloutProjectile(FalloutFormKey Form, ushort Flags, usho
     internal System.Numerics.Vector3 Rotation { get; private init; }
     internal float BouncyMultiplier { get; private init; }
     internal float FadeSeconds { get; private init; }
+    internal float ImpactForce { get; private init; }
     internal float ExplosionAltTriggerProximity { get; private init; }
     internal float ExplosionAltTriggerTimer { get; private init; }
     internal bool HasAlternateTriggerParameters => ExplosionAltTriggerProximity > 0 || ExplosionAltTriggerTimer > 0;
@@ -62,6 +63,7 @@ internal sealed record FalloutProjectile(FalloutFormKey Form, ushort Flags, usho
             Rotation = data.Length >= 80 ? new(Number(data, 68), Number(data, 72), Number(data, 76)) : default,
             BouncyMultiplier = bouncy,
             FadeSeconds = Number(data, 48),
+            ImpactForce = Number(data, 52),
             ExplosionAltTriggerProximity = Number(data, 28),
             ExplosionAltTriggerTimer = Number(data, 32),
             ExplosionSource = (flags & 2) != 0 ? FalloutExplosion.Read(records,

@@ -106,6 +106,7 @@ internal sealed partial class RuntimeNativeActorCombat
         Activity.SetCombat(false); Activity.SetAlerted(false); Activity.SetWeaponDrawn(false);
         Activity.SetMovement(false, false);
         if (_actor is CharacterBody3D body) body.Velocity = Vector3.Zero;
+        _previousKnockbackVertical = 0;
         _context?.DispatchEvent?.Invoke(_state.Reference, "OnCombatEnd");
         if (_actor is RuntimeNativeCreature creature) creature.ResumePackagesAfterCombat();
     }

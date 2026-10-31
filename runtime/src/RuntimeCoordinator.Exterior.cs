@@ -265,7 +265,7 @@ public partial class RuntimeCoordinator
         _nativePrewarmedInitialCellRoot?.Free(); _nativePrewarmedInitialCellRoot = null;
         _nativeReferences?.Dispose(); _nativePluginStack?.Dispose();
         _nativeIndexCancellation.Dispose();
-        GD.Print("OPENNV_NATIVE_SESSION_RETIRE phase=source-owners-disposed");
+        GD.Print("OPENNV_NATIVE_SESSION_RETIRE phase=session-source-views-disposed immutableData=owned-content-lifetime");
     }
 
     private void StageNativeExteriorGrid(PreparedExteriorGrid prepared)
@@ -632,7 +632,6 @@ public partial class RuntimeCoordinator
         _nativeExteriorGrid ??= new(_nativePluginStack!);
         var settings = FalloutInstallationSettings.Read(RuntimeLiveContentSource.Current!);
         var diameter = checked((int)settings.Unsigned("General", "uGridsToLoad"));
-        diameter = Math.Max(diameter, _configuration.World.MinimumExteriorGridDiameter);
         return _nativeExteriorGrid.Resolve(world, _nativeExteriorGrid.PersistentCell(world),
             position[0], position[1], diameter);
     }
@@ -661,10 +660,10 @@ public partial class RuntimeCoordinator
         var imageSpace = FalloutImageSpaceReader.ForCell(_nativePluginStack!, cell.FormKey) ??
             FalloutImageSpaceReader.ForWorld(_nativePluginStack!, cell.Worldspace ??
                 throw new InvalidDataException("Exterior environment has no worldspace."));
-        sky.Compositor = AddNativeImageSpace(root, imageSpace);
+        sky.Compositor = AddNativeImageSpace(root, imageSpace,
+            () => _nativeSkyLighting!.ImageSpaceModifiers(_nativeGameTime!.Hour));
         sky.ImageSpace = imageSpace;
-        var diameter = Math.Max(checked((int)FalloutInstallationSettings.Read(RuntimeLiveContentSource.Current!).Unsigned("General", "uGridsToLoad")),
-            _configuration.World.MinimumExteriorGridDiameter);
+        var diameter = checked((int)FalloutInstallationSettings.Read(RuntimeLiveContentSource.Current!).Unsigned("General", "uGridsToLoad"));
         // Cover the complete resident square, including its diagonal when the
         // player crosses an anchor boundary. Engine defaults cut this at 100m.
         var shadowDistance = (diameter / 2 + 1) * 4096 * _configuration.World.GameUnitsToMeters * MathF.Sqrt(2);

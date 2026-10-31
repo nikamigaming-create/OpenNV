@@ -9,20 +9,23 @@ namespace OpenNV.Runtime;
 public partial class RuntimeCoordinator
 {
     private async Task<double> PlaceNativeCellReferenceResponsive(Node3D root, FalloutCellScene cell,
-        FalloutPlacedReference reference, FalloutNifFile? preparedModel = null)
+        FalloutPlacedReference reference, NativeCellConstructionBudget budget, FalloutNifFile? preparedModel = null)
     {
-        var started = Stopwatch.GetTimestamp();
+        var started = budget.BeginStep();
         if (DisplayServer.GetName() != "headless" && preparedModel is not null &&
             cell.BaseObjects.TryGetValue(reference.Base, out var staticSource) &&
             staticSource.Signature is not ("NPC_" or "CREA") && staticSource.ModelPath is { } staticPath &&
             !_nativeNifPrototypes.ContainsKey(staticPath) && _nativeReferences!.IsEnabled(reference.FormKey))
-            return await PlaceNativeStaticCellReferenceResponsive(root, cell, reference, staticPath, preparedModel);
+        {
+            budget.CompleteStep(started);
+            return await PlaceNativeStaticCellReferenceResponsive(root, cell, reference, staticPath, preparedModel, budget);
+        }
         if (DisplayServer.GetName() == "headless" ||
             !cell.BaseObjects.TryGetValue(reference.Base, out var source) || source.Signature != "NPC_" ||
             !_nativeReferences!.IsEnabled(reference.FormKey))
         {
             PlaceNativeCellReference(root, cell, reference, preparedModel: preparedModel);
-            return Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+            return budget.CompleteStep(started);
         }
         var previousChildren = root.GetChildCount();
         ExteriorNpcPreparation? preparation = null;
@@ -36,24 +39,29 @@ public partial class RuntimeCoordinator
             preparation = PrepareExteriorNpc(reference);
             if (preparation is not null)
                 GD.Print($"OPENNV_NATIVE_NPC_PREPARING reference={reference.FormKey} source=bounded-worker detached=true");
-            maximumStep = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+            maximumStep = budget.CompleteStep(started);
             var sliceStarted = Stopwatch.GetTimestamp();
             while (preparation is not null)
             {
                 if (_nativeSessionTransitioning || _retiringNativeSession)
                     throw new OperationCanceledException("NPC construction session retired.");
+                started = budget.BeginStep();
                 var armor = _nativeReferences.EquippedArmor(reference.FormKey,
                     _nativeOpeningStageDriver?.PlayerLevel ?? _nativeOpeningRestore?.State.Vitals?.Level ?? 1, _nativeGlobals);
-                if (!armor.SequenceEqual(preparation.Appearance.EquippedArmor))
+                var appearanceChanged = !armor.SequenceEqual(preparation.Appearance.EquippedArmor);
+                maximumStep = Math.Max(maximumStep, budget.CompleteStep(started));
+                if (appearanceChanged)
                 {
                     await ReleaseLoadingNpcPreparation(preparation);
+                    started = budget.BeginStep();
                     preparation = PrepareExteriorNpc(reference);
+                    maximumStep = Math.Max(maximumStep, budget.CompleteStep(started));
                     continue;
                 }
-                started = Stopwatch.GetTimestamp();
+                started = budget.BeginStep();
                 var stage = preparation.NextStage;
                 var complete = preparation.Advance(this, cell, out actor);
-                var step = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+                var step = budget.CompleteStep(started);
                 maximumStep = Math.Max(maximumStep, step);
                 if (_options.ContainsKey("live-harness") && step > 16.667)
                     GD.Print($"OPENNV_NATIVE_NPC_PREPARATION_SLOW reference={reference.FormKey} stage={stage} milliseconds={step:F3}");
@@ -61,15 +69,20 @@ public partial class RuntimeCoordinator
                 // Small detached hierarchy steps may share the existing
                 // loading allowance; pending source work and native operations
                 // that exhaust it yield without publishing a partial actor.
-                if (!preparation.ReadTask.IsCompleted || Stopwatch.GetElapsedTime(sliceStarted).TotalMilliseconds >= 2)
+                if (!preparation.ReadTask.IsCompleted || Stopwatch.GetElapsedTime(sliceStarted).TotalMilliseconds >= 2 ||
+                    budget.RequestYield())
                 {
                     await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
                     sliceStarted = Stopwatch.GetTimestamp();
                 }
             }
-            started = Stopwatch.GetTimestamp();
+            if (budget.RequestYield())
+                await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+            if (_nativeSessionTransitioning || _retiringNativeSession)
+                throw new OperationCanceledException("NPC construction session retired.");
+            started = budget.BeginStep();
             PlaceNativeReference(root, cell, reference, preparedNpc: actor);
-            maximumStep = Math.Max(maximumStep, Stopwatch.GetElapsedTime(started).TotalMilliseconds);
+            maximumStep = Math.Max(maximumStep, budget.CompleteStep(started));
         }
         catch (Exception error) when (error is IOException or InvalidDataException or NotSupportedException or InvalidOperationException)
         {

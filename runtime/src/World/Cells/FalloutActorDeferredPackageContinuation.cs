@@ -49,7 +49,7 @@ internal sealed record FalloutActorDeferredPackageContinuation(FalloutFormKey Re
             !MatchesNativePredecessor(actor.Animation, actor.PackageMotion) || actor.PackageIdle is not null ||
             actor.PackageBindingFailure is not null || actor.SelectionFailure is not null || actor.PendingPackageSelection is not null ||
             actor.FurnitureContinuation is not null || actor.DialogueContinuation is not null ||
-            actor.Engagement is not null || actor.Ragdoll is not null || actor.HitReaction is not null ||
+            actor.Engagement is not null || actor.Ragdoll is not null || actor.HitReaction is not null || actor.HitKnockback is not null ||
             actor.HeadTracking is not null || actor.CorpseEquipment is not null || actor.ObjectAnimations is not null || actor.KnockedDown || actor.Injury?.Dead == true ||
             actor.SandboxAdmissionFailure is not null || actor.InterruptedSandboxAdmission is not null || actor.SandboxMotionFailure is not null || actor.CreatureScriptIdle is not null ||
             RetainedAssignment is null && actor.AnimationSoundEvents is not null || actor.HitReactionFaults is not null)
@@ -88,7 +88,7 @@ internal sealed record FalloutActorDeferredPackageContinuation(FalloutFormKey Re
         actor.SelectionFailure is null && actor.PendingPackageSelection is null && actor.FurnitureContinuation is null &&
         actor.DialogueContinuation is null && actor.Engagement is null && actor.Ragdoll is null && actor.HitReaction is null &&
         actor.HeadTracking is null && !actor.HeadTrackingRequired && actor.CorpseEquipment is null &&
-        !actor.KnockedDown && actor.Injury?.Dead != true && !actor.HasHitReactionHistory &&
+        !actor.KnockedDown && actor.HitKnockback is null && actor.Injury?.Dead != true && !actor.HasHitReactionHistory &&
         actor.SandboxAdmissionFailure is null && actor.InterruptedSandboxAdmission is null && actor.SandboxMotionFailure is null && actor.CreatureScriptIdle is null;
 
     internal void BindNative(FalloutPluginStack records, FalloutReferenceInstance actor, FalloutPackageEvents events)

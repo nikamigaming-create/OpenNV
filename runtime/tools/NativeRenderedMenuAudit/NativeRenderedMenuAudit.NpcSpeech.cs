@@ -97,7 +97,7 @@ public partial class NativeRenderedMenuAudit
             fixture.AddChild(speech);
             if (ambientFailure)
             {
-                NpcSpeechAmbientFailure(speech, scripts, speaker.FormKey, listener.FormKey, topic, divergences,
+                NpcSpeechAmbientFailure(speech, scripts, world, speaker.FormKey, listener.FormKey, topic, divergences,
                     resultSource is null ? null : () => quests.Variable(resultSource.Quest, 1));
                 return;
             }
@@ -145,7 +145,7 @@ public partial class NativeRenderedMenuAudit
         finally { fixture?.Free(); RuntimeLiveContentSource.Clear(); }
     }
 
-    private static void NpcSpeechAmbientFailure(RuntimeNativeSpeech speech, FalloutReferenceScripts scripts,
+    private static void NpcSpeechAmbientFailure(RuntimeNativeSpeech speech, FalloutReferenceScripts scripts, FalloutReferenceWorld world,
         FalloutFormKey speaker, FalloutFormKey listener, FalloutDialogueTopic topic,
         List<string> divergences, Func<double>? authoritativeCounter = null)
     {
@@ -173,6 +173,8 @@ public partial class NativeRenderedMenuAudit
                     $"topic={topic.Topic.FormKey} resultCallbacks={results} authoritativeCounter={authoritativeCounter()} injectedAfterResults=true");
             throw new NotSupportedException(failure);
         };
+        var actor = world.Get(speaker);
+        actor.ConversationSuppressionSeconds = 0;
         foreach (var busy in new[] { speaker, listener })
         {
             speech.BeginPlayerDialogue(busy);
@@ -188,12 +190,24 @@ public partial class NativeRenderedMenuAudit
         if (!speech.CanCaptureState || !speech.CanCaptureFinishedState)
             throw new InvalidDataException("Refused busy ambient attempts left uncapturable speech state.");
         _ = speech.CaptureState(); _ = speech.CaptureFinishedState();
+        var random = actor.SoundRandom.State;
+        var history = actor.ConversationHistory;
+        actor.ConversationSuppressionSeconds = 1;
+        for (var attempt = 0; attempt < 180; attempt++)
+            if (speech.TryStartNpcConversation(speaker, listener, topic.Topic.FormKey) ||
+                speech.Error is not null || results != 0 || subtitles != 0 || completed != 0 ||
+                actor.SoundRandom.State != random || actor.ConversationSuppressionSeconds != 1 ||
+                !ReferenceEquals(actor.ConversationHistory, history))
+                throw new InvalidDataException("Suppressed ambient retries consumed selection, history, randomness or speech effects.");
+        actor.ConversationSuppressionSeconds = FalloutConversationSuppression.Advance(1, 1);
         try
         {
             _ = speech.TryStartNpcConversation(speaker, listener, topic.Topic.FormKey);
             throw new InvalidDataException("Ambient fixture did not reach its injected startup failure.");
         }
         catch (NotSupportedException error) when (error.Message == failure) { }
+        GD.Print("OPENNV_NATIVE_AMBIENT_SUPPRESSION_PASS repeatedRetries=true noEffects=true noRandomDraw=true " +
+            "noHistoryMutation=true sourceTimerRetained=true expiryAdmitted=true recording=false");
         if (subtitles != 1 || speech.Error != failure || divergences.Count != 1 ||
             speech.IsNpcDialogueActive(speaker) || speech.IsNpcDialogueActive(listener) ||
             !speech.IsTalking(speaker) || !speech.IsDialogueBusy(speaker) || speech.IsDialogueBusy(listener) ||

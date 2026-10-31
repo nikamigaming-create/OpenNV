@@ -30,7 +30,7 @@ internal static class PlayerActorValueContracts
             globals.Set(Key(19), 1);
             Require(skills.Value(13) == 340, "Active carry effect did not change source capacity.");
             Require(owner.ReadCurrent(10) == 6 && owner.ReadPermanent(10) == 5 && skills.Value("Guns") == 17 &&
-                vitals.State.MaximumActionPoints == 83 && vitals.State.MaximumHitPoints == 200,
+                vitals.State.MaximumActionPoints == 83 && vitals.State.MaximumHitPoints == 300,
                 "Conditional ability, live skill or current-Agility AP derivation failed.");
             owner.AddModifier(5, FalloutActorValuePool.Permanent, .5f);
             owner.AddModifier(5, FalloutActorValuePool.Temporary, 2.25f);
@@ -49,10 +49,10 @@ internal static class PlayerActorValueContracts
             vitals.Damage(12.25f);
             vitals.Publish(vitals.State with { ActionPoints = vitals.State.ActionPoints - 7, ExperiencePoints = 15 });
             owner.AddModifier(7, FalloutActorValuePool.Temporary, 4);
-            Require(vitals.State.MaximumHitPoints == 200, "Temporary Endurance changed the permanent HP formula.");
+            Require(vitals.State.MaximumHitPoints == 300, "Temporary Endurance changed the permanent HP formula.");
             owner.AddModifier(7, FalloutActorValuePool.Permanent, 1);
             owner.WriteBaseInteger(7, 6);
-            Require(vitals.State.MaximumHitPoints == 240 && vitals.State.ExactHitPoints == 227.75f && vitals.State.ExperiencePoints == 15,
+            Require(vitals.State.MaximumHitPoints == 340 && vitals.State.ExactHitPoints == 327.75f && vitals.State.ExperiencePoints == 15,
                 "Base/permanent Endurance did not update vitals or healed the retained damage/XP.");
             owner.WriteBaseInteger(10, 6);
             Require(skills.Value("Guns") == 19 && vitals.State.MaximumActionPoints == 86 && vitals.State.ActionPoints == 79,

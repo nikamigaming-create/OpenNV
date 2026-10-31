@@ -75,7 +75,11 @@ internal static partial class NativeCharacterStep
             if (wall < 0 || score.CompareTo(wallScore) < 0) { wall = index; wallScore = score; }
         }
         blocked = "no-riser";
-        if (wall < 0) return false;
+        if (wall < 0)
+        {
+            return TrySlope(body, from, motion, maximumHeight, parameters, result,
+                out destination, out blocked, out contact);
+        }
         // A bevel can be just steeper than the walkable slope. Probe beyond
         // the contacted riser for its top, bounded by the step height; every
         // accepted move still sweeps the whole capsule up and forward.
@@ -109,7 +113,13 @@ internal static partial class NativeCharacterStep
             // A sloped landing's first ray can be too low to clear the whole
             // capsule. Try the remaining supported heights within the same
             // step bound; each candidate still needs both complete sweeps.
-            if (TestMotion(rid, parameters, result)) continue;
+            if (TestMotion(rid, parameters, result))
+            {
+                if (!TrySlope(body, parameters.From, motion, maximumHeight - up, parameters, result,
+                    out destination, out blocked, out var slopeContact))
+                { contact = slopeContact ?? contact; continue; }
+                return true;
+            }
             destination = parameters.From.Origin + motion;
             blocked = null;
             return true;

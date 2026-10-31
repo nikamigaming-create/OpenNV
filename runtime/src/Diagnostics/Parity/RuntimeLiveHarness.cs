@@ -39,7 +39,7 @@ internal sealed partial class RuntimeLiveHarness : Node
     private LiveHarnessFrameBuffer? _liveFrames;
     private RuntimeRenderTrace? _trace;
     private ReactiveReferenceBot? _bot;
-    private float _botSensitivity;
+    private Func<OpenNV.Runtime.Content.FalloutMouseLookScale>? _botLookScale;
     private Key _botForward, _botActivate;
     private Action? _pumpBotInput;
     private object? _lastPhysicsTest;
@@ -49,13 +49,13 @@ internal sealed partial class RuntimeLiveHarness : Node
         .SingleOrDefault()?.IsJITOptimizerDisabled ?? false;
 
     internal void ConfigureBot(Func<string, BotObservation> observe,
-        Func<System.Numerics.Vector3, System.Numerics.Vector3, float, BotNavigationRoute> route, float sensitivity, Key forward, Key activate,
+        Func<System.Numerics.Vector3, System.Numerics.Vector3, float, BotNavigationRoute> route,
+        Func<OpenNV.Runtime.Content.FalloutMouseLookScale> lookScale, Key forward, Key activate,
         Func<OpenNV.Runtime.Gameplay.Bots.SteeringIntent, bool, bool>? inputOverride = null, Action? pumpInput = null,
         Func<System.Numerics.Vector3, System.Numerics.Vector3, System.Numerics.Vector3, float, float, BotNavigationRoute?>? approachRoute = null,
         Action? cancelRoute = null, Func<BotPlanningProgress?>? planningProgress = null)
     {
-        if (!float.IsFinite(sensitivity) || sensitivity <= 0) throw new ArgumentException("Invalid mouse sensitivity.");
-        _botSensitivity = sensitivity; _botForward = forward; _botActivate = activate;
+        _botLookScale = lookScale; _botForward = forward; _botActivate = activate;
         _pumpBotInput = pumpInput;
         ReactiveReferenceBot.Log = GD.Print;
         _bot = new(identity =>
@@ -72,7 +72,12 @@ internal sealed partial class RuntimeLiveHarness : Node
             }
             SetKey(_botForward, intent.Forward, 200);
             if (intent.YawRadians != 0 || intent.PitchRadians != 0)
-                DeliverLook(-intent.YawRadians / _botSensitivity, -intent.PitchRadians / _botSensitivity);
+            {
+                var scale = _botLookScale();
+                if (!float.IsFinite(scale.Horizontal) || !float.IsFinite(scale.Vertical) || scale.Horizontal <= 0 || scale.Vertical == 0)
+                    throw new NotSupportedException("Ordinary bot look requires an enabled owned mouse sensitivity.");
+                DeliverLook(-intent.YawRadians / scale.Horizontal, -intent.PitchRadians / scale.Vertical);
+            }
             SetKey(_botActivate, activation, 50);
             DeliverBotCombatInput(intent);
         }, approachRoute, cancelRoute, _botSkills, PersistBotSkillLibrary, planningProgress);

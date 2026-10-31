@@ -157,6 +157,7 @@ public partial class RuntimeCoordinator
                 position = Vector(_nativePlayer.GlobalPosition),
                 viewPitchRadians = _nativePlayer.ViewPitchRadians,
                 velocity = Vector(_nativePlayer.Velocity),
+                hitKnockback = _nativePlayer.CaptureHitKnockback(),
                 onFloor = _nativePlayer.IsOnFloor(),
                 running = _nativePlayer.Running,
                 jumpCount = _nativePlayer.JumpCount,
@@ -256,6 +257,14 @@ public partial class RuntimeCoordinator
                     modifier.Source.SourceSha256,
                     modifier.ElapsedSeconds,
                     modifier.Source.Duration,
+                }).ToArray(),
+                weather = presenter.Frame?.Weather?.Select(modifier => new
+                {
+                    modifier.Slot,
+                    form = modifier.Source?.Form.ToString(),
+                    sourceSha256 = modifier.Source?.SourceSha256,
+                    modifier.Strength,
+                    modifier.EngineDefault,
                 }).ToArray(),
                 unbound = presenter.Frame?.UnboundChannels,
                 finalStageOperational = presenter.GetMeta("opennv_image_space_operational", false).AsBool(),
@@ -649,6 +658,7 @@ public partial class RuntimeCoordinator
             _nativeReferences = new(stack, auxiliary: _nativeScriptStorage?.Auxiliary,
                 ini: _nativeScriptStorage?.Ini, ui: _nativeUi, controls: _nativeScriptStorage?.Controls);
             if (restore.State.FormLists is { } formLists) _nativeReferences.FormLists.Restore(formLists);
+            if (restore.State.ActorBaseFlags is { } baseFlags) _nativeReferences.ActorBaseFlags.Restore(baseFlags);
             _nativeReferences.RestoreEncounterZones(restore.State.EncounterZones);
             _nativeReferences.TransientExplosions.Restore(restore.State.TransientExplosions);
             if (restore.State.References is { } savedReferences) _nativeReferences.Restore(savedReferences);
@@ -848,7 +858,7 @@ public partial class RuntimeCoordinator
         _ = sourceSide;
         var root = new Node3D { Name = $"NativeCell_{cell.Cell.FormKey}" };
         var total = Stopwatch.StartNew();
-        var slice = Stopwatch.StartNew();
+        var budget = new NativeCellConstructionBudget();
         var referenceWatch = new Stopwatch();
         var yields = 0;
         double maximumReferenceMilliseconds = 0;
@@ -873,7 +883,7 @@ public partial class RuntimeCoordinator
                     continue;
                 }
                 referenceWatch.Restart();
-                var stepMilliseconds = await PlaceNativeCellReferenceResponsive(root, cell, reference,
+                var stepMilliseconds = await PlaceNativeCellReferenceResponsive(root, cell, reference, budget,
                     cell.BaseObjects[reference.Base].ModelPath is { } path ? preparedModels.GetValueOrDefault(path) : null);
                 if (stepMilliseconds > maximumStepMilliseconds)
                 { maximumStepMilliseconds = stepMilliseconds; maximumStepReference = reference.FormKey; }
@@ -885,10 +895,9 @@ public partial class RuntimeCoordinator
                 }
                 // Each reference remains atomic. Publish the same detached root
                 // only after all references finish, while letting loading UI draw.
-                if (slice.Elapsed.TotalMilliseconds >= 8 && DisplayServer.GetName() != "headless")
+                if (budget.RequestYield())
                 {
                     await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
-                    slice.Restart();
                     yields++;
                 }
             }
@@ -897,6 +906,8 @@ public partial class RuntimeCoordinator
             CompleteNativeCellRoot(root, cell);
             GD.Print($"OPENNV_NATIVE_CELL_BUILD cell={cell.Cell.FormKey} references={cell.References.Count} " +
                 $"elapsedMs={total.Elapsed.TotalMilliseconds:F1} frameYields={yields} " +
+                $"assemblyWorkMs={budget.WorkMilliseconds:F1} assemblyWorkFrames={budget.WorkFrames} " +
+                $"assemblyMaxFrameWorkMs={budget.MaximumFrameMilliseconds:F1} budgetYields={budget.YieldRequests} " +
                 $"maxReferenceMs={maximumReferenceMilliseconds:F1} maxReference={maximumReference} " +
                 $"referenceTiming=wall-including-yields maxMainThreadStepMs={maximumStepMilliseconds:F1} maxStepReference={maximumStepReference}");
             return root;
@@ -1441,6 +1452,7 @@ public partial class RuntimeCoordinator
             (_nativeQuestScripts ?? throw new InvalidOperationException("Native activation feedback has no quest session."))
                 .Scripts.NoActivationSound.RejectActivation(_nativePluginStack!.RuntimeFormKey(0x14));
         _nativePlayer.SaveGame = SaveNativeManualSlot;
+        _nativePlayer.LoadGame = QuickLoadNativeSlot;
         _nativePlayer.OpenPauseMenu += ToggleNativeSessionMenu;
         _nativePlayer.Configure(_configuration, transform);
         _nativePlayer.ConfigureInputControls(_nativeScriptStorage?.Controls ??
@@ -1574,14 +1586,15 @@ public partial class RuntimeCoordinator
         });
     }
 
-    private Compositor? AddNativeImageSpace(Node3D root, FalloutImageSpace? imageSpace)
+    private Compositor? AddNativeImageSpace(Node3D root, FalloutImageSpace? imageSpace,
+        Func<IReadOnlyList<FalloutWeatherImageModifier>>? weather = null)
     {
         if (imageSpace is null) return null;
         var application = RetailImageSpaceRenderer.CreateFromSource(imageSpace,
             _configuration.FalloutEnvironment.ImageSpace, _configuration.Capture,
             _configuration.ActorCompiler.FaceGenMaterial.RuntimeAlbedoTransfer);
         var presenter = new RuntimeNativeImageSpace();
-        presenter.Configure(imageSpace, _nativeImageSpaceState, application.Effect, _nativeGameTime);
+        presenter.Configure(imageSpace, _nativeImageSpaceState, application.Effect, _nativeGameTime, weather);
         root.AddChild(presenter);
         root.SetMeta("opennv_source_image_space", imageSpace.Form.ToString());
         root.SetMeta("opennv_source_image_space_version", imageSpace.FormVersion);

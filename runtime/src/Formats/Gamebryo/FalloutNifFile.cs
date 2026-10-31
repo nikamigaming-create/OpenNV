@@ -226,7 +226,7 @@ internal sealed partial class FalloutNifFile
                 "NiPSysRotationModifier" or "NiPSysBombModifier" or "NiPSysGravityModifier" or "NiPSysDragModifier" or
                 "NiPSysPositionModifier" or "NiPSysBoundUpdateModifier" or "BSParentVelocityModifier" or "BSWindModifier" => ReadParticleModifier(block, ref cursor),
             "NiPSysEmitterCtlr" or "BSPSysMultiTargetEmitterCtlr" or "NiPSysEmitterSpeedCtlr" or "NiPSysEmitterLifeSpanCtlr" or
-                "NiPSysModifierActiveCtlr" or "NiPSysGravityStrengthCtlr" or "NiPSysUpdateCtlr" => ReadParticleController(block, ref cursor),
+                "NiPSysEmitterInitialRadiusCtlr" or "NiPSysModifierActiveCtlr" or "NiPSysGravityStrengthCtlr" or "NiPSysUpdateCtlr" => ReadParticleController(block, ref cursor),
             "NiPSysPlanarCollider" => ReadParticlePlanarCollider(block, ref cursor),
             "NiPSysSphericalCollider" => ReadParticleSphericalCollider(block, ref cursor),
             "NiColorData" => ReadColorData(block, ref cursor),
@@ -619,22 +619,29 @@ internal sealed partial class FalloutNifFile
         ref NifCursor cursor,
         bool strips)
     {
-        var start = cursor;
         var prefix = ReadMeshPrefix(ref cursor);
         if (FileVersion == UnsizedVersion)
             return ReadMeshTail(block, ref cursor, prefix, (byte)(prefix.StoredUvSets & 0x3f), strips);
+        // Bethesda 20.2 data flags encode UV presence in bit zero; the
+        // following bits also carry Havok material, not a UV array count.
+        // Earlier unsized declarations above retain their six-bit count.
+        var flagUvSets = (byte)(prefix.StoredUvSets & 1);
         if (prefix.StoredUvSets <= 1)
-            return ReadMeshTail(block, ref cursor, prefix, prefix.StoredUvSets, strips);
-        FalloutNifMeshData? match = null;
+            return ReadMeshTail(block, ref cursor, prefix, flagUvSets, strips);
+        byte? match = null;
         InvalidDataException? lastError = null;
-        for (byte uvSets = 0; uvSets <= 1; ++uvSets)
+        // Retain the existing exact-extent zero/one-lane export recovery.
+        // Sized flags do not declare additional UV lanes; unknown extents
+        // remain refused rather than interpreting flag bits as a count.
+        foreach (var uvSets in new[] { flagUvSets, (byte)0, (byte)1 }.Distinct())
         {
-            FalloutNifMeshData parsed;
-            var candidate = start;
+            // Trial extents must not publish duplicate or rejected read ranges.
+            var candidate = new NifCursor(_payload.Span.Slice(block.Offset, block.Size),
+                $"NIF block {block.Index} ({block.TypeName})");
             try
             {
                 var candidatePrefix = ReadMeshPrefix(ref candidate);
-                parsed = ReadMeshTail(block, ref candidate, candidatePrefix, uvSets, strips);
+                _ = ReadMeshTail(block, ref candidate, candidatePrefix, uvSets, strips);
                 candidate.RequireEnd();
             }
             catch (InvalidDataException error)
@@ -646,11 +653,12 @@ internal sealed partial class FalloutNifFile
             // candidate. Do not swallow it in the candidate-error handler.
             if (match is not null)
                 throw new InvalidDataException($"NIF block {block.Index} UV-set recovery is ambiguous.");
-            match = parsed;
-            cursor = candidate;
+            match = uvSets;
         }
-        return match ?? throw new InvalidDataException(
-            $"NIF block {block.Index} UV-set recovery has no exact layout: {lastError?.Message}", lastError);
+        if (match is not { } selected)
+            throw new InvalidDataException(
+                $"NIF block {block.Index} UV-set recovery has no exact layout: {lastError?.Message}", lastError);
+        return ReadMeshTail(block, ref cursor, prefix, selected, strips);
     }
 
     private static MeshPrefix ReadMeshPrefix(ref NifCursor cursor)
@@ -688,14 +696,16 @@ internal sealed partial class FalloutNifFile
             colors[index] = new FalloutNifColor(
                 cursor.ReadFiniteSingle($"color {index} r"), cursor.ReadFiniteSingle($"color {index} g"),
                 cursor.ReadFiniteSingle($"color {index} b"), BitConverter.Int32BitsToSingle(cursor.ReadInt32($"color {index} a")));
+        if ((long)uvSets * prefix.VertexCount * sizeof(float) * 2 > cursor.Remaining)
+            throw new InvalidDataException($"NIF block {block.Index} UV stream exceeds its declared extent.");
         var textureCoordinates = new FalloutNifTexCoord[uvSets][];
         for (var set = 0; set < textureCoordinates.Length; ++set)
         {
             textureCoordinates[set] = new FalloutNifTexCoord[prefix.VertexCount];
             for (var index = 0; index < prefix.VertexCount; ++index)
                 textureCoordinates[set][index] = new FalloutNifTexCoord(
-                    cursor.ReadFiniteSingle($"UV {set}/{index} u"),
-                    cursor.ReadFiniteSingle($"UV {set}/{index} v"));
+                    FileVersion == UnsizedVersion ? cursor.ReadFiniteSingle($"UV {set}/{index} u") : cursor.ReadSingle($"UV {set}/{index} u"),
+                    FileVersion == UnsizedVersion ? cursor.ReadFiniteSingle($"UV {set}/{index} v") : cursor.ReadSingle($"UV {set}/{index} v"));
         }
         var consistency = cursor.ReadUInt16("consistency flags");
         var additionalData = ReadReference(ref cursor, "additional geometry data");
@@ -2566,9 +2576,12 @@ internal ref struct NifCursor
 
     internal int ReadInt32(string label) => unchecked((int)ReadWord(label, "i32-le"));
 
+    internal float ReadSingle(string label) =>
+        BitConverter.Int32BitsToSingle(unchecked((int)ReadWord(label, "ieee754-f32-le")));
+
     internal float ReadFiniteSingle(string label)
     {
-        var value = BitConverter.Int32BitsToSingle(unchecked((int)ReadWord(label, "ieee754-f32-le")));
+        var value = ReadSingle(label);
         if (!float.IsFinite(value))
             throw new InvalidDataException($"{_owner} {label} is not finite.");
         return value;

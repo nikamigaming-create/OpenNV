@@ -115,6 +115,7 @@ internal sealed class FalloutActorRetirementCandidate
         _state.DeletePending,
         _state.Deleted,
         _state.KnockedDown,
+        _state.HitKnockback,
         _state.Unconscious,
         _state.Restrained,
         _state.Injury,

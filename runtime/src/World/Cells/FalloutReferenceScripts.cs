@@ -483,6 +483,8 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                 if (value.Number != 0x14 && records.GetEffective(suppliedTarget.Value).Signature is not ("REFR" or "ACHR" or "ACRE"))
                     throw new InvalidDataException("Reference function caller is not a placed reference.");
             }
+            if (parts.Length <= 2 && FalloutScriptActorFlags.Function(operation, parts.Length == 2 || caller is not null, records,
+                () => world, () => Target()) is { } actorFlags) return actorFlags;
             if (parts.Length == 1 && FalloutSoundCommands.Function(records, operation) is { } soundFunction)
                 return soundFunction;
             if (parts.Length == 1 && FalloutQuestObjectCommands.Function(records, operation) is { } questObjectFunction)
@@ -736,7 +738,8 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
             var parts = command.Split('.');
             var operation = parts[^1].ToLowerInvariant();
             if (parts.Length <= 2 && FalloutActorValueCommands.Operation(operation) is not null ||
-                parts.Length == 1 && FalloutScriptFormLists.Supports(operation))
+                parts.Length == 1 && FalloutScriptFormLists.Supports(operation) ||
+                parts.Length <= 2 && FalloutScriptActorFlags.Supports(operation, parts.Length == 2))
             {
                 _ = FalloutNvseNumericExpression.EvaluateValue([command, .. arguments], values, Function, UserFunction);
                 return;

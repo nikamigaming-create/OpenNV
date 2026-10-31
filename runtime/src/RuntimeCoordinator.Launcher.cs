@@ -95,10 +95,11 @@ public partial class RuntimeCoordinator
         var mod = selection?.Resolve(baseRoot);
         var vanilla = contentSelection == "vanilla";
         var plugins = vanilla ? RuntimeLiveContentSource.ResolveVanillaPlugins(baseRoot) : mod?.ActivePlugins;
+        var previousSource = RuntimeLiveContentSource.Current;
         RuntimeLiveContentSource.Configure(baseRoot, campaign, mod?.ContentRoots.Skip(1).ToArray(), plugins, mod?.Settings,
             includeImplicitPlugins: !vanilla);
         var source = RuntimeLiveContentSource.Current!;
-        GD.Print($"OPENNV_CONTENT_SELECTION mode={contentSelection} nativePlugins=none " +
+        GD.Print($"OPENNV_CONTENT_SELECTION mode={contentSelection} nativePlugins=none reusedOwnedSource={ReferenceEquals(previousSource, source)} " +
             $"plugins={string.Join(',', source.PluginSources.Select(plugin => plugin.Name))} saveCompatibility={source.SaveCompatibilityId}");
     }
 }

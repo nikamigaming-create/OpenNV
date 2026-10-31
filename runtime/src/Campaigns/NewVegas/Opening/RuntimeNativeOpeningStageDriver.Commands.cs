@@ -264,11 +264,13 @@ internal partial class RuntimeNativeOpeningStageDriver
         {
             Vitals = vitals,
             WeaponHandling = _player.CaptureWeaponHandling(),
+            PlayerHitKnockback = _player.CaptureHitKnockback(),
             Ingestibles = _ingestibles.Capture(),
             ActorOverrides = _scripts.References!.CaptureActorOverrides(),
             FactionRelations = _scripts.References.CaptureFactionRelations(),
             Reputations = _scripts.References.CaptureReputations(),
             FormLists = _scripts.References.FormLists.Capture(),
+            ActorBaseFlags = _scripts.References.ActorBaseFlags.Capture(),
             PlayerNotes = _scripts.References.PlayerNotes.Capture(),
             PlayerCaravanCards = _scripts.References.PlayerCaravanCards.Capture(),
             DroppedItems = _scripts.References.CaptureDroppedItems(),

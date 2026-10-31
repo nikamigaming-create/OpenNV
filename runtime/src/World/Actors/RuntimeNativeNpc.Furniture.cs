@@ -117,9 +117,12 @@ internal partial class RuntimeNativeNpc
                 GD.Print($"OPENNV_NATIVE_FURNITURE_APPROACH reference={Appearance.Reference} target={_reservedFurniture} " +
                     $"authored={authored} navm={_furnitureApproachFloor.Value} owner=source-corridor-and-native-capsule arrival=unobserved");
             }
-            Combat.AdvancePackageMotion(_aiPackage!, authored, .08f,
-                _furnitureSandboxActivity ? _sandboxPackage!.Running : _findFurniture?.Running == true || _eatPackage?.Running == true || _sleepPackage?.Running == true,
-                delta, weaponDrawn: _furnitureSandboxActivity && _sandboxPackage!.WeaponDrawn, requireArrivalHeight: true);
+            var travelMovement = FurnitureTravelMovement();
+            var running = travelMovement?.Running ?? (_furnitureSandboxActivity ? _sandboxPackage!.Running :
+                _findFurniture?.Running == true || _eatPackage?.Running == true || _sleepPackage?.Running == true);
+            var weaponDrawn = travelMovement?.WeaponDrawn ?? (_furnitureSandboxActivity && _sandboxPackage!.WeaponDrawn);
+            Combat.AdvancePackageMotion(_aiPackage!, authored, .08f, running,
+                delta, weaponDrawn: weaponDrawn, requireArrivalHeight: true, sneaking: travelMovement?.Sneaking == true);
             if (!IsOnFloor() || GlobalPosition.DistanceTo(authored) > .1f) return;
             var direction = -(parent.GlobalBasis * _furnitureApproach.Basis.Z).Normalized();
             Combat.FacePackageDirection(direction, delta);

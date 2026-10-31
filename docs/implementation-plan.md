@@ -1,10 +1,15 @@
 # Playable OpenNV implementation plan
 
-Updated 2026-10-29 under the user's direction. This is the sole active plan.
-One GPT-6.1 Sol High executor owns implementation, builds, game input and Git.
-The coordinator prioritizes and reviews the final diff before publication;
-individual coding decisions and builds do not wait for approval. No parallel
-investigation or implementation agents are active.
+Updated 2026-10-31 under the user's direction. This is the sole active plan.
+Root owns integration, builds, game input and Git. User-authorized workers
+implement or review separate shared-system repairs in parallel; private drafts
+keep the current build stable. Individual coding decisions and builds do not
+wait for approval. Parallel work supports, and does not replace, retail
+recording, Godot replay and ordinary gameplay verification.
+
+Immediate priority is the user's live retail/Godot side-by-side gameplay request
+at native 3840x2160 and 60 FPS. Do not expand test infrastructure in place of
+playing and repairing the game. Required checks still precede publication.
 
 ## Objective and boundaries
 
@@ -47,7 +52,7 @@ Do not require another giant audit before implementing known shared gaps.
 2. **Authoritative world/time/events/save:** references and actor lifecycle,
    enabled/deleted state, time, event order, RNG, transactions, streaming and
    current-build persistence; interruption/cancellation without replayed effects.
-3. **Scripts/conditions/quests/dialogue — active batch:** shared function/context
+3. **Scripts/conditions/quests/dialogue:** shared function/context
    dispatch joining bytecode execution and world-state host. Route NPC,
    creature, dialogue and idle consumers through the same handlers; preserve
    caller/target/run-on namespaces, time, RNG, locals and event/result order.
@@ -77,59 +82,37 @@ rather than being inferred from FNV results.
 
 ## Current batch and delivery order
 
-Checked baseline PR #334 is f6141664. The merged shared-state runtime implements
-shared mutable FormLists and behavioral actor-value pools, used command/query
-families, live consumers and current-save persistence. Named source definitions
-are immutable; world state and native/Godot adapters remain separate. Focused
-production-handler contracts and the selected owned GRA-prefix/player-state audit
-pass. The full publication gate and diff check pass. Actual fresh-game export b2a220ad reached VCG01 stage80 through Doc speech,
-Reflectron, manual traversal and Vigor acceptance, then saved successfully.
-Retain the requested screenshots; the release checkpoint below supersedes that
-earlier opening checkpoint.
+The user rejected the published tester build. Retail recording and Godot replay
+are the primary execution loop. The current verified state and remaining capture
+gaps are in current-work.md; old package-route checks do not establish playability.
 
-The active codex/experimental-playtest-release branch now prepares the requested
-outside-tester release after completed checked publication:
+1. Record substantial ordinary retail gameplay batches across source areas and
+   applicable action/state permutations. Capture objects and arrangement, actor
+   routines/support, scripts/quests/factions, combat and animation, voices/radio,
+   Pip-Boy controls, doors/fast travel, weather/clouds/LOD and save/reload. Maintain
+   the source-bound coverage queue and reacquire missing required evidence.
+2. Establish comparable starting state before a matched replay. Preserve actual
+   source/event/timing/UI/audio/pixel evidence separately. Unjoined diagnostics
+   expose failures but cannot certify a matched run. Sampled actor fields and a
+   latest-frame video are not lossless event/frame coverage.
+3. Implement coherent shared owners using the dependency order above and measured
+   failures. Current first repair: exterior residency from owned settings and one
+   process-phase planning allowance across physics catch-up, followed by native
+   query/request lifetime and actor process/support ownership. Preserve actual
+   collision, gameplay clocks, source selection and fair retained work.
+4. Run focused synthetic and owned-data checks, then the required full gate;
+   produce an immutable build and replay/smoke it. Separate recording-free speed
+   measurement from visual capture overhead. Target substantially better measured
+   performance than retail on matched hardware/settings/workloads, alongside
+   absolute flat/XR objectives. Do not infer performance from encoded video FPS.
+5. Repair integrated failures, acquire missing evidence, then expand the next
+   recording and implementation batch. A source cell count, isolated interaction
+   or plausible frame never closes a scene, system or campaign.
 
-1. Build/pin the existing experimental Windows playtest pipeline. Inspect actual
-   PCK entries as well as loose/package archive contents. Ship no owned/derived
-   retail assets, saves or private diagnostics. Verify notices and hashes.
-2. Verify ordinary packaged launch, real scripting/quest interaction, combat and
-   useful save/Continue. Reuse checkpoint d4c408782359473da7b8bd7d1bc32c19:
-   Doc 200, tutorial 50, crafting 10, HP 94, meat/hide and both ingredients.
-   Its ordinary save/quit/fresh-process Continue is verified; do not replay character
-   creation after minor cleanup. Resolve blockers on this playable release path
-   in coherent shared-system batches and label known limitations accurately.
-   Retain the user-requested continuous proof video from this exact package:
-   identity/launcher, Continue, finish Doc, Goodsprings/Sunny, shooting, combat,
-   loot/crafting and save/quit/Continue. Use real elapsed time and game audio if
-   available, exclude unrelated apps, and keep the original take. Encoded frame
-   rate is not measured game FPS. A blocked route stays explicitly incomplete.
-3. Publish an asset-free experimental release once package/gameplay and required
-   checks pass. Complete parity, sustained native 4K60 and physical XR144 remain
-   product objectives, not prerequisites or claims for this limited playtest.
-4. Complete shared actor-state semantics required on that path: mutable actor-base
-   flags plus essential damage, knockdown, recovery, queries and persistence.
-   SetEssential targets a base identity; SetActorRefEssential needs its native
-   per-reference saved-state owner. Qualify base/template scope, knockout,
-   recovery clocks and Kill behavior before implementation. Setting names alone
-   do not establish timing or formulas. Registration alone cannot replace the
-   current essential-hit refusal.
-5. Advance compiled SCDA program decoding/execution through the existing shared
-   host. Extent accounting and SCTX parsing are not a VM. Do not turn an unclosed
-   NVSE expression into another isolated parser-patch chain. Implement remaining
-   used function/context families by dependency breadth, without default returns.
-
-General dynamic references also require authoritative allocation, stable identity,
-lifetime and persistence. PluginStack currently resolves source forms, PlayerRef
-is intrinsic and PlaceAtMe owns EXPL only. A VM must share the eventual world
-owner rather than manufacture plugin records or privately stash dynamic members.
-Do not add another streaming owner: exterior worker preparation and reads exist.
-Measured CPU creature/package/capsule work remains a performance target; unrelated
-GPU techniques are not evidence of a fix.
-
-The complete system-first dependency order above remains active. Shared AV IDs
-and aliases stay centralized; recognizing an ID never invents a supported pool.
-Existing selected systems do not imply full campaign, FO3/TTW/plugin or XR support.
+Existing in-progress essential lifecycle work is preserved. SCDA execution,
+general dynamic references, actor process tiers, radio generation/persistence,
+source device animations and remaining script/function families are still real
+system gaps. Do not bypass them with stub results or scenario-specific staging.
 
 ## Validation and publication
 

@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using Godot;
 using OpenNV.Runtime.Content;
+using OpenNV.Runtime.Content.Definitions;
 using OpenNV.Runtime.Formats.Gamebryo;
 using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.World.Cells;
@@ -25,7 +26,7 @@ internal sealed partial class RuntimeNativeActorCombat
                 _world.Health(_state.Reference).Base, agility, _state.HitReactionRandom.NextUnitFloat))
         {
             // Bind both source recovery orientations before interrupting the actor.
-            _ = RecoveryIdle(true); _ = RecoveryIdle(false);
+            _ = RecoveryIdle(true, false); _ = RecoveryIdle(false, false);
             PrepareDeath(); _state.KnockedDown = true; BeginKnockdown();
             GD.Print($"OPENNV_ACTOR_KNOCKDOWN reference={_state.Reference} explosion={explosion.Form}");
         }
@@ -33,15 +34,38 @@ internal sealed partial class RuntimeNativeActorCombat
             _ragdoll.ApplyBlast(center, explosion.Force * _skeleton.UnitsToMetres);
     }
 
-    private FalloutPluginRecord RecoveryIdle(bool faceUp)
+    private FalloutPluginRecord RecoveryIdle(bool faceUp, bool essential)
     {
-        _recoveryTree ??= new(_records, _skeletonPath, 106);
+        _recoveryTree ??= new(_records, _skeletonPath, (ushort)FalloutConditionFunction.IsFacingUp);
         return _recoveryTree.Select(condition => condition.Function switch
         {
-            106 => faceUp ? 1 : 0,
-            107 => 2,
+            (ushort)FalloutConditionFunction.IsFacingUp => faceUp ? 1 : 0,
+            (ushort)FalloutConditionFunction.GetKnockedState => essential ? 1 : 0,
             _ => HitReactionCondition(condition, -1)
         }) ?? throw new NotSupportedException("Knocked-down actor has no source recovery IDLE.");
+    }
+
+    private bool AdvanceEssentialKnockdown(double delta)
+    {
+        if (_state.EssentialKnockout is not { } state) return false;
+        try
+        {
+            if (!_state.KnockedDown || _state.HitReaction is not null && !state.RecoveryRequested)
+            {
+                _ = RecoveryIdle(true, true); _ = RecoveryIdle(false, true);
+                PrepareDeath();
+                _state.KnockedDown = true;
+                BeginKnockdown();
+            }
+            if (_ragdoll is { Active: true } body)
+            {
+                if (body.Settled && !state.Unconscious)
+                    _state.EssentialKnockout = state with { Unconscious = true };
+                _world.AdvanceEssentialKnockout(_state.Reference, (float)delta);
+            }
+            return false;
+        }
+        catch (Exception error) { ReportHitReactionError(error); return true; }
     }
 
     private void BeginKnockdown()
@@ -56,17 +80,18 @@ internal sealed partial class RuntimeNativeActorCombat
             _knockdownFilters.TryAdd(collider, (collider.CollisionLayer, collider.CollisionMask));
             GamebryoReferenceEnableRuntime.SetCollisionFilter(collider, 0, 0);
         }
-        _ragdoll!.Activate();
+        if (!_ragdoll!.Active) _ragdoll.Activate();
     }
 
     private bool AdvanceKnockdown()
     {
         if (!_state.KnockedDown || _state.HitReaction is not null) return false;
+        if (_state.EssentialKnockout is { RecoveryRequested: false }) return true;
         if (_ragdoll is not { Settled: true }) return true;
         try
         {
             var torso = _ragdoll.TorsoTransform;
-            var selected = RecoveryIdle((-torso.Basis.Z).Dot(Vector3.Up) > 0);
+            var selected = RecoveryIdle((-torso.Basis.Z).Dot(Vector3.Up) > 0, _state.EssentialKnockout is not null);
             var source = FalloutActorIdleSource.Resolve(_records, selected);
             var clip = new NativeActorCombatAnimation(source.AnimationPath, _content, _skeleton, _enemyObject, false);
             if (clip.Animation.Sequence.CycleType != 2) throw new NotSupportedException("Knockdown recovery must have a finite source KF.");
@@ -82,6 +107,8 @@ internal sealed partial class RuntimeNativeActorCombat
                 if (IsInstanceValid(collider)) GamebryoReferenceEnableRuntime.SetCollisionFilter(collider, filter.Layer, filter.Mask);
             _knockdownFilters.Clear();
             _hitReactionClip = clip;
+            if (_state.EssentialKnockout is { } essential)
+                _state.EssentialKnockout = essential with { Unconscious = false };
             var p = _actor.GlobalPosition; var q = _actor.GlobalBasis.Orthonormalized().GetRotationQuaternion();
             _state.HitReaction = new(selected.FormKey, Convert.ToHexString(SHA256.HashData(selected.ReadData())), 0,
                 new(clip.Path, clip.Hash, 0, true), [p.X, p.Y, p.Z], [q.X, q.Y, q.Z, q.W]);

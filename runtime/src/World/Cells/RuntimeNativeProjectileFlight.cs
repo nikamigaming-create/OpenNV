@@ -11,6 +11,8 @@ internal readonly record struct RuntimeNativeProjectileContact(
 internal sealed partial class RuntimeNativeProjectileFlight : Node3D
 {
     private readonly FalloutProjectile _source;
+    private readonly FalloutPluginStack _records;
+    private readonly float _unitsToMeters;
     private readonly Vector3 _origin;
     private readonly Vector3 _initialVelocity;
     private readonly Vector3 _gravity;
@@ -63,11 +65,12 @@ internal sealed partial class RuntimeNativeProjectileFlight : Node3D
         boundary = "missile-lobber-and-flame-flight;gravity,source-speed,bounce,flame-actor-pass-through-and-source-explosion-radius-damage;flame-audio,explosion-distance-attenuation,force,radiation,projectile-beam-visuals,rotation,tracer-and-retail-parity-unmatched"
     };
 
-    internal RuntimeNativeProjectileFlight(FalloutProjectile source, Node3D model, float unitsToMeters,
+    internal RuntimeNativeProjectileFlight(FalloutPluginStack records, FalloutProjectile source, Node3D model, float unitsToMeters,
         float gravityMetersPerSecondSquared, Vector3 origin, Vector3 direction, uint collisionMask,
         IEnumerable<Rid> exclusions)
     {
         ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(records);
         ArgumentNullException.ThrowIfNull(model);
         ArgumentNullException.ThrowIfNull(exclusions);
         if (source.Hitscan || source.Type is not (1 or 2 or 8) || source.Speed <= 0 || source.Model is null)
@@ -79,6 +82,8 @@ internal sealed partial class RuntimeNativeProjectileFlight : Node3D
             throw new InvalidDataException("Projectile flight inputs are invalid.");
 
         _source = source;
+        _records = records;
+        _unitsToMeters = unitsToMeters;
         _model = model;
         _origin = origin;
         _rangeMeters = source.Range * unitsToMeters;
@@ -358,6 +363,7 @@ internal sealed partial class RuntimeNativeProjectileFlight : Node3D
         _contacts++;
         try
         {
+            RuntimeNativeProjectileImpulse.Apply(_records, _source, contact.Collider, contact.Point, contact.Direction, _unitsToMeters);
             OnContact?.Invoke(contact);
             return true;
         }

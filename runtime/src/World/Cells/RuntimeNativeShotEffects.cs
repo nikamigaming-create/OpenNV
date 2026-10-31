@@ -160,7 +160,7 @@ internal sealed partial class RuntimeNativeShotEffects : Node3D
             _projectilePrototype = new(ReadModel(path), _units);
             _projectilePath = path;
         }
-        var flight = new RuntimeNativeProjectileFlight(source, _projectilePrototype!.Instantiate(), _units, gravity, origin, direction, collisionMask, exclusions);
+        var flight = new RuntimeNativeProjectileFlight(_records, source, _projectilePrototype!.Instantiate(), _units, gravity, origin, direction, collisionMask, exclusions);
         if (source.Type == 2)
         {
             flight.ContactFriction = FalloutGameSettingFloats.Read(_records, "fGrenadeFriction");

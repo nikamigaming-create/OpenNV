@@ -5,6 +5,19 @@ internal static class RecordedInputProbe
 {
     internal static void Run()
     {
+        var commit = new RecordedInputCommit(3, 42, 100_200, 100_210, 10_000_000);
+        commit.Validate(3, 42, 100_000, 5_100_000, 10_000_000);
+        Require(commit.DurationMicroseconds == 1 && commit.SegmentMicroseconds(0, 10_000) == 21,
+            "Client receipt latency changed the native commit interval or segment timestamp.");
+        foreach (var invalid in new[] { commit with { Request = 4 }, commit with { Process = 43 },
+            commit with { Frequency = 0 }, commit with { Frequency = 1_000_000 },
+            commit with { BeginTicks = 99_999 }, commit with { EndTicks = 100_199 }, commit with { EndTicks = 5_100_001 } })
+            Reject(() => invalid.Validate(3, 42, 100_000, 5_100_000, 10_000_000));
+        Reject(() => commit.SegmentMicroseconds(-1, 0));
+        Reject(() => commit.SegmentMicroseconds(100_211, 0));
+        Reject(() => commit.SegmentMicroseconds(0, 10_022));
+        Require((commit with { EndTicks = 100_201 }).DurationMicroseconds == 1,
+            "A sub-microsecond native uncertainty was rounded away.");
         var path = Path.Combine(Path.GetTempPath(), "opennv-input-" + Guid.NewGuid().ToString("N") + ".jsonl");
         var binding = new RecordedInputBinding(new string('a', 64), "cell:source",
             [new("Source.esm", new string('b', 64)), new("Patch.esp", new string('c', 64))]);

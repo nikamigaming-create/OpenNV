@@ -49,14 +49,15 @@ internal sealed record RecordedInputTape(RecordedInputHeader Header, IReadOnlyLi
         if (header is null) throw new InvalidDataException("Recorded input header is absent.");
         if (header.Schema == UnjoinedSchema)
         {
-            if (header.Engine != "retail" || header.Binding is not null || header.Timing != "receipt-observed" ||
+            if (header.Engine != "retail" || header.Binding is not null || header.Timing is not ("receipt-observed" or "adapter-commit-monotonic") ||
                 !Hash(header.RetailExecutableSha256) || header.RetailCheckpointSha256 is not null && !Hash(header.RetailCheckpointSha256))
                 throw new InvalidDataException("An unjoined diagnostic must retain its actual retail source and cannot invent an OpenNV binding.");
             return;
         }
         ValidateBinding(header.Binding ?? throw new InvalidDataException("A bound input segment has no actual OpenNV checkpoint binding."));
         if (header.Schema != Schema || header.Engine is not ("retail" or "opennv") ||
-            header.Timing is not ("producer-monotonic" or "receipt-observed") ||
+            header.Timing is not ("producer-monotonic" or "receipt-observed" or "adapter-commit-monotonic") ||
+            header.Timing == "adapter-commit-monotonic" && header.Engine != "retail" ||
             header.RetailExecutableSha256 is not null && !Hash(header.RetailExecutableSha256) ||
             header.Engine == "retail" && !Hash(header.RetailCheckpointSha256))
             throw new InvalidDataException("Recorded input header or retail checkpoint identity is invalid.");

@@ -190,6 +190,7 @@ internal partial class RuntimeNativePlayer
         _furnitureClip.Animation.ApplySourceTime(_furnitureClip.Sequence.StartTime);
         _furnitureBody.Visible = true;
         Velocity = Vector3.Zero;
+        _previousKnockbackVertical = 0;
         PublishFurnitureCamera();
     }
 

@@ -155,6 +155,7 @@ internal partial class RuntimeNativePlayer
                 hit = combat.Hit(collider, damage, _presentationRecords.RuntimeFormKey(0x14),
                     _combatLevel!(), _combatGlobals!, weapon.OnHitBehavior, _weaponHandling!.NextShotRandomUnit,
                     hitWeapon: weapon.Form);
+                combat.ReceiveMeleeKnockback(GlobalPosition, damage.Amount);
             }
             else if (collider is not null)
                 MarkWeaponHit(hitReference, _presentationRecords.RuntimeFormKey(0x14), weapon.Form, FalloutReferenceHitKind.Melee);

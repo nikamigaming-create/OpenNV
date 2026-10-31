@@ -4,9 +4,9 @@ using OpenNV.Runtime.World.Cells;
 namespace OpenNV.Runtime.Content;
 
 // Movement transports an owned package goal. It never substitutes a Travel
-// PACK for Sleep or completes Sleep when its destination cell is entered.
+// PACK for a parent procedure or completes its interaction at a cell boundary.
 internal sealed record FalloutPackageTravelGoal(FalloutTravelPackage Movement, FalloutActorSleepProgress? Sleep = null,
-    FalloutActorEatPackageProgress? Eat = null)
+    FalloutActorEatPackageProgress? Eat = null, FalloutFormKey? Furniture = null)
 {
     internal FalloutFormKey Form => Movement.Form;
     internal int LocationType => Sleep is null && Eat is null ? Movement.LocationType : 1;
@@ -14,6 +14,7 @@ internal sealed record FalloutPackageTravelGoal(FalloutTravelPackage Movement, F
     internal int Radius => Movement.Radius;
     internal bool Running => Movement.Running;
     internal bool Sneaking => Movement.Sneaking;
+    internal bool AllowFalls => Movement.AllowFalls;
     internal bool ContinueIfPlayerNear => Movement.ContinueIfPlayerNear;
     internal bool MustReach => Movement.MustReach;
     internal bool WeaponDrawn => Movement.WeaponDrawn;
@@ -34,7 +35,17 @@ internal sealed record FalloutPackageTravelGoal(FalloutTravelPackage Movement, F
             eating.Validate(records, world, actor, eat);
             return new(new(package.FormKey, eating.Flags, 1, eat.Seat ?? eating.Location.Form, 0), Eat: eat);
         }
-        if (sleep is null) return new(FalloutTravelPackage.Read(package, ownsIdleCollection: true));
+        if (sleep is null)
+        {
+            var movement = FalloutTravelPackage.Read(package, ownsIdleCollection: true);
+            if (movement.LocationType == 0 && movement.Reference is { } reference &&
+                records.GetEffective(world.Get(reference).Base).Signature == "FURN")
+            {
+                if (movement.Radius != 0) throw new NotSupportedException("Furniture Travel requires its location-radius owner.");
+                return new(movement, Furniture: reference);
+            }
+            return new(movement);
+        }
         var source = FalloutSleepPackage.Read(package);
         source.Validate(records, world, actor, sleep);
         // These are the original Sleep flags and source bed. Movement only
@@ -45,6 +56,15 @@ internal sealed record FalloutPackageTravelGoal(FalloutTravelPackage Movement, F
     internal FalloutTravelProgress Start(FalloutPluginStack records, FalloutReferenceWorld world, FalloutFormKey actor,
         float[]? currentLocation = null)
     {
+        if (Furniture is { } furniture)
+        {
+            var state = world.Get(furniture);
+            if (state.Deleted || state.DeletePending || records.GetEffective(state.Base).Signature != "FURN")
+                throw new InvalidDataException("Furniture Travel destination is no longer an existing source furniture reference.");
+            var target = world.Placement(furniture);
+            target.Validate();
+            return new(target.Cell, (float[])target.Position.Clone(), false);
+        }
         if (Eat is { } eat)
         {
             var source = FalloutEatPackage.Read(records.GetEffective(Form));
@@ -62,7 +82,7 @@ internal sealed record FalloutPackageTravelGoal(FalloutTravelPackage Movement, F
 
     internal void Validate(FalloutPluginStack records, FalloutReferenceWorld world, FalloutFormKey actor, FalloutTravelProgress progress)
     {
-        if (Sleep is null && Eat is null) { Movement.Validate(records, world, actor, progress); return; }
+        if (Sleep is null && Eat is null && Furniture is null) { Movement.Validate(records, world, actor, progress); return; }
         if (Sleep?.Furniture == true || Eat?.Furniture == true)
             throw new InvalidDataException("Physical resting/eating retained a cell-approach route.");
         var source = Start(records, world, actor);

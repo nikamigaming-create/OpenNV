@@ -198,7 +198,27 @@ internal sealed partial class RuntimeLiveHarness
             return;
         }
         _replayCheckpointPrepared = false;
-        _inputPlayback?.Stop("Playback yielded to physical player input.", ReleaseAll);
+        if (_inputPlayback?.Active == true)
+        {
+            try
+            {
+                _replayDeliveryJournal?.Append("unmarked-input-interruption", InputMicroseconds, new
+                {
+                    inputType = input.GetType().Name,
+                    device = input.Device,
+                    instance = input.GetInstanceId(),
+                    deliveredInputs = _inputPlayback.Cursor,
+                    mouseMode = Input.MouseMode.ToString(),
+                    windowFocused = GetWindow().HasFocus(),
+                    sceneTreePaused = GetTree().Paused,
+                    key = input is InputEventKey key ? new { code = key.Keycode.ToString(), physical = key.PhysicalKeycode.ToString(), key.Pressed, key.Echo } : null,
+                    motion = input is InputEventMouseMotion motion ? new { relative = new[] { motion.Relative.X, motion.Relative.Y }, position = new[] { motion.Position.X, motion.Position.Y } } : null,
+                    button = input is InputEventMouseButton button ? new { index = button.ButtonIndex.ToString(), button.Pressed, position = new[] { button.Position.X, button.Position.Y } } : null,
+                    origin = "unmarked; physical origin unverified"
+                });
+            }
+            finally { _inputPlayback.Stop("Playback yielded to unmarked input; physical origin is unverified.", ReleaseAll); }
+        }
         if (_inputRecording is null) return;
         var scene = _captureIdentity().StateKey;
         switch (input)

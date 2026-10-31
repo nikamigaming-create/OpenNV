@@ -2,6 +2,8 @@ using OpenNV.Runtime.Formats.Gamebryo;
 
 namespace OpenNV.Runtime.Content;
 
+internal sealed record FalloutActorMovementAnimation(string RequestedGroup, string ResolvedGroup, string Path);
+
 // Source KF variants retain both their authored filename and exported group.
 // The mounted content owner shares this index across player and NPC bodies.
 internal sealed class FalloutActorAnimationResources
@@ -164,6 +166,26 @@ internal sealed class FalloutActorAnimationResources
 
     internal string Require(string directory, string group) => Find(directory, group) ??
         throw new FileNotFoundException($"Source animation group is missing: {directory}/{group}.kf", directory + "/" + group + ".kf");
+
+    internal FalloutActorMovementAnimation ResolveUnmodifiedMovement(string directory, string requestedGroup,
+        IReadOnlyList<string> folders)
+    {
+        // The native sequence-map resolver remaps FastForward to Forward,
+        // then clears the action component to Idle when no sequence exists.
+        // This entry point covers unmodified movement actions; weapon/stance
+        // modifier inheritance requires its own qualified group mapping.
+        string[] actions = requestedGroup switch
+        {
+            "mtfastforward" => ["mtfastforward", "mtforward", "mtidle"],
+            "mtforward" => ["mtforward", "mtidle"],
+            _ => throw new ArgumentException("An unmodified forward movement group is required.", nameof(requestedGroup)),
+        };
+        foreach (var action in actions)
+            foreach (var folder in folders)
+                if (Find(directory, folder.Length == 0 ? action : folder + "/" + action) is { } path)
+                    return new(requestedGroup, action, path);
+        throw new FileNotFoundException("Source actor group is absent: " + string.Join(',', actions));
+    }
 
     private static string Canonical(string path) => FalloutBsaArchive.CanonicalPath(path).Replace('\\', '/');
 }

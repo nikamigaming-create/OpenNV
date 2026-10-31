@@ -1,12 +1,13 @@
 using System.Buffers.Binary;
+using OpenNV.Runtime.Content.Definitions;
 
 namespace OpenNV.Runtime.Content;
 
 internal sealed record FalloutActorHealthSource(FalloutFormKey Actor, FalloutFormKey StatsOwner,
     float Health, uint Flags, FalloutFormKey BodyParts, FalloutFormKey? DeathItem, uint ImpactMaterial)
 {
-    internal bool Essential => (Flags & 2) != 0;
-    internal bool Invulnerable => (Flags & 0x40000000) != 0;
+    internal bool Essential => (Flags & (uint)FalloutActorBaseFlags.Essential) != 0;
+    internal bool Invulnerable => (Flags & (uint)FalloutActorBaseFlags.Invulnerable) != 0;
 
     internal static bool StartsDead(FalloutPluginStack records, FalloutFormKey actor, FalloutActorTemplateSelection? selection = null)
     {
@@ -25,7 +26,7 @@ internal sealed record FalloutActorHealthSource(FalloutFormKey Actor, FalloutFor
         var source = records.GetEffective(actor);
         if (source.Signature is not ("NPC_" or "CREA")) throw new InvalidDataException("Health source is not an actor.");
         var stats = FalloutActorTemplateOwner.Resolve(records, source, 2, selection);
-        var baseData = FalloutActorTemplateOwner.Resolve(records, source, 128, selection);
+        var baseData = FalloutActorTemplateOwner.Resolve(records, source, (ushort)FalloutActorTemplateGroup.BaseData, selection);
         var inventory = FalloutActorTemplateOwner.Resolve(records, source, 256, selection);
         var model = FalloutActorTemplateOwner.Resolve(records, source, 64, selection);
         var acbs = Field(stats, "ACBS", 24);

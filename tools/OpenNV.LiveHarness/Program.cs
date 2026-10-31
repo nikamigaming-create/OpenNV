@@ -92,7 +92,8 @@ internal sealed record HarnessConfiguration(
     int RetailProcessId,
     int OpenNvProcessId,
     string RetailCommandDirectory,
-    string OpenNvCommandDirectory)
+    string OpenNvCommandDirectory,
+    bool CompositorPreview = false)
 {
     internal void Validate()
     {

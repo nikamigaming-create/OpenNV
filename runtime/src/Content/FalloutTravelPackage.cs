@@ -8,6 +8,7 @@ internal sealed record FalloutTravelPackage(FalloutFormKey Form, uint Flags, int
 {
     internal bool Running => (Flags & 0x2000) != 0;
     internal bool Sneaking => (Flags & 0x20000) != 0;
+    internal bool AllowFalls => (Flags & FalloutScriptPackage.AllowFallsFlag) != 0;
     internal bool ContinueIfPlayerNear => (Flags & 0x200) != 0;
     internal bool MustReach => (Flags & 6) != 0;
     internal bool OncePerDay => (Flags & 0x400) != 0;
@@ -15,8 +16,8 @@ internal sealed record FalloutTravelPackage(FalloutFormKey Form, uint Flags, int
     internal bool ContinueCombat => (Flags & 0x04000000) != 0;
     internal bool NoCombatAlert => (Flags & 0x08000000) != 0;
 
-    // GECK IsContinuingPackagePCNear defines "near" as the same CELL;
-    // the package flag also prevents iterating to done while that hold applies.
+    // ContinueIfPCNear retains package selection while the player shares its
+    // CELL. Procedure arrival and its end result remain a separate lifecycle.
     internal bool HoldsForPlayer(bool playerInSameCell) => ContinueIfPlayerNear && playerInSameCell;
     internal bool RetainsSelection(bool complete, bool playerInSameCell, bool forced) =>
         !forced && !complete && (MustReach || HoldsForPlayer(playerInSameCell));
@@ -33,11 +34,14 @@ internal sealed record FalloutTravelPackage(FalloutFormKey Form, uint Flags, int
         if (source.Procedure != 6 || source.LocationType is not (0 or 2 or 3))
             throw new NotSupportedException("Travel requires its reference-marker, current-location or editor-location owner.");
         var data = FalloutPackageData.Read(record);
-        const uint supported = 2 | 4 | 0x200 | 0x400 | 0x1000 | 0x2000 | 0x20000 | 0x800000 | 0x0c000000 | FalloutScriptPackage.HeadTrackingOffFlag |
+        const uint supported = 2 | 4 | 0x200 | 0x400 | 0x1000 | 0x2000 | 0x20000 | 0x800000 | 0x0c000000 | FalloutScriptPackage.AllowFallsFlag | FalloutScriptPackage.HeadTrackingOffFlag |
             FalloutScriptPackage.WeaponsUnequippedFlag;
         var flags = data.Flags;
         // Skip Fallout Behavior disables the optional behavior lane. Retained
         // declarations in that lane do not add a second travel procedure.
+        // Allow Falls grants permission to use falling routes; it does not
+        // require a fall or invalidate ordinary grounded movement. The native
+        // navigation owner still refuses any unsupported descent explicitly.
         if ((flags & ~supported) != 0 ||
             (flags & 0x1000) == 0 && data.BehaviorFlags != 0 || data.SpecificFlags is not (null or 0) ||
             record.ReadSubrecords().Any(field => field.Signature is "PLD2" or "PTDT" or "PTD2") ||

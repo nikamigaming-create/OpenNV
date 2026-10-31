@@ -53,6 +53,8 @@ internal partial class RuntimeNativeNpc
             portalRangeOwner = "validated-configured-interaction-range",
             _nativeMarkerTravel.ContinueCombat,
             _nativeMarkerTravel.NoCombatAlert,
+            _nativeMarkerTravel.AllowFalls,
+            fallRoutes = _nativeMarkerTravel.AllowFalls ? "unbound;grounded-route-subset-only" : "not-permitted-by-package",
             combatBoundary = "no-partial-detection-search; concurrent-travel-firing-explicitly-unbound",
             navigationDoorAssociationErrors = _navigation?.DoorAssociationErrors,
             owner = "source-navm-native-capsule-and-package-kf",
@@ -191,6 +193,12 @@ internal partial class RuntimeNativeNpc
             var source = _nativeMarkerTravel ?? throw new InvalidOperationException("Current-location Travel did not acquire its native start anchor.");
             var progress = _nativeMarkerTravelProgress!;
             if (MarkerPortalTransferred || _markerPortalRequested) return;
+            if (source.Furniture is { } furniture && progress.PortalDoor is null &&
+                _aiWorld!.SameTravelRegion(_aiWorld.Placement(Appearance.Reference!.Value).Cell, progress.Cell))
+            {
+                EnterFurnitureTravelRegion(furniture);
+                return;
+            }
             var location = progress.PortalDoor is { } portal ? _aiWorld!.Placement(portal).Position : progress.Location;
             var authored = GetParent<Node3D>().ToGlobal(new Vector3(location[0], location[2], -location[1]) * Skeleton.UnitsToMetres);
             var destination = _nativeMarkerTravelDestination ??= Combat.ProjectPackageDestination(authored);
@@ -202,8 +210,9 @@ internal partial class RuntimeNativeNpc
             }
             var radius = MarkerTravelRadius(progress);
             var reached = IsOnFloor() && GlobalPosition.DistanceTo(destination) <= radius + .1f;
-            var completedNow = source.Sleep is null && source.Eat is null && reached && !progress.Complete && progress.PortalDoor is null &&
-                !source.HoldsForPlayer(source.ContinueIfPlayerNear && Combat.PackagePlayerInSameCell());
+            // ContinueIfPCNear retains the selected package during reevaluation;
+            // it does not defer the end result of a physically completed Travel.
+            var completedNow = source.Sleep is null && source.Eat is null && source.Furniture is null && reached && !progress.Complete && progress.PortalDoor is null;
             progress = progress with
             {
                 NavigationSha256 = _navigation!.SourceSha256,

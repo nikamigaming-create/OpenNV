@@ -83,7 +83,8 @@ public partial class RuntimeCoordinator
         if (_nativeSessionTransitioning || _nativeDoorLoading || _nativePlayer is null ||
             _nativeActiveCell is null || _nativeOpeningStageDriver is null)
             throw new InvalidOperationException("A checkpoint requires a settled native campaign session.");
-        var slot = NativeSaveSlots().Create(id, () => _nativeOpeningStageDriver.PersistWorldState(_nativeActiveCell.Cell.FormKey));
+        var slot = NativeSaveSlots().Create(id, () => _nativeOpeningStageDriver.PersistWorldState(_nativeActiveCell.Cell.FormKey),
+            quickSave: IsNativeQuickSave(id));
         GD.Print($"OPENNV_NATIVE_CHECKPOINT_CREATED id={slot.Id} save={slot.Path} owner=shared-campaign-state");
         return slot;
     }
@@ -98,6 +99,7 @@ public partial class RuntimeCoordinator
         var references = new List<FalloutReferenceSnapshot>();
         var sequence = _nativeReferences!.CaptureSequence().GetEnumerator();
         var catalog = NativeSaveSlots();
+        var quickSave = IsNativeQuickSave(id);
         var path = Path.GetFullPath(RequireOption(_options, "save-path"));
         double maximumSlice = 0;
         var slices = 0;
@@ -127,7 +129,7 @@ public partial class RuntimeCoordinator
             GD.Print($"OPENNV_NATIVE_SAVE_CAPTURE references={references.Count} slices={slices} maximumSliceMilliseconds={maximumSlice:F3} finalCaptureMilliseconds={System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds:F3} commit=background");
             // The preparation owner holds gameplay/source producers paused.
             // Native callbacks run above; commit reads only the managed snapshot.
-            return Task.Run(() => catalog.Create(id, () => FalloutNativeCampaignSave.Write(path, state)));
+            return Task.Run(() => catalog.Create(id, () => FalloutNativeCampaignSave.Write(path, state), quickSave));
         });
     }
 
@@ -143,6 +145,36 @@ public partial class RuntimeCoordinator
     }
 
     private RuntimeManualSaveReceipt SaveNativeMenuSlot() => RequestNativeManualSave(RuntimeManualSaveOrigin.SessionMenu);
+
+    private bool IsNativeQuickSave(Guid id) => _nativeManualSaves.Receipt is
+    { Disposition: "pending", Origin: RuntimeManualSaveOrigin.PlayerInput } receipt && receipt.Slot == id;
+
+    private void QuickLoadNativeSlot()
+    {
+        if (_nativeSessionTransitioning || _nativeDoorLoading || _retiringNativeSession ||
+            _nativeManualSaves.Pending || _nativeManualSavePreparation is not null ||
+            _nativePlayer is null || _nativePlayer.ModalInput || GetTree().Paused ||
+            _nativeActiveCell is null || _nativeOpeningStageDriver is null)
+        {
+            GD.Print("OPENNV_NATIVE_QUICKLOAD_BLOCKED reason=unsettled-session");
+            return;
+        }
+        try
+        {
+            var slot = NativeSaveSlots().ReadQuickSave() ??
+                throw new InvalidOperationException("No committed quicksave is available. Select an ordinary saved game or create a quicksave.");
+            // The source control loads its dedicated quicksave directly. Use
+            // the ordinary complete-state validation/activation/reload owner.
+            GD.Print($"OPENNV_NATIVE_QUICKLOAD_REQUEST slot={slot.Id}");
+            SelectNativeSave(slot, pauseAfterLoad: false);
+        }
+        catch (Exception error)
+        {
+            OpenNativeSessionMenu(showSaves: true);
+            _nativeSessionMenu?.ShowFailure(error.Message);
+            GD.PushError($"OPENNV_NATIVE_QUICKLOAD_REJECTED {error}");
+        }
+    }
 
     private void ToggleNativeSessionMenu()
     {

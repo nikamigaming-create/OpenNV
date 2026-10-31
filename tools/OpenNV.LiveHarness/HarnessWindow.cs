@@ -28,6 +28,9 @@ internal sealed class HarnessWindow : Form
     private readonly List<object> _events = [];
     private readonly CancellationTokenSource _shutdown = new();
     private readonly Dictionary<string, JsonElement> _states = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, (long ObservedAt, double FileAgeMilliseconds)> _stateTimes = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, Queue<(long At, long Draw, int Process)>> _drawSamples = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, long> _drawAdvancedAt = new(StringComparer.Ordinal);
     private readonly Dictionary<string, long> _nextCommands = new(StringComparer.Ordinal);
     private readonly Dictionary<string, string> _receiptContents = new(StringComparer.Ordinal);
     private readonly Dictionary<string, string> _controlContents = new(StringComparer.Ordinal);
@@ -47,14 +50,7 @@ internal sealed class HarnessWindow : Form
     private HarnessRecording? _recording;
     private readonly HashSet<string> _recordingStreamFailures = [];
 
-    private static readonly Dictionary<string, int> RetailKeys = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ["W"] = 17, ["A"] = 30, ["S"] = 31, ["D"] = 32,
-        ["E"] = 18, ["F"] = 33, ["R"] = 19, ["Q"] = 16,
-        ["Space"] = 57, ["Tab"] = 15, ["Enter"] = 28, ["Escape"] = 1,
-        ["Up"] = 200, ["Down"] = 208, ["Left"] = 203, ["Right"] = 205,
-        ["Shift"] = 42, ["Control"] = 29, ["1"] = 2, ["2"] = 3,
-    };
+    private static readonly IReadOnlyDictionary<string, int> RetailKeys = SequentialInputRunner.RetailKeys;
 
     internal HarnessWindow(HarnessConfiguration configuration, bool background = false)
     {
@@ -67,8 +63,8 @@ internal sealed class HarnessWindow : Form
         MinimumSize = new Size(1100, 720);
         WindowState = FormWindowState.Maximized;
         KeyPreview = true;
-        _retail = new LiveGameView(configuration.RetailProcessId);
-        _openNv = new LiveGameView(configuration.OpenNvProcessId);
+        _retail = new LiveGameView(configuration.RetailProcessId, configuration.CompositorPreview);
+        _openNv = new LiveGameView(configuration.OpenNvProcessId, configuration.CompositorPreview);
         var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 7, Padding = new Padding(12) };
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
@@ -156,8 +152,16 @@ internal sealed class HarnessWindow : Form
         }
         Log("system", "both", "ready", "Live windows connected; keyboard and console share the same input bridge.");
         _ = Task.Run(ServeClients);
-        _ = Task.Run(() => WatchFrames("retail"));
-        _ = Task.Run(() => WatchFrames("opennv"));
+        if (_configuration.CompositorPreview)
+        {
+            Send("retail", "native.frames 0", "system", "compositor preview; CPU frame publication off");
+            Send("opennv", "{\"op\":\"frames\",\"enabled\":false}", "system", "compositor preview; CPU frame publication off");
+        }
+        else
+        {
+            _ = Task.Run(() => WatchFrames("retail"));
+            _ = Task.Run(() => WatchFrames("opennv"));
+        }
         _timer.Start();
         RefreshViews();
     }
@@ -238,7 +242,8 @@ internal sealed class HarnessWindow : Form
     private static string? KeyName(Keys key) => key switch
     {
         Keys.Return => "Enter", Keys.ShiftKey => "Shift", Keys.ControlKey => "Control",
-        Keys.D1 => "1", Keys.D2 => "2", _ => RetailKeys.ContainsKey(key.ToString()) ? key.ToString() : null,
+        >= Keys.D0 and <= Keys.D9 => ((int)key - (int)Keys.D0).ToString(System.Globalization.CultureInfo.InvariantCulture),
+        _ => RetailKeys.ContainsKey(key.ToString()) ? key.ToString() : null,
     };
 
     private object Execute(JsonElement command, string driver)
@@ -264,6 +269,8 @@ internal sealed class HarnessWindow : Form
         }
         if (operation == "record.start")
         {
+            if (_configuration.CompositorPreview)
+                throw new InvalidOperationException("Compositor preview does not record CPU frames. Select explicit native-frame recording for a bounded capture.");
             if (_recording is not null && !_recording.Finished) throw new InvalidOperationException("A recording is already active or finalizing.");
             RequireFreshStreams();
             _recordingStreamFailures.Clear();
@@ -302,6 +309,20 @@ internal sealed class HarnessWindow : Form
         {
             case "key":
                 DispatchKey(command.GetProperty("key").GetString()!, command.GetProperty("pressed").GetBoolean(), target, driver, true);
+                break;
+            case "mouse":
+                var mouseInput = JsonSerializer.SerializeToElement(new
+                {
+                    op = "mouse",
+                    button = command.GetProperty("button").GetString(),
+                    pressed = command.GetProperty("pressed").GetBoolean(),
+                    leaseMilliseconds = command.TryGetProperty("leaseMilliseconds", out var mouseLease) ? mouseLease.GetInt32() : 900,
+                }, Program.Json);
+                // Use the recorder's admitted physical-button mapping and
+                // bounded lease for both recording and live gameplay.
+                var retailMouse = SequentialInputRunner.RetailCommand(mouseInput);
+                foreach (var engine in Targets(target))
+                    Send(engine, engine == "retail" ? retailMouse : mouseInput.GetRawText(), driver, "mouse");
                 break;
             case "tap":
                 var key = command.GetProperty("key").GetString()!;
@@ -350,6 +371,18 @@ internal sealed class HarnessWindow : Form
                 break;
             case "capture":
                 foreach (var engine in Targets(target)) Send(engine, engine == "retail" ? "native.capture" : "{\"op\":\"capture\"}", driver, "capture");
+                break;
+            case "engine.state":
+                if (target != "opennv") throw new ArgumentException("Detailed engine state currently requires an explicit OpenNV target.");
+                Send(target, "{\"op\":\"state\"}", driver, "state");
+                break;
+            case "bot":
+                if (target != "opennv") throw new ArgumentException("Source-reference bot input requires an explicit OpenNV target.");
+                Send(target, command.GetRawText(), driver, "bot input");
+                break;
+            case "publication.mode":
+                if (target != "opennv") throw new ArgumentException("Publication mode currently requires an explicit OpenNV target.");
+                Send(target, command.GetRawText(), driver, "publication mode");
                 break;
             case "trace":
             case "trace.capture":
@@ -456,6 +489,8 @@ internal sealed class HarnessWindow : Form
             if (filename is "live-state.json" or "live-ui.json")
             {
                 _states[target + "/" + filename] = document.RootElement.Clone();
+                _stateTimes[target + "/" + filename] = (Stopwatch.GetTimestamp(), Math.Max(0, (DateTime.UtcNow - File.GetLastWriteTimeUtc(path)).TotalMilliseconds));
+                if (filename == "live-state.json") ObserveDrawCadence(target, document.RootElement);
                 _recording?.Journal("state", new { target, filename, state = document.RootElement.Clone() });
                 if (document.RootElement.TryGetProperty("process", out var process))
                     (target == "retail" ? _retail : _openNv).SetProcess(process.GetInt32());
@@ -556,8 +591,41 @@ internal sealed class HarnessWindow : Form
     private static double FrameAge(LiveHarnessSurface surface) => Math.Max(0,
         Stopwatch.GetTimestamp() * (1000.0 / Stopwatch.Frequency) - surface.Nanoseconds / 1_000_000.0);
 
+    private void ObserveDrawCadence(string target, JsonElement state)
+    {
+        if (!state.TryGetProperty("drawCount", out var drawValue) || !drawValue.TryGetInt64(out var draw) ||
+            !state.TryGetProperty("process", out var processValue) || !processValue.TryGetInt32(out var process)) return;
+        if (!_drawSamples.TryGetValue(target, out var samples)) _drawSamples[target] = samples = new();
+        var now = Stopwatch.GetTimestamp();
+        if (samples.Count > 0 && (samples.Last().Process != process || samples.Last().Draw > draw)) samples.Clear();
+        if (samples.Count == 0 || samples.Last().Draw != draw) _drawAdvancedAt[target] = now;
+        samples.Enqueue((now, draw, process));
+        while (samples.Count > 2 && now - samples.Peek().At > Stopwatch.Frequency * 2) samples.Dequeue();
+    }
+
     private string FrameStatus(string target)
     {
+        if (_configuration.CompositorPreview)
+        {
+            var view = target == "retail" ? _retail : _openNv;
+            var key = target + "/live-state.json";
+            var stateAge = _stateTimes.TryGetValue(key, out var timing)
+                ? timing.FileAgeMilliseconds + Stopwatch.GetElapsedTime(timing.ObservedAt).TotalMilliseconds : double.PositiveInfinity;
+            if (!view.Connected) return view.CompositorStatus;
+            if (stateAge > 1500) return $"{view.CompositorStatus} · engine state stale ({stateAge / 1000:0.0}s)";
+            if (_drawAdvancedAt.TryGetValue(target, out var advanced) && Stopwatch.GetElapsedTime(advanced).TotalSeconds > 1.5)
+                return $"NO NEW DRAWS for {Stopwatch.GetElapsedTime(advanced).TotalSeconds:0.0}s · {view.CompositorStatus}";
+            if (_states.TryGetValue(key, out var state) && state.TryGetProperty("performance", out var performance) &&
+                performance.ValueKind == JsonValueKind.Object && performance.TryGetProperty("framesPerSecond", out var fps))
+                return $"engine {fps} FPS · {view.CompositorStatus}";
+            if (_drawSamples.TryGetValue(target, out var samples) && samples.Count > 1)
+            {
+                var first = samples.Peek(); var last = samples.Last();
+                var seconds = (last.At - first.At) / (double)Stopwatch.Frequency;
+                if (seconds >= .5) return $"engine {(last.Draw - first.Draw) / seconds:0.0} draws/s · {view.CompositorStatus}";
+            }
+            return $"{view.CompositorStatus} · engine FPS unavailable";
+        }
         if (!_surfaces.TryGetValue(target, out var surface)) return "waiting for pixels";
         var age = FrameAge(surface);
         return $"{(age > 1000 ? "STALE" : "live")} {age:0} ms · draw {surface.Draw}";

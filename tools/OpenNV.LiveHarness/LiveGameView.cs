@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 
 namespace OpenNV.LiveHarness;
 
@@ -6,6 +7,9 @@ internal sealed class LiveGameView : Panel
 {
     private int _processId;
     private nint _sourceWindow;
+    private readonly bool _compositor;
+    private nint _thumbnail, _thumbnailSource, _thumbnailDestination;
+    private string? _compositorError;
     private Bitmap? _nativePreview;
     private long _previewSequence;
     private long _paintedSequence;
@@ -13,9 +17,10 @@ internal sealed class LiveGameView : Panel
     private long _sourceNanoseconds;
     private readonly Queue<long> _recentPaints = new();
 
-    internal LiveGameView(int processId)
+    internal LiveGameView(int processId, bool compositor = false)
     {
         _processId = processId;
+        _compositor = compositor;
         BackColor = Color.FromArgb(9, 12, 17);
         Dock = DockStyle.Fill;
         TabStop = true;
@@ -23,10 +28,14 @@ internal sealed class LiveGameView : Panel
     }
 
     internal bool Connected => _sourceWindow != 0;
+    internal string CompositorStatus => _compositorError ?? (_sourceWindow == 0 ? "source window unavailable" :
+        _thumbnail == 0 ? "compositor disconnected" : "compositor preview · display cadence unmeasured");
 
     internal object Presentation => new
     {
-        mode = "native-frame-arrival",
+        mode = _compositor ? "desktop-compositor;display-cadence-unmeasured" : "native-frame-arrival",
+        compositorConnected = _thumbnail != 0,
+        compositorError = _compositorError,
         sourceWindowPresent = Connected,
         sourceSequence = _previewSequence,
         sourceAgeMilliseconds = _sourceNanoseconds == 0 ? (double?)null : SourceAgeMilliseconds,
@@ -89,8 +98,58 @@ internal sealed class LiveGameView : Panel
             _sourceWindow = process.MainWindowHandle;
         }
         catch (ArgumentException) { _sourceWindow = 0; }
+        if (_compositor) RefreshThumbnail();
         if (_nativePreview is not null && SourceAgeMilliseconds > 1000) Invalidate();
     }
+
+    private void RefreshThumbnail()
+    {
+        var form = FindForm();
+        var destination = form is { IsHandleCreated: true } ? form.Handle : 0;
+        if (_thumbnailSource != _sourceWindow || _thumbnailDestination != destination) ReleaseThumbnail();
+        if (_sourceWindow == 0 || form is null || !form.IsHandleCreated || !IsHandleCreated) return;
+        if (_thumbnail == 0)
+        {
+            var result = DwmRegisterThumbnail(form.Handle, _sourceWindow, out _thumbnail);
+            if (result != 0) { _compositorError = $"DWM registration 0x{result:X8}"; return; }
+            _thumbnailSource = _sourceWindow;
+            _thumbnailDestination = destination;
+        }
+        if (!GetClientRect(_sourceWindow, out var source) || source.Right <= 0 || source.Bottom <= 0) return;
+        var fitted = DisplayBounds(source.Right, source.Bottom);
+        var origin = form.PointToClient(PointToScreen(fitted.Location));
+        var properties = new ThumbnailProperties
+        {
+            Flags = 1 | 4 | 8 | 16,
+            Destination = new() { Left = origin.X, Top = origin.Y, Right = origin.X + fitted.Width, Bottom = origin.Y + fitted.Height },
+            Opacity = 255, Visible = Visible && form.Visible, ClientOnly = true,
+        };
+        var updated = DwmUpdateThumbnailProperties(_thumbnail, ref properties);
+        _compositorError = updated == 0 ? null : $"DWM update 0x{updated:X8}";
+        if (updated != 0) ReleaseThumbnail();
+    }
+
+    private void ReleaseThumbnail()
+    {
+        if (_thumbnail != 0) _ = DwmUnregisterThumbnail(_thumbnail);
+        _thumbnail = 0; _thumbnailSource = 0; _thumbnailDestination = 0;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativeRect { internal int Left, Top, Right, Bottom; }
+    [StructLayout(LayoutKind.Sequential)]
+    private struct ThumbnailProperties
+    {
+        internal uint Flags;
+        internal NativeRect Destination, Source;
+        internal byte Opacity;
+        [MarshalAs(UnmanagedType.Bool)] internal bool Visible;
+        [MarshalAs(UnmanagedType.Bool)] internal bool ClientOnly;
+    }
+    [DllImport("dwmapi.dll")] private static extern int DwmRegisterThumbnail(nint destination, nint source, out nint thumbnail);
+    [DllImport("dwmapi.dll")] private static extern int DwmUpdateThumbnailProperties(nint thumbnail, ref ThumbnailProperties properties);
+    [DllImport("dwmapi.dll")] private static extern int DwmUnregisterThumbnail(nint thumbnail);
+    [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool GetClientRect(nint window, out NativeRect rectangle);
 
     internal Rectangle DisplayBounds(int width, int height)
     {
@@ -101,7 +160,7 @@ internal sealed class LiveGameView : Panel
 
     protected override void Dispose(bool disposing)
     {
-        if (disposing) { _nativePreview?.Dispose(); _nativePreview = null; }
+        if (disposing) { ReleaseThumbnail(); _nativePreview?.Dispose(); _nativePreview = null; }
         base.Dispose(disposing);
     }
 }

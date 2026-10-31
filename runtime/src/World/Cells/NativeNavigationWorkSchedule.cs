@@ -7,8 +7,9 @@ internal sealed record NativeNavigationWorkSnapshot(long Search, string State, l
     long GuidedSamples, long SmoothingSteps, double WorkMilliseconds, double MaximumSliceMilliseconds,
     double? NearestTargetDistance, ulong? LastPhysicsFrame, ulong? LastProcessFrame, int QueuePosition);
 
-// Main-thread queries retain their own cursor. The global budget limits work,
-// while this queue keeps callback order from deciding who can ever progress.
+// Main-thread queries retain their own cursor. One process phase shares its
+// planning budget across every physics catch-up tick and Process caller.
+// The queue keeps callback order from deciding who can ever progress.
 internal sealed class NativeNavigationWorkSchedule
 {
     internal const double BudgetMilliseconds = 2;
@@ -45,8 +46,8 @@ internal sealed class NativeNavigationWorkSchedule
         if (_running is not null) throw new InvalidOperationException("Native navigation work cannot overlap or reenter.");
         if (_physicsFrame > physicsFrame || _processFrame > processFrame)
             throw new InvalidOperationException("Native navigation engine phases moved backwards.");
-        if (_physicsFrame != physicsFrame) { _physicsFrame = physicsFrame; UsedMilliseconds = 0; }
-        _processFrame = processFrame;
+        if (_processFrame != processFrame) { _processFrame = processFrame; UsedMilliseconds = 0; }
+        _physicsFrame = physicsFrame;
         registration.Attempts++;
         registration.LastPhysicsFrame = physicsFrame;
         registration.LastProcessFrame = processFrame;

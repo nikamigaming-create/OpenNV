@@ -1,14 +1,70 @@
 # Product status
 
-Updated 2026-10-29. User priority: **retail behavior and presentation through
+Updated 2026-10-31. User priority: **retail behavior and presentation through
 Goodsprings to the Strip, sustained native 3840x2160 at 60 FPS indoors and
 outdoors, and physical XR acceptance with a separate 144 Hz target**.
 FO1 remains an incomplete classic preview with selected movement, inventory,
 equipment, door and save flows. Complete campaign execution and 1:1 3D art are
 unverified. See [current-work.md](current-work.md) for the active owner.
 
-The checked baseline is PR #334, f6141664, with local/owned gates and all five
-hosted checks passed. The merged runtime implements shared mutable
+The published tester build 743aa164 failed user acceptance: severe outdoor
+slowdown and visibly unresponsive coyote combat. Do not call it tester-ready.
+The current work is substantial retail recording, Godot playback and shared
+system repair across all areas and applicable actions. A diagnostic replay
+reproduced severe slowdown, but its checkpoint is unmatched and recording
+amplifies the cost. Scene parity and faster-than-retail performance remain open.
+See current-work.md for the measured limits and active repair batch.
+
+The current Release work includes owned Idle fallback, compass strip,
+regional weather caches, dedicated F5/F9 save identity, source resource reuse,
+and NPC furniture/package repairs. Ordinary quicksave/move/quickload and
+isolation from a later menu save passed. Both games completed Sunny's bottle
+lesson; OpenNV followed her to the well and now advances through stages 40/45.
+An ordinary fight killed both well geckos with player survival. Corpse looting
+and post-combat quicksave/move/quickload restored exact position and inventory,
+with recovery to 57+ FPS in 11.625 seconds. One reloading recipe consumed its
+input and produced the authored materials. These are bounded gameplay cases.
+
+Bounded native-4K capture-off observations reached approximately 59â€“60 draws/s
+on outdoor movement, an interior sequence and the stationary well scene. These
+are not long-run combat or whole-game acceptance. Restored base health now
+matches the qualified 220-health source inputs. Projectile rigid-body impulses,
+XTEL approach classification and frame-paced loading are implemented; actual
+prop-hit and remaining route checks are open. Shared melee knockback now responds
+to real gecko hits with no held movement keys. The subsequent two-kill fight
+ended at 170 health and quicksave completed. Paused menu saving also committed
+after two original windmill voices finished, without resuming gameplay. Native
+cold airborne motion retains velocity differently from the current rate/time
+snapshot; that persistence lane remains divergent. The later stationary
+57.482/59.547 FPS windows had retail presentation stopped and do not qualify as
+simultaneous comparisons. Scene completeness, broad combat and tester acceptance
+remain open.
+
+Immediate work is the requested live retail/Godot comparison. A local compositor
+preview removes continuous CPU frame copies. Godot now confirms native 3840x2160
+viewports and reports 60 FPS in the loaded outdoor scene. The unlocked desktop
+shows both games. Bounded GPU footage with separate audio now covers a matched
+time/weather setup, turns, road movement and Pip-Boy; camera drift and capture
+extent/cadence remain explicit. The consolidated source repair batch is in
+repair-batch.md. This does not close 4K60 acceptance or combat failures.
+
+Two local candidates completed the same 183-delivery diagnostic tape with capture
+off. A roughly 29-second unpaused window at identical sampled player position
+improved from 21.77 to 59.52 draws/s at flat 1280x720. The candidates include
+preserved essential-lifecycle work; later routes diverge and actor/world state
+equivalence remains unproved. Full runtime and selected owned navigation/speech
+checks pass. This is neither whole-route acceptance nor faster-than-retail proof.
+Private retail input/capture qualification is active before broader replay.
+The prior retail checkpoint originated in a COC-created diagnostic fixture;
+normal campaign initialization was unproved. A new ordinary New Game reached
+Doc's handoff/exit, radio playback and a visible world map and produced a normal
+quicksave. Its questionnaire input segment failed its receipt timing bound and
+must be re-recorded; continuous campaign timing acceptance remains open. Earlier
+fixture clips remain isolated diagnostics. Native commit-clock recording and
+exact harness binary provenance are being qualified before further replay.
+
+The checked repository baseline is PR #335, 828e7b16. Earlier PR #334, f6141664,
+passed local/owned gates and all five hosted checks and implemented shared mutable
 FormLists and behavioral AV pools, persistent additions/modifiers, both parsed
 script hosts and live inventory/equipment/hit/weapon/appearance consumers.
 Focused headless contracts, selected owned audit, the full required gate and diff
@@ -23,11 +79,9 @@ SHA256 73A1248C07B3FD0FF4B4832C5350D0D8075F8993DCDE20B8A3270BF086E9E930;
 normal close disposed source owners. Six requested screenshots are retained at
 3840x2124; no 4K, campaign or matched-retail claim follows. Old 02ABC remains intact.
 
-The immediate delivery priority is an accurately labeled asset-free experimental
-playtest: verified package contents including PCK entries, packaged launch, real
-quest/script interaction, combat and saving. Full parity/4K60/physical XR144 remain
-open and are not prerequisites for that limited release. Next shared actor-state
-work includes mutable base flags and essential knockdown/recovery/query/save,
+The experimental package's selected checks did not establish tester acceptance.
+Full parity/4K60/physical XR144 remain open. Pending shared actor-state work
+includes mutable base flags and essential knockdown/recovery/query/save,
 rather than a successful SetEssential command with missing lifecycle behavior.
 SCDA instruction execution and general runtime reference identity/allocation/
 lifetime/persistence remain absent; source parsing is not a VM.

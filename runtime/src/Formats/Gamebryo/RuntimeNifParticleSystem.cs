@@ -16,6 +16,7 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
     private readonly Dictionary<string, float> _rates = new(StringComparer.Ordinal);
     private readonly Dictionary<string, float> _speeds = new(StringComparer.Ordinal);
     private readonly Dictionary<string, float> _lifespans = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, float> _initialRadii = new(StringComparer.Ordinal);
     private readonly Dictionary<string, float> _gravityStrengths = new(StringComparer.Ordinal);
     private readonly Dictionary<string, double> _remainders = new(StringComparer.Ordinal);
     private readonly Dictionary<int, FalloutNifMeshData> _meshes = [];
@@ -73,9 +74,9 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
         {
             _active[modifier.Name] = modifier.Active;
             if (modifier is FalloutNifParticleVolumeEmitter volume)
-            { _speeds[modifier.Name] = volume.Emitter.Speed; _lifespans[modifier.Name] = volume.Emitter.Life; }
+            { _speeds[modifier.Name] = volume.Emitter.Speed; _lifespans[modifier.Name] = volume.Emitter.Life; _initialRadii[modifier.Name] = volume.Emitter.Radius; }
             else if (modifier is FalloutNifParticleMeshEmitter mesh)
-            { _speeds[modifier.Name] = mesh.Emitter.Speed; _lifespans[modifier.Name] = mesh.Emitter.Life; }
+            { _speeds[modifier.Name] = mesh.Emitter.Speed; _lifespans[modifier.Name] = mesh.Emitter.Life; _initialRadii[modifier.Name] = mesh.Emitter.Radius; }
             else if (modifier is FalloutNifParticleGravity gravity) _gravityStrengths[modifier.Name] = gravity.Strength;
         }
         foreach (var name in _rates.Keys) { _rates[name] = 0; _remainders[name] = 0; }
@@ -103,6 +104,7 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
             rate = _rates.GetValueOrDefault(modifier.Name),
             speed = _speeds.GetValueOrDefault(modifier.Name),
             lifespan = _lifespans.GetValueOrDefault(modifier.Name),
+            initialRadius = _initialRadii.GetValueOrDefault(modifier.Name),
             gravityStrength = modifier is FalloutNifParticleGravity ? (float?)_gravityStrengths[modifier.Name] : null,
             remainder = _remainders.GetValueOrDefault(modifier.Name)
         }).ToArray(),
@@ -265,6 +267,7 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
             throw new InvalidDataException("Particle emitter has an invalid range.");
         _rates.Add(emitter.Name, 0); _remainders.Add(emitter.Name, 0);
         _lifespans.Add(emitter.Name, emitter.Life);
+        _initialRadii.Add(emitter.Name, emitter.Radius);
     }
 
     private void RequireNode(int index)
@@ -290,6 +293,21 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
                 var strength = sampler.Sample(time);
                 if (!float.IsFinite(strength)) throw new InvalidDataException("Particle gravity strength is not finite.");
                 _gravityStrengths[link.Variable1] = strength;
+            });
+        }
+        if (link.ControllerType == "NiPSysEmitterInitialRadiusCtlr")
+        {
+            if (link.PropertyType.Length != 0 || link.Variable2.Length != 0 || link.Priority != 0 ||
+                !_initialRadii.ContainsKey(link.Variable1))
+                throw new NotSupportedException("Particle initial-radius channel has no declared emitter owner.");
+            var sampler = new FalloutNifFloatAnimation(file, link.Interpolator);
+            return new(time =>
+            {
+                RequireConfigured();
+                var radius = sampler.Sample(time);
+                if (!float.IsFinite(radius) || radius < 0)
+                    throw new InvalidDataException("Particle initial radius is negative or not finite.");
+                _initialRadii[link.Variable1] = radius;
             });
         }
         if (link.ControllerType == "NiPSysEmitterLifeSpanCtlr" && link.Variable2.Length == 0 && _lifespans.ContainsKey(link.Variable1))
@@ -524,7 +542,7 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
             Position = transform * point,
             Velocity = (transform.Basis * direction).Normalized() * (Vary(_speeds[modifier.Name], emitter.SpeedVariation) * _units),
             Life = Math.Max(float.Epsilon, Vary(_lifespans[emitter.Name], emitter.LifeVariation)),
-            Radius = Math.Max(0, Vary(emitter.Radius, emitter.RadiusVariation)) * _units * transform.Basis.Scale.Abs().X,
+            Radius = Math.Max(0, Vary(_initialRadii[emitter.Name], emitter.RadiusVariation)) * _units * transform.Basis.Scale.Abs().X,
             InitialColor = ToColor(emitter.Color),
             SourceBirth = emitter.Block.Index,
             Texture = _data.Subtextures.Length == 0 ? 0 : _random.Next(_data.Subtextures.Length),

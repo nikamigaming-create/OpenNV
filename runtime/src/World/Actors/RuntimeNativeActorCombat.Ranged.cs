@@ -352,6 +352,12 @@ internal sealed partial class RuntimeNativeActorCombat
         FalloutActorHit? actorHit = null;
         var playerHit = part is not null;
         var hitReference = collider is null ? null : _context?.CollisionReference?.Invoke(collider.GetInstanceId());
+        try { RuntimeNativeProjectileImpulse.Apply(_records, shot.Projectile, collider, point, direction, _skeleton.UnitsToMetres); }
+        catch (Exception error)
+        {
+            damageError = error.Message;
+            GD.PushError($"OPENNV_NPC_PROJECTILE_IMPULSE_UNBOUND reference={_state.Reference} projectile={shot.Projectile.Form} target={targetPath} {error.Message}");
+        }
         if (playerHit)
         {
             try

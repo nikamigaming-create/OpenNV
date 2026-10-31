@@ -1267,7 +1267,7 @@ internal static partial class RuntimeNativeNifMeshBuilder
                     "BSRefractionStrengthController" or "BSRefractionFirePeriodController" => BuildRefractionChannel(sequence, link, targetBlock),
                     "NiGeomMorpherController" => BuildManagedMorphChannel(sequence, link, targetBlock),
                     "NiPSysEmitterCtlr" or "NiPSysEmitterSpeedCtlr" or "NiPSysEmitterLifeSpanCtlr" or
-                        "NiPSysModifierActiveCtlr" or "NiPSysGravityStrengthCtlr" => BuildParticleChannel(sequence, link, targetBlock),
+                        "NiPSysEmitterInitialRadiusCtlr" or "NiPSysModifierActiveCtlr" or "NiPSysGravityStrengthCtlr" => BuildParticleChannel(sequence, link, targetBlock),
                     _ => throw new NotSupportedException(
                         $"NIF sequence {sequence.Block.Index} controller {link.ControllerType} is unsupported."),
                 });
@@ -1571,7 +1571,7 @@ internal static partial class RuntimeNativeNifMeshBuilder
 
             if (source.SkinInstance >= 0 && _source.ReadObject(source.SkinInstance) is FalloutNifSkinInstance embedded &&
                 embedded.Bones.Length > 1)
-                return BuildEmbeddedSkin(source, data, embedded, collision);
+                return BuildEmbeddedSkin(source, data, embedded, collision, geometryMorph);
 
             FalloutNifOneBoneBinding? skinBinding = null;
             FalloutNifNode? skinBone = null;
@@ -1596,7 +1596,7 @@ internal static partial class RuntimeNativeNifMeshBuilder
                     // One source bone does not imply the specialized head
                     // layout. Use the same partition and live-bone owner as
                     // other embedded skins; malformed data still fails there.
-                    return BuildEmbeddedSkin(source, data, instance, collision);
+                    return BuildEmbeddedSkin(source, data, instance, collision, geometryMorph);
                 }
                 var skeletonRoot = _source.ReadNode(skinBinding.SkeletonRoot);
                 skinBone = _source.ReadNode(skinBinding.Bone);
@@ -1643,6 +1643,8 @@ internal static partial class RuntimeNativeNifMeshBuilder
                 // default material must not turn it into a visible solid.
                 result.Layers = material.HasMeta("opennv_nif_no_render_shader") ? 0u : 1u;
                 result.SetMeta("opennv_nif_geometry_block", source.Block.Index);
+                result.SetMeta("opennv_nif_nonfinite_uv_components", prepared.Uv.Sum(uv =>
+                    (float.IsFinite(uv.X) ? 0 : 1) + (float.IsFinite(uv.Y) ? 0 : 1)));
                 if (geometryMorph is not null) RegisterManagedMorph(source, geometryMorph, result);
                 if (morph is not null) result.SetMeta("opennv_landscape_morph_targets", morph.Heights.Length);
                 result.SetMeta("opennv_nif_source_name", source.Name);

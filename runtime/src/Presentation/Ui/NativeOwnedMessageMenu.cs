@@ -153,6 +153,7 @@ internal sealed class NativeOwnedMenuTree
     private readonly HashSet<(XElement, string)> _evaluating = [];
     private readonly HashSet<(XElement, string)> _evaluatingText = [];
     private readonly Dictionary<XElement, NativeOwnedUiArt> _art = [];
+    private readonly Dictionary<XElement, Vector2> _textureOffsets = [];
     private readonly Dictionary<int, NativeBitmapFontAsset> _fonts = [];
     private readonly Dictionary<string, XElement> _named = new(StringComparer.OrdinalIgnoreCase);
     private readonly FalloutInstallationSettings _settings;
@@ -175,12 +176,18 @@ internal sealed class NativeOwnedMenuTree
         Color = new Color(color.X, color.Y, color.Z);
     }
     internal void Bind(XElement tile, string trait, float value) => _values[(tile, trait)] = value;
+    internal void BindTextureOffset(XElement tile, Vector2 value)
+    {
+        if (!value.IsFinite()) throw new InvalidDataException("Owned image texture offset is not finite.");
+        _textureOffsets[tile] = value;
+    }
     internal void BindText(XElement tile, string trait, string value) => _textValues[(tile, trait)] = value;
     internal void Forget(XElement tile)
     {
         var removed = tile.DescendantsAndSelf().ToHashSet();
         foreach (var key in Text.Keys.Where(removed.Contains).ToArray()) Text.Remove(key);
         foreach (var key in _art.Keys.Where(removed.Contains).ToArray()) _art.Remove(key);
+        foreach (var key in _textureOffsets.Keys.Where(removed.Contains).ToArray()) _textureOffsets.Remove(key);
         foreach (var key in _values.Keys.Where(key => removed.Contains(key.Item1)).ToArray()) _values.Remove(key);
         foreach (var key in _textValues.Keys.Where(key => removed.Contains(key.Item1)).ToArray()) _textValues.Remove(key);
         _named.Clear();
@@ -453,10 +460,11 @@ internal sealed class NativeOwnedMenuTree
                     // Keep that mapping for members without an explicit zoom.
                     var zoom = tile.Element("texatlas") is not null && tile.Element("zoom") is null ? -1 : Number(tile, "zoom");
                     var crop = new Vector2(Number(tile, "cropx"), Number(tile, "cropy"));
-                    if (tile.Element("tile") is not null && Number(tile, "tile") != 0 && zoom > 0)
+                    if ((tile.Element("tile") is not null && Number(tile, "tile") != 0 || _textureOffsets.ContainsKey(tile)) && zoom > 0)
                     {
                         var repeat = art.Region.Size * zoom / 100;
                         if (repeat.X <= 0 || repeat.Y <= 0) throw new InvalidDataException("Owned tiled image has no positive period.");
+                        if (_textureOffsets.TryGetValue(tile, out var textureOffset)) crop += textureOffset * repeat;
                         var window = new Rect2(position, size);
                         var bounds = clip?.Intersection(window) ?? window;
                         for (var y = -Mathf.PosMod(crop.Y, repeat.Y); y < size.Y; y += repeat.Y)

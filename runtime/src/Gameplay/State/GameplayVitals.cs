@@ -18,7 +18,8 @@ internal sealed record GameplayVitals(
     internal GameplayVitals WithDerivedMaximums(GameplayVitals derived)
     {
         ArgumentNullException.ThrowIfNull(derived);
-        var health = Math.Clamp(derived.MaximumHitPoints - (MaximumHitPoints - ExactHitPoints), 0, derived.MaximumHitPoints);
+        var health = ExactHitPoints == 0 ? 0 :
+            Math.Clamp(derived.MaximumHitPoints - (MaximumHitPoints - ExactHitPoints), 0, derived.MaximumHitPoints);
         var displayed = checked((int)MathF.Ceiling(health));
         var actionPoints = Math.Clamp(derived.MaximumActionPoints - (MaximumActionPoints - ExactActionPoints), 0, derived.MaximumActionPoints);
         var displayedActionPoints = checked((int)MathF.Ceiling(actionPoints));

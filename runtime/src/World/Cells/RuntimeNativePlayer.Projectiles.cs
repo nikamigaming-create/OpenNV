@@ -315,6 +315,8 @@ internal partial class RuntimeNativePlayer
     {
         FalloutActorHit? actorHit = null;
         var destructible = trace.Collider is { } objectCollider ? RuntimeNativeDestructible.Find(objectCollider) : null;
+        try { RuntimeNativeProjectileImpulse.Apply(records, shot.Projectile, trace.Collider, trace.Point, trace.Direction, UnitsToMeters); }
+        catch (Exception error) { _damageError = error.Message; GD.PushError("OPENNV_PROJECTILE_IMPULSE_UNBOUND " + error.Message); }
         if (trace.Collider is { } collider && combat is not null && damage is { } resolvedDamage)
         {
             try

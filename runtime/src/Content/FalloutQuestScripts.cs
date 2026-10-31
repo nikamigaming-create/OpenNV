@@ -276,8 +276,11 @@ internal sealed partial class FalloutQuestScripts
     internal object State => Observe(detailed: true);
     internal object Observe(bool detailed) => new
     {
-        detail = detailed ? "complete-script-observation" : "live-summary;request-state-for-quest-variables-and-objective-details",
-        quests = _instances.Select(instance => new
+        detail = detailed ? "complete-script-observation" : "live-summary;faulted-instances-retained;request-state-for-all-instances-histories-and-storage",
+        questCount = _instances.Count,
+        claimedCount = _instances.Count(instance => instance.Claimed),
+        unboundCount = _unbound.Count,
+        quests = _instances.Where(instance => detailed || instance.Error is not null || instance.ContinuationError is not null).Select(instance => new
         {
             quest = instance.Quest.FormKey.ToString(),
             script = instance.Script.FormKey.ToString(),
@@ -295,14 +298,14 @@ internal sealed partial class FalloutQuestScripts
         newlyParsedOnRestore = _newlyParsed.Select(key => key.ToString()).ToArray(),
         inventory = _inventory.Items,
         messages = _messages.ToArray(),
-        messageResults = MessageResults.Capture(),
+        messageResults = detailed ? MessageResults.Capture() : null,
         notifications = _inventory.Notifications.Capture(),
         session = Session.Capture(),
-        challenges = Challenges.Capture(),
+        challenges = detailed ? Challenges.Capture() : null,
         radio = Radio?.State,
-        events = Events.State,
-        strings = ScriptValues.Capture(),
-        auxiliary = Auxiliary.State,
+        events = detailed ? Events.State : null,
+        strings = detailed ? ScriptValues.Capture() : null,
+        auxiliary = detailed ? Auxiliary.State : null,
         objectives = detailed ? _quests.ObjectiveState : _quests.ObjectiveSummaryState,
         variables = detailed ? _quests.VariableState : _quests.VariableSummaryState,
         initialization = new { _initialization.EmbeddedQuestScripts, _initialization.Initializations, _initialization.DefaultDelay },
@@ -672,6 +675,10 @@ internal sealed partial class FalloutQuestScripts
             if (parts.Length == 1 && FalloutScriptFormLists.Function(operation, _records, () =>
                 (References ?? throw new NotSupportedException("Form-list commands have no shared world owner.")).FormLists) is { } formListFunction)
                 return formListFunction;
+            if (parts.Length <= 2 && FalloutScriptActorFlags.Function(operation, parts.Length == 2 || caller is not null, _records,
+                () => References ?? throw new NotSupportedException("Actor flags have no shared world owner."),
+                () => caller?.FormKey(_records) ?? (parts.Length == 2 ? QueryReference(parts[0]) : instance.Quest.FormKey)) is { } actorFlags)
+                return actorFlags;
             if (parts.Length <= 2 && conditionRuntime.ScriptFunction(operation, instance.Script,
                 () => caller?.FormKey(_records) ?? (parts.Length == 2 ? QueryReference(parts[0]) : instance.Quest.FormKey),
                 name => Form(name).FormKey, Variable, parts.Length == 2 || caller is not null) is { } shared) return shared;
@@ -890,7 +897,8 @@ internal sealed partial class FalloutQuestScripts
             var parts = command.Split('.');
             var operation = parts[^1].ToLowerInvariant();
             if (parts.Length <= 2 && FalloutActorValueCommands.Operation(operation) is not null ||
-                parts.Length == 1 && FalloutScriptFormLists.Supports(operation))
+                parts.Length == 1 && FalloutScriptFormLists.Supports(operation) ||
+                parts.Length <= 2 && FalloutScriptActorFlags.Supports(operation, parts.Length == 2))
             {
                 _ = FalloutNvseNumericExpression.EvaluateValue([command, .. rawArguments], values, Function);
                 return;

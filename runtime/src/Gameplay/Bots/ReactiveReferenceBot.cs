@@ -373,7 +373,7 @@ internal sealed partial class ReactiveReferenceBot
                 // Travel and interaction references can move too. Execute one
                 // collision-checked segment before refreshing their target;
                 // observed final arrival still checks the live reference below.
-                var movingTarget = _mode is "follow" or "shoot" or "travel" or "interact";
+                var movingTarget = _mode is "approach" or "follow" or "shoot" or "travel" or "interact";
                 if (_path is not null && !movingTarget && Vector3.Distance(state.Target, _plannedTarget) > .4f)
                 { CancelRoute(); _path = null; _projectionRadius = 2; _endpointReplans = 0; }
                 if (_path is null)

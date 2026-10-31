@@ -100,7 +100,8 @@ internal sealed partial class NativeActorWeaponAttachment
             return time => nodes[0].Visible = visibility.Sample(time);
         }
         if (link.PropertyType.Length == 0 && nodes[0] is RuntimeNifParticleSystem particle &&
-            link.ControllerType is "NiPSysEmitterCtlr" or "NiPSysEmitterSpeedCtlr" or "NiPSysEmitterLifeSpanCtlr" or "NiPSysModifierActiveCtlr")
+            link.ControllerType is "NiPSysEmitterCtlr" or "NiPSysEmitterSpeedCtlr" or "NiPSysEmitterLifeSpanCtlr" or
+                "NiPSysEmitterInitialRadiusCtlr" or "NiPSysModifierActiveCtlr")
             return particle.Bind(source, link).Apply;
         if (link.ControllerType != "NiTransformController") return null;
         var sampler = new FalloutNifAnimationSampler(source, link.Interpolator);

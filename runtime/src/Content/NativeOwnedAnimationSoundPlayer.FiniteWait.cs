@@ -37,24 +37,36 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer
             _unbound.Except(_events.OwnedLanes, StringComparer.Ordinal).Any() ||
             !_voices.TryGetValue(node, out var bound) || !ReferenceEquals(bound, voice) ||
             voice.Generation is not { } generation || voice.Loop.Mode != FalloutSoundLoopMode.None || voice.Releasing ||
-            voice.CompletionWait is null || !GodotObject.IsInstanceValid(node) || !node.IsInsideTree() || !node.CanProcess() ||
+            voice.CompletionWait is null || !GodotObject.IsInstanceValid(node) || !node.IsInsideTree() ||
             (voice.Attachment is { } attachment ? !attachment.Alive :
                 !GodotObject.IsInstanceValid(voice.Emitter) || !voice.Emitter.IsInsideTree())) return null;
+        var treePaused = node.GetTree().Paused;
+        // A menu pause does not invalidate an already observed native voice.
+        // Only scene-pausable owners may explain CanProcess=false here; a
+        // disabled owner or an unrelated suspension still has no drain proof.
+        Node? processOwner = node;
+        while (processOwner is not null && processOwner.ProcessMode == ProcessModeEnum.Inherit)
+            processOwner = processOwner.GetParent();
+        if (!node.CanProcess() && !(treePaused && processOwner?.ProcessMode == ProcessModeEnum.Pausable)) return null;
         var entry = _events.Events.SingleOrDefault(entry => entry.Generation == generation);
         if (entry is not { End: FalloutAnimationSoundEnd.Active, Error: null }) return null;
         var playing = node is AudioStreamPlayer3D spatial ? spatial.Playing : ((AudioStreamPlayer)node).Playing;
         var paused = node is AudioStreamPlayer3D spatiallyPaused ? spatiallyPaused.StreamPaused : ((AudioStreamPlayer)node).StreamPaused;
         var stream = node is AudioStreamPlayer3D positioned ? positioned.Stream : ((AudioStreamPlayer)node).Stream;
         var playback = ReadPlayback(node);
-        if (paused || playback is null || !GodotObject.IsInstanceValid(playback) ||
+        if (paused && !treePaused || playback is null || !GodotObject.IsInstanceValid(playback) ||
             stream is null || !GodotObject.IsInstanceValid(stream) ||
             !double.IsFinite(stream.GetLength()) || stream.GetLength() <= 0 ||
             stream is AudioStreamWav { LoopMode: not AudioStreamWav.LoopModeEnum.Disabled } ||
             !stream.GetMeta("opennv_owned_media_sha256", "").AsString().Equals(entry.MediaSha256, StringComparison.OrdinalIgnoreCase)) return null;
         var proof = new FalloutFiniteSoundVoice(_nativeOwner, _events.Reference, generation,
             entry.Sound, entry.SoundSha256, entry.Path!, entry.MediaSha256!);
-        return voice.CompletionWait.Observe(proof, node.GetInstanceId(), playback.GetInstanceId(), stream.GetInstanceId(),
-            playing, node is AudioStreamPlayer3D ? Engine.GetPhysicsFrames() : Engine.GetProcessFrames(), Time.GetTicksMsec());
+        var phase = node is AudioStreamPlayer3D ? Engine.GetPhysicsFrames() : Engine.GetProcessFrames();
+        return treePaused
+            ? voice.CompletionWait.ObserveSavePreparation(proof, node.GetInstanceId(), playback.GetInstanceId(), stream.GetInstanceId(),
+                playing, paused || !node.CanProcess(), phase, Time.GetTicksMsec())
+            : voice.CompletionWait.Observe(proof, node.GetInstanceId(), playback.GetInstanceId(), stream.GetInstanceId(),
+                playing, phase, Time.GetTicksMsec());
     }
 
     private NativeOwnedFiniteSoundSaveDrain PrepareFiniteSaveDrain(Node node, Voice voice)

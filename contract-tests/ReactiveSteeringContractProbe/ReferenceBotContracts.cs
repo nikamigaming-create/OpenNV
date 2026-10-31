@@ -18,7 +18,12 @@ internal static class ReferenceBotContracts
         if (!input.Forward || routes != 1) throw new Exception("Observed approach did not produce ordinary movement.");
         observation = observation with { Target = new(1, 0, 6), Aim = new(1, 1, 6) };
         bot.Tick(.016f);
-        if (routes != 2) throw new Exception("Moving reference retained a stale destination.");
+        if (routes != 1) throw new Exception("Moving approach discarded its checked segment before arrival.");
+        observation = observation with { Position = new(0, 0, 3.35f), Camera = new(0, 1, 3.35f) };
+        bot.Tick(.016f);
+        if (Phase(bot) != "replanning-moving-target") throw new Exception("Completed approach segment retained a stale destination.");
+        bot.Tick(.016f);
+        if (routes != 2) throw new Exception("Completed approach segment did not refresh the moving target.");
         observation = observation with { Paused = true };
         bot.Tick(.016f);
         if (input.Forward) throw new Exception("Modal gameplay retained movement.");

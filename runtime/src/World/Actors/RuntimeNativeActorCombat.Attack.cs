@@ -249,12 +249,14 @@ internal sealed partial class RuntimeNativeActorCombat
         {
             part = selectedPart;
             _context!.DamagePlayer(resolvedDamage, selectedPart);
+            player!.ReceiveMeleeKnockback(_actor.GlobalPosition, resolvedDamage.Amount);
             ++_hits;
         }
         else if (distance <= allowed && _opponent is not null && TargetContact(origin) is { } collider)
         {
             part = _opponent.Hit(collider, resolvedDamage, _state.Reference, _context!.Level(), _context.Globals,
                 hitWeapon: _enemyWeapon?.Form).Part;
+            _opponent.ReceiveMeleeKnockback(_actor.GlobalPosition, resolvedDamage.Amount);
             ++_hits;
         }
         if (_enemyWeapon?.IsMeleeWeapon == true)

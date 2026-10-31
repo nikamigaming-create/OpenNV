@@ -15,7 +15,9 @@ internal sealed partial class RuntimeNativeCreature
         progress = _travelProgress,
         endpoint = _travelDestination is { } point ? new[] { point.X, point.Y, point.Z } : null,
         endIdlePending = PackageEndIdlePending,
-        unbound = new[] { "retail-arrival-and-transition-timing" }
+        unbound = _travelPackage.AllowFalls
+            ? new[] { "fall-route-expansion", "retail-arrival-and-transition-timing" }
+            : new[] { "retail-arrival-and-transition-timing" }
     };
 
     private void BeginTravel(FalloutPluginRecord package, bool restored)
