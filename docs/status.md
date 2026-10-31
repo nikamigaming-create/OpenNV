@@ -25,7 +25,7 @@ and post-combat quicksave/move/quickload restored exact position and inventory,
 with recovery to 57+ FPS in 11.625 seconds. One reloading recipe consumed its
 input and produced the authored materials. These are bounded gameplay cases.
 
-Bounded native-4K capture-off observations reached approximately 59â€“60 draws/s
+Bounded native-4K capture-off observations reached approximately 59–60 draws/s
 on outdoor movement, an interior sequence and the stationary well scene. These
 are not long-run combat or whole-game acceptance. Restored base health now
 matches the qualified 220-health source inputs. Projectile rigid-body impulses,
@@ -63,7 +63,8 @@ must be re-recorded; continuous campaign timing acceptance remains open. Earlier
 fixture clips remain isolated diagnostics. Native commit-clock recording and
 exact harness binary provenance are being qualified before further replay.
 
-The checked repository baseline is PR #335, 828e7b16. Earlier PR #334, f6141664,
+The checked repository baseline is PR #336, a8c78dc1. Its shared runtime repairs
+passed local and hosted checks; current-work.md records the latest live evidence. Earlier PR #334, f6141664,
 passed local/owned gates and all five hosted checks and implemented shared mutable
 FormLists and behavioral AV pools, persistent additions/modifiers, both parsed
 script hosts and live inventory/equipment/hit/weapon/appearance consumers.

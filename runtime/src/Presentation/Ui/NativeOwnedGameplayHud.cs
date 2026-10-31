@@ -42,6 +42,9 @@ internal partial class NativeOwnedGameplayHud : Control
         compassError = _compassError,
         scriptUiRevision = _uiRevision,
         sourceControls = _lastControls,
+        condition = _lastCondition,
+        conditionError = _conditionError,
+        conditionBoundary = "ammo-abbreviation-offset,condition-arrows,opacity-and-warning-cadence-unverified",
         hitPointsVisible = _hp is not null && _tiles.Number(_hp, "visible") > 0,
         actionPointsVisible = _ap is not null && _tiles.Number(_ap, "visible") > 0,
         reticleVisible = _tiles.Number(_reticle, "visible") > 0,
@@ -52,7 +55,8 @@ internal partial class NativeOwnedGameplayHud : Control
     internal NativeOwnedGameplayHud(FalloutPluginStack records, string activateKey, Func<NativeHudTarget?> target, Func<bool> shown,
         Func<GameplayVitals>? vitals = null, Func<NativeHudAmmo?>? ammunition = null, Func<string?>? notice = null,
         FalloutUiComponentStore? scriptUi = null, Func<FalloutPlayerControlState>? controls = null,
-        Func<float, OpenNV.Runtime.World.Cells.FalloutCompassFrame>? compass = null)
+        Func<float, OpenNV.Runtime.World.Cells.FalloutCompassFrame>? compass = null,
+        Func<NativeHudCondition?>? condition = null)
     {
         Name = "HUDMainMenuGameplay"; MouseFilter = MouseFilterEnum.Ignore; ProcessMode = ProcessModeEnum.Always;
         _target = target; _shown = shown; _vitals = vitals; _ammunition = ammunition; _notice = notice;
@@ -91,10 +95,11 @@ internal partial class NativeOwnedGameplayHud : Control
             if (ammunition is not null)
             {
                 _ammo = Template("template_justify_right_text", _ap);
-                _tiles.Bind(_ammo, "x", _tiles.Number(_ap, "width")); _tiles.Bind(_ammo, "y", 55);
+                _tiles.Bind(_ammo, "x", 315); _tiles.Bind(_ammo, "y", 80);
                 _tiles.Bind(_ammo, "visible", 0); _tiles.Bind(_ammo, "alpha", 255);
             }
         }
+        InitializeMeterDetails(records, Template, condition);
         if (notice is not null)
         {
             _warning = Template("template_justify_center_text", menu);
@@ -105,13 +110,14 @@ internal partial class NativeOwnedGameplayHud : Control
         {
             var branch = Branch(branchName);
             _tiles.Bind(branch, "locus", 1);
-            var label = Template(right ? "template_justify_right_text" : "template_justify_left_text", branch);
+            var label = Template("template_justify_right_text", branch);
             _tiles.Bind(label, "visible", 1); _tiles.Bind(label, "alpha", 255);
-            _tiles.Bind(label, "x", right ? _tiles.Number(branch, "width") : 0); _tiles.Bind(label, "y", 0);
+            _tiles.Bind(label, "x", right ? 315 : 53); _tiles.Bind(label, "y", 8);
             _tiles.Text[label] = FalloutGameSettingStrings.Read(records, labelSetting);
             var meter = Template("template_meter", branch);
-            _tiles.Bind(meter, "x", right ? 0 : 62); _tiles.Bind(meter, "y", 19);
-            _tiles.Bind(meter, "width", _tiles.Number(meter, "_TotalWidth"));
+            _tiles.Bind(meter, "_OriginalX", right ? 326 : 20); _tiles.Bind(meter, "y", 41);
+            _tiles.Bind(meter, "brightness", 175);
+            BindMeter(meter, 1, right, 0);
             return (branch, meter);
         }
         SetMeta("opennv_ui_source", "menus/main/hud_main_menu.xml; source-Info-and-reticle-templates");
@@ -123,15 +129,15 @@ internal partial class NativeOwnedGameplayHud : Control
     public override void _ExitTree() => _viewportLayout?.Dispose();
     private void Layout()
     {
-        var scale = GetViewportRect().Size.Y / 960;
-        Scale = Vector2.One * scale; Size = _tiles.Screen = GetViewportRect().Size / scale; _tiles.ResolutionConverter = 1 / scale;
+        var pixels = GetViewportRect().Size;
+        var scale = pixels.Y / 960;
+        Scale = Vector2.One * scale; Size = _tiles.Screen = pixels / scale; _tiles.ResolutionConverter = 1 / scale;
         _tiles.Bind(_reticle, "x", Size.X / 2); _tiles.Bind(_reticle, "y", Size.Y / 2);
         _tiles.Bind(_info, "x", Size.X / 2); _tiles.Bind(_info, "y", Size.Y / 2 + 72);
         if (_warning is not null) _tiles.Bind(_warning, "x", Size.X / 2);
         if (_hp is not null && _ap is not null)
         {
-            _tiles.Bind(_hp, "x", 48); _tiles.Bind(_hp, "y", Size.Y - 125);
-            _tiles.Bind(_ap, "x", Size.X - 48 - _tiles.Number(_ap, "width")); _tiles.Bind(_ap, "y", Size.Y - 125);
+            LayoutMeterBranches(pixels);
         }
         _tiles.ValidateDrawing();
         QueueRedraw();
@@ -144,6 +150,7 @@ internal partial class NativeOwnedGameplayHud : Control
             Visible = _shown();
             if (!Visible) return;
             UpdateCompass();
+            UpdateCondition();
             var controls = _controls();
             if (controls != _lastControls)
             {
@@ -178,8 +185,8 @@ internal partial class NativeOwnedGameplayHud : Control
             if (vitals is not null && vitals != _lastVitals)
             {
                 vitals.Validate(); _lastVitals = vitals;
-                _tiles.Bind(_hpMeter!, "width", _tiles.Number(_hpMeter!, "_TotalWidth") * vitals.HitPoints / vitals.MaximumHitPoints);
-                _tiles.Bind(_apMeter!, "width", _tiles.Number(_apMeter!, "_TotalWidth") * vitals.ActionPoints / vitals.MaximumActionPoints);
+                BindMeter(_hpMeter!, vitals.ExactHitPoints / vitals.MaximumHitPoints, false, vitals.HitPoints > 0 ? 1 : 0);
+                BindMeter(_apMeter!, vitals.ExactActionPoints / vitals.MaximumActionPoints, true, 0);
                 QueueRedraw();
             }
             // The movement control also disables world activation. A ray hit

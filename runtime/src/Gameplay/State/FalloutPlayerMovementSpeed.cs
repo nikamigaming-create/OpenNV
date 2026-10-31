@@ -39,15 +39,22 @@ internal sealed class FalloutPlayerMovementSpeed
         _inventoryRevision = -1;
     }
 
-    internal bool Overencumbered(Func<int, float> actorValue, IReadOnlyList<FalloutPerkEntry> perks,
-        Func<FalloutCondition, float> condition)
+    internal (float Weight, float Capacity) InventoryBurden(Func<int, float> actorValue,
+        IReadOnlyList<FalloutPerkEntry> perks, Func<FalloutCondition, float> condition)
     {
         RefreshEquipment();
         var weight = Finite(actorValue(46), "InventoryWeight");
         if (weight < int.MinValue || (double)weight > int.MaxValue)
             throw new NotSupportedException("Carried weight exceeds its source integer query.");
         var capacity = FalloutPlayerPerkNumericEffects.Apply(22, Finite(actorValue(13), "CarryWeight"), perks, condition);
-        return (int)weight > capacity;
+        return (weight, capacity);
+    }
+
+    internal bool Overencumbered(Func<int, float> actorValue, IReadOnlyList<FalloutPerkEntry> perks,
+        Func<FalloutCondition, float> condition)
+    {
+        var burden = InventoryBurden(actorValue, perks, condition);
+        return (int)burden.Weight > burden.Capacity;
     }
 
     internal FalloutPlayerMovement Calculate(bool running, bool sneaking, bool weaponDrawn, GameplayVitals vitals,

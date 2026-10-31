@@ -152,7 +152,7 @@ internal sealed class NativeOwnedMenuTree
     private readonly Dictionary<(XElement, string), float> _values = [];
     private readonly HashSet<(XElement, string)> _evaluating = [];
     private readonly HashSet<(XElement, string)> _evaluatingText = [];
-    private readonly Dictionary<XElement, NativeOwnedUiArt> _art = [];
+    private readonly Dictionary<XElement, (string Filename, NativeOwnedUiArt Art)> _art = [];
     private readonly Dictionary<XElement, Vector2> _textureOffsets = [];
     private readonly Dictionary<int, NativeBitmapFontAsset> _fonts = [];
     private readonly Dictionary<string, XElement> _named = new(StringComparer.OrdinalIgnoreCase);
@@ -182,9 +182,13 @@ internal sealed class NativeOwnedMenuTree
         _textureOffsets[tile] = value;
     }
     internal void BindText(XElement tile, string trait, string value) => _textValues[(tile, trait)] = value;
-    internal void Forget(XElement tile)
+    internal void Forget(XElement tile) => Forget([tile]);
+    internal void Forget(IEnumerable<XElement> tiles)
     {
-        var removed = tile.DescendantsAndSelf().ToHashSet();
+        // Forget a whole refresh/measurement batch with one pass over the
+        // binding caches, rather than scanning them once for every row.
+        var removed = tiles.SelectMany(tile => tile.DescendantsAndSelf()).ToHashSet();
+        if (removed.Count == 0) return;
         foreach (var key in Text.Keys.Where(removed.Contains).ToArray()) Text.Remove(key);
         foreach (var key in _art.Keys.Where(removed.Contains).ToArray()) _art.Remove(key);
         foreach (var key in _textureOffsets.Keys.Where(removed.Contains).ToArray()) _textureOffsets.Remove(key);
@@ -304,7 +308,7 @@ internal sealed class NativeOwnedMenuTree
         if (trait is "string" or "_PCButtonText") return String(tile, trait).Length == 0 ? 0 : 1;
         if (trait is "filewidth" or "fileheight")
         {
-            if (!_art.TryGetValue(tile, out var art)) _art[tile] = art = NativeOwnedUiArt.Read(tile, Filename(tile));
+            var art = Art(tile);
             var zoom = Number(tile, "zoom");
             return zoom <= 0 ? 0 : (trait == "filewidth" ? art.Region.Size.X : art.Region.Size.Y) * zoom / 100;
         }
@@ -363,6 +367,17 @@ internal sealed class NativeOwnedMenuTree
             if (Number(parent, "locus") != 0) position += new Vector2(Number(parent, "x"), Number(parent, "y"));
         return position;
     }
+    private NativeOwnedUiArt Art(XElement tile)
+    {
+        // A source expression can change through another tile's bound trait.
+        // Cache the evaluated filename as well as the tile, including during
+        // measurement and validation, so arrows and icons share one owner.
+        var filename = Filename(tile);
+        if (!_art.TryGetValue(tile, out var cached) ||
+            !string.Equals(cached.Filename, filename, StringComparison.Ordinal))
+            _art[tile] = cached = (filename, NativeOwnedUiArt.Read(tile, filename));
+        return cached.Art;
+    }
     private string Filename(XElement tile, string trait = "filename")
     {
         var property = tile.Element(trait) ?? throw new NotSupportedException($"Owned texture trait {trait} is unbound.");
@@ -398,7 +413,7 @@ internal sealed class NativeOwnedMenuTree
                 _ = Position(tile);
                 if (tile.Element("filename") is not null)
                 {
-                    if (!_art.ContainsKey(tile)) _art[tile] = NativeOwnedUiArt.Read(tile, Filename(tile));
+                    _ = Art(tile);
                     _ = Number(tile, "width"); _ = Number(tile, "height");
                     _ = Number(tile, "brightness"); _ = Number(tile, "alpha");
                     _ = DrawingColor(tile);
@@ -450,7 +465,7 @@ internal sealed class NativeOwnedMenuTree
             var clip = Clip(tile);
             if (drawTile?.Invoke(tile) != false && tile.Element("filename") is not null)
             {
-                if (!_art.TryGetValue(tile, out var art)) _art[tile] = art = NativeOwnedUiArt.Read(tile, Filename(tile));
+                var art = Art(tile);
                 var size = new Vector2(Number(tile, "width"), Number(tile, "height"));
                 if (size.X > 0 && size.Y > 0)
                 {

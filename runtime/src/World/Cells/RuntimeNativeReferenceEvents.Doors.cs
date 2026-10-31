@@ -57,7 +57,8 @@ internal partial class RuntimeNativeReferenceEvents
         if (!npc.IsOnFloor() || !combat.PackageMovementReady) return false;
         var origin = combat.InteractionOrigin;
         var surface = NativeReferenceGeometryTarget.ObserveSurface(node, npc, origin, combat.CollisionRids,
-            contact => CollisionReference(contact.GetInstanceId()) == door, _ => _world.IsResident(door));
+            contact => CollisionReference(contact.GetInstanceId()) == door, _ => _world.IsResident(door),
+            combat.PackagePortalContact(door));
         if (origin.DistanceTo(surface.Aim) > combat.PackageActivationRange) return false;
         using var query = PhysicsRayQueryParameters3D.Create(origin,
             surface.Aim + (surface.Aim - origin).Normalized() * .01f, npc.CollisionMask | npc.CollisionLayer);

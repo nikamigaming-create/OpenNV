@@ -24,7 +24,7 @@ public partial class RuntimeCoordinator
             NativeAimedTarget, () => _nativeXr is null && _nativePlayer is { ModalInput: false } &&
                 !_nativeDoorLoading && !GetTree().Paused, () => _nativeOpeningStageDriver!.Vitals,
             () => _nativePlayer?.AmmunitionHud, () => _nativePlayer?.WeaponActionNotice, _nativeUi,
-            () => _nativePlayer!.SourceControls, NativeCompass);
+            () => _nativePlayer!.SourceControls, NativeCompass, () => _nativePlayer?.WeaponConditionHud);
         layer.AddChild(_nativeGameplayHud);
         _nativeHudMessages = new(_nativePluginStack!, _nativeInventory.Notifications,
             () => _nativeXr is null && _nativePlayer is { ModalInput: false } && !_nativeDoorLoading && !GetTree().Paused, _nativeQuestState,
@@ -205,13 +205,13 @@ public partial class RuntimeCoordinator
             var title = FalloutDialogueTopic.Text(record.ReadSubrecords().Single(field => field.Signature == "FULL").Data.Span);
             var wasPaused = GetTree().Paused;
             var menu = new NativeOwnedContainerMenu(_nativePluginStack, _nativeInventory, inventory,
-                _nativeOpeningStageDriver.PlayerName, title, () =>
+                title, () =>
                 {
                     _nativeContainerLayer!.QueueFree(); _nativeContainerLayer = null;
                     _nativeContainerReference = null;
                     GetTree().Paused = wasPaused; _nativePlayer!.SetModalInput(false);
                     Input.MouseMode = Input.MouseModeEnum.Captured; SaveNativeInteraction();
-                }, () => { });
+                }, () => { }, () => _nativePlayer!.InventoryBurden);
             _nativePlayer!.SetModalInput(true); Input.MouseMode = Input.MouseModeEnum.Visible;
             _nativeContainerLayer = new CanvasLayer { Name = "NativeContainerLayer", Layer = 100, ProcessMode = ProcessModeEnum.Always };
             AddChild(_nativeContainerLayer);

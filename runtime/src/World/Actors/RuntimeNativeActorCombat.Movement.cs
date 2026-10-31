@@ -144,6 +144,9 @@ internal sealed partial class RuntimeNativeActorCombat
     {
         var direction = point - _actor.GlobalPosition; direction.Y = 0;
         if (direction.LengthSquared() < .000001f) return;
+        // Standing/restored procedures can face before their first movement.
+        // Initialize the source turn rate and world scale before applying either.
+        PrepareMovement();
         var destination = Basis.LookingAt(direction.Normalized(), Vector3.Up).GetRotationQuaternion();
         var current = _actor.GlobalBasis.Orthonormalized().GetRotationQuaternion();
         var angle = current.AngleTo(destination);

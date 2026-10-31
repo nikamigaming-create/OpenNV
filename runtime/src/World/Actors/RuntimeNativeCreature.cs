@@ -59,6 +59,10 @@ internal sealed partial class RuntimeNativeCreature : CharacterBody3D
         Appearance.SkeletonPath,
         Appearance.Models,
         Appearance.BaseScale,
+        // These retained fields describe the default clip, which can be dormant
+        // while a package/combat/idle owner publishes the current skeleton pose.
+        animationMetadataOwner = "default-idle",
+        poseOwners = PoseOwners,
         sourceAnimation = _clock.Capture(),
         sequence = _animation.Sequence.Name,
         sourceSeconds = SourceSeconds,

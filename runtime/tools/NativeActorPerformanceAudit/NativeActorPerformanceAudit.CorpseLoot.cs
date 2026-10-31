@@ -126,7 +126,7 @@ public partial class NativeActorPerformanceAudit
                 RequireLoot(target.FormKey == reference && node == actor && signature == "NPC_" &&
                     activator == records.RuntimeFormKey(0x14) && world.IsDead(reference), "Ordinary default loot lost its actual corpse/collider identity.");
                 if (menu is not null) return;
-                menu = new(records, player, inventory, saved.PlayerName,
+                menu = NativeOwnedContainerMenu.CreateComponentFixture(records, player, inventory,
                     FalloutDialogueTopic.Text(records.GetEffective(original.Base).ReadSubrecords().Single(field => field.Signature == "FULL").Data.Span),
                     () => { }, () => changes++);
                 fixture.AddChild(menu); activations++;

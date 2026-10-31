@@ -16,6 +16,11 @@ internal sealed partial class RuntimeNativeActorCombat
         internal string? Error;
     }
     private RouteDoor? _routeDoor;
+    internal Vector3? PackagePortalContact(FalloutFormKey door) =>
+        _routeDoor is { Portal: true } route && route.Reference == door && route.Contact.Reference == door &&
+        GodotObject.InstanceFromId(route.Contact.Collider) is CollisionObject3D collider &&
+        GodotObject.IsInstanceValid(collider) && collider.IsInsideTree() && route.Contact.Point.IsFinite()
+            ? route.Contact.Point : null;
     private int _doorActivations;
     private object DoorNavigationObservation => new
     {

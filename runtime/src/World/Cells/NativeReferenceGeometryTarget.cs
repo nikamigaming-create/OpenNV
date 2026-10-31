@@ -46,7 +46,8 @@ internal static class NativeReferenceGeometryTarget
     }
 
     internal static NativeReferenceSurfaceObservation ObserveSurface(Node3D reference, CharacterBody3D player,
-        Vector3 camera, IEnumerable<Rid> excluded, Func<Node, bool> belongsToReference, Func<Vector3, bool> resident)
+        Vector3 camera, IEnumerable<Rid> excluded, Func<Node, bool> belongsToReference, Func<Vector3, bool> resident,
+        Vector3? collisionContact = null)
     {
         if (!reference.IsInsideTree() || !reference.IsVisibleInTree() || !camera.IsFinite() ||
             !reference.GlobalPosition.IsFinite())
@@ -78,8 +79,14 @@ internal static class NativeReferenceGeometryTarget
             selected = (point, node.GetInstanceId(), hit["shape"].AsInt32());
             return true;
         }
-        foreach (var bound in bounds.OrderBy(bound => camera.DistanceSquaredTo(bound.GetCenter())))
-            if (Pick(camera, bound.GetCenter())) break;
+        // A native capsule contact can find a surface missed by mesh-center
+        // rays (for example an offset or concave authored collision shape).
+        // It is only a candidate: a fresh ray must still hit this reference.
+        if (collisionContact is { } contact && contact.IsFinite() && !camera.IsEqualApprox(contact))
+            Pick(camera, contact + (contact - camera).Normalized() * .01f);
+        if (selected is null)
+            foreach (var bound in bounds.OrderBy(bound => camera.DistanceSquaredTo(bound.GetCenter())))
+                if (Pick(camera, bound.GetCenter())) break;
         if (selected is null)
         {
             // A wall can occlude the present view before ordinary navigation

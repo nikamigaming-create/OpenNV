@@ -16,6 +16,12 @@ internal partial class RuntimeNativePlayer
             _combatCondition ?? throw new NotSupportedException("Player movement has no condition owner."));
     }
 
+    internal (float Weight, float Capacity) InventoryBurden =>
+        (_movementSpeed ?? throw new NotSupportedException("Player inventory has no source movement owner."))
+        .InventoryBurden(_combatActorValue ?? throw new NotSupportedException("Player inventory has no actor-value owner."),
+            (_combatPerks ?? throw new NotSupportedException("Player inventory has no perk owner."))(),
+            _combatCondition ?? throw new NotSupportedException("Player inventory has no condition owner."));
+
     internal bool Overencumbered => (_movementSpeed ?? throw new NotSupportedException("Player movement has no source speed owner."))
         .Overencumbered(_combatActorValue ?? throw new NotSupportedException("Player movement has no actor-value owner."),
             (_combatPerks ?? throw new NotSupportedException("Player movement has no perk owner."))(),

@@ -24,6 +24,20 @@ internal partial class RuntimeNativePlayer
     internal FalloutWeaponHandlingSnapshot? CaptureWeaponHandling() => _weaponHandling?.Capture();
     internal bool WeaponDrawn => (_weaponHandling ??
         throw new NotSupportedException("Player weapon draw query has no handling owner.")).Drawn;
+    internal NativeHudCondition? WeaponConditionHud
+    {
+        get
+        {
+            if (_presentationInventory is null || _presentationRecords is null) return null;
+            var weapons = _presentationInventory.Equipped.Select(_presentationRecords.RuntimeFormKey)
+                .Where(form => _presentationRecords.GetEffective(form).Signature == "WEAP").ToArray();
+            if (weapons.Length == 0) return null;
+            if (weapons.Length != 1) throw new NotSupportedException("HUD has multiple equipped weapons.");
+            var item = _presentationInventory.Item(weapons[0]) ??
+                throw new InvalidOperationException("HUD equipped weapon has no persistent inventory instance.");
+            return new(weapons[0], FalloutWeaponCondition.SelectedCondition(item));
+        }
+    }
     internal NativeHudAmmo? AmmunitionHud
     {
         get
