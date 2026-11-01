@@ -59,11 +59,13 @@ internal static partial class NativeNavigationContracts
         using var detourData = JsonDocument.Parse("""
             {"schema":"opennv-owned-cell-navigation/v1","navmeshes":[
               {"formId":"detour","cellFormId":"cell","version":11,
-               "verticesGameUnits":[[0,0,0],[-10,10,0],[10,10,0],[10,-10,0],[-10,-10,0]],
+               "verticesGameUnits":[[0,0,0],[-10,10,0],[10,10,0],[10,-10,0],[-10,-10,0],
+                                    [30,30,0],[40,30,0],[30,40,0]],
                "triangles":[{"vertexIndices":[0,1,2],"adjacentTriangles":[3,-1,1],"flags":0},
                             {"vertexIndices":[0,2,3],"adjacentTriangles":[0,-1,2],"flags":0},
                             {"vertexIndices":[0,3,4],"adjacentTriangles":[1,-1,3],"flags":0},
-                            {"vertexIndices":[0,4,1],"adjacentTriangles":[2,-1,0],"flags":0}],
+                            {"vertexIndices":[0,4,1],"adjacentTriangles":[2,-1,0],"flags":0},
+                            {"vertexIndices":[5,6,7],"adjacentTriangles":[-1,-1,-1],"flags":0}],
                "externalConnections":[]}]}
             """);
         var detourGraph = CellNavigationGraph.Load(detourData.RootElement, new HashSet<string> { "cell" });
@@ -88,6 +90,26 @@ internal static partial class NativeNavigationContracts
         try { _ = detourGraph.FindPath(new(0, 6, 0), new(0, -6, 0), _ => false); }
         catch (InvalidOperationException) { sealedRoute = true; }
         if (!sealedRoute) throw new InvalidOperationException("A* fabricated a route through rejected source portals.");
+        var internalStart = new Vector3(0, 6, 0); var internalEnd = new Vector3(0, -6, 0);
+        var isolated = new Vector3(31, 31, 0);
+        Parallel.For(0, 64, _ =>
+        {
+            if (detourGraph.FindReachablePoint(internalStart, internalEnd) != internalEnd ||
+                detourGraph.FindReachablePoint(internalEnd, internalStart) != internalStart ||
+                detourGraph.FindReachablePoint(internalStart, isolated) != internalStart ||
+                detourGraph.FindReachablePoint(isolated, internalStart) != isolated)
+                throw new InvalidOperationException("Concurrent internal reachability changed reciprocal or disconnected source floors.");
+        });
+        for (var index = 0; index < 128; ++index)
+            _ = detourGraph.FindReachablePoint(internalStart, internalEnd);
+        var beforeInternal = GC.GetAllocatedBytesForCurrentThread();
+        for (var index = 0; index < 1024; ++index)
+            if (detourGraph.FindReachablePoint(internalStart, internalEnd) != internalEnd)
+                throw new InvalidOperationException("Warmed internal reachability changed its authored floor.");
+        var internalBytes = GC.GetAllocatedBytesForCurrentThread() - beforeInternal;
+        if (internalBytes != 0)
+            throw new InvalidOperationException($"Warmed internal reachability allocated {internalBytes} bytes.");
+        Console.WriteLine("OPENNV_NAVIGATION_INTERNAL_REACHABILITY_PASS reciprocal=true disconnectedRefused=true concurrentQueries=64 warmedQueries=1024 allocatedBytes=0");
         using var data = JsonDocument.Parse("""
             {"schema":"opennv-owned-cell-navigation/v1","navmeshes":[
               {"formId":"a","cellFormId":"cell","version":11,

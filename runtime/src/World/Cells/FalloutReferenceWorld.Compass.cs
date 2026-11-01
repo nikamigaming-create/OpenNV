@@ -195,10 +195,10 @@ internal sealed partial class FalloutReferenceWorld
                                 throw new NotSupportedException("Actor visibility ability requires its active effect owner.");
                         }
                         if (AcquiredPerks(actor.Reference).Count != 0 ||
-                            actor.Ingestibles is { Effects.Count: > 0 } or { Failure: not null } || actor.Inventory is null ||
-                            actor.Inventory.Contents.Items.Any(item => records.GetEffective(item.FormKey).ReadSubrecords().Any(field => field.Signature == "EITM")) ||
+                            actor.Ingestibles is { Effects.Count: > 0 } or { Failure: not null } ||
                             actor.ActorValues.Keys.Any(name => name.Equals("invisibility", StringComparison.OrdinalIgnoreCase) || name.Equals("chameleon", StringComparison.OrdinalIgnoreCase)))
                             throw new NotSupportedException("Visibility effects require their active spell/equipment/perk owner.");
+                        var equipment = RequireCompassEquipmentVisibility(actor);
                         var sneaking = QueryNativeCondition(actor.Reference,
                             new FalloutCondition(basis, 0, 0, (ushort)FalloutConditionFunction.IsSneaking, 0, 0, 0, 0));
                         if (sneaking != 0) throw new NotSupportedException("Stealth target requires complete detection inputs.");
@@ -238,7 +238,7 @@ internal sealed partial class FalloutReferenceWorld
                             var actionLevels = new[] { Integer("iSoundLevelSilent"), Integer("iSoundLevelNormal"), Integer("iSoundLevelLoud") };
                             if (bootBase < 0 || bootWeight < 0 || sounds < 0 || running < 0 || unseen < 0 || action < 0 ||
                                 actionLevels.Any(level => level < 0) || Math.Truncate(action) * actionLevels.Max() > int.MaxValue ||
-                                actor.Inventory.Contents.Items.Any(item => item.RecordType == "ARMO" && (item.Weight is null || item.Weight < 0)))
+                                equipment.Contents.Items.Any(item => item.RecordType == "ARMO" && (item.Weight is null || item.Weight < 0)))
                                 throw new NotSupportedException("Movement sound does not admit a nonnegative source-weight/action proof.");
                             var soundAttenuation = Math.Min(1, unseen);
                             var cone = Setting("fDetectionViewCone");
@@ -264,6 +264,66 @@ internal sealed partial class FalloutReferenceWorld
             catch (Exception error) when (error is InvalidDataException or NotSupportedException or InvalidOperationException)
             { unbound.Add($"actor-detection:{error.Message}"); }
         }
+    }
+
+    // Compass reads the existing equipment publication. It must not choose or
+    // equip clothing/weapons as a side effect of drawing a detection marker.
+    private FalloutReferenceInventory RequireCompassEquipmentVisibility(FalloutReferenceInstance actor)
+    {
+        var inventory = actor.Inventory ??
+            throw new NotSupportedException("Detection target equipment has no inventory owner.");
+        var equipped = inventory.Contents.Equipped.Select(records.RuntimeFormKey).ToHashSet();
+        var weaponResolved = equipped.Any(key => records.GetEffective(key).Signature == "WEAP");
+        foreach (var item in inventory.Contents.Items)
+        {
+            var source = records.GetEffective(item.FormKey);
+            var fields = source.ReadSubrecords().Where(field => field.Signature == "EITM").ToArray();
+            if (fields.Length == 0) continue;
+            if (fields.Length != 1 || fields[0].Data.Length != 4)
+                throw new InvalidDataException("Detection equipment enchantment identity is invalid.");
+            var effect = source.Plugin.AdjustOptionalFormId(BinaryPrimitives.ReadUInt32LittleEndian(fields[0].Data.Span));
+            if (effect is null) continue;
+            if (source.Signature == "ARMO")
+            {
+                if (!inventory.InitialArmorResolved)
+                    throw new NotSupportedException("Detection target worn armor selection is unresolved.");
+            }
+            else if (source.Signature == "WEAP")
+            {
+                if (inventory.Unequipped.Contains(item.FormKey))
+                {
+                    if (equipped.Contains(item.FormKey))
+                        throw new InvalidDataException("Detection equipment has conflicting equipped/unequipped state.");
+                    continue;
+                }
+                if (!weaponResolved)
+                    throw new NotSupportedException("Detection target enchanted weapon selection is unresolved.");
+            }
+            else
+                throw new NotSupportedException("Detection inventory enchantment requires its source activation owner.");
+            // A carried enchantment does not prove an active worn effect.
+            if (!equipped.Contains(item.FormKey)) continue;
+            if (!_perkAbilities.TryGetConstantModifiers(effect.Value, out var modifiers) ||
+                _perkAbilities.Scripts(effect.Value).Count != 0)
+                throw new NotSupportedException("Detection equipment effect requires its active effect owner.");
+            foreach (var modifier in modifiers)
+            {
+                var value = (FalloutActorValueId)modifier.ActorValue;
+                if (value is FalloutActorValueId.Sneak or FalloutActorValueId.Invisibility or FalloutActorValueId.Chameleon)
+                    throw new NotSupportedException("Detection equipment modifies a source stealth input.");
+                // These target AVs are absent from the qualified detection
+                // expression. Conditions/amounts cannot make them stealth terms.
+                // Other attribute, state or skill-dependency paths stay unknown.
+                if (value is not
+                    (FalloutActorValueId.Perception or FalloutActorValueId.Barter or FalloutActorValueId.BigGuns or
+                    FalloutActorValueId.EnergyWeapons or FalloutActorValueId.Explosives or FalloutActorValueId.Lockpick or
+                    FalloutActorValueId.Medicine or FalloutActorValueId.MeleeWeapons or FalloutActorValueId.Repair or
+                    FalloutActorValueId.Science or FalloutActorValueId.SmallGuns or FalloutActorValueId.Speech or
+                    FalloutActorValueId.Survival or FalloutActorValueId.Unarmed))
+                    throw new NotSupportedException($"Detection equipment AV {modifier.ActorValue} impact is unqualified.");
+            }
+        }
+        return inventory;
     }
 
     // CELL initialization derives north from its engine NorthMarker reference,
