@@ -1,20 +1,36 @@
 using System.Globalization;
 using Godot;
 using OpenNV.Runtime.Content;
+using OpenNV.Runtime.Gameplay.State;
 
 namespace OpenNV.Runtime.Presentation.Ui;
 
 internal sealed partial class NativeOwnedPipBoyMenu
 {
     private readonly Dictionary<FalloutDefaultObject, FalloutFormKey?> _statsAidForms = [];
-    private readonly Dictionary<Key, (BaseButton Button, Action Action)> _statsAidKeys = [];
+    private readonly Dictionary<Key, (BaseButton Button, Action Action)> _sourceActionKeys = [];
 
-    private bool HandleStatsAidKey(InputEventKey input)
+    private bool HandleSourceActionKey(InputEventKey input)
     {
         var key = input.PhysicalKeycode != Key.None ? input.PhysicalKeycode : input.Keycode;
-        if (!_statsAidKeys.TryGetValue(key, out var binding)) return false;
+        if (!_sourceActionKeys.TryGetValue(key, out var binding)) return false;
         if (binding.Button.IsVisibleInTree() && !binding.Button.Disabled) RunAction(binding.Action);
         return true;
+    }
+
+    private void BindSourceActionShortcut(System.Xml.Linq.XElement tile, BaseButton button, Action action)
+    {
+        if (_state.Page is not (FalloutPipBoyPage.Stats or FalloutPipBoyPage.Items)) return;
+        var name = (string?)tile.Attribute("name");
+        if (name is null) return;
+        foreach (var shortcut in _tiles.Root.Elements().Where(element =>
+                     element.Name.LocalName.StartsWith("_PCButton_", StringComparison.Ordinal) && element.Value.Trim() == name))
+        {
+            var sourceKey = shortcut.Name.LocalName["_PCButton_".Length..];
+            if (!Enum.TryParse<Key>(sourceKey, ignoreCase: true, out var key))
+                throw new NotSupportedException($"Source action shortcut {sourceKey} has no desktop key owner.");
+            _sourceActionKeys.Add(key, (button, action));
+        }
     }
 
     private void BindStatsAid()
@@ -48,18 +64,7 @@ internal sealed partial class NativeOwnedPipBoyMenu
             Target(tile, label, use);
             var button = _buttons[^1].Button;
             button.Disabled = !enabled;
-            var shortcut = _tiles.Root.Elements().SingleOrDefault(element =>
-                element.Name.LocalName.StartsWith("_PCButton_", StringComparison.Ordinal) && element.Value.Trim() == name);
-            if (shortcut is not null)
-            {
-                var sourceKey = shortcut.Name.LocalName["_PCButton_".Length..];
-                if (!Enum.TryParse<Key>(sourceKey, out var key))
-                    throw new NotSupportedException($"Stats source shortcut {sourceKey} has no desktop key owner.");
-                // Device keys arrive through PushInput, the same path as page
-                // navigation. Dispatch here rather than depending on a later
-                // viewport shortcut phase, which may not receive that event.
-                _statsAidKeys.Add(key, (button, use));
-            }
+
         }
     }
 }

@@ -89,7 +89,16 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
     internal FalloutFormKey ActiveCell => _activeCell;
     internal FalloutFastTravel FastTravel { get; } = new();
     internal void EnterWorldCell(FalloutFormKey cell) => _activeCell = cell;
-    internal void RequestWorldSave() => _saveRequested = true;
+    internal void RequestWorldSave()
+    {
+        if (!_saveRequested)
+        {
+            _saveAdmissionFrame = null;
+            _saveAdmissionTimestamp = null;
+            _saveAdmissionBlocker = null;
+        }
+        _saveRequested = true;
+    }
     internal bool HasCampaignSave => File.Exists(_savePath);
     internal string PlayerName => _playerName;
     internal int PlayerLevel => SourcePlayerLevel;
@@ -330,9 +339,13 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
             _scripts.References?.AdvanceActorIngestibles(delta);
             _stageResults?.Continue();
             AdvancePlayerAdvancement();
-            if (_saveRequested && Vitals.HitPoints > 0 && SaveContinuationBlocker is null && SourceAnimationSoundSaveBlocker is null &&
-                !_scripts.References!.PlayerMoves.Pending)
-                SaveCurrentState();
+            if (_saveRequested && Vitals.HitPoints > 0)
+            {
+                _saveAdmissionBlocker = ObserveAutoSaveBlocker();
+                _saveAdmissionFrame = Engine.GetProcessFrames();
+                _saveAdmissionTimestamp = System.Diagnostics.Stopwatch.GetTimestamp();
+                if (_saveAdmissionBlocker is null) SaveCurrentState();
+            }
             _playerPackage?.Advance(delta);
         }
         catch (Exception error) when (error is NotSupportedException or InvalidDataException or FileNotFoundException or InvalidOperationException or KeyNotFoundException or OverflowException)
@@ -412,7 +425,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
             _machine.Stage == FalloutNativeCampaignSave.CompletedOpeningStage &&
             !_stage200Saved)
         {
-            _saveRequested = true;
+            RequestWorldSave();
         }
     }
 

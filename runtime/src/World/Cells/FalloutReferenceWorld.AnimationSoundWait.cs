@@ -5,13 +5,28 @@ namespace OpenNV.Runtime.World.Cells;
 
 internal sealed partial class FalloutReferenceWorld
 {
+    private FalloutReferenceInstance? _lastPendingAnimationSoundCapture;
+    internal bool HasPendingAnimationSoundCapture
+    {
+        get
+        {
+            // Keep only a blocker identity. Recheck its actual ledger every
+            // time; a cleared witness requires a fresh complete search.
+            if (_lastPendingAnimationSoundCapture is { } previous &&
+                _instances.TryGetValue(previous.Reference, out var current) && ReferenceEquals(previous, current) &&
+                !previous.AnimationSoundsCaptureReady) return true;
+            _lastPendingAnimationSoundCapture = _instances.Values.FirstOrDefault(instance => !instance.AnimationSoundsCaptureReady);
+            return _lastPendingAnimationSoundCapture is not null;
+        }
+    }
+
     internal FalloutFiniteSoundSaveDrain PrepareSourceAudioTransfer(IReadOnlySet<FalloutFormKey> references) =>
         records.SoundVoices.PrepareFiniteSourceDrain(references);
 
     // Every unsettled ledger blocks a complete save. Only exact retained
     // finite native voices may wait for Finished; an absent or looping owner
     // remains a visible continuation refusal without stopping later gameplay.
-    internal string? AnimationSoundSaveBlocker => PendingAnimationSoundCaptureCount == 0 ? null :
+    internal string? AnimationSoundSaveBlocker => !HasPendingAnimationSoundCapture ? null :
         PendingAnimationSoundFiniteVoiceWait() is { Count: > 0 } ? "source-finite-audio" : "animation-sound-continuation";
 
     // Read-only wait admission covers every retained ledger, including doors,
@@ -19,7 +34,7 @@ internal sealed partial class FalloutReferenceWorld
     // It never relaxes complete capture or interprets elapsed time as Finished.
     internal IReadOnlyList<FalloutFiniteSoundVoice>? PendingAnimationSoundFiniteVoiceWait()
     {
-        var pending = _instances.Values.Where(instance => instance.AnimationSoundCaptureDiagnostic is { Ready: false })
+        var pending = _instances.Values.Where(instance => !instance.AnimationSoundsCaptureReady)
             .OrderBy(instance => records.RuntimeFormId(instance.Reference)).ToArray();
         if (pending.Length == 0) return null;
         var result = new List<FalloutFiniteSoundVoice>();

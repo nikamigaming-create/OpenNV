@@ -26,6 +26,24 @@ internal sealed class NativeVatsVisibilitySamples : IDisposable
     private readonly List<ShaderMaterial> _materials = [];
     private int _disposed;
     private bool _measuring;
+    private readonly Vector2I _extent;
+    private NativeVatsGpuCounts? _gpu; // Access/release only on the render thread.
+    private int _sampleFormat = -1, _capturedTextures;
+    private long _readbackBytes;
+    private string _phase = "not-started", _method = "unobserved";
+    private byte? _part;
+    internal object State => new
+    {
+        phase = _phase,
+        method = _method,
+        part = _part,
+        width = _extent.X,
+        height = _extent.Y,
+        format = Volatile.Read(ref _sampleFormat) is var format && format >= 0 ? ((RenderingDevice.DataFormat)format).ToString() : null,
+        capturedTextures = _capturedTextures,
+        readbackBytes = _readbackBytes,
+        disposed = Volatile.Read(ref _disposed) != 0
+    };
 
     internal NativeVatsVisibilitySamples(Node3D owner, Camera3D camera)
     {
@@ -42,7 +60,7 @@ internal sealed class NativeVatsVisibilitySamples : IDisposable
         {
             Name = "VatsBodyPartSamples",
             World3D = owner.GetWorld3D(),
-            Size = (Vector2I)camera.GetViewport().GetVisibleRect().Size,
+            Size = _extent = (Vector2I)camera.GetViewport().GetVisibleRect().Size,
             TransparentBg = true,
             RenderTargetUpdateMode = SubViewport.UpdateMode.Disabled,
             ProcessMode = Node.ProcessModeEnum.Always
@@ -84,11 +102,11 @@ internal sealed class NativeVatsVisibilitySamples : IDisposable
     {
         RequireActive();
         if (_measuring) throw new InvalidOperationException("VATS visibility requests must be sequential.");
-        _measuring = true;
+        _measuring = true; _part = part; _capturedTextures = 0; _readbackBytes = 0; _phase = "resolving-source-meshes";
         var meshes = actor.FindChildren("*", "", true, false).OfType<MeshInstance3D>()
             .Where(mesh => mesh.Visible && mesh.Mesh is not null && mesh.HasMeta("opennv_nif_body_part") &&
                 mesh.GetMeta("opennv_nif_body_part").AsInt32() == part).ToArray();
-        if (meshes.Length == 0) { _measuring = false; return 0; }
+        if (meshes.Length == 0) { _phase = "no-presented-source-meshes"; _measuring = false; return 0; }
         try
         {
             foreach (var mesh in meshes)
@@ -137,14 +155,38 @@ internal sealed class NativeVatsVisibilitySamples : IDisposable
                 }
             }
             _camera.CullMask = _queryLayer;
+            _phase = "isolated-red-gpu-copy"; SetMaskColor(new(1, 0, 0, 1));
+            if (await CaptureGpuAsync(0))
+            {
+                _method = "gpu-full-resolution-paired-mask-reduction";
+                _phase = "isolated-blue-gpu-copy"; SetMaskColor(new(0, 0, 1, 1));
+                if (!await CaptureGpuAsync(1)) throw new InvalidDataException("VATS GPU format changed between paired masks.");
+                _camera.CullMask = _worldMask | _queryLayer;
+                _phase = "world-red-gpu-copy"; SetMaskColor(new(1, 0, 0, 1));
+                if (!await CaptureGpuAsync(2)) throw new InvalidDataException("VATS GPU format changed between paired masks.");
+                _phase = "world-blue-gpu-copy"; SetMaskColor(new(0, 0, 1, 1));
+                if (!await CaptureGpuAsync(3)) throw new InvalidDataException("VATS GPU format changed between paired masks.");
+                _phase = "gpu-reduction-and-eight-byte-readback";
+                var counts = await ReadGpuCountsAsync();
+                _phase = "complete";
+                return counts.Total == 0 ? 0 : Math.Clamp(counts.Visible / (float)counts.Total, 0, 1);
+            }
+            // sRGB texel sampling applies a transfer function. Preserve the
+            // existing byte oracle rather than approximate its inverse.
+            _method = "cpu-exact-format-fallback"; _phase = "isolated-cpu-readbacks";
             var totalPair = await ColorsAsync();
+            _phase = "isolated-cpu-count";
             var total = Count(totalPair, totalPair);
-            if (total == 0) return 0;
+            if (total == 0) { _phase = "complete"; return 0; }
             _camera.CullMask = _worldMask | _queryLayer;
-            var visible = Count(await ColorsAsync(), totalPair);
-            RequireActive();
+            _phase = "world-cpu-readbacks";
+            var measured = await ColorsAsync();
+            _phase = "world-cpu-count";
+            var visible = Count(measured, totalPair);
+            RequireActive(); _phase = "complete";
             return Math.Clamp(visible / (float)total, 0, 1);
         }
+        catch { _phase = _cancel.IsCancellationRequested ? "cancelled" : "failed"; throw; }
         finally { RestorePart(); _measuring = false; }
     }
 
@@ -238,7 +280,79 @@ internal sealed class NativeVatsVisibilitySamples : IDisposable
             }
             catch (Exception error) { complete.TrySetException(error); }
         }));
-        return await complete.Task;
+        var pixels = await complete.Task; _readbackBytes += pixels.Data.Length; return pixels;
+    }
+
+    private void SetMaskColor(Color color)
+    {
+        foreach (var material in _materials) material.SetShaderParameter("opennv_vats_sample_color", color);
+    }
+
+    private async Task<bool> CaptureGpuAsync(int slot)
+    {
+        RequireActive();
+        _view.RenderTargetUpdateMode = SubViewport.UpdateMode.Once;
+        await _owner.ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+        RequireActive();
+        var complete = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var cancelled = _cancel.Token.Register(() => complete.TrySetCanceled(_cancel.Token));
+        var texture = _view.GetTexture().GetRid();
+        RenderingServer.CallOnRenderThread(Callable.From(() =>
+        {
+            try
+            {
+                if (Volatile.Read(ref _disposed) != 0) { complete.TrySetCanceled(); return; }
+                var device = RenderingServer.GetRenderingDevice() ?? throw new InvalidOperationException("VATS rendering device retired.");
+                var rid = RenderingServer.TextureGetRdTexture(texture);
+                using var format = device.TextureGetFormat(rid);
+                Volatile.Write(ref _sampleFormat, (int)format.Format);
+                if (!NativeVatsGpuCounts.Supports(format.Format)) { complete.TrySetResult(false); return; }
+                _gpu ??= new(device);
+                _gpu.Capture(rid, slot);
+                complete.TrySetResult(true);
+            }
+            catch (Exception error) { complete.TrySetException(error); }
+        }));
+        var copied = await complete.Task;
+        RequireActive();
+        if (copied) ++_capturedTextures;
+        return copied;
+    }
+
+    private async Task<(uint Total, uint Visible)> ReadGpuCountsAsync()
+    {
+        var complete = new TaskCompletionSource<(uint Total, uint Visible)>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var cancelled = _cancel.Token.Register(() => complete.TrySetCanceled(_cancel.Token));
+        RenderingServer.CallOnRenderThread(Callable.From(() =>
+        {
+            try
+            {
+                if (Volatile.Read(ref _disposed) != 0) { complete.TrySetCanceled(); return; }
+                var gpu = _gpu ?? throw new InvalidOperationException("VATS GPU counter owner is absent.");
+                gpu.Dispatch();
+                var device = RenderingServer.GetRenderingDevice() ?? throw new InvalidOperationException("VATS rendering device retired.");
+                var error = device.BufferGetDataAsync(gpu.Result, Callable.From<byte[]>(data =>
+                {
+                    try { complete.TrySetResult(NativeVatsGpuCounts.Decode(data)); }
+                    catch (Exception failure) { complete.TrySetException(failure); }
+                }), 0, 8);
+                if (error != Error.Ok) complete.TrySetException(new InvalidOperationException("VATS GPU counter readback failed: " + error));
+            }
+            catch (Exception error) { complete.TrySetException(error); }
+        }));
+        var counts = await complete.Task;
+        RequireActive(); _readbackBytes += 8;
+        var pixels = (ulong)_extent.X * (uint)_extent.Y;
+        if (counts.Total > pixels || counts.Visible > pixels) throw new InvalidDataException("VATS GPU count exceeds the captured pixel extent.");
+        return counts;
+    }
+
+    internal static (uint Total, uint Visible) CountReferencePixels(byte[] referenceRed, byte[] referenceBlue,
+        byte[] measuredRed, byte[] measuredBlue, RenderingDevice.DataFormat format)
+    {
+        var reference = new Pair(new(referenceRed, format), new(referenceBlue, format));
+        var measured = new Pair(new(measuredRed, format), new(measuredBlue, format));
+        return ((uint)Count(reference, reference), (uint)Count(measured, reference));
     }
 
     private void RequireActive() => ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
@@ -253,6 +367,7 @@ internal sealed class NativeVatsVisibilitySamples : IDisposable
     {
         if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
         _cancel.Cancel(); RestorePart();
+        RenderingServer.CallOnRenderThread(Callable.From(() => { _gpu?.Dispose(); _gpu = null; }));
         foreach (var (camera, mask) in _cameraMasks) if (GodotObject.IsInstanceValid(camera)) camera.CullMask = mask;
         _cameraMasks.Clear();
         foreach (var (probe, mask) in _probeMasks) if (GodotObject.IsInstanceValid(probe)) probe.CullMask = mask;

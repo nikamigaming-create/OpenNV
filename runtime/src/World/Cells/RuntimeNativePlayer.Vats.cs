@@ -10,6 +10,7 @@ internal partial class RuntimeNativePlayer
 {
     private FalloutPlayerVitals? _vatsVitals;
     private FalloutVatsSession? _vats;
+    private readonly FalloutVatsPublications _vatsPublications = new();
     private NativeVatsMenu? _vatsMenu;
     private CanvasLayer? _vatsLayer;
     private Action? _releaseVatsInput;
@@ -21,20 +22,39 @@ internal partial class RuntimeNativePlayer
     private NativeVatsVisibilitySamples? _vatsVisibility;
     private IReadOnlyList<FalloutVatsSession.Target>? _vatsTargets;
     private long _vatsGeneration;
+    private long _vatsPreparationStarted;
+    private double _vatsPreparationElapsed;
+    private int? _vatsPreparationCandidates;
+    private int _vatsPreparationMeasured, _vatsPreparationSkipped;
+    private object? _vatsPreparationLastSamples;
     private bool _vatsPreparing, _vatsOwnsPause, _vatsGameplayFault;
     private bool _vatsPreviousAiming;
     internal bool VatsExecuting => _vats?.CurrentPhase == FalloutVatsSession.Phase.Executing;
     internal bool VatsMenuActive => _vatsMenu is not null;
-    internal string? VatsSaveBlocker => _vatsGameplayFault ? "vats-fault" : VatsMenuActive || VatsExecuting ? "vats-active" : null;
+    internal string? VatsSaveBlocker => _vatsGameplayFault ? "vats-fault" :
+        _vatsPublications.SaveBlocker ?? (PendingProjectileImpactCount != 0 ? "projectile-impact-continuation" :
+        VatsMenuActive || VatsExecuting ? "vats-active" : null);
     internal FalloutActorProjectileLaunch? CaptureProjectileLaunch() => _playerProjectileLaunch;
     internal object VatsState => new
     {
         active = VatsMenuActive,
+        preparing = _vatsPreparing,
+        preparation = new
+        {
+            candidateParts = _vatsPreparationCandidates,
+            completedPartMeasurements = _vatsPreparationMeasured,
+            skippedCandidateParts = _vatsPreparationSkipped,
+            elapsedMilliseconds = _vatsPreparing && _vatsPreparationStarted != 0
+                ? System.Diagnostics.Stopwatch.GetElapsedTime(_vatsPreparationStarted).TotalMilliseconds : _vatsPreparationElapsed,
+            samples = _vatsVisibility?.State ?? _vatsPreparationLastSamples
+        },
         phase = _vats?.CurrentPhase.ToString(),
         error = _vatsError ?? _vats?.Error,
         reason = _vatsLastReason,
         attacks = _vats?.Queue,
         completed = _vats?.CompletedAttacks,
+        pendingPublications = _vatsPublications.Count,
+        impacts = _vats?.Impacts,
         availableAP = _vatsVitals?.State.ExactActionPoints,
         baseAP = _vatsVitals?.BaseActionPoints,
         source = "source-control16;source-WEAP-GMST;BPTD-BPNT-current-pose;shared-weapon-ammo-projectile-events",
@@ -90,8 +110,17 @@ internal partial class RuntimeNativePlayer
             _vats = session; _vatsError = null; _vatsLastReason = null;
             DiscoverVatsActors();
             _vatsTargets = null; _vatsPreparing = true;
+            _vatsPreparationStarted = System.Diagnostics.Stopwatch.GetTimestamp(); _vatsPreparationElapsed = 0;
+            _vatsPreparationCandidates = null; _vatsPreparationMeasured = 0; _vatsPreparationSkipped = 0;
+            _vatsPreparationLastSamples = null;
             menu = new(session, VatsTargets, () => _vatsPreparing, QueueVatsTarget, BeginVatsExecution,
-                () => { if (ReferenceEquals(_vats, session)) RetireVats("player-cancelled"); });
+                () => { if (ReferenceEquals(_vats, session)) RetireVats("player-cancelled"); }, ProjectVatsTarget, _presentationRecords,
+                () => _vatsVitals!.State, () => AmmunitionHud, () => SourceControls, error =>
+                {
+                    if (!ReferenceEquals(_vats, session)) return;
+                    _vatsError = error.Message; RetireVats("presentation-failed");
+                    GD.PushError("OPENNV_NATIVE_VATS_PRESENTATION_DIVERGENCE: " + error.Message);
+                });
             layer = new CanvasLayer { Name = "NativeVatsLayer", Layer = 99, ProcessMode = ProcessModeEnum.Always };
             _vatsMenu = menu; _vatsLayer = layer;
             _vatsWasPaused = GetTree().Paused; _vatsPreviousMouse = Input.MouseMode;
@@ -133,7 +162,7 @@ internal partial class RuntimeNativePlayer
         var always = _presentationRecords!.IniSettings.Get("bVatsAlwaysHit:Combat");
         if (always is not (0 or 1)) throw new NotSupportedException("VATS always-hit setting is unbound.");
         _vats!.Add(weapon.Form, _presentationInventory!.SelectedWeapon(weapon.Form).Extra.Instance!.Value, current,
-            _weaponHandling!.NextShotRandomUInt32, always == 1);
+            _weaponHandling!.NextShotRandomUInt32, always == 1, FalloutVatsActions.OrdinaryRanged(weapon.WeaponAnimationType));
     }
 
     private void BeginVatsExecution()
@@ -181,7 +210,8 @@ internal partial class RuntimeNativePlayer
             { RetireVats("tracking-lost"); return; }
             if (_vatsRequestedAttack)
             {
-                if (_weaponAction is not null || _pendingShotCount != 0 || PendingProjectileImpactCount != 0) return;
+                if (_weaponAction is not null || _pendingShotCount != 0 || PendingProjectileImpactCount != 0 ||
+                    _vats!.PendingPublications != 0) return;
                 _vats!.CompleteAttack(_vats.CurrentShotCommitted);
                 _vatsRequestedAttack = false; _vatsMenu?.Refresh();
                 if (_vats.CurrentPhase == FalloutVatsSession.Phase.Completed) { RetireVats("queue-complete"); return; }
@@ -217,6 +247,14 @@ internal partial class RuntimeNativePlayer
     }
 
     private bool VatsBurstActive => VatsExecuting && _vatsRequestedAttack;
+    private FalloutVatsValueContext? CurrentVatsValueContext()
+    {
+        if (_vats?.CurrentPhase == FalloutVatsSession.Phase.Faulted)
+            throw new InvalidOperationException("VATS action has a retained publication fault: " + _vats.Error);
+        if (_vats?.CurrentAttack is not { } attack) return null;
+        return new(attack.Weapon, attack.Target.Reference, attack.Target.Base, attack.Target.PartActorValue,
+            attack.Action, attack.Success);
+    }
     private Vector3? VatsAimPoint()
     {
         if (!VatsBurstActive || _vats?.CurrentAttack is not { } attack) return null;
@@ -290,10 +328,13 @@ internal partial class RuntimeNativePlayer
     private float VatsPerkCondition(byte group, FalloutCondition condition)
     {
         if (group == 0) return (_combatCondition ?? throw new InvalidOperationException("VATS player conditions are absent."))(condition);
-        if (group == 2 && _vatsConditionTarget is { } target)
+        var targetContext = _vatsConditionTarget ?? _hitReferences?.VatsConditions.CurrentContext?.Target;
+        if (group == 2 && targetContext is { } target)
             return (_vatsTargetCondition ?? throw new InvalidOperationException("VATS target conditions are absent."))(target, condition);
         if (group != 1 || condition.RunOn != 0) throw new NotSupportedException("VATS perk condition context is unbound.");
-        var weapon = _firstPerson?.Weapon?.Form;
+        if (condition.Function is 224 or 235 or 408)
+            return (_combatCondition ?? throw new InvalidOperationException("VATS shared conditions are absent."))(condition);
+        var weapon = _hitReferences?.VatsConditions.CurrentContext?.Weapon ?? _firstPerson?.Weapon?.Form;
         if (FalloutPlatformConditions.Evaluate(condition) is { } platform) return platform;
         return condition.Function switch
         {

@@ -16,6 +16,7 @@ internal partial class RuntimeNativePlayer
         _hitReference = collisionReference;
         references.VatsConditions.BindContext(() => _vats?.CurrentPhase is
             FalloutVatsSession.Phase.Selecting or FalloutVatsSession.Phase.Executing or FalloutVatsSession.Phase.Faulted);
+        references.VatsConditions.BindCurrentAction(CurrentVatsValueContext);
     }
 
     private FalloutFormKey? HitReference(Node? collider) => collider is null ? null :

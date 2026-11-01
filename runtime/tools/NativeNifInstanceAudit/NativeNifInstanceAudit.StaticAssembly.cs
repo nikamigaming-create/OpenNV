@@ -7,6 +7,7 @@ public partial class NativeNifInstanceAudit
 {
     private static void ExerciseOwnedStaticAssembly(string game, string model)
     {
+        ExerciseWorldAxesContracts();
         RuntimeLiveContentSource.Configure(game, RuntimeLiveContentSource.FalloutNewVegasGame,
             activePlugins: RuntimeLiveContentSource.ResolveVanillaPlugins(game), includeImplicitPlugins: false);
         using var content = RuntimeLiveContentSource.Current!;
@@ -99,7 +100,7 @@ public partial class NativeNifInstanceAudit
             Compare(direct.Root, staged.Root);
             if (steps == 0) throw new InvalidDataException("Selected NIF did not yield between source nodes.");
             var freshOwners = direct.Root.FindChildren("*", "", true, false)
-                .Any(node => node is RuntimeNifControllerPlayer or RuntimeNifParticleSystem or NativeNifBillboard or RuntimeNifHingeJoint);
+                .Any(node => node is RuntimeNifControllerPlayer or RuntimeNifParticleSystem or NativeNifBillboard or RuntimeNifHingeJoint or NativeNifWorldAxes);
             GD.Print($"OPENNV_OWNED_STATIC_ASSEMBLY_PASS steps={steps} nodes={direct.Nodes} surfaces={direct.Surfaces} collisionShapes={direct.CollisionShapes} particles={directParticles.Length} controllers={directControllers.Length} freshOwners={freshOwners} directMs={directMilliseconds:F3} maxStepMs={maximumStep:F3} stagedCacheWarm=true gpuAndGameplayTiming=unverified");
         }
         finally { direct.Root.Free(); staged?.Root.Free(); }

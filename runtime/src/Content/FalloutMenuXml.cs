@@ -45,6 +45,29 @@ internal static class FalloutMenuXml
             : document;
     }
 
+    internal static string Filename(XElement property, Func<string, string, float> number,
+        Func<string, string, string> text)
+    {
+        if (!property.HasElements) return property.Value.Trim();
+        var operations = property.Elements().ToArray();
+        var final = operations[^1];
+        if (final.Name != "copy" || final.Attribute("src") is not { } source ||
+            final.Attribute("trait") is not { } trait)
+            throw new NotSupportedException("Owned texture expression must finish with a source string copy.");
+        // The selector is an ordinary numeric tile expression. Arithmetic and
+        // conditions retain the same evaluator used by all other tile traits.
+        var prefix = new XElement("selector", operations[..^1].Select(value => new XElement(value)));
+        var index = operations.Length == 1 ? 0 : Number(prefix, number);
+        var key = trait.Value;
+        if (key.EndsWith('_'))
+        {
+            if (!float.IsFinite(index) || index != MathF.Truncate(index))
+                throw new InvalidDataException("Texture trait index is not a finite integer.");
+            key += index.ToString(CultureInfo.InvariantCulture);
+        }
+        return text(source.Value, key);
+    }
+
     internal static XElement Parse(ReadOnlySpan<byte> bytes)
     {
         var text = Regex.Replace(Encoding.UTF8.GetString(bytes), @"<!--.*?-->", "", RegexOptions.Singleline);
@@ -96,6 +119,8 @@ internal static class FalloutMenuXml
                 "entity_false" or "entity_console" or "entity_xbox" or "entity_left" => 0,
                 "entity_center" => 1,
                 "entity_right" => 2,
+                "entity_up" => 5,
+                "entity_down" => 6,
                 "entity_scale" or "entity_uselocalcolor" => -1,
                 _ => throw new NotSupportedException($"Menu numeric token has no owner: {token}"),
             };

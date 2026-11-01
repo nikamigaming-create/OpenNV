@@ -10,10 +10,11 @@ internal sealed partial class FalloutConditionRuntime
         Func<FalloutFormKey> subject, Func<string, FalloutFormKey> form,
         Func<string, (FalloutFormKey Owner, uint Index)> variable, bool explicitReceiver = false)
     {
-        double Call(Function function, FalloutFormKey? argument = null, uint number = 0, uint second = 0, bool scoped = true)
+        double Call(Function function, FalloutFormKey? argument = null, uint number = 0, uint second = 0, bool scoped = true,
+            FalloutScriptValue? secondForm = null)
         {
             if (!scoped && explicitReceiver) RequireReference(subject());
-            return Evaluate(new FalloutConditionQuery(new(declaration, 0, 0, (ushort)function, number, second, 0, 0), argument),
+            return Evaluate(new FalloutConditionQuery(new(declaration, 0, 0, (ushort)function, number, second, 0, 0), argument, secondForm),
                 new(scoped ? subject() : declaration.FormKey));
         }
         FalloutFormKey FormValue(FalloutScriptArgument argument) => argument.Value.Kind == FalloutScriptValueKind.Number
@@ -53,6 +54,7 @@ internal sealed partial class FalloutConditionRuntime
             "islastidleplayed" => Form(Function.IsLastIdlePlayed),
             "getitemcount" => Form(Function.GetItemCount),
             "isequipped" or "getequipped" => Form(Function.GetEquipped),
+            "isweaponinlist" => Form(Function.IsWeaponInList),
             "getdistance" => Form(Function.GetDistance),
             "getheadingangle" => Form(Function.GetHeadingAngle),
             "getisuseditem" => Form(Function.GetIsUsedItem, false),
@@ -96,8 +98,15 @@ internal sealed partial class FalloutConditionRuntime
             "getvatsvalue" => new([FalloutScriptArgumentKind.Number, FalloutScriptArgumentKind.OptionalNumber], arguments =>
             {
                 if (arguments.Count > 2) throw new InvalidDataException("GetVATSValue accepts one selector and one optional value.");
-                return Call(Function.GetVATSValue, number: Index(arguments[0].Number),
-                    second: arguments.Count == 2 ? Index(arguments[1].Number) : 0, scoped: false);
+                var selector = Index(arguments[0].Number);
+                var second = arguments.Count == 2 ? Index(arguments[1].Number) : 0;
+                // The native command still takes an optional integer. For form
+                // selectors that integer is a runtime identity, not a raw ID
+                // in the script declaration's plugin. Defer its resolution so
+                // the qualified no-action return never requests a form owner.
+                FalloutScriptValue? formOperand = selector is 0 or 1 or 2 or 3 or 9 or 10
+                    ? FalloutScriptValue.Form(second) : (FalloutScriptValue?)null;
+                return Call(Function.GetVATSValue, number: selector, second: second, scoped: false, secondForm: formOperand);
             })
             { ReadOnly = true },
             "getdisabled" => None(Function.GetDisabled),

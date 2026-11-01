@@ -331,7 +331,7 @@ internal partial class RuntimeNativeNpc : CharacterBody3D
             AdvanceFaceAnimation(delta);
             PosePublished?.Invoke();
         }
-        catch (Exception error) when (error is NotSupportedException or InvalidDataException or ArgumentOutOfRangeException or InvalidOperationException)
+        catch (Exception error) when (error is NotSupportedException or InvalidDataException or ArgumentOutOfRangeException or InvalidOperationException or KeyNotFoundException)
         {
             AnimationError = error.Message;
             GD.PushError($"OPENNV_NATIVE_ANIMATION_DIVERGENCE reference={Appearance.Reference}: {error.Message}");

@@ -2,122 +2,128 @@
 
 ## Owner and delivery
 
-Root owns the scripted retail/Godot pair, ordinary input, integration, bounded
-capture, packaging and publication. User-authorized Sol-medium workers prepare
-separate shared-system repairs. No computer use or new test suites. Run the
-required existing gate and selected owned-data audits before pushing.
+Root owns scripted retail/Godot input, bounded capture, integration, packaging
+and publication. User-authorized Sol-medium workers prepare and cross-review
+shared-system repairs. No computer use or new test suites. Preserve unrelated
+classic asset-import edits.
 
-Active branch: `codex/environment-motion-and-sandbox-performance`, based on
-checked PR339 (`4729bd1c`). Preserve unrelated classic asset-import edits.
-Finish the current package smoke and checked PR, merge, verify local main equals
-origin/main, then integrate the prepared next batch on a fresh branch.
+Active branch: `codex/gameplay-actions-quest-and-scene-owners`, based on checked
+PR340 (`9e034a0a`). Local main was verified equal to origin/main after merge.
+The broad batch is unpublished. Its earlier required gate and refreshed owned
+equipment audit pass. The source NAVM spatial index and McCarran grass-water
+guard are integrated. The final combined gate and optimized packaging pass.
+The owned water audit covers 17 qualifying child worldspaces; vanilla has no
+legacy XCLL rows. The new package cold-loads the forward checkpoint and is
+undergoing paired native-4K movement checks before checked PR merge. Sustained
+performance gains and the repaired McCarran transition remain unverified.
 
-## Current integrated batch
+## Current route and target
 
-- Placed object managers start their unique exact-case looping Idle/SpecialIdle
-  after handlers bind. Explicit playback, saved phases, caller-owned add-on
-  controllers and separately clamped direct morphs retain their owners.
-- Compass admission reads actual equipped effects. Harmless constant clothing
-  bonuses no longer reject actor markers; unknown stealth/perk behavior remains
-  explicit. The previously rejected saloon settler is present in live HUD data.
-- NAVM reachability reuses immutable reciprocal connected components. Movement,
-  collision and pursuit budgets are unchanged. A cache-specific FPS gain has
-  not been isolated.
-- Ordinary diagnostic summaries no longer traverse exhaustive capture readiness
-  and inventories across thousands of references. Detailed requests and strict
-  save admission retain those checks; unsampled readiness is null with scope.
-- Player steady idle/aim advances at simulation rate instead of inheriting the
-  weapon action multiplier. Attack/reload keep their separate rates. Independent
-  native animation-layer phase and reset rules remain unqualified.
-- Source sound directories admit supported Ogg variants without changing
-  selection order or RNG. The flag's two owned variants decode. PlayAtRandom
-  scheduling remains unsupported.
-- Grass uses the mutable Grass Dimmer field rather than Sunlight Dimmer. Its
-  atlas sampler now follows the existing encoded world/compositor color path,
-  removing a premature decode. No guessed tint or saturation adjustment is used.
-  Composed grass modifiers and exact population/color parity remain open.
+The user target is native 3840x2160 at sustained 60 FPS during movement,
+combat, interiors and transitions. Both render surfaces were configured at
+native 4K. Sustained performance and faster-than-retail behavior remain open.
 
-The full required gate, including the sampler correction, passed. Final selected
-owned sound and image-space audits passed within their supported layouts;
-unsupported modifier layouts stay visible.
-The corrected sampler is packaged and running. After ordinary daylight loading,
-calendar/hour and camera directions were realigned for a selected comparison.
-The grass now appears dry/gold in that view; full color and foliage parity are
-not established. The daylight checkpoint is unarmed, unlike retail's rifle state.
-It must not be used to certify first-person weapon animation agreement.
+Both games actually walked out of Goodsprings and reached Jean Sky Diving.
+OpenNV discovered Jean's fast-travel marker. After the Sandbox Eat repair,
+ordinary F5 and cold reload pass at checkpoint
+`87b8854192fd49309e89476989fc6fe4`. The onward ordinary route and Freeside/Strip
+door chain remain open. Inventory contains every source map marker, interior
+and XTEL edge; enumeration does not mean visited, playable or verified.
 
-## Live evidence and limits
+Separate diagnostic player-only authored arrivals, with matched yaw and time,
+have captured Primm, Nipton, Novac, Boulder City, McCarran and Freeside North.
+They use independent saves, AI and weather; they are not fast travel, continuous
+campaign travel or parity certification. Freeside North completed after the
+helper reported more than five seconds of stale state during loading and then
+recovered fresh loaded state. This does not pass load responsiveness. Freeside
+East arrival is underway.
 
-Both actual render buffers and window clients are 3840x2160. Source calendars,
-view direction, weapon and quest state must be checked again after a load;
-matching window sizes or positions does not establish matched gameplay state.
+Ordinary E on McCarran's gate started loading its courtyard, then the old
+parent-water guard refused the destination world and rolled the transfer back.
+The integrated guard preserves the world's own DNAM water when UseWater is clear;
+actual water inheritance remains unsupported. Live gate retry awaits the new
+package.
 
-Packaged windmill blade/shaft transforms and all nine flag bones in both skin
-publishers advance, while roots stay fixed and direct morph clocks stay clamped.
-Independent native observations show those behaviors; exact phases and pixels
-remain unjoined. Ordinary town traversal, saloon entry, seated settler greeting,
-indoor save, exit and outdoor save/cold restore have completed. The final sampler package cold-loaded the existing armed checkpoint. Ordinary
-rifle fire changed ammunition from 5/70 to 4/70; reload produced 5/69, and F5
-committed the resulting state. Both games supplied complete eight-second 4K
-recordings of those inputs. Exact clip phases, audio and pixels remain unjoined.
+Retail's character-confirmation menu interrupted departure. It was completed
+through ordinary input. The private walker now stops on stalled rendering or
+unresponsive look input instead of repeatedly steering through a blocked menu.
+Native modal-menu telemetry remains incomplete. Capture is off outside explicit
+checks and temporary raw frames are removed after inspection.
 
-Ordinary summary cost fell from an earlier route median 49.34 ms to about
-2.8â€“3.1 ms in the rebuilt package. A stationary 10.33-second interval produced
-620 draws with unchanged pose and no publication failures. A subsequent walking
-route reported median 60 FPS with dips to 49. Retail remained indoors during
-part of that route because of a private steering-gain error, now repaired;
-that run is not a controlled retail-versus-candidate performance comparison.
-Host frame intervals still exceed 16.67 ms. Sustained 4K60 and faster-than-retail
-acceptance remain open. Do not measure acceptance during builds/headless checks.
+## Verified ordinary gameplay
 
-The player flashlight toggles through held Tab and persists through save/load.
-The Stats Stimpak shortcut consumes the item and heals authoritative health.
-Doc's reached idle conditions and Sandbox phases now permit ordinary house exit
-and healthy indoor/outdoor persistence. Unsupported predicates remain visible.
+- Pip-Boy rows equip the 9mm pistol and Varmint Rifle with actual ammo changes.
+- Two queued VATS actions in the preceding build spend ammo/AP and damage the
+  target. One physical head impact differs from the queued torso selection.
+  F5 and cold reload retain ammunition and damage; outcome parity remains open.
+- Actual ammo breakdown consumes one 20-gauge round and produces 18 powder,
+  one hull, one primer and 26 lead. F5 and cold reload retain the quantities.
+  Native recipe/quantity input was also exercised; UI parity remains open.
+- Ordinary repair-kit use consumes one kit, changes the same rifle instance
+  from 27.3% to 37.3% condition and records one completed script receipt. F5 and
+  cold reload pass: three kits remain, the same rifle retains 37.3% condition,
+  and one completed receipt is restored without replay.
+- The GPU VATS path prepared 24 parts in about 2508 ms and reached Selecting
+  without the cloned-label failure. It uses full-size RGBA8 masks and eight
+  count-readback bytes. Queue/execution of the final UI remains pending; the
+  preceding build's two-shot result does not verify this revised UI path.
 
-Creature root movement shares source priority/ease weights with the displayed
-pose and persists consumed phases. In three bounded bighorner takes, 205 sampled
-intervals with no authored root advance had zero body travel. The small magnitude
-residual, complete bone joins and broad creature/weapon execution remain open.
-Cheyenne's resident Accompany reaches the door and transfers outside with its
-actual source/destination receipt; cached following to Sunny is not established.
+These are selected gameplay observations with incompletely matched save,
+actor, clock and camera state. They do not establish retail parity.
 
-## Next shared repair batch
+## Integrated source
 
-Workers prepare private patches while the current source is frozen. Integrate
-qualified changes together; do not invent semantics to meet a numerical target.
+The batch repairs shared map cursor/pan/color, seated look, player/NPC health
+and limbs, VATS namespaces/execution/publication, world-axis NIF nodes,
+composed sunlight, atomic crafting, equipment-lock instance preservation,
+inventory shortcuts/row actions, quest failure persistence, weapon selection,
+mutable weapon lists, repair eligibility and qualified null-quest predicates.
+It adds source VATS layout/desktop input, exact GPU mask reduction, cheap
+pending-autosave audio witnesses and atomic instant Start-script ingestion.
+Timed/mixed effects and downward weapon-damage writes remain unsupported.
 
-- UI owner: world-map cursor dimensions/UVs, authored pan bounds and source
-  background/marker colors have prepared fixes. Heading including seated
-  rotation and X/Y action ownership are under qualification. Native local-map
-  floor shading, ceiling culling and exploration remain separate open work.
-- Gameplay owner: route player health/limb writes to their actual vitals/anatomy
-  owners, preserving nonplayer state. Retain the second bound form namespace in
-  VATS condition queries. Per-part VATS perk context, current-weapon list queries
-  and humanoid Follow/Accompany need complete owner contracts.
-- Environment owner: BSValueNode flag 1 must clear effective world rotation after
-  ordinary world evaluation, retain position/scale, and feed children, skins and
-  emitters consistently. This currently excludes source motorcycle add-ons.
-  Composed Sunlight Dimmer is also discarded before its world-light consumer.
-  Flag 2, sky modifier consumers and remaining random-sound timing are unqualified.
-- Root: keep ordinary gameplay/capture moving and validate actual UI actions.
-  Pip-Boy Equip delivery returned successfully without an inventory mutation.
-  A transport receipt is not button activation; the exact Godot revision already
-  updates hover for mouse-button events, so a guessed mouse-enter fix is unjustified.
+Later smoke repairs cover staged menu-sound pitch/variant randomness, numeric
+prefixes in source texture expressions and requester-scoped cloned UI names.
+Jean exposed a real Sandbox Eat owner bug: phase publication replaced the
+activity record while idle admission retained its predecessor. The repair
+propagates the published record and preserves identity on same-phase reads.
+All physical-owner checks remain. The rebuilt ordinary Jean route now commits
+F5 and cold-loads successfully.
 
-Other product gaps remain explicit: creature Follow cross-cell execution,
-cached/unloaded actor process tiers, full radio generation/persistence, active
-VATS outcomes/cinematics, LOD seams, room population, tutorial art, exact compass
-pixels and comprehensive combat/animation coverage. The animation catalog and
-comparator exist, but their initial paired isolation attempts did not complete;
-record inventory is not rig execution. Full SCDA execution, general dynamic
-references and broad campaign/plugin behavior remain in the implementation plan.
+The immutable source NAVM spatial index is integrated. Its full spatial-index
+gate passes; the selected owned route retains exactly the same 228 waypoints
+and projection errors. This establishes the checked navigation result, not a
+live performance improvement. The indexed package and live gain are pending.
 
-## Observation discipline
+A reviewed single-controller pose path removes redundant blend passes without
+changing samples, arithmetic, events or physics frequency. Posed-bound sampling
+reuses its world-transform read only within the synchronous invocation.
+No speed improvement is claimed before measurement on the optimized package.
 
-Keep frame/scalar recording off outside bounded checks. Delete temporary frames
-in cleanup paths; retain only diagnostics still needed for active work. Native
-callback timing precedes world update: counters and clocks alone do not prove
-pose publication. Canonical bytes, semantics, event order, timing, bones, audio,
-UI and final pixels are separate lanes. No tester-ready, campaign-complete,
-scene-complete, physical-XR or retail-parity claim is made.
+## Performance and next owners
+
+The optimized six-minute moving native-4K run averaged 51.2097 FPS. Its first
+minute averaged 57.91 FPS and its last minute 42.81 FPS. Sustained 4K60 remains
+open; the decline is not attributed to one subsystem. The source-index package
+has not yet repeated this run. The pending-autosave path still needs a fresh
+actual interaction-driven check; a checkpoint without a pending request does
+not exercise it.
+
+- Root: finish combined gate and owned audits, indexed optimized package,
+  McCarran ordinary gate retry, final VATS UI queue/execution and moving
+  route/performance checks, then checked PR, merge and local/origin main
+  verification.
+- Reviewed private next batch: source recipe/quantity UI, resident Follow and
+  Accompany ownership, and Sleep door events with an empty effective lock set.
+  These are not integrated or live-verified. The regional imposter owner packet
+  is private and not integration-ready. Nonempty lock events and exterior
+  scopes remain unqualified. No guessed CELL-public-state write is proposed.
+- Ordinary player T/wait has no current menu binding. VATS cinematics/control
+  paths, local-map rendering, LOD seams, full animation/actor process behavior,
+  radio persistence, room completeness and campaign/plugin execution remain
+  explicit gaps.
+
+The exact GPU mask reduction passes its hardware audit. The broader optional
+GPU audit then fails an obsolete cell-environment fixture; its reviewed fixture
+correction remains private. Do not describe the entire optional audit as passed.
+No tester-ready, campaign-complete, physical-XR or retail-parity claim is made.

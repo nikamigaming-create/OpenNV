@@ -57,6 +57,8 @@ internal static class PlayerActorValueContracts
             owner.WriteBaseInteger(10, 6);
             Require(skills.Value("Guns") == 19 && vitals.State.MaximumActionPoints == 86 && vitals.State.ActionPoints == 79,
                 "Immediate base edit was not shared by skills and AP or lost the spent-AP deficit.");
+            VerifyVitalWrites(records);
+            VerifyVatsPublications(records);
             VerifyMovementValues(records);
             VerifyScripts(records);
             VerifyCold(records, owner, inventory, globals, vitals);
@@ -73,6 +75,72 @@ internal static class PlayerActorValueContracts
             Key(7), () => Key(10), () => false, actorValues: owner);
         owner.BindConstantModifiers(skills.Modifiers);
         return skills;
+    }
+
+    private static void VerifyVatsPublications(FalloutPluginStack records)
+    {
+        var values = new FalloutPlayerActorValues(records); values.BindConstantModifiers((_, _) => []);
+        var vitals = FalloutPlayerVitals.FromActorValues(records, values);
+        var initial = vitals.State.ExactActionPoints;
+        var session = new FalloutVatsSession(vitals);
+        var publications = new FalloutVatsPublications();
+        var instance = Guid.NewGuid();
+        var target = new FalloutVatsSession.Target(Key(0x200), 1, "Actor", "Head", 95, 35, true, Key(28), 25);
+        var draws = 0;
+        session.Add(Key(0x47), instance, target, () => { draws++; return 0; }, false, FalloutVatsActions.OrdinaryRanged(4));
+        session.Add(Key(0x47), instance, target, () => { draws++; return uint.MaxValue; }, false, FalloutVatsActions.OrdinaryRanged(4));
+        Require(draws == 2 && session.Queue[0].Success && !session.Queue[1].Success && session.ReservedActionPoints == 70 &&
+            vitals.State.ExactActionPoints == initial, "VATS queue spent reserved AP or resampled the chosen success.");
+        session.Execute();
+        var first = session.CurrentAttack!;
+        var publication = publications.Begin(session);
+        session.CommitShot(first.Ordinal);
+        Refuse(() => session.CommitShot(first.Ordinal));
+        Refuse(() => session.CompleteAttack(true));
+        Require(session.CompletedAttacks == 0 && session.PendingPublications == 1 && vitals.State.ExactActionPoints == initial - 35,
+            "VATS advanced an unfinished projectile or duplicated its AP debit.");
+        session.RecordImpact(first.Ordinal, target.Reference, 1, 60, 45.5f);
+        publications.Finish(publication);
+        Refuse(() => publications.Finish(publication));
+        session.CompleteAttack(true);
+        var second = session.CurrentAttack!;
+        var delayed = publications.Begin(session);
+        session.CommitShot(second.Ordinal);
+        session.Cancel();
+        Require(publications.Count == 1 && publications.SaveBlocker == "vats-projectile-continuation",
+            "Cancelling VATS admitted capture with an unserialized fired continuation.");
+        var replacement = new FalloutVatsSession(vitals);
+        replacement.Add(Key(0x47), Guid.NewGuid(), target with { ActionPointCost = 0 }, () => 0, true, FalloutVatsAction.Pistol);
+        replacement.Execute();
+        var replacementPublication = publications.Begin(replacement);
+        replacement.CommitShot(replacement.CurrentAttack!.Ordinal);
+        publications.Finish(replacementPublication); replacement.CompleteAttack(true);
+        Require(publications.Count == 1 && publications.SaveBlocker is not null && replacement.CompletedAttacks == 1,
+            "Completing replacement VATS forgot the retired session's pending save context.");
+        session.RecordImpact(second.Ordinal, target.Reference, 1, 45.5f, 40);
+        publications.Finish(delayed);
+        Require(session.CurrentPhase == FalloutVatsSession.Phase.Cancelled && session.PendingPublications == 0 &&
+            publications.SaveBlocker is null && vitals.State.ExactActionPoints == initial - 70 && session.Impacts.Count == 2 &&
+            session.Impacts[0].Ordinal == first.Ordinal && session.Impacts[1].Ordinal == second.Ordinal,
+            "Cancellation refunded a fired action or lost/reassigned its later impact.");
+        session.Fail(new InvalidDataException("Retained original publication failure."));
+        session.Fail(new InvalidDataException("Later error."));
+        Require(session.Error == "Retained original publication failure." && session.CurrentPhase == FalloutVatsSession.Phase.Faulted,
+            "VATS publication failure was overwritten or retired as success.");
+        var next = new FalloutVatsSession(vitals);
+        next.Add(Key(0x47), Guid.NewGuid(), target with { ActionPointCost = 0 },
+            () => throw new InvalidDataException("Always-hit incorrectly sampled RNG."), true, FalloutVatsActions.OrdinaryRanged(9));
+        next.Execute(); next.CommitShot(next.CurrentAttack!.Ordinal); next.CompleteAttack(true);
+        Require(next.CurrentPhase == FalloutVatsSession.Phase.Completed && next.Queue.Single().Roll is null &&
+            next.Queue.Single().Action == FalloutVatsAction.Launcher && session.Impacts.Count == 2,
+            "New VATS action reused the prior session's publication/result or invented an always-hit roll.");
+        Reject(() => FalloutVatsActions.OrdinaryRanged(10));
+
+        static void Refuse(Action action)
+        {
+            try { action(); } catch (InvalidOperationException) { return; }
+            throw new InvalidDataException("Invalid VATS action/publication transition was accepted.");
+        }
     }
 
     private static void VerifyScripts(FalloutPluginStack records)
@@ -123,6 +191,63 @@ internal static class PlayerActorValueContracts
             Require(owner.ReadBase(5) == 6 && owner.Capture().Values[5].Permanent == 6,
                 "Out-of-range integer coercion replayed or rolled back the executed base prefix.");
         }
+    }
+
+    private static void VerifyVitalWrites(FalloutPluginStack records)
+    {
+        var owner = new FalloutPlayerActorValues(records); owner.BindConstantModifiers((_, _) => []);
+        var vitals = FalloutPlayerVitals.FromActorValues(records, owner);
+        using var world = new FalloutReferenceWorld(records);
+        var player = Key(0x14);
+        void Write(string name, string operation, double value)
+        {
+            if (!vitals.TryChangeActorValue(name, operation, value)) owner.Change(name, operation, value);
+        }
+        void Command(string operation, string name, double value, bool referenceHost = false)
+        {
+            var function = FalloutScriptActorValues.Function(operation, () => player, player,
+                () => throw new InvalidDataException("Player write requested a placed reference world."),
+                (_, _, _) => throw new InvalidDataException("Write unexpectedly performed a read."),
+                referenceWrite: referenceHost ? (_, field, op, amount) => Write(field, op, amount) : null,
+                playerWrite: referenceHost ? null : Write)!;
+            function.Invoke([new(0, name), new(value)]);
+        }
+        vitals.Damage(11.25f);
+        var injured = vitals.State;
+        Command("restoreactorvalue", "Health", 3.5);
+        Require(vitals.State.ExactHitPoints == injured.ExactHitPoints + 3.5f && world.InstanceCount == 0,
+            "Player RestoreAV used a world reference or lost fractional health.");
+        Command("damageav", "Health", 1.25, referenceHost: true);
+        Require(vitals.State.ExactHitPoints == injured.ExactHitPoints + 2.25f,
+            "Reference-host player DamageAV bypassed actual vitals.");
+        Command("damageactorvalue", "PerceptionCondition", 40);
+        var anatomy = FalloutBodyPartData.Read(records.GetEffective(Key(0x1d)));
+        Require(Math.Abs(anatomy.LimbCondition(25, vitals.State.MaximumHitPoints, vitals.State.LimbDamage) - 60) < .001f,
+            "Anatomical damage wrote raw HP instead of source percentage units.");
+        Command("restoreav", "PerceptionCondition", 15, referenceHost: true);
+        Require(Math.Abs(anatomy.LimbCondition(25, vitals.State.MaximumHitPoints, vitals.State.LimbDamage) - 75) < .001f,
+            "Reference-host anatomical restoration missed the actual injury owner.");
+        var beforeFailure = JsonSerializer.Serialize(vitals.State);
+        Reject(() => Command("setav", "PerceptionCondition", 100));
+        Reject(() => Command("restoreav", "Health", -1));
+        var absent = FalloutScriptActorValues.Function("restoreav", () => player, player,
+            () => throw new InvalidDataException("Missing player owner fabricated a reference world."), (_, _, _) => 0)!;
+        Reject(() => absent.Invoke([new(0, "Health"), new(1)]));
+        Require(JsonSerializer.Serialize(vitals.State) == beforeFailure && world.InstanceCount == 0,
+            "Rejected mutation changed player state or fabricated PlayerRef.");
+        var saved = JsonSerializer.Deserialize<GameplayVitals>(beforeFailure)!;
+        var cold = FalloutPlayerVitals.FromActorValues(records, owner, saved);
+        Require(JsonSerializer.Serialize(cold.State) == beforeFailure,
+            "Cold player state lost script health/limb changes.");
+        Command("restoreav", "PerceptionCondition", float.MaxValue);
+        Require(anatomy.LimbCondition(25, vitals.State.MaximumHitPoints, vitals.State.LimbDamage) == 100,
+            "Finite large restoration was refused instead of clearing the source injury.");
+        Command("restoreav", "Health", float.MaxValue);
+        Require(vitals.State.ExactHitPoints == vitals.State.MaximumHitPoints,
+            "Restoration exceeded the source health maximum.");
+        vitals.Damage(vitals.State.MaximumHitPoints);
+        Command("restoreav", "Health", 100);
+        Require(vitals.State.ExactHitPoints == 0, "RestoreAV substituted for player resurrection.");
     }
 
     private static void VerifyMovementValues(FalloutPluginStack records)
@@ -215,12 +340,13 @@ internal static class PlayerActorValueContracts
                 Field("SPLO", BitConverter.GetBytes(21u)), Field("SPLO", BitConverter.GetBytes(24u))), Record("RACE", 10),
             Record("NPC_", 28, Field("ACBS", Actor()), Field("DATA", [100, 0, 0, 0, 5, 5, 5, 5, 5, 5, 5])),
             Record("GLOB", 19, Field("EDID", Text("Switch")), Field("FNAM", [(byte)'f']), Field("FLTV", BitConverter.GetBytes(0f))),
-            Modifier(16, 5), Modifier(17, 6), Modifier(18, 10), Modifier(29, 13),
+            Modifier(16, 5), Modifier(17, 6), Modifier(18, 10), Modifier(45, 13),
             Record("SPEL", 21, Field("SPIT", Declaration(4)), Effect(16, 2)),
             Record("SPEL", 24, Field("SPIT", Declaration(4)), Effect(18, 1), Field("CTDA", condition)),
-            Record("ENCH", 22, Field("ENIT", Declaration(3)), Effect(17, 3), Effect(29, 50), Field("CTDA", condition)),
+            Record("ENCH", 22, Field("ENIT", Declaration(3)), Effect(17, 3), Effect(45, 50), Field("CTDA", condition)),
             Record("ARMO", 23, Field("EDID", Text("Outfit")), Field("DATA", new byte[12]),
                 Field("BMDT", [4, 0, 0, 0, 0, 0, 0, 0]), Field("EITM", BitConverter.GetBytes(22u))),
+            Record("BPTD", 0x1d, VitalPart()), Record("WEAP", 0x47),
             Setting(100, "fAVDHealthEnduranceOffset", 5), Setting(101, "fAVDHealthEnduranceMult", 20), Setting(102, "fAVDHealthLevelMult", 5),
             Setting(103, "fAVDActionPointsBase", 65), Setting(104, "fAVDActionPointsMult", 3),
             Record("GMST", 105, Field("EDID", Text("iXPBase")), Field("DATA", BitConverter.GetBytes(200))),
@@ -230,6 +356,13 @@ internal static class PlayerActorValueContracts
             Record("SCPT", 0x500, Field("SCHR", header), Local(1, "first"), Local(2, "second"), Local(3, "third"),
                 Field("SCRO", BitConverter.GetBytes(0x14u)), Field("SCTX", Text(script))),
             Record("QUST", 0x501, Field("DATA", [1, 0]), Field("SCRI", BitConverter.GetBytes(0x500u))));
+    }
+
+    private static byte[] VitalPart()
+    {
+        var data = new byte[84]; Float(data, 0, 1); data[5] = 1; data[6] = 25; data[7] = 25;
+        Float(data, 24, 1); Float(data, 40, 1); Float(data, 80, 1);
+        return Join(Field("BPNN", Text("Head")), Field("BPNT", Text("Head")), Field("BPND", data));
     }
 
     private static byte[] Header(string? master = null) => Record("TES4", 0, Field("HEDR", new byte[12]),

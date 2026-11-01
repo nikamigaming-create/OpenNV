@@ -146,11 +146,11 @@ internal static class ActorDamageContracts
                     "Dialogue death requires presentation or ignored source-authored zero health.");
                 var pendingCorpseOwner = unloaded.Get(Key(0x93));
                 pendingCorpseOwner.CanCaptureCorpseEquipment = _ => false;
-                Check(unloaded.PendingCorpseEquipmentCaptureCount == 1,
+                Check(unloaded.PendingCorpseEquipmentCaptureCount == 1 && unloaded.HasPendingCorpseEquipmentCapture,
                     "Unready native corpse ownership did not defer source snapshot capture.");
                 Reject(() => unloaded.Capture());
                 pendingCorpseOwner.CanCaptureCorpseEquipment = _ => true;
-                Check(unloaded.PendingCorpseEquipmentCaptureCount == 0,
+                Check(unloaded.PendingCorpseEquipmentCaptureCount == 0 && !unloaded.HasPendingCorpseEquipmentCapture,
                     "Completed native corpse ownership kept source snapshot capture blocked.");
                 Func<FalloutActorCorpseEquipment?> committedCorpse = () => null;
                 Func<FalloutActorCorpseEquipment?> detachedCorpse = () => null;
@@ -170,6 +170,16 @@ internal static class ActorDamageContracts
             world.LoadCell(cell);
             Check(world.ActorValue(Key(0x91), "Health") == 50 && !world.IsDead(Key(0x91)), "Source CREA health was not initialized.");
             Check(DeathConditions(world).Evaluate(deathCondition) == 0, "Dialogue considered a living actor dead.");
+            var healthBeforeScript = world.Health(Key(0x92));
+            world.ChangeActorValue(Key(0x92), "health", "damageav", 2.5);
+            Check(world.Health(Key(0x92)).Current == healthBeforeScript.Current - 2.5f && !world.IsDead(Key(0x92)),
+                "Script health damage used the skill DNAM owner or invented a death.");
+            world.ChangeActorValue(Key(0x92), "health", "restoreav", 2.5);
+            Check(world.Health(Key(0x92)) == healthBeforeScript, "Script restoration lost the authoritative health pool.");
+            var beforeLethalScript = JsonSerializer.Serialize(world.Get(Key(0x92)).Capture());
+            Reject(() => world.ChangeActorValue(Key(0x92), "Health", "damageav", 1000));
+            Check(JsonSerializer.Serialize(world.Get(Key(0x92)).Capture()) == beforeLethalScript,
+                "Unqualified lethal script mutation published a prefix or death event.");
             var first = world.DamageActor(Key(0x91), Key(0x92), 0, 10, 1.5f, 1);
             Check(first is { HealthBefore: 50, HealthAfter: 40, LimbDamage: 15, Died: false } && world.Health(Key(0x92)).Current == 50,
                 "Damage pools, limb multiplier or per-reference isolation failed.");

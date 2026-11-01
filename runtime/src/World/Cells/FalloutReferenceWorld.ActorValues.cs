@@ -114,14 +114,11 @@ internal sealed partial class FalloutReferenceWorld
         }
         else if (LimbActorValue(name) is { } limb)
         {
-            var parts = BodyParts(reference).Parts.Where(part => part.ActorValue == limb && part.HealthPercent > 0).ToArray();
-            if (parts.Length == 0) return;
-            if (parts.Length != 1) throw new NotSupportedException("Actor limb restore has ambiguous source anatomy.");
-            var part = parts[0];
             var health = Health(reference);
-            var damage = new Dictionary<byte, float>(actor.Injury!.LimbDamage);
-            damage[part.Type] = Math.Max(0, damage.GetValueOrDefault(part.Type) - value * health.Base * part.HealthPercent / 10000);
-            actor.Injury = actor.Injury with { LimbDamage = damage };
+            var injury = actor.Injury!;
+            var damage = FalloutAnatomicalActorValues.Change(BodyParts(reference), limb, health.Base,
+                injury.LimbDamage, FalloutActorValueOperation.Restore, value);
+            actor.Injury = injury with { LimbDamage = damage ?? injury.LimbDamage };
         }
         else
         {
@@ -141,9 +138,30 @@ internal sealed partial class FalloutReferenceWorld
     {
         var instance = Actor(reference);
         var value = (float)FalloutActorValueCommands.Argument(operation, argument);
-        var slot = FalloutActorValue.SourceSlot(name);
-        var previous = instance.ActorValues.GetValueOrDefault(slot, new(SourceActorValue(instance, slot)));
         var kind = FalloutActorValueCommands.Operation(operation) ?? throw new NotSupportedException($"Actor value operation {operation} is unbound.");
-        instance.ActorValues[slot] = FalloutActorValueCommands.Apply(previous, kind, value, previous.Current);
+        if (kind == FalloutActorValueOperation.Restore)
+        {
+            RestoreActorValue(reference, name, value);
+            return;
+        }
+        if (LimbActorValue(name) is { } limb)
+        {
+            var health = Health(reference);
+            var injury = instance.Injury!;
+            var damage = FalloutAnatomicalActorValues.Change(BodyParts(reference), limb, health.Base,
+                injury.LimbDamage, kind, value);
+            instance.Injury = injury with { LimbDamage = damage ?? injury.LimbDamage };
+            return;
+        }
+        var slot = FalloutActorValueNames.Parse(name) == FalloutActorValueId.Health
+            ? "health" : FalloutActorValue.SourceSlot(name);
+        if (slot == "health" && kind != FalloutActorValueOperation.Damage)
+            throw new NotSupportedException("Script health base/permanent mutation requires its derived-health contract.");
+        FalloutActorValue previous = slot == "health" ? Health(reference) :
+            instance.ActorValues.TryGetValue(slot, out var retained) ? retained : new(SourceActorValue(instance, slot));
+        var changed = FalloutActorValueCommands.Apply(previous, kind, value, previous.Current);
+        if (slot == "health" && (instance.Injury?.Dead == true || changed.Current <= 0))
+            throw new NotSupportedException("Script lethal/dead health mutation requires its death-event and killer contract.");
+        instance.ActorValues[slot] = changed;
     }
 }

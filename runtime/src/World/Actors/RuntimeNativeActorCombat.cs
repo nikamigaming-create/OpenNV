@@ -121,6 +121,7 @@ internal sealed partial class RuntimeNativeActorCombat : Node
         _state.CaptureCorpseEquipment = CaptureCorpseEquipment;
         _state.CaptureCorpseEquipmentForFiniteWait = CaptureCorpseEquipmentForFiniteWait;
         _state.PrepareNativeInventoryRemoval = PrepareNativeInventoryRemoval;
+        RefreshProcessEquipment(initializing: true);
         RestorePackageMotion();
         RestoreEngagementPose();
         // A cold cell enters the tree with this owner already attached. Its

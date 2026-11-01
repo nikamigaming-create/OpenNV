@@ -220,7 +220,7 @@ internal sealed partial class FalloutPlayerInventory
         }
         foreach (var equipped in displaced) _equipped.Remove(equipped);
         _equipped.Add(item.RuntimeFormId);
-        if (noUnequip is { } locked) _items[form] = item with { UnequipLocked = locked };
+        if (noUnequip is { } locked) _items[form] = _items[form] with { UnequipLocked = locked };
         ++Revision;
     }
     internal bool Unequip(FalloutPluginStack records, FalloutFormKey form, bool force = false)

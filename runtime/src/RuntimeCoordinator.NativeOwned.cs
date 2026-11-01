@@ -1606,14 +1606,14 @@ public partial class RuntimeCoordinator
     }
 
     private Compositor? AddNativeImageSpace(Node3D root, FalloutImageSpace? imageSpace,
-        Func<IReadOnlyList<FalloutWeatherImageModifier>>? weather = null)
+        Func<IReadOnlyList<FalloutWeatherImageModifier>>? weather = null, Action<float>? sunlightDimmer = null)
     {
         if (imageSpace is null) return null;
         var application = RetailImageSpaceRenderer.CreateFromSource(imageSpace,
             _configuration.FalloutEnvironment.ImageSpace, _configuration.Capture,
             _configuration.ActorCompiler.FaceGenMaterial.RuntimeAlbedoTransfer);
         var presenter = new RuntimeNativeImageSpace();
-        presenter.Configure(imageSpace, _nativeImageSpaceState, application.Effect, _nativeGameTime, weather);
+        presenter.Configure(imageSpace, _nativeImageSpaceState, application.Effect, _nativeGameTime, weather, sunlightDimmer);
         root.AddChild(presenter);
         root.SetMeta("opennv_source_image_space", imageSpace.Form.ToString());
         root.SetMeta("opennv_source_image_space_version", imageSpace.FormVersion);

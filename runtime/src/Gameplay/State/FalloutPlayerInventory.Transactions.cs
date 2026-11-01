@@ -35,13 +35,18 @@ internal sealed partial class FalloutPlayerInventory
         ApplyRemovalTransaction(target, (source, destination) =>
             source.TransferToCore(destination!, form, count, variantIndex, false), effects);
 
-    internal void ConsumeOne(FalloutFormKey item, FalloutInventoryChangeLease effects)
+    internal void ConsumeOne(FalloutFormKey item, FalloutInventoryChangeLease effects,
+        int? variant = null, long? expectedRevision = null, Action<FalloutPlayerInventory>? stageEffects = null)
     {
         ArgumentNullException.ThrowIfNull(effects);
+        if (variant is not null)
+            RequireRevision(expectedRevision ?? throw new InvalidOperationException("Selected consumption has no inventory revision."));
         ApplyRemovalTransaction(null, (source, _) =>
         {
             if (source.Item(item) is not { Count: > 0 }) throw new InvalidOperationException("Consumed item is no longer present.");
-            source.RemoveCore(item, 1, true);
+            if (variant is { } selected) source.RemoveVariantCore(item, selected, 1);
+            else source.RemoveCore(item, 1, true);
+            stageEffects?.Invoke(source);
         }, effects);
     }
 

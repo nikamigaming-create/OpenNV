@@ -5,7 +5,7 @@ namespace OpenNV.Runtime.Content;
 
 internal sealed record FalloutIngestibleEffect(int Index, FalloutFormKey Form, string Hash,
     uint Archetype, int ActorValue, uint Flags, float Magnitude, uint Duration,
-    uint Area, uint Range, bool AdditionalPresentation, IReadOnlyList<FalloutCondition> Conditions, int Resistance = -1)
+    uint Area, uint Range, bool AdditionalPresentation, IReadOnlyList<FalloutCondition> Conditions, int Resistance = -1, FalloutFormKey? Script = null)
 {
     internal uint EffectiveDuration => (Flags & 0x80) == 0 ? Duration : 0;
 }
@@ -72,7 +72,9 @@ internal sealed record FalloutIngestible(FalloutFormKey Form, string Hash, byte 
             if (group.Any(field => field.Signature is not ("EFIT" or "CTDA")))
                 throw new NotSupportedException("Ingestible effect has an unbound script/data extension.");
             var flags = BinaryPrimitives.ReadUInt32LittleEndian(definition);
-            var presentation = BinaryPrimitives.ReadUInt32LittleEndian(definition[8..]) != 0 ||
+            var archetype = BinaryPrimitives.ReadUInt32LittleEndian(definition[64..]);
+            var script = archetype == 1 ? effect.Plugin.AdjustOptionalFormId(BinaryPrimitives.ReadUInt32LittleEndian(definition[8..])) : null;
+            var presentation = archetype != 1 && BinaryPrimitives.ReadUInt32LittleEndian(definition[8..]) != 0 ||
                 BinaryPrimitives.ReadUInt16LittleEndian(definition[20..]) != 0 ||
                 new[] { 24, 32, 36, 40, 44, 48, 52 }.Any(offset =>
                     BinaryPrimitives.ReadUInt32LittleEndian(definitionData.Span[offset..]) != 0) ||
@@ -82,7 +84,7 @@ internal sealed record FalloutIngestible(FalloutFormKey Form, string Hash, byte 
                 BinaryPrimitives.ReadUInt32LittleEndian(data), BinaryPrimitives.ReadUInt32LittleEndian(data[8..]),
                 BinaryPrimitives.ReadUInt32LittleEndian(data[4..]), BinaryPrimitives.ReadUInt32LittleEndian(data[12..]), presentation,
                 group.Where(field => field.Signature == "CTDA").Select(field => FalloutCondition.Read(record, field.Data.Span)).ToArray(),
-                BinaryPrimitives.ReadInt32LittleEndian(definition[16..])));
+                BinaryPrimitives.ReadInt32LittleEndian(definition[16..]), script));
             index = end - 1;
         }
         return effects;

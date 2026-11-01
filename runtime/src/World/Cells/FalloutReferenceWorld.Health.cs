@@ -49,6 +49,9 @@ internal sealed partial class FalloutReferenceWorld
     internal int PendingCorpseEquipmentCaptureCount => _instances.Values.Count(actor =>
         actor.Injury?.Dead == true && !actor.CorpseEquipmentCaptureReady);
 
+    internal bool HasPendingCorpseEquipmentCapture => _instances.Values.Any(actor =>
+        actor.Injury?.Dead == true && !actor.CorpseEquipmentCaptureReady);
+
     internal object PendingCorpseEquipmentCaptures => _instances.Values
         .Where(actor => actor.Injury?.Dead == true && actor.CorpseEquipmentCaptureBlocker is not null)
         .Select(actor => new

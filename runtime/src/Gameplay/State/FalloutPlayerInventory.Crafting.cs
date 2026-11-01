@@ -22,31 +22,15 @@ internal sealed partial class FalloutPlayerInventory
                 FalloutHudEventKind.ItemAdded, group.Key, group.Sum(output => output.Count))))
             .ToArray();
         Notifications.RequirePublish(events);
-        var priorItems = new Dictionary<FalloutFormKey, FalloutCampaignItem>(_items);
-        var priorTraversal = _traversal;
-        var priorEquipped = _equipped.ToArray();
-        var priorRandom = _random.State;
-        var priorRevision = Revision;
-        try
+        ApplyRemovalTransaction(null, (staged, _) =>
         {
             foreach (var (form, count) in ingredients)
-                Remove(form, count, silent: true);
+                staged.RemoveCore(form, count, silent: true);
             foreach (var output in recipe.Outputs)
-                Add(records, output.Form, output.Count, level, silent: true, globals,
+                staged.Add(records, output.Form, output.Count, level, silent: true, globals,
                     validateAddition: selected => FalloutReferenceWorld.RequirePlayerItemAcquisition(
                         records, records.GetEffective(selected), records.RuntimeFormKey(0x14)));
-        }
-        catch
-        {
-            _items.Clear();
-            foreach (var (form, item) in priorItems) _items.Add(form, item);
-            _equipped.Clear();
-            _equipped.UnionWith(priorEquipped);
-            _random = new(priorRandom);
-            _traversal = priorTraversal;
-            Revision = priorRevision;
-            throw;
-        }
+        });
 
         Notifications.Publish(events);
     }

@@ -15,6 +15,9 @@ internal partial class RuntimeNativeOpeningStageDriver
     private FalloutCaravanMinimumNotice? _caravanMinimumNotice;
     internal FalloutFormKey? SourceMusic => _scriptMusic?.SourceForm;
     private bool _saveRequested;
+    private ulong? _saveAdmissionFrame;
+    private long? _saveAdmissionTimestamp;
+    private string? _saveAdmissionBlocker;
     private CanvasLayer? _recipeLayer;
     private NativeOwnedRecipeMenu? _recipeMenu;
     private CanvasLayer? _barterLayer;
@@ -22,7 +25,7 @@ internal partial class RuntimeNativeOpeningStageDriver
     private Action? _releaseRecipeInput;
     private Action? _releaseBarterInput;
     private readonly HashSet<CanvasItem> _screenSplatters = [];
-    private string? SaveContinuationBlocker =>
+    private string? SaveInteractionBlocker =>
         _player.VatsSaveBlocker is { } vats ? vats :
         PlayerAdvancementSaveBlocker is { } advancement ? advancement :
         _moviePlaying ? "movie" : _player.FurnitureActive ? "furniture" :
@@ -32,17 +35,27 @@ internal partial class RuntimeNativeOpeningStageDriver
         _vigorEntry is not null ? "special-menu" : _tagSkillEntry is not null ? "tag-menu" :
         _traitEntry is not null ? "trait-menu" : _recipeMenu is not null ? "recipe-menu" :
         _barterMenu is not null ? "barter-menu" : _caravanMenu is not null ? "caravan-menu" :
-        TerminalSaveBlocker is { } terminal ? terminal :
-        _scripts.References?.PendingProcedureCaptureCount > 0 ? "actor-procedure-initialization" :
-        _scripts.References?.PendingCorpseEquipmentCaptureCount > 0 ? "actor-corpse-continuation" :
-        _scripts.References?.TransientExplosions.SaveBlocker ?? StageResultsSaveBlocker;
+        TerminalSaveBlocker;
+    private string? SaveContinuationBlocker => SaveInteractionBlocker ?? (
+        _scripts.References?.HasPendingProcedureCapture == true ? "actor-procedure-initialization" :
+        _scripts.References?.HasPendingCorpseEquipmentCapture == true ? "actor-corpse-continuation" :
+        _scripts.References?.TransientExplosions.SaveBlocker ?? StageResultsSaveBlocker);
     internal object SaveRequestState => new
     {
         requested = _saveRequested,
         transientExplosions = _scripts.References?.TransientExplosions.State,
         sourceManual = _scripts.ScriptManualSaves.Receipt,
         sourceManualDeferredBy = _scripts.ScriptManualSaves.DeferredBy,
-        deferredBy = !_saveRequested ? null : _scripts.References!.PlayerMoves.Pending ? "player-move" : SaveContinuationBlocker ?? SourceAnimationSoundSaveBlocker,
+        deferredBy = _saveRequested ? _saveAdmissionBlocker : null,
+        admissionObservation = new
+        {
+            scope = "last-actual-autosave-admission-attempt;not-current-readiness",
+            policy = "any-current-blocker;finite-audio-classification-requires-full-save-admission",
+            sampled = _saveAdmissionFrame is not null,
+            processFrame = _saveAdmissionFrame,
+            ageMilliseconds = _saveAdmissionTimestamp is { } timestamp
+                ? System.Diagnostics.Stopwatch.GetElapsedTime(timestamp).TotalMilliseconds : (double?)null
+        },
         activeContinuationSaving = "source-radio-pcm;other-continuations-unbound"
     };
 
@@ -209,7 +222,7 @@ internal partial class RuntimeNativeOpeningStageDriver
                 (_skyLighting ?? throw new InvalidOperationException("Sky state owner is absent.")).ReleaseWeatherOverride();
                 break;
             case "autosave" when parts.Length == 1 && arguments.Count == 0:
-                _saveRequested = true;
+                RequestWorldSave();
                 break;
             default:
                 throw new NotSupportedException($"Reached native script command {command} ({arguments.Count} arguments) has no owner.");

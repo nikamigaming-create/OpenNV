@@ -7,7 +7,7 @@ namespace OpenNV.Runtime.Content;
 internal sealed record FalloutQuestSnapshot(FalloutFormKey Quest, short Stage, bool Completed,
     IReadOnlyList<short> EnteredStages, IReadOnlyDictionary<uint, double> Variables,
     IReadOnlyList<FalloutQuestObjectiveSnapshot>? Objectives = null, bool? Running = null, FalloutFormKey? NextQuest = null,
-    bool Active = false);
+    bool Active = false, bool Failed = false);
 
 internal sealed record FalloutQuestObjectiveSnapshot(uint Index, bool Displayed, bool Completed);
 internal sealed record FalloutQuestObjectiveCommand(string QuestEditorId, uint Index, bool Display, bool Value);
@@ -21,6 +21,7 @@ internal sealed class FalloutQuestState(FalloutPluginStack stack, FalloutHudNoti
     {
         internal short Stage;
         internal bool Completed;
+        internal bool Failed;
         internal bool Running;
         internal FalloutFormKey? NextQuest;
         internal bool Active;
@@ -42,6 +43,8 @@ internal sealed class FalloutQuestState(FalloutPluginStack stack, FalloutHudNoti
             quest = pair.Key.ToString(),
             stage = pair.Value.Stage,
             completed = pair.Value.Completed,
+            failed = pair.Value.Failed,
+            failurePresentation = pair.Value.Failed ? "unbound-HUD-banner-and-sound" : null,
             running = pair.Value.Running,
             enteredStages = pair.Value.Stages.Order().ToArray(),
         }).ToArray();
@@ -49,7 +52,7 @@ internal sealed class FalloutQuestState(FalloutPluginStack stack, FalloutHudNoti
     internal IReadOnlyList<FalloutQuestSnapshot> Capture() => _states.OrderBy(pair => stack.RuntimeFormId(pair.Key))
         .Select(pair => new FalloutQuestSnapshot(pair.Key, pair.Value.Stage, pair.Value.Completed,
             pair.Value.Stages.Order().ToArray(), new Dictionary<uint, double>(pair.Value.Variables),
-            pair.Value.Objectives.Values.OrderBy(value => value.Index).ToArray(), pair.Value.Running, pair.Value.NextQuest, pair.Value.Active)).ToArray();
+            pair.Value.Objectives.Values.OrderBy(value => value.Index).ToArray(), pair.Value.Running, pair.Value.NextQuest, pair.Value.Active, pair.Value.Failed)).ToArray();
 
     internal object ObjectiveState => new
     {
@@ -104,7 +107,7 @@ internal sealed class FalloutQuestState(FalloutPluginStack stack, FalloutHudNoti
         {
             if (validated._states.ContainsKey(snapshot.Quest) || snapshot.EnteredStages.Distinct().Count() != snapshot.EnteredStages.Count ||
                 snapshot.Stage < 0 || snapshot.EnteredStages.Any(stage => stage < 0 || stage > snapshot.Stage) ||
-                snapshot.Variables.Values.Any(value => !double.IsFinite(value)))
+                snapshot.Variables.Values.Any(value => !double.IsFinite(value)) || snapshot.Failed && !snapshot.Completed)
                 throw new InvalidDataException("Saved quest state is invalid or duplicated.");
             var state = validated.Require(snapshot.Quest);
             if (!state.Variables.Keys.Order().SequenceEqual(snapshot.Variables.Keys.Order()))
@@ -116,6 +119,7 @@ internal sealed class FalloutQuestState(FalloutPluginStack stack, FalloutHudNoti
                 throw new InvalidDataException("Saved quest objectives differ from the winning declarations or contain duplicates.");
             state.Stage = snapshot.Stage;
             state.Completed = snapshot.Completed;
+            state.Failed = snapshot.Failed;
             state.Running = snapshot.Running ?? state.Running;
             if (snapshot.NextQuest is { } next && stack.GetEffective(next).Signature != "QUST")
                 throw new InvalidDataException("Saved next-quest identity is not a quest.");
@@ -187,6 +191,23 @@ internal sealed class FalloutQuestState(FalloutPluginStack stack, FalloutHudNoti
         ProgressRevision++;
     }
 
+    internal void Fail(FalloutFormKey quest)
+    {
+        var state = Require(quest);
+        // Native failure does not turn a previously completed quest into failure.
+        // Its running bit and source objectives have independent owners.
+        if (state.Completed) return;
+        state.Failed = true; state.Completed = true;
+        ++Revision; ++ProgressRevision;
+    }
+
+    internal void ClearActive(FalloutFormKey quest)
+    {
+        var state = Require(quest);
+        if (!state.Active) return;
+        state.Active = false; ++Revision; ++ProgressRevision;
+    }
+
     internal static IReadOnlyList<FalloutQuestObjectiveCommand> ReadObjectiveCommands(string source)
     {
         var lines = FalloutDialogueTopic.CodeLines(source).ToArray();
@@ -244,6 +265,7 @@ internal sealed class FalloutQuestState(FalloutPluginStack stack, FalloutHudNoti
     internal short Stage(FalloutFormKey quest) => Require(quest).Stage;
     internal bool IsRunning(FalloutFormKey quest) => Require(quest).Running;
     internal bool IsCompleted(FalloutFormKey quest) => Require(quest).Completed;
+    internal bool IsFailed(FalloutFormKey quest) => Require(quest).Failed;
     internal FalloutFormKey? ActiveQuest => _states.Where(pair => pair.Value.Active).Select(pair => (FalloutFormKey?)pair.Key).SingleOrDefault();
     internal string ObjectiveText(FalloutFormKey quest, uint index) => Require(quest).ObjectiveText[index];
     internal void ForceActive(FalloutFormKey quest)
@@ -304,8 +326,14 @@ internal sealed class FalloutQuestState(FalloutPluginStack stack, FalloutHudNoti
         Revision++;
     }
 
+    // These getters initialize their numeric result before testing the quest
+    // pointer. Other null-argument contracts remain with their actual owners.
+    internal static float? ExplicitNullQuestValue(Function function) => function is Function.GetQuestRunning or
+        Function.GetStage or Function.GetStageDone or Function.GetQuestVariable or Function.GetQuestCompleted ? 0 : null;
+
     internal float Evaluate(FalloutCondition condition)
-        => Evaluate(condition.Kind, condition.FormArgument1, condition.Argument2);
+        => condition.Argument1 == 0 && ExplicitNullQuestValue(condition.Kind) is { } empty
+            ? empty : Evaluate(condition.Kind, condition.FormArgument1, condition.Argument2);
 
     internal float Evaluate(Function function, FalloutFormKey quest, uint argument)
     {

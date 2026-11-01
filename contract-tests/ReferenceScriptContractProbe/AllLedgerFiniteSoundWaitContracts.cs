@@ -21,6 +21,7 @@ internal static class AllLedgerFiniteSoundWaitContracts
             return new(native, state.Reference, generation, sound, entry.SoundSha256, entry.Path!, entry.MediaSha256!);
         }
         var first = Begin(actor, 81); var second = Begin(nonactor, 82);
+        Require(world.HasPendingAnimationSoundCapture, "Current unsettled ledgers did not block Boolean audio admission.");
         var firstRandom = actor.SoundRandom.State; var secondRandom = nonactor.SoundRandom.State;
         Require(world.PendingAnimationSoundFiniteVoiceWait() is null, "A source ledger invented a missing native voice.");
         Require(world.AnimationSoundSaveBlocker == "animation-sound-continuation", "Missing native audio admitted the automatic writer.");
@@ -48,12 +49,14 @@ internal static class AllLedgerFiniteSoundWaitContracts
         Require(world.AnimationSoundSaveBlocker == "animation-sound-continuation", "Retiring a native wait owner waived its source capture refusal.");
         eligible = true;
         actor.AnimationSoundEvents.Complete(first.Generation, FalloutAnimationSoundEnd.NativeFinished); actorVoice.Dispose();
+        Require(world.HasPendingAnimationSoundCapture, "A settled audio witness hid another current reference's blocker.");
         Require(world.PendingAnimationSoundFiniteVoiceWait()?.SequenceEqual([second, concurrent]) == true,
             "One native completion silently admitted another still-active nonactor.");
         nonactor.AnimationSoundEvents.Complete(second.Generation, FalloutAnimationSoundEnd.NativeFinished); nonactorVoice.Dispose();
         Require(world.PendingAnimationSoundFiniteVoiceWait()?.SequenceEqual([concurrent]) == true,
             "Completing one sound owner waived another generation on the same reference.");
         nonactor.AnimationSoundEvents.Complete(concurrent.Generation, FalloutAnimationSoundEnd.NativeFinished); concurrentVoice.Dispose();
+        Require(!world.HasPendingAnimationSoundCapture, "Audio admission retained an old refusal after actual completion.");
         var snapshot = JsonSerializer.Serialize(world.Capture());
         using var cold = new FalloutReferenceWorld(records);
         cold.Restore(JsonSerializer.Deserialize<FalloutReferenceSnapshot[]>(snapshot)!);
@@ -62,6 +65,7 @@ internal static class AllLedgerFiniteSoundWaitContracts
         Require(world.AnimationSoundSaveBlocker is null && cold.AnimationSoundSaveBlocker is null,
             "Genuine completed history failed automatic save admission.");
         var third = Begin(nonactor, 84);
+        Require(world.HasPendingAnimationSoundCapture, "Audio admission reused old ready state after a new generation began.");
         using var interruptedVoice = records.SoundVoices.Register(sound, null, "synthetic-cancelled", () => false, () => { },
             sourceReference: nonactor.Reference, finiteWait: () => third);
         nonactor.AnimationSoundEvents.Cancel(third.Generation, "Actual source audio node retired.");

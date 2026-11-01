@@ -30,6 +30,7 @@ internal static partial class IngestibleContracts
                 Idle(0x32, "Test2/IdleAnims", 0, 0x87, Predicate(159, 3)),
                 Idle(0x33, "Test2/IdleAnims/Food", 0x32, 7, Predicate(143, 10)),
                 Idle(0x34, "Test2/IdleAnims/Meal.kf", 0x33, 7),
+                InstantScriptFixture(),
                 Item(1, Effect(10, 20, 0)), Item(2, Effect(11, 4, 6, true)),
                 Item(3, Effect(10, 20, 0), Effect(12, 1, 0)),
                 Item(4, Effect(13, 20, 99)), Item(5, Effect(11, 0, 0), Effect(14, 50, 0)),
@@ -113,6 +114,32 @@ internal static partial class IngestibleContracts
             var hardcore = false;
             FalloutPlayerIngestibles Owner(FalloutPlayerVitals health) => new(records, inventory, health, parts, _ => 50, _ => false, () => hardcore);
             var owner = Owner(vitals);
+            InstantScriptTransactions(records, () => Vitals(initial), parts);
+            var selectedInventory = new FalloutPlayerInventory(45);
+            selectedInventory.Add(records, Key(1), 1, 1, true);
+            selectedInventory.Add(records, Key(1), 1, 1, true, extra: new(1, Owner: Key(7), Hotkey: 3));
+            var selectedVitals = Vitals(initial);
+            var selectedOwner = new FalloutPlayerIngestibles(records, selectedInventory, selectedVitals, parts,
+                _ => 50, _ => false, () => false);
+            var selectedBefore = JsonSerializer.Serialize(selectedInventory.Capture());
+            var selectedRevision = selectedInventory.Revision;
+            Reject(() => selectedOwner.Prepare(Key(1), 2, selectedRevision));
+            Reject(() => selectedOwner.Prepare(Key(1), 1, selectedRevision - 1));
+            Check(selectedInventory.Revision == selectedRevision &&
+                JsonSerializer.Serialize(selectedInventory.Capture()) == selectedBefore && selectedVitals.State == initial,
+                "Invalid selected Aid reordered inventory, advanced its revision or changed vitals.");
+            var selectedUse = selectedOwner.Prepare(Key(1), 1, selectedRevision);
+            selectedInventory.PrepareChange = (_, _) => new(() => throw new InvalidOperationException("fixture selected Aid refusal"), () => { });
+            Reject(() => selectedUse.Commit());
+            Check(selectedInventory.Revision == selectedRevision &&
+                JsonSerializer.Serialize(selectedInventory.Capture()) == selectedBefore && selectedVitals.State == initial,
+                "Refused selected Aid retained selection, consumption or health publication.");
+            selectedInventory.PrepareChange = null;
+            selectedOwner.Prepare(Key(1), 1, selectedRevision).Commit();
+            Check(selectedInventory.Revision == selectedRevision + 1 && selectedInventory.Item(Key(1)) is { Count: 1 } &&
+                selectedInventory.Instances(Key(1)).Single().Extra.Owner is null &&
+                selectedInventory.Instances(Key(1)).Single().Extra.Hotkey is null && selectedVitals.State.ExactHitPoints == 140,
+                "Selected/hotkey Aid consumed another variant or published more than one inventory transaction.");
             var ingredientInventory = new FalloutPlayerInventory(44);
             ingredientInventory.Add(records, Key(9), 1, 1, true);
             Reject(() => FalloutIngestible.Read(records, Key(9)));

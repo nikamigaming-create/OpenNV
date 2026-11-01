@@ -171,6 +171,18 @@ internal static class FalloutSoundPlaybackContract
                 "an environment Area3D reverb send for a dry or environment-ignored sound");
     }
 
+    internal static float SelectPitch(FalloutSoundRecord descriptor, FalloutSoundRandomState random)
+    {
+        ArgumentNullException.ThrowIfNull(descriptor);
+        ArgumentNullException.ThrowIfNull(random);
+        var pitch = (descriptor.Flags & FalloutSoundFlags.RandomFrequencyShift) != 0
+            ? 1 + (random.NextUnitFloat() * 2 - 1) * Math.Abs((int)descriptor.FrequencyAdjustment) / 100f
+            : descriptor.FixedPitchScale;
+        if (pitch <= 0 || !float.IsFinite(pitch))
+            throw Unsupported(descriptor, "a nonpositive selected pitch");
+        return pitch;
+    }
+
     internal static bool PassesRandomChance(
         FalloutSoundRecord descriptor,
         FalloutSoundRandomState random)

@@ -46,6 +46,12 @@ internal partial class RuntimeNativeOpeningStageDriver
     }
     private void ChangePlayerActorValue(string name, string operation, double value)
     {
+        if (name.Equals("health", StringComparison.OrdinalIgnoreCase) || FalloutBodyPartData.LimbActorValue(name) is not null)
+        {
+            (_vitals ?? throw new NotSupportedException("Player health/anatomy write requires initialized vitals."))
+                .TryChangeActorValue(name, operation, value);
+            return;
+        }
         if (_playerSkills.IsSkill(name)) _playerSkills.ChangeSkill(name, operation, value);
         else _playerActorValues.Change(name, operation, value);
     }

@@ -27,7 +27,9 @@ internal sealed partial class RuntimeNativeActorCombat
                 return BinaryPrimitives.ReadInt16LittleEndian(data[12..]) *
                     FalloutWeaponDamageResolver.NewVegasConditionMultiplier(FalloutWeaponCondition.SelectedCondition(row.Item));
             }).ThenBy(row => row.Item.RuntimeFormId).ToArray();
-        return choices.FirstOrDefault().Item;
+        var selected = choices.FirstOrDefault().Item;
+        owned.ResolveWeaponSelection(_records, selected?.FormKey);
+        return selected;
     }
 
     private void PrepareWeapon(FalloutCampaignItem item, FalloutPluginRecord stats, string directory)

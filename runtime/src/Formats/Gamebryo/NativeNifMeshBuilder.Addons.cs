@@ -7,9 +7,9 @@ internal static partial class RuntimeNativeNifMeshBuilder
 {
     private sealed partial class BuildState
     {
-        private void BindAddon(Node3D node, FalloutNifNodeValue value)
+        private void BindAddon(Node3D node, FalloutNifNodeValue value, Node3D? presentationParent = null)
         {
-            if (value.Flags != 0) throw new NotSupportedException($"BSValueNode flags {value.Flags} need player-adjust/world-Z ownership.");
+            _ = NativeNifWorldAxes.Validate(value.Flags);
             var content = _contentSource ?? RuntimeLiveContentSource.Current ??
                 throw new NotSupportedException("BSValueNode has no owned ADDN catalog.");
             var addon = FalloutAddonNodes.For(content).Get(value.Value);
@@ -19,7 +19,7 @@ internal static partial class RuntimeNativeNifMeshBuilder
             {
                 var model = NativeOwnedNifCache.Read(content, addon.Model, out var identity);
                 var scene = RuntimeNativeNifMeshBuilder.Build(model, _unitsToMetres, contentSource: content, addonAncestors: AddonAncestors);
-                node.AddChild(scene.Root);
+                (presentationParent ?? node).AddChild(scene.Root);
                 node.SetMeta("opennv_addon_form", addon.Form.ToString());
                 node.SetMeta("opennv_addon_index", value.Value);
                 node.SetMeta("opennv_addon_resource", identity);

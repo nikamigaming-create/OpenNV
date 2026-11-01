@@ -266,6 +266,7 @@ internal partial class RuntimeNativeOpeningStageDriver
     internal float PlayerSkillValue(string name) => _playerSkills.Value(name);
     internal float PlayerCombatValue(int value) => _playerSkills.Value(value);
     internal IReadOnlyList<FalloutPerkEntry> PlayerPerkEntries => _playerSkills.PerkEntries;
+    internal bool PlayerJuryRigging => FalloutPlayerPerkNumericEffects.Apply(48, 0, _playerSkills.PerkEntries, PlayerExperienceCondition) > 0;
     private int SourcePlayerLevel
     {
         get

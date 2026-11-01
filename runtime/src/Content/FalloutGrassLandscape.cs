@@ -149,8 +149,22 @@ internal static class FalloutGrassWater
         if (cell.Worldspace is not { } worldspace) return 0f;
         var world = stack.GetEffective(worldspace);
         var fields = world.ReadSubrecords().ToArray();
-        if (fields.Any(row => row.Signature == "WNAM"))
-            throw new NotSupportedException($"WRLD {worldspace} grass-water inheritance is not yet qualified.");
+        var parents = fields.Where(row => row.Signature == "WNAM").ToArray();
+        if (parents.Length != 0)
+        {
+            if (parents.Length != 1 || parents[0].Data.Length != 4)
+                throw new InvalidDataException("WRLD water parent requires one FormID.");
+            var parent = world.Plugin.AdjustFormId(BinaryPrimitives.ReadUInt32LittleEndian(parents[0].Data.Span));
+            if (stack.GetEffective(parent).Signature != "WRLD")
+                throw new InvalidDataException("WRLD water parent is not WRLD.");
+            var flags = fields.Where(row => row.Signature == "PNAM").ToArray();
+            if (flags.Length != 1 || flags[0].Data.Length != 2)
+                throw new NotSupportedException($"WRLD {worldspace} has no qualified parent flags.");
+            // A parent used for map/LOD/etc. does not replace this world's water.
+            // Actual UseWaterData inheritance still requires its native consumer.
+            if ((BinaryPrimitives.ReadUInt16LittleEndian(flags[0].Data.Span) & 8) != 0)
+                throw new NotSupportedException($"WRLD {worldspace} grass-water inheritance is not yet qualified.");
+        }
         var defaults = fields.Where(row => row.Signature == "DNAM").ToArray();
         if (defaults.Length != 1 || defaults[0].Data.Length != 8)
             throw new NotSupportedException($"WRLD {worldspace} has no qualified explicit default water height.");

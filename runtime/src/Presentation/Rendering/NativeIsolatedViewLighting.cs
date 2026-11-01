@@ -40,6 +40,8 @@ internal sealed partial class NativeIsolatedViewLighting : Node
         _worldCamera = worldCamera; _viewCamera = viewCamera; _model = model;
         _worldUnits = worldUnits; _viewUnits = viewUnits; _additional = additional;
         Name = "SourceWorldLightingBridge"; ProcessMode = ProcessModeEnum.Always;
+        // Source modifier clock90 -> composed light publication100 -> isolated light inputs101.
+        ProcessPriority = 101;
     }
 
     public override void _Ready()

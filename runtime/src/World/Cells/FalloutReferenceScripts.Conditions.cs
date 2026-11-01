@@ -21,6 +21,7 @@ internal sealed partial class FalloutReferenceScripts
         },
         ItemCount = host.Inventory is { } inventory ? inventory.ItemCount : null,
         Equipped = host.Inventory is { } equipment ? (subject, item) => equipment.IsEquipped(subject, item) : null,
+        WeaponInList = host.Inventory is { } weaponLists ? weaponLists.IsWeaponInList : null,
         IsDead = host.IsDead,
         HealthPercentage = host.HealthPercentage,
         Sitting = host.Sitting,

@@ -19,6 +19,7 @@ public partial class NativeVertexFogAudit : Node
             try
             {
                 foreach (var clipFar in new[] { 0f, -1f }) Exercise(device, clipFar);
+                ExerciseVatsCounts(device);
             }
             finally { device.Free(); }
             ExerciseInstanceInventory();

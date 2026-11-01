@@ -9,19 +9,25 @@ internal partial class RuntimeNativeOpeningStageDriver
     private readonly FalloutSoundRandomState _ingestibleSoundRandom = new(0x41d);
     internal FalloutIngestiblesSnapshot IngestibleState => _ingestibles.Capture();
 
-    internal void UseAid(FalloutFormKey form)
+    internal void UseAid(FalloutFormKey form) => CommitAidUse(form, _ingestibles.Prepare(form));
+
+    internal void UseAid(FalloutFormKey form, int variant, long expectedRevision) =>
+        CommitAidUse(form, _ingestibles.Prepare(form, variant, expectedRevision));
+
+    private void CommitAidUse(FalloutFormKey form, FalloutIngestibleUse use)
     {
-        var use = _ingestibles.Prepare(form);
         AudioStreamPlayer? sound = null;
+        var soundRandom = new FalloutSoundRandomState(_ingestibleSoundRandom.State);
         try
         {
             // Resolve audio before committing the inventory/vitals transaction.
             if (use.Sound is { } soundForm)
                 sound = NativeOwnedSoundPlayback.CreateMenu(FalloutSoundRecordReader.Read(_pluginStack, soundForm), _pluginStack,
-                    RuntimeLiveContentSource.Current!, _ingestibleSoundRandom);
+                    RuntimeLiveContentSource.Current!, soundRandom);
             var result = use.Commit();
             if (sound is not null && result.Consumed)
             {
+                _ingestibleSoundRandom.Restore(soundRandom.State);
                 sound.ProcessMode = ProcessModeEnum.Always;
                 AddChild(sound);
                 sound.Finished += sound.QueueFree;

@@ -45,6 +45,8 @@ internal partial class RuntimeNifEmbeddedSkin : Skeleton3D
 
     internal static Transform3D Relative(Node3D root, Node3D bone)
     {
+        root = NativeNifWorldAxes.Effective(root);
+        bone = NativeNifWorldAxes.Effective(bone);
         var result = Transform3D.Identity;
         for (Node? node = bone; node != root; node = node.GetParent())
         {

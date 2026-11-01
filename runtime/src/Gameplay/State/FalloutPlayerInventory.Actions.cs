@@ -1,4 +1,3 @@
-using System.Buffers.Binary;
 using OpenNV.Runtime.Content;
 
 namespace OpenNV.Runtime.Gameplay.State;
@@ -89,47 +88,38 @@ internal sealed partial class FalloutPlayerInventory
     }
 
     internal IReadOnlyList<FalloutInventoryInstance> RepairMaterials(FalloutPluginStack records, FalloutFormKey target, int variant,
-        IFalloutFormLists? formLists = null)
+        IFalloutFormLists? formLists = null, Func<bool>? juryRigging = null)
     {
         var item = Item(target) ?? throw new InvalidOperationException("Repair target is absent.");
         if (item.RecordType is not ("WEAP" or "ARMO")) return [];
         var selected = Instances(target)[variant];
         if ((selected.Extra.Condition ?? 1) >= 1) return [];
-        var allowed = new HashSet<FalloutFormKey> { target };
-        var record = records.GetEffective(target);
-        var repair = record.ReadSubrecords().SingleOrDefault(field => field.Signature == "REPL").Data;
-        if (!repair.IsEmpty)
+        bool? jury = null;
+        bool CurrentJury()
         {
-            if (repair.Length != 4) throw new InvalidDataException("Repair list FormID extent is invalid.");
-            var raw = BinaryPrimitives.ReadUInt32LittleEndian(repair.Span);
-            if (raw != 0) ReadList(record.Plugin.AdjustFormId(raw), []);
+            if (jury is { } known) return known;
+            var value = (juryRigging ?? throw new NotSupportedException("Repair has no current player perk owner."))();
+            jury = value;
+            return value;
         }
-        return Items.Where(entry => allowed.Contains(entry.FormKey) && !entry.UnequipLocked &&
+        return Items.Where(entry => !entry.UnequipLocked &&
                 !records.QuestObjects.IsQuestObject(entry.FormKey) &&
-                (entry.FormKey == target || !_equipped.Contains(entry.RuntimeFormId)))
+                (entry.FormKey == target || !_equipped.Contains(entry.RuntimeFormId)) &&
+                FalloutRepairAdmission.Allows(records, target, entry.FormKey, formLists, CurrentJury))
             .SelectMany(entry => Instances(entry.FormKey)).Where(instance =>
-                instance.Form != target || instance.Variant != variant || instance.Extra.Count > 1).ToArray();
-
-        void ReadList(FalloutFormKey form, HashSet<FalloutFormKey> active)
-        {
-            if (!active.Add(form)) throw new InvalidDataException("Repair list contains a cycle.");
-            var list = records.GetEffective(form);
-            if (list.Signature != "FLST") { allowed.Add(form); return; }
-            foreach (var entry in FalloutFormList.Entries(records, form, formLists))
-            {
-                if (entry is not { } member) throw new InvalidDataException("Repair list member is null.");
-                ReadList(member, new(active));
-            }
-        }
+                (instance.Form != target || instance.Variant != variant || instance.Extra.Count > 1) &&
+                (instance.Form != target || instance.Variant == variant ||
+                    instance.Extra.WeaponMods == 0 && !(instance.Variant == 0 && _equipped.Contains(item.RuntimeFormId)))).ToArray();
     }
 
     internal void Repair(FalloutPluginStack records, FalloutFormKey target, int variant,
-        FalloutFormKey material, int materialVariant, float skill, long revision, IFalloutFormLists? formLists = null)
+        FalloutFormKey material, int materialVariant, float skill, long revision, IFalloutFormLists? formLists = null, Func<bool>? juryRigging = null)
     {
         RequireRevision(revision);
         if (!float.IsFinite(skill)) throw new InvalidDataException("Repair skill is invalid.");
-        if (!RepairMaterials(records, target, variant, formLists).Any(value => value.Form == material && value.Variant == materialVariant))
+        if (!RepairMaterials(records, target, variant, formLists, juryRigging).Any(value => value.Form == material && value.Variant == materialVariant))
             throw new InvalidOperationException("Selected repair material is no longer eligible.");
+        RequireRevision(revision);
         var selected = Instances(target)[variant].Extra;
         var donor = Instances(material)[materialVariant].Extra;
         // The source formula uses condition on a 0..10 scale. NV retains its

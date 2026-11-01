@@ -17,6 +17,7 @@ internal partial class RuntimeNativeOpeningStageDriver
         ActorValue = DialogueActorValue,
         ItemCount = (subject, item) => InventoryCommands.ItemCount(subject, item),
         Equipped = (subject, item) => InventoryCommands.IsEquipped(subject, item),
+        WeaponInList = InventoryCommands.IsWeaponInList,
         HasPerk = (subject, perk) => subject == _pluginStack.RuntimeFormKey(0x14) ? _playerSkills.HasPerk(perk) :
             _scripts.References!.AcquiredPerks(subject).Contains(perk),
         IsDead = DialogueActorDead,

@@ -21,6 +21,7 @@ internal sealed partial class FalloutConditionRuntime(FalloutPluginStack records
     internal Func<FalloutFormKey, int, float>? ActorValue { get; init; }
     internal Func<FalloutFormKey, FalloutFormKey, double>? ItemCount { get; init; }
     internal Func<FalloutFormKey, FalloutFormKey, bool?>? Equipped { get; init; }
+    internal Func<FalloutFormKey, FalloutFormKey, bool>? WeaponInList { get; init; }
     internal Func<FalloutFormKey, FalloutFormKey, bool>? HasPerk { get; init; }
     internal Func<FalloutFormKey, bool>? IsDead { get; init; }
     internal Func<FalloutFormKey, float>? HealthPercentage { get; init; }
@@ -61,7 +62,11 @@ internal sealed partial class FalloutConditionRuntime(FalloutPluginStack records
             throw new NotSupportedException($"Condition run-on {condition.RunOn} has no qualified invocation owner.");
         if (condition.Kind is Function.GetQuestRunning or Function.GetStage or Function.GetStageDone or Function.GetQuestVariable or
             Function.GetObjectiveCompleted or Function.GetObjectiveDisplayed or Function.GetQuestCompleted)
+        {
+            if (condition.IsNullFormArgument1(records) && FalloutQuestState.ExplicitNullQuestValue(condition.Kind) is { } empty)
+                return empty;
             return quests.Evaluate(condition.Kind, condition.FormArgument1, condition.Argument2);
+        }
         if (FalloutPlatformConditions.Evaluate(condition.Declaration) is { } platform)
         { NoArguments(condition); return platform; }
         switch (condition.Kind)
@@ -69,7 +74,7 @@ internal sealed partial class FalloutConditionRuntime(FalloutPluginStack records
             case Function.GetCurrentTime: NoArguments(condition); return Hour is { } hour ? hour() : GlobalValue(condition);
             case Function.MenuMode: return Required(world, "active menu identity").QueryMenuMode(condition);
             case Function.GetVATSValue:
-                return Required(world, "VATS action context").VatsConditions.Query(condition.Argument1, condition.Argument2);
+                return Required(world, "VATS action context").VatsConditions.Query(condition, world!.FormLists);
             case Function.GetVATSMode:
                 NoArguments(condition); return Required(world, "VATS action context").VatsConditions.Mode();
             case Function.GetVatsTargetHeight:
@@ -150,7 +155,10 @@ internal sealed partial class FalloutConditionRuntime(FalloutPluginStack records
             case Function.IsFacingUp or Function.IsLeftUp:
                 NoArguments(condition); return NativeValue(subject, condition);
             case Function.IsWeaponInList:
-                SecondUnused(condition); Form(condition, "FLST"); return NativeValue(subject, condition);
+                SecondUnused(condition);
+                if (condition.IsNullFormArgument1(records)) return 0;
+                Form(condition, "FLST");
+                return WeaponInList is { } weaponList ? weaponList(subject, condition.FormArgument1) ? 1 : 0 : NativeValue(subject, condition);
             case Function.GetDistance:
                 SecondUnused(condition); RequireReference(condition.FormArgument1);
                 var separation = Distance is { } distance ? distance(subject, condition.FormArgument1) :

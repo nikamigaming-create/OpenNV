@@ -19,6 +19,7 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
     private readonly Func<FalloutNativeSpecialState> _special;
     private readonly Func<string, float>? _actorValue;
     private readonly Action<FalloutFormKey>? _useAid;
+    internal Action<FalloutFormKey, int, long>? UseAidInstance { get; init; }
     private readonly FalloutRadioStations? _radio;
     private long _radioRevision = -1;
     private long _noteRevision = -1;
@@ -43,6 +44,7 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
     private int _statusMode;
     private float _textOffset;
     private long _displayedInventoryRevision = -1;
+    private bool _inventorySelectionRefresh;
     private IReadOnlyList<FalloutFormKey> CollectedNotes => _references.PlayerNotes.Notes;
     private FalloutMapMarker? _travelTarget;
     internal Func<FalloutFormKey, string?>? FastTravel { get; init; }
@@ -117,6 +119,10 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
         if (_tiles is not null && Error is null && _state.Page == FalloutPipBoyPage.Stats && _displayedInventoryRevision != _inventory.Revision)
         { Refresh(); return; }
         if (_tiles is null || Error is not null || _state.Page != FalloutPipBoyPage.Items) return;
+        // Hover selects source inventory entries. Keep the current GUI capture
+        // alive until release rather than rebuilding a pressed row underneath it.
+        if (_inventorySelectionRefresh && !_buttons.Any(value => value.Button.IsPressed()))
+        { Refresh(); return; }
         if (_displayedInventoryRevision != _inventory.Revision) { Refresh(); return; }
         var vitals = _vitals();
         if (_displayedHealth == (vitals.HitPoints, vitals.MaximumHitPoints)) return;
@@ -144,6 +150,7 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
     private void Refresh()
     {
         var started = System.Diagnostics.Stopwatch.GetTimestamp();
+        _inventorySelectionRefresh = false;
         SaveMapView();
         Error = null;
         RemoveMeta("opennv_pipboy_error");
@@ -152,7 +159,7 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
         _pipBoyRevision = _state.Revision;
         SetMeta("opennv_page", (int)_state.Page);
         foreach (var child in GetChildren()) { RemoveChild(child); child.QueueFree(); }
-        _buttons.Clear(); _statsAidKeys.Clear(); _templates.Clear(); _namedTiles.Clear(); _map = null; _mapForeground = null;
+        _buttons.Clear(); _sourceActionKeys.Clear(); _templates.Clear(); _namedTiles.Clear(); _map = null; _mapForeground = null;
         try
         {
             var path = _state.Page switch { FalloutPipBoyPage.Stats => "stats", FalloutPipBoyPage.Items => "inventory", _ => "map" };
@@ -180,14 +187,15 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
         Error = error.Message; GD.PushError($"OPENNV_PIPBOY_UNBOUND {Error}");
         SetMeta("opennv_pipboy_error", Error);
     }
-    private void Target(XElement tile, string label, Action action)
+    private void Target(XElement tile, string label, Action action, Action? hovered = null)
     {
         var font = _tiles.Font(tile.DescendantsAndSelf("text").FirstOrDefault() ?? tile);
         var button = new NativeBitmapMenuButton(font.Font, font.Atlas, _tiles.TileColor(tile)) { Text = label, DrawText = false };
         button.Pressed += () => RunAction(action);
-        button.MouseEntered += () => { _tiles.Bind(tile, "mouseover", 1); QueueRedraw(); };
+        button.MouseEntered += () => { _tiles.Bind(tile, "mouseover", 1); hovered?.Invoke(); QueueRedraw(); };
         button.MouseExited += () => { _tiles.Bind(tile, "mouseover", 0); QueueRedraw(); };
         AddChild(button); _buttons.Add((tile, button));
+        BindSourceActionShortcut(tile, button, action);
     }
     private void Tabs(string parentName, string[] labels)
     {
@@ -216,7 +224,8 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
             x += widths[index] + gap;
         }
     }
-    private IReadOnlyList<XElement> ListRows(XElement list, string template, IReadOnlyList<(string Label, Action Action, bool Equipped)> items)
+    private IReadOnlyList<XElement> ListRows(XElement list, string template, IReadOnlyList<(string Label, Action Action, bool Equipped)> items,
+        Action<int>? hovered = null)
     {
         var rows = new List<XElement>();
         _tiles.Bind(list, "_highlight_y", -100); _tiles.Bind(list, "_selected_height", 48);
@@ -245,7 +254,8 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
             _tiles.Bind(tile, "height", height); y += height;
             foreach (var marker in tile.Descendants().Where(marker => ((string?)marker.Attribute("name"))?.EndsWith("ItemMarker", StringComparison.Ordinal) == true))
                 _tiles.Bind(marker, "visible", item.Equipped ? 1 : 0);
-            Target(tile, item.Label, item.Action);
+            var sourceIndex = _offset + index;
+            Target(tile, item.Label, item.Action, hovered is null ? null : () => hovered(sourceIndex));
             rows.Add(tile);
         }
         BindListNavigation(list, items.Count, rows.Count);
@@ -435,7 +445,7 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
     private void BuildItems()
     {
         Tabs("IM_Tabline", ["Weapons", "Apparel", "Aid", "Misc", "Ammo"]);
-        Hide("IM_HotKeyWheel", "IM_ItemInfoRect", "IM_EquipItemMarker", "IM_RepairButton", "IM_HotkeyButton", "IM_ModButton", "IM_DropButton", "IM_CancelButton");
+        Hide("IM_HotKeyWheel", "IM_ItemInfoRect", "IM_EquipItemMarker", "IM_CancelButton");
         var vitals = _vitals();
         _tiles.BindText(Tile("IM_Headline_PlayerHPInfo"), "_Value", $"{vitals.HitPoints}/{vitals.MaximumHitPoints}");
         _displayedHealth = (vitals.HitPoints, vitals.MaximumHitPoints);
@@ -446,7 +456,7 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
         _tiles.BindText(Tile("IM_Headline_PlayerCapsInfo"), "_Value", caps.ToString(CultureInfo.InvariantCulture));
         if (BuildInventoryActionList()) return;
         foreach (var name in new[] { "IM_RepairButton", "IM_ModButton" })
-        { Bind(name, "visible", 1); Bind(name, "target", 0); }
+        { Bind(name, "target", 0); }
         var items = _state.Items.Where(item => _records.QuestObjects.IsQuestObject(item.FormKey) ||
                 FalloutInventoryAccess.CanTransfer(_records, _records.GetEffective(item.FormKey), false))
             .Where(item => _state.Selection switch
@@ -460,16 +470,15 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
             .OrderBy(item => NameOf(item.FormKey), StringComparer.CurrentCultureIgnoreCase).ToArray();
         _selectedItem = items.FirstOrDefault(item => item.FormKey == _selectedItem?.FormKey) ?? items.FirstOrDefault();
         if (_selectedItem is { } chosen) _selectedVariant = Math.Clamp(_selectedVariant, 0, _inventory.Instances(chosen.FormKey).Count - 1);
-        ListRows(Tile("IM_InventoryList"), "IM_InventoryListTemplate", items.SelectMany(item => _inventory.Instances(item.FormKey).Select(instance =>
-            (InventoryInstanceLabel(item, instance.Extra), (Action)(() =>
+        var instances = items.SelectMany(item => _inventory.Instances(item.FormKey).Select(instance => (Item: item, instance.Variant))).ToArray();
+        ListRows(Tile("IM_InventoryList"), "IM_InventoryListTemplate", instances.Select(entry =>
+            (InventoryInstanceLabel(entry.Item, _inventory.Instances(entry.Item.FormKey)[entry.Variant].Extra), (Action)(() =>
             {
-                _selectedItem = item;
-                _selectedVariant = instance.Variant;
-                Refresh();
+                ActivateInventoryInstance(entry.Item, entry.Variant);
             }),
-                _inventory.Equipped.Contains(item.RuntimeFormId) && instance.Variant == 0))).ToArray());
+                _inventory.Equipped.Contains(entry.Item.RuntimeFormId) && entry.Variant == 0)).ToArray(),
+            index => SelectInventoryInstance(instances[index].Item, instances[index].Variant));
         var equip = Tile("IM_EquipButton");
-        _tiles.Bind(equip, "visible", _selectedItem?.RecordType is "ARMO" or "WEAP" or "ALCH" or "INGR" ? 1 : 0);
         if (_selectedItem is { } selected)
         {
             var fields = _records.GetEffective(selected.FormKey).ReadSubrecords().ToArray();
@@ -484,13 +493,15 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
                 AddText("Quest item", new(470, 605), new(400, 40));
             var equipped = _inventory.Equipped.Contains(selected.RuntimeFormId) && _selectedVariant == 0;
             var aid = selected.RecordType is "ALCH" or "INGR";
+            var canActivate = aid || selected.RecordType is "WEAP" or "ARMO";
+            _tiles.Bind(_tiles.Root, "_EquippableItem", canActivate ? 1 : 0);
+            _tiles.Bind(equip, "target", canActivate ? 1 : 0);
             _tiles.Text[equip] = Setting(aid ? "sInventoryUse" : equipped ? "sInventoryUnequip" : "sInventoryEquip");
             Target(equip, aid ? "Use" : equipped ? "Unequip" : "Equip", () =>
             {
-                if (aid) (_useAid ?? throw new NotSupportedException("Aid use has no gameplay owner."))(selected.FormKey);
-                else ToggleEquipment(selected);
-                Refresh();
+                ActivateInventoryInstance(SelectedInventoryItem(), _selectedVariant);
             });
+            _buttons[^1].Button.Disabled = !canActivate;
             BindInventoryActions(selected);
         }
     }
@@ -528,6 +539,30 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
             _selectedVariant = 0;
             _inventory.Equip(_records, item.FormKey);
         }
+    }
+
+    private FalloutCampaignItem SelectedInventoryItem() => _selectedItem ??
+        throw new InvalidOperationException("Inventory action has no selected item.");
+
+    private void SelectInventoryInstance(FalloutCampaignItem item, int variant)
+    {
+        if (_selectedItem?.FormKey == item.FormKey && _selectedVariant == variant) return;
+        _selectedItem = item;
+        _selectedVariant = variant;
+        _inventorySelectionRefresh = true;
+    }
+
+    private void ActivateInventoryInstance(FalloutCampaignItem item, int variant)
+    {
+        _selectedItem = item;
+        _selectedVariant = variant;
+        if (item.RecordType is "ALCH" or "INGR")
+        {
+            (UseAidInstance ?? throw new NotSupportedException("Selected Aid use has no inventory-instance owner."))
+                (item.FormKey, variant, _inventory.Revision);
+        }
+        else if (item.RecordType is "WEAP" or "ARMO") ToggleEquipment(item);
+        Refresh();
     }
     private void BuildData()
     {
@@ -705,7 +740,9 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
         // A failed page can still switch tabs or close through its device.
         // Do not interpret scrolling against a partially constructed tile tree.
         if (_tiles is null || Error is not null) return;
-        if (input is InputEventKey { Pressed: true, Echo: false } aidKey && HandleStatsAidKey(aidKey))
+        if (_inventorySelectionRefresh && input is InputEventKey { Pressed: true, Echo: false } &&
+            !_buttons.Any(value => value.Button.IsPressed())) Refresh();
+        if (input is InputEventKey { Pressed: true, Echo: false } aidKey && HandleSourceActionKey(aidKey))
         {
             GetViewport().SetInputAsHandled(); return;
         }

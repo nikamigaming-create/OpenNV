@@ -620,7 +620,7 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
     internal FalloutPlayerMoves PlayerMoves { get; } = new();
     internal FalloutPlayerNotes PlayerNotes { get; } = new(records);
     internal FalloutLeveledItemState LeveledItems { get; } = new(records);
-    internal FalloutVatsConditionState VatsConditions { get; } = new();
+    internal FalloutVatsConditionState VatsConditions { get; } = new(records);
     private FalloutFormListState? _formLists;
     internal FalloutFormListState FormLists
     {
@@ -832,7 +832,22 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
         stoppedRetirement = instance.StoppedRetirement?.State,
     };
 
+    private FalloutReferenceInstance? _lastPendingProcedureCapture;
     internal int PendingProcedureCaptureCount => _instances.Values.Count(PendingProcedureCapture);
+    internal bool HasPendingProcedureCapture
+    {
+        get
+        {
+            // Revalidate the actual blocker, never retain a readiness result.
+            // A persistent refusal needs one current owner query, rather than
+            // recapturing every earlier actor on each waiting autosave frame.
+            if (_lastPendingProcedureCapture is { } previous &&
+                _instances.TryGetValue(previous.Reference, out var current) && ReferenceEquals(previous, current) &&
+                PendingProcedureCapture(previous)) return true;
+            _lastPendingProcedureCapture = _instances.Values.FirstOrDefault(PendingProcedureCapture);
+            return _lastPendingProcedureCapture is not null;
+        }
+    }
     internal int StoppedPackageBindingCount => _instances.Values.Count(instance => instance.PackageBindingFailureCaptureReady);
     internal int PendingAnimationSoundCaptureCount => _instances.Values.Count(instance => !instance.AnimationSoundsCaptureReady);
     internal object PendingAnimationSoundCaptures => _instances.Values.Where(instance => !instance.AnimationSoundsCaptureReady)

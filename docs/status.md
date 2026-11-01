@@ -15,6 +15,28 @@ reproduced severe slowdown, but its checkpoint is unmatched and recording
 amplifies the cost. Scene parity and faster-than-retail performance remain open.
 See current-work.md for the measured limits and active repair batch.
 
+The current unpublished gameplay batch verifies ordinary weapon changes, VATS
+damage and ammo breakdown with cold persistence. Repair-kit cold reload retains
+three kits, the same rifle at 37.3% condition and one completed script receipt.
+The ordinary route reached Jean Sky Diving; after the Sandbox Eat repair, F5
+and cold reload pass at checkpoint `87b8854192fd49309e89476989fc6fe4`.
+Separate player-only diagnostic authored arrivals with matched yaw/time cover
+Primm, Nipton, Novac, Boulder City, McCarran and Freeside North; independent
+save/AI/weather state prevents travel or parity claims. Freeside North recovered
+fresh loaded state after a helper stale-state timeout, leaving load responsiveness
+open; East arrival is underway. The optimized six-minute moving 4K run averaged
+51.2097 FPS, falling from 57.91 in the first minute to 42.81 in the last.
+The source NAVM index passes its full spatial-index gate and preserves the owned
+route's 228 waypoints and projection errors; new-package live gains remain
+pending. The McCarran grass guard is integrated, with ordinary gate retry pending.
+VATS now reaches Selecting after preparing 24 parts in about 2508 ms without the
+cloned-label failure; final UI queue/execution remains pending. The expanded
+source also repairs quest failure state, actor values, equipment selection,
+source VATS layout and exact GPU mask reduction. The final combined gate is
+running before packaging/live checks and checked PR merge. The private regional
+imposter packet is not integration-ready. Sustained native 4K60, matched-state
+parity and broad location/action coverage remain unverified.
+
 The checked PR339 batch completes the ordinary Doc-house exit after shared idle
 condition and Sandbox-phase repairs. An enabled Pip-Boy flashlight survives a
 committed save and cold restore; a later outdoor save retains the disabled light
@@ -53,7 +75,7 @@ and post-combat quicksave/move/quickload restored exact position and inventory,
 with recovery to 57+ FPS in 11.625 seconds. One reloading recipe consumed its
 input and produced the authored materials. These are bounded gameplay cases.
 
-Bounded native-4K capture-off observations reached approximately 59–60 draws/s
+Bounded native-4K capture-off observations reached approximately 59â€“60 draws/s
 on outdoor movement, an interior sequence and the stationary well scene. These
 are not long-run combat or whole-game acceptance. Restored base health now
 matches the qualified 220-health source inputs. Projectile rigid-body impulses,

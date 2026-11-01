@@ -14,6 +14,7 @@ internal static class NativeOwnedSoundPlayback
         RuntimeLiveContentSource source, FalloutSoundRandomState random)
     {
         var before = random.State;
+        var stagedRandom = new FalloutSoundRandomState(before);
         var selected = descriptor.LogicalPath;
         if (!descriptor.HasExactFile)
         {
@@ -23,34 +24,49 @@ internal static class NativeOwnedSoundPlayback
                     Path.GetExtension(path).Equals(".wav", StringComparison.OrdinalIgnoreCase))
                 .ToArray();
             if (variants.Length == 0) throw new InvalidDataException($"Menu SOUN {descriptor.FormKey} has no owned WAV variants in {descriptor.LogicalPath}.");
-            selected = variants[random.NextBounded((uint)variants.Length)];
+            selected = variants[stagedRandom.NextBounded((uint)variants.Length)];
         }
         // The menu event is an explicit 2D playback request. Its SOUN still
         // supplies the winning asset, gain, pitch and loop declaration.
         // Environmental/submersion gates belong to positioned sounds. A menu
         // request has no world position or underwater listener relationship.
         var menuFlags = descriptor.Flags & ~(FalloutSoundFlags.EnvironmentIgnored | FalloutSoundFlags.MuteWhenSubmerged);
-        var player = CreateTwoDimensional(descriptor with { LogicalPath = selected, Flags = menuFlags | FalloutSoundFlags.MenuSound }, records);
+        var pitch = FalloutSoundPlaybackContract.SelectPitch(descriptor, stagedRandom);
+        var player = CreateSelectedTwoDimensional(descriptor with
+        {
+            LogicalPath = selected,
+            Flags = menuFlags | FalloutSoundFlags.MenuSound,
+        }, records, pitch);
         player.SetMeta("opennv_menu_sound_source", descriptor.FormKey.ToString());
         player.SetMeta("opennv_menu_sound_source_flags", (int)descriptor.Flags);
         player.SetMeta("opennv_menu_sound_variant", selected);
         player.SetMeta("opennv_menu_sound_random_before", before.ToString(System.Globalization.CultureInfo.InvariantCulture));
-        player.SetMeta("opennv_menu_sound_random_after", random.State.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        player.SetMeta("opennv_menu_sound_random_after", stagedRandom.State.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        random.Restore(stagedRandom.State);
         return player;
     }
 
     internal static AudioStreamPlayer CreateTwoDimensional(FalloutSoundRecord descriptor, FalloutPluginStack records)
     {
         ArgumentNullException.ThrowIfNull(descriptor);
+        if ((descriptor.Flags & FalloutSoundFlags.RandomFrequencyShift) != 0)
+            throw Unsupported(descriptor, "random frequency selection without an owned random stream");
+        return CreateSelectedTwoDimensional(descriptor, records, descriptor.FixedPitchScale);
+    }
+
+    private static AudioStreamPlayer CreateSelectedTwoDimensional(
+        FalloutSoundRecord descriptor, FalloutPluginStack records, float pitch)
+    {
+        ArgumentNullException.ThrowIfNull(descriptor);
         if (!descriptor.HasExactFile)
             throw Unsupported(descriptor, "folder-based random variant selection");
         if (!descriptor.IsTwoDimensional)
             throw Unsupported(descriptor, "3D attenuation requires the authored curve runtime");
-        if ((descriptor.Flags & ~SupportedTwoDimensionalFlags) != 0 ||
-            descriptor.RandomChancePercent != 0 || descriptor.FixedPitchScale <= 0.0f ||
+        if ((descriptor.Flags & ~(SupportedTwoDimensionalFlags | FalloutSoundFlags.RandomFrequencyShift)) != 0 ||
+            descriptor.RandomChancePercent != 0 || pitch <= 0.0f || !float.IsFinite(pitch) ||
             descriptor.StopTime != 0 || descriptor.StartTime != 0)
             throw Unsupported(descriptor,
-                "random frequency, environmental, envelope, timed, or nonpositive pitch behavior");
+                "random chance, environmental, envelope, timed, or nonpositive pitch behavior");
 
         var stream = NativeOwnedMediaLoader.LoadAudio(descriptor.LogicalPath);
         ConfigureLoop(stream, descriptor);
@@ -60,7 +76,7 @@ internal static class NativeOwnedSoundPlayback
             Name = $"NativeSound_{descriptor.EditorId}",
             Stream = stream,
             VolumeDb = -descriptor.StaticAttenuationDb,
-            PitchScale = descriptor.FixedPitchScale,
+            PitchScale = pitch,
             ProcessMode = menuFeedback ? Node.ProcessModeEnum.Always : Node.ProcessModeEnum.Inherit,
         };
         // A finite menu cue has no script or actor continuation to serialize.

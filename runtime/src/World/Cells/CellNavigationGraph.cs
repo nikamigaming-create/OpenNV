@@ -33,6 +33,9 @@ internal sealed partial class CellNavigationGraph
         // Projection ties use FormID order; other graph operations retain the
         // original source order, including source-bound random selection.
         _projectionMeshes = navmeshes.OrderBy(value => value.FormId, StringComparer.OrdinalIgnoreCase).ToArray();
+        // Large worlds reuse an immutable exact bounds index. Small scopes
+        // retain their existing stack-only projection traversal.
+        _projectionIndex = _projectionMeshes.Length > 64 ? new(_projectionMeshes) : null;
     }
 
     internal int NavMeshes => _navmeshes.Count;
@@ -165,7 +168,7 @@ internal sealed partial class CellNavigationGraph
         return start.Point;
     }
 
-    private NearestNodeResult NearestNode(Vector3 point)
+    private NearestNodeResult NearestNodeSorted(Vector3 point)
     {
         if (_navmeshes.Count == 0)
             throw new InvalidOperationException(
@@ -420,6 +423,7 @@ internal sealed partial class CellNavigationGraph
 
         private readonly Vector3 _minimum, _maximum;
         private readonly Lazy<int[]> _internalComponents;
+        internal (Vector3 Minimum, Vector3 Maximum) ProjectionBounds => (_minimum, _maximum);
         internal float BoundsDistanceSquared(Vector3 point)
         {
             var nearest = new Vector3(Math.Clamp(point.X, _minimum.X, _maximum.X),

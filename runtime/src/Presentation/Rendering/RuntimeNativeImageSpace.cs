@@ -14,17 +14,19 @@ internal partial class RuntimeNativeImageSpace : Node
     private string _unbound = string.Empty;
     private FalloutImageSpaceFrame? _menuBackground;
     private long _menuSerial;
+    private Action<float>? _publishSunlight;
     internal FalloutImageSpaceFrame? Frame { get; private set; }
     internal RetailHdrCompositorEffect Effect => _effect;
 
     internal void Configure(FalloutImageSpace source, FalloutImageSpaceState state, RetailHdrCompositorEffect effect,
-        FalloutGameTime? gameTime = null, Func<IReadOnlyList<FalloutWeatherImageModifier>>? weather = null)
+        FalloutGameTime? gameTime = null, Func<IReadOnlyList<FalloutWeatherImageModifier>>? weather = null,
+        Action<float>? sunlightDimmer = null)
     {
         Name = "NativeImageSpace";
         ProcessMode = ProcessModeEnum.Always;
         ProcessPriority = 100;
         _source = source; _state = state; _effect = effect; _gameTime = gameTime;
-        _weather = weather;
+        _weather = weather; _publishSunlight = sunlightDimmer;
         SetMeta("opennv_image_space_program_source", effect.SourceProgramIdentity);
         SetMeta("opennv_image_space_kernel_sha256", effect.SourceKernelSha256);
         if (effect.DoubleVisionPhaseError is { } error)
@@ -79,7 +81,10 @@ internal partial class RuntimeNativeImageSpace : Node
 
     private void Publish(double delta)
     {
-        var gameplay = _state.Compose(_source, _gameTime?.Hour, _effect.DoubleVisionPhase, weather: _weather?.Invoke());
+        var gameplay = _state.Compose(_source, _gameTime?.Hour, _effect.DoubleVisionPhase, weather: _weather?.Invoke(),
+            sunlightOwned: _publishSunlight is not null);
+        _publishSunlight?.Invoke(gameplay.SunlightDimmer);
+        SetMeta("opennv_image_space_sunlight_dimmer", gameplay.SunlightDimmer);
         Frame = _menuBackground ?? gameplay;
         _effect.SetSourceFrame(gameplay, (float)delta);
         SetMeta("opennv_image_space_operational", _effect.Operational);

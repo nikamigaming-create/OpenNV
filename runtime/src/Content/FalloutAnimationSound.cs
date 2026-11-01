@@ -87,11 +87,7 @@ internal static class FalloutAnimationSound
         if (!FalloutSoundPlaybackContract.PassesRandomChance(source, random))
             return new(source, false, null, 1, before, random.State, unbound);
         var path = variants.Count == 1 ? variants[0] : variants[(int)random.NextBounded((uint)variants.Count)];
-        var pitch = (source.Flags & FalloutSoundFlags.RandomFrequencyShift) != 0
-            ? 1 + (random.NextUnitFloat() * 2 - 1) * Math.Abs((int)source.FrequencyAdjustment) / 100f
-            : source.FixedPitchScale;
-        if (pitch <= 0 || !float.IsFinite(pitch))
-            throw FalloutSoundPlaybackContract.Unsupported(source, "a nonpositive selected pitch");
+        var pitch = FalloutSoundPlaybackContract.SelectPitch(source, random);
         return new(source, true, path, pitch, before, random.State, unbound);
     }
 }
