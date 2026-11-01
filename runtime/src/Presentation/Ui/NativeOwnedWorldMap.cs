@@ -15,7 +15,7 @@ internal sealed partial class NativeOwnedWorldMap : Control
     private readonly float _heading;
     private readonly FalloutNumericGameSettings _settings;
     private readonly NativeOwnedMenuTree _markerRules;
-    private readonly XElement _markerParent, _markerTemplate;
+    private readonly XElement _markerParent, _markerTemplate, _cursorTemplate;
     private readonly List<(Vector2 Point, FalloutMapMarker Marker, Texture2D Art, bool Travel)> _markers = [];
     private Vector2 _offset;
     private float _zoom = 1;
@@ -29,14 +29,14 @@ internal sealed partial class NativeOwnedWorldMap : Control
         var bounds = ZoomBounds;
         if (!float.IsFinite(view.Zoom) || view.Zoom < bounds.Minimum || view.Zoom > bounds.Maximum || !view.Offset.IsFinite())
             throw new InvalidDataException("Map view is nonfinite or outside the zoom range.");
-        _zoom = view.Zoom; _offset = view.Offset; QueueRedraw();
+        _zoom = view.Zoom; _offset = view.Offset; ClampPan(); QueueRedraw();
     }
     internal void ZoomAt(Vector2 position, int direction)
     {
         var point = (position - _offset) / Extent;
         var bounds = ZoomBounds;
         _zoom = Math.Clamp(_zoom * (direction > 0 ? 1.2f : 1 / 1.2f), bounds.Minimum, bounds.Maximum);
-        _offset = position - point * Extent; QueueRedraw();
+        _offset = position - point * Extent; ClampPan(); QueueRedraw();
     }
     internal event Action<FalloutMapMarker>? Selected;
     internal event Action<string>? Hovered;
@@ -65,8 +65,16 @@ internal sealed partial class NativeOwnedWorldMap : Control
         var menu = FalloutMenuXml.Expand(FalloutMenuXml.Read("menus/main/map_menu.xml"));
         _markerTemplate = new XElement(menu.Descendants("template")
             .Single(tile => (string?)tile.Attribute("name") == "MapMarkerTemplate").Elements().Single());
-        _markerParent = new XElement("rect", new XAttribute("name", "WorldMapMarkerRules"), _markerTemplate);
-        _markerRules = new(new XElement("menu", _markerParent));
+        var image = menu.Descendants().Single(tile => (string?)tile.Attribute("name") == "MM_WorldMap_ParentImage");
+        _markerParent = new XElement("rect", new XAttribute("name", "MM_WorldMap_ParentImage"),
+            new XElement(image.Element("x") ?? throw new InvalidDataException("World map has no source X pan rule.")),
+            new XElement(image.Element("y") ?? throw new InvalidDataException("World map has no source Y pan rule.")),
+            image.Elements().Where(property => property.Name.LocalName is "alpha" or "brightness" or "systemcolor")
+                .Select(property => new XElement(property)), _markerTemplate);
+        _cursorTemplate = new XElement(menu.Descendants().Single(tile => (string?)tile.Attribute("name") == "MM_WorldMapCursor"));
+        _markerRules = new(new XElement("menu",
+            new XElement(menu.Descendants("menu").Single().Element("systemcolor") ??
+                throw new InvalidDataException("World map has no source system color.")), _markerParent, _cursorTemplate));
         var map = FalloutWorldMap.Read(records, world);
         _mapSize = new(map.Width, map.Height);
         _texture = NativeOwnedMediaLoader.LoadTexture(map.Texture);
@@ -115,7 +123,18 @@ internal sealed partial class NativeOwnedWorldMap : Control
         }
     }
     private Vector2 Extent => _mapSize * _zoom;
-    internal void CenterPlayer() { _offset = Size / 2 - _player * Extent; QueueRedraw(); }
+    internal void CenterPlayer() { _offset = Size / 2 - _player * Extent; ClampPan(); QueueRedraw(); }
+    private void ClampPan()
+    {
+        _markerRules.Bind(_markerParent, "width", Extent.X);
+        _markerRules.Bind(_markerParent, "height", Extent.Y);
+        // The expression adds the proposed displacement, then applies the
+        // authored bounds. No native gameplay position is changed by panning.
+        _markerRules.Bind(_markerParent, "dragdeltax", _offset.X);
+        _markerRules.Bind(_markerParent, "dragdeltay", _offset.Y);
+        _offset = new(_markerRules.Number(_markerParent, "x", bindings: false),
+            _markerRules.Number(_markerParent, "y", bindings: false));
+    }
     public override void _GuiInput(InputEvent input)
     {
         if (input is InputEventMouseButton mouse)
@@ -142,7 +161,7 @@ internal sealed partial class NativeOwnedWorldMap : Control
         }
         if (input is InputEventMouseMotion motion)
         {
-            if (_drag is not null) { _dragDistance += motion.Relative.Length(); _offset += motion.Relative; _drag = motion.Position; QueueRedraw(); }
+            if (_drag is not null) { _dragDistance += motion.Relative.Length(); _offset += motion.Relative; ClampPan(); _drag = motion.Position; QueueRedraw(); }
             var selected = _markers.Where(marker => (_offset + marker.Point * Extent).DistanceTo(motion.Position) < 22)
                 .OrderBy(marker => (_offset + marker.Point * Extent).DistanceSquaredTo(motion.Position)).FirstOrDefault();
             Hovered?.Invoke(selected.Marker?.Name ?? ""); AcceptEvent();
@@ -150,7 +169,7 @@ internal sealed partial class NativeOwnedWorldMap : Control
     }
     public override void _Draw()
     {
-        DrawTextureRect(_texture, new(_offset, Extent), false, new(_color.R, _color.G, _color.B, 0.5f));
+        DrawTextureRect(_texture, new(_offset, Extent), false, _markerRules.DrawingColor(_markerParent));
         var bounds = ZoomBounds;
         var minimum = _settings.Float("fWorldMapMarkerMinSize");
         var maximum = _settings.Float("fWorldMapMarkerMaxSize");
@@ -165,10 +184,20 @@ internal sealed partial class NativeOwnedWorldMap : Control
         {
             var point = _offset + marker.Point * Extent;
             if (NativeUiImage.Sample(new(point - size / 2, size), new(Vector2.Zero, marker.Art.GetSize()), zoom, crop) is { } sample)
-                DrawTextureRectRegion(marker.Art, sample.Destination, sample.Source, _color);
+                DrawTextureRectRegion(marker.Art, sample.Destination, sample.Source, _markerRules.DrawingColor(_markerTemplate));
         }
+        var cursorMinimum = _settings.Float("fWorldfPlayerCursorMinSize");
+        var cursorMaximum = _settings.Float("fWorldPlayerCursorMaxSize");
+        if (!float.IsFinite(cursorMinimum) || !float.IsFinite(cursorMaximum) || cursorMinimum <= 0 || cursorMaximum <= 0)
+            throw new InvalidDataException("World map source cursor sizes are invalid.");
+        _markerRules.Bind(_markerParent, "user2", Mathf.Lerp(cursorMinimum, cursorMaximum,
+            (_zoom - bounds.Minimum) / (bounds.Maximum - bounds.Minimum)));
+        var cursorSize = new Vector2(_markerRules.Number(_cursorTemplate, "width"), _markerRules.Number(_cursorTemplate, "height"));
+        var cursorZoom = _markerRules.Number(_cursorTemplate, "zoom");
+        var cursorCrop = new Vector2(_markerRules.Number(_cursorTemplate, "cropx"), _markerRules.Number(_cursorTemplate, "cropy"));
         DrawSetTransform(_offset + _player * Extent, _heading);
-        DrawTextureRect(_cursor, new(-Vector2.One * 24, Vector2.One * 48), false, _color);
+        if (NativeUiImage.Sample(new(-cursorSize / 2, cursorSize), new(Vector2.Zero, _cursor.GetSize()), cursorZoom, cursorCrop) is { } cursorSample)
+            DrawTextureRectRegion(_cursor, cursorSample.Destination, cursorSample.Source, _color);
         DrawSetTransform(Vector2.Zero);
     }
 }

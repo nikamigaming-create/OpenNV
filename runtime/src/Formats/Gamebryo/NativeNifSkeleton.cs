@@ -267,6 +267,8 @@ internal sealed class RuntimeNativeNifSkeleton
             return;
         }
         var source = Source.ReadNode(blockIndex);
+        if (source.Value is { Flags: not 0 })
+            throw new NotSupportedException("BSValueNode world-axis publication in an external actor skeleton is unbound.");
         var controllerChain = FalloutNifNodeControllerChain.Read(Source, source);
         foreach (var blend in controllerChain.OfType<FalloutNifBlendController>())
             FalloutNifNodeControllerChain.RequireDormantBlend(source, blend);

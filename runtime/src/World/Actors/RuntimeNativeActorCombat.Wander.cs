@@ -35,6 +35,9 @@ internal sealed partial class RuntimeNativeActorCombat
     {
         var previous = CurrentSandboxActivity ?? throw new InvalidOperationException("Sandbox phase has no selected activity.");
         _ = FalloutSandboxProcedure.Read(phase, previous.Activity);
+        // Reobserving a phase must not invalidate a queued physical request
+        // which retains this exact selected activity instance.
+        if (previous.NativePhase == phase) return previous;
         var current = previous with { NativePhase = phase };
         if (_executingSandboxActivity is not null) _executingSandboxActivity = current;
         if (_state.PackageMotion is { } motion && motion.Sandbox == previous)

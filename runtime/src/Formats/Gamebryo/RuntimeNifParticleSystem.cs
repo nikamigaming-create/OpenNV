@@ -50,6 +50,7 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
     internal void ResetParentMotion() { _previousParent = GlobalTransform; _parentSeconds = 0; }
     internal void BeginParentMotion(double seconds)
     {
+        NativeNifWorldAxes.RefreshAncestors(this);
         _parent = GlobalTransform; _parentInverse = _parent.AffineInverse();
         _parentSeconds = (float)seconds;
     }
@@ -583,8 +584,9 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
     {
         var cacheable = _advancing && LifecycleEvent is null;
         if (cacheable && _stepTransforms.TryGetValue(index, out var retained)) return retained;
-        var transform = _source.WorldSpace ? _nodes[index].GlobalTransform :
-            GlobalTransform.AffineInverse() * _nodes[index].GlobalTransform;
+        var source = NativeNifWorldAxes.Effective(_nodes[index]);
+        var transform = _source.WorldSpace ? source.GlobalTransform :
+            GlobalTransform.AffineInverse() * source.GlobalTransform;
         if (cacheable) _stepTransforms.Add(index, transform);
         return transform;
     }

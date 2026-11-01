@@ -151,6 +151,7 @@ public partial class NativeNifInstanceAudit : Node
             }
             if (OS.GetCmdlineUserArgs() is ["--owned-install-models", var installationRoot, .. var installationModels])
             {
+                ExerciseWorldAxesContracts();
                 ExerciseOwnedInstallationModels(installationRoot, installationModels);
                 GetTree().Quit(); return;
             }
@@ -257,6 +258,7 @@ public partial class NativeNifInstanceAudit : Node
             ExerciseMorphBasis();
             ExerciseManagedMorph();
             ExerciseScalarSnapshots();
+            ExerciseWorldAxesContracts();
             ExerciseParticleChannels();
             ExerciseParticleTransformCache();
             ExerciseParticleShapesColors();

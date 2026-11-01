@@ -213,6 +213,7 @@ internal sealed partial class RuntimeNativeActorCombat
         }
         if (Dead) { RestoreDeath(); return; }
         if (_context is null || !EffectiveEnabled || _state.Unconscious) return;
+        RefreshProcessEquipment();
         var player = _context.Player();
         if (!_context.Resident(_actor.GlobalPosition)) return;
         if (_state.ConversationSuppressionSeconds is { } suppression)

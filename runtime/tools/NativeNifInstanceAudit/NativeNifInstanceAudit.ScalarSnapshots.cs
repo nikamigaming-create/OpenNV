@@ -126,8 +126,8 @@ public partial class NativeNifInstanceAudit
         var visible = true;
         var target = new FalloutNifScalarTarget(FalloutNifScalarKind.Visibility, "ExternalObject", "NiVisController");
         var link = new FalloutNifControllerLink(target.Node, "", target.Name, "", "", -1, -1, 50);
-        RuntimeNativeNifAnimation Clip(bool value, byte priority = 50) => new(source,
-            sequence with { ControlledBlocks = [link with { Priority = priority }], Weight = 1 }, skeleton,
+        RuntimeNativeNifAnimation Clip(bool value, byte priority = 50, float weight = 1) => new(source,
+            sequence with { ControlledBlocks = [link with { Priority = priority }], Weight = weight }, skeleton,
             bindScalarChannel: current => new(target, current.Priority, new ConstantVisibility(value),
                 () => FalloutNifBoolAnimation.Encode(visible), value => visible = FalloutNifBoolAnimation.BlendedValue(value)));
         var incoming = Clip(false);
@@ -151,6 +151,17 @@ public partial class NativeNifInstanceAudit
         visible = true;
         RuntimeNativeNifAnimation.ApplyWeightedLayers([(Clip(false), 0, 0)]);
         Require(!visible, "The native single attached interpolator fast path lost its source value.");
+        var bone = skeleton.BoneIndex("SyntheticRoot");
+        var originalPosition = skeleton.Node.GetBonePosePosition(bone);
+        var retainedPosition = new Vector3(1, 2, 3);
+        skeleton.Node.SetBonePosePosition(bone, retainedPosition);
+        visible = true;
+        RuntimeNativeNifAnimation.ApplyWeightedLayers([(Clip(false, weight: 0), 0, 0)]);
+        Require(!visible && skeleton.Node.GetBonePosePosition(bone) == retainedPosition,
+            "Single attached reduction lost zero-weight scalar semantics or reset an uncovered bone.");
+        skeleton.Node.SetBonePosePosition(bone, originalPosition);
+        Reject(() => RuntimeNativeNifAnimation.ApplyWeightedLayers([(Clip(false), float.NaN, 1)]));
+        Reject(() => RuntimeNativeNifAnimation.ApplyWeightedLayers([(Clip(false), 0, float.NaN)]));
         Reject(() => incoming.ValidateSnapshotScalars([]));
         Reject(() => incoming.ValidateSnapshotScalars([cold[0], cold[0]]));
         Reject(() => (cold[0] with { Value = .5f }).Validate());

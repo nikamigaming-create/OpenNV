@@ -58,8 +58,43 @@ internal static class UiAnimationProbe
         Advance(100, 0);
         store.Reset();
         Advance(100, 7);
+        NamedSources();
         SignedArguments();
         Console.WriteLine("OPENNV_UI_ANIMATION_PASS modes=4 signedArguments=true sourceDependencies=live stop=true missingTile=false unload=true reset=true finite=true");
+    }
+
+    private static void NamedSources()
+    {
+        var root = XElement.Parse("<menu name='Vats'><rect name='Shared'/><rect name='Glow'/><rect name='Outside'/>" +
+            "<template name='definition'><image name='chance_bracket'/></template></menu>");
+        var glow = root.Elements().Single(tile => (string?)tile.Attribute("name") == "Glow");
+        var resolver = new NativeOwnedMenuNamedSources(root);
+        var rows = new List<(XElement Row, XElement Text, XElement Bracket)>();
+        for (var index = 0; index < 6; index++)
+        {
+            var row = XElement.Parse($"<rect name='part_{index}'><image name='chance_bracket'><y>{index}</y></image>" +
+                "<text name='limb_name'><y><copy src='chance_bracket' trait='y'/></y></text></rect>");
+            glow.Add(row);
+            rows.Add((row, row.Element("text")!, row.Element("image")!));
+        }
+        foreach (var row in rows)
+            Require(ReferenceEquals(resolver.Resolve(row.Text, "chance_bracket"), row.Bracket) &&
+                ReferenceEquals(resolver.Resolve(row.Text, "CHANCE_BRACKET"), row.Bracket) &&
+                ReferenceEquals(resolver.Resolve(row.Text, "Shared"), root.Elements().First()),
+                "Cloned bare tile references crossed instances or lost case-insensitive/shared lookup.");
+        var outside = root.Elements().Single(tile => (string?)tile.Attribute("name") == "Outside");
+        Reject(() => resolver.Resolve(outside, "chance_bracket"));
+        Reject(() => resolver.Resolve(outside, "absent"));
+        var ambiguous = rows[0]; ambiguous.Row.Add(new XElement(ambiguous.Bracket)); resolver.Clear();
+        Reject(() => resolver.Resolve(ambiguous.Text, "chance_bracket"));
+        foreach (var row in rows) row.Row.Remove();
+        resolver.Clear();
+        var fresh = XElement.Parse("<rect name='replacement'><image name='chance_bracket'/><text name='limb_name'/></rect>");
+        glow.Add(fresh);
+        Require(ReferenceEquals(resolver.Resolve(fresh.Element("text")!, "chance_bracket"), fresh.Element("image")) &&
+            ReferenceEquals(resolver.Resolve(outside, "chance_bracket"), fresh.Element("image")),
+            "Refresh retained a retired clone or treated a template declaration as a live tile.");
+        Console.WriteLine("OPENNV_UI_NAMED_SOURCE_SCOPE_PASS sixClones=true siblingIsolation=true caseInsensitive=true sharedGlobal=true ambiguousRefused=true templateExcluded=true refresh=true");
     }
 
     private static void SignedArguments()

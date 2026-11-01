@@ -30,6 +30,9 @@ internal static class NativeActorPosedBounds
         MeshInstance3D? selectedMesh = null)
     {
         FalloutNifSphereBound? result = null;
+        // This synchronous sample cannot advance or publish the skeleton.
+        // Read its world transform once, without retaining a pose across calls.
+        Transform3D? skeletonTransform = null;
         foreach (var part in parts)
         {
             var prepared = PartCache.GetValue(part, scene => new(scene.Root.GetMeta("opennv_source_model").AsString(),
@@ -58,8 +61,14 @@ internal static class NativeActorPosedBounds
                         while (ancestor >= 0 && ancestor != selected) ancestor = skeleton.Node.GetBoneParent(ancestor);
                         if (ancestor < 0) continue;
                     }
-                    var pose = sphere.Bone < 0 ? mesh.GlobalTransform :
-                        skeleton.Node.GlobalTransform * skeleton.Node.GetBoneGlobalPose(sphere.Bone);
+                    Transform3D pose;
+                    if (sphere.Bone < 0) pose = mesh.GlobalTransform;
+                    else
+                    {
+                        var transform = skeletonTransform ?? skeleton.Node.GlobalTransform;
+                        skeletonTransform = transform;
+                        pose = transform * skeleton.Node.GetBoneGlobalPose(sphere.Bone);
+                    }
                     var center = pose * sphere.Center;
                     var next = new FalloutNifSphereBound(new(center.X, center.Y, center.Z), sphere.Radius * pose.Basis.Scale.X);
                     result = result?.Merge(next) ?? next;

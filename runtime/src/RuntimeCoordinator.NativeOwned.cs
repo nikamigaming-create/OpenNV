@@ -110,6 +110,7 @@ public partial class RuntimeCoordinator
             manualSave = new { receipt = _nativeManualSaves.Receipt, history = detailed ? _nativeManualSaves.History : null },
             combatWheel = _nativeCombatWheel?.State,
             vats = _nativePlayer?.VatsState,
+            vatsTargetMeasurements = detailed ? _nativePlayer?.VatsTargetMeasurements : null,
             xr = _nativeXr?.State,
             detail = detailed ? "complete-runtime-snapshot" : "live-summary;reference-readiness-and-inventories-unsampled;request-state-for-details",
             reviewScope = !detailed || _nativeActiveCell is null ? null : new
@@ -1606,14 +1607,14 @@ public partial class RuntimeCoordinator
     }
 
     private Compositor? AddNativeImageSpace(Node3D root, FalloutImageSpace? imageSpace,
-        Func<IReadOnlyList<FalloutWeatherImageModifier>>? weather = null)
+        Func<IReadOnlyList<FalloutWeatherImageModifier>>? weather = null, Action<float>? sunlightDimmer = null)
     {
         if (imageSpace is null) return null;
         var application = RetailImageSpaceRenderer.CreateFromSource(imageSpace,
             _configuration.FalloutEnvironment.ImageSpace, _configuration.Capture,
             _configuration.ActorCompiler.FaceGenMaterial.RuntimeAlbedoTransfer);
         var presenter = new RuntimeNativeImageSpace();
-        presenter.Configure(imageSpace, _nativeImageSpaceState, application.Effect, _nativeGameTime, weather);
+        presenter.Configure(imageSpace, _nativeImageSpaceState, application.Effect, _nativeGameTime, weather, sunlightDimmer);
         root.AddChild(presenter);
         root.SetMeta("opennv_source_image_space", imageSpace.Form.ToString());
         root.SetMeta("opennv_source_image_space_version", imageSpace.FormVersion);

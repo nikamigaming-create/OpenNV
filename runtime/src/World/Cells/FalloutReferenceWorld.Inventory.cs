@@ -5,7 +5,8 @@ using OpenNV.Runtime.Gameplay.State;
 namespace OpenNV.Runtime.World.Cells;
 
 internal sealed record FalloutReferenceInventorySnapshot(FalloutOpeningInventoryGrant Contents,
-    IReadOnlyList<FalloutFormKey> Unequipped, bool InitialArmorResolved = false, FalloutInventoryTraversal? Traversal = null);
+    IReadOnlyList<FalloutFormKey> Unequipped, bool InitialArmorResolved = false, FalloutInventoryTraversal? Traversal = null,
+    bool WeaponSelectionResolved = false, bool WeaponSelectionRefreshPending = false);
 
 internal sealed class FalloutReferenceInventory
 {
@@ -16,8 +17,39 @@ internal sealed class FalloutReferenceInventory
     // An unresolved initial weapon choice is not an authoritative empty list.
     internal HashSet<FalloutFormKey> Unequipped { get; } = [];
     internal bool InitialArmorResolved { get; set; }
+    private bool _weaponSelectionPublished;
+    private FalloutFormKey? _publishedWeapon;
+    private long? _weaponSelectionRevision;
+    private bool _restoredWeaponSelectionRefreshPending;
+    internal bool WeaponSelectionRefreshPending => _restoredWeaponSelectionRefreshPending ||
+        _weaponSelectionPublished && _weaponSelectionRevision != Contents.Revision;
+    internal bool WeaponSelectionResolved => _weaponSelectionPublished && (_publishedWeapon is { } weapon
+        ? Contents.Item(weapon) is { RecordType: "WEAP" } selected && Contents.Equipped.Contains(selected.RuntimeFormId)
+        : !Contents.Items.Any(item => item.RecordType == "WEAP" && Contents.Equipped.Contains(item.RuntimeFormId)));
+
+    // Only the actor's selection owner publishes this decision. A null choice
+    // is explicit unarmed state, not an inference from a missing attachment.
+    internal void ResolveWeaponSelection(FalloutPluginStack records, FalloutFormKey? selected)
+    {
+        if (selected is { } weapon && (Contents.Item(weapon)?.RecordType != "WEAP" || Unequipped.Contains(weapon)))
+            throw new InvalidDataException("Actor selected weapon is absent, not a weapon or explicitly unequipped.");
+        var current = Contents.EquippedObject(records, 5);
+        if (current != selected)
+        {
+            if (current is { } previous && Contents.Item(previous)!.UnequipLocked)
+                throw new NotSupportedException("Actor weapon selection conflicts with an explicit equipment lock.");
+            if (selected is { } chosen) Contents.Equip(records, chosen);
+            else if (current is { } old) _ = Contents.Unequip(records, old);
+        }
+        if (Contents.EquippedObject(records, 5) != selected)
+            throw new InvalidOperationException("Actor weapon selection was not committed to its inventory.");
+        _publishedWeapon = selected;
+        _weaponSelectionPublished = true;
+        _weaponSelectionRevision = Contents.Revision;
+        _restoredWeaponSelectionRefreshPending = false;
+    }
     internal FalloutReferenceInventorySnapshot Capture() => new(Contents.Capture(), Unequipped.OrderBy(key => key.ToString(), StringComparer.Ordinal).ToArray(),
-        InitialArmorResolved, Contents.CaptureTraversal());
+        InitialArmorResolved, Contents.CaptureTraversal(), WeaponSelectionResolved, WeaponSelectionRefreshPending);
     internal void Restore(FalloutReferenceInventorySnapshot state, FalloutPluginStack records)
     {
         if (state.Unequipped is null || state.Unequipped.Distinct().Count() != state.Unequipped.Count ||
@@ -27,6 +59,10 @@ internal sealed class FalloutReferenceInventory
         Contents.RestoreTraversal(records, state.Traversal);
         Unequipped.UnionWith(state.Unequipped);
         InitialArmorResolved = state.InitialArmorResolved;
+        _publishedWeapon = state.WeaponSelectionResolved ? Contents.EquippedObject(records, 5) : null;
+        _weaponSelectionPublished = state.WeaponSelectionResolved;
+        _weaponSelectionRevision = Contents.Revision;
+        _restoredWeaponSelectionRefreshPending = state.WeaponSelectionRefreshPending;
     }
 }
 
@@ -202,7 +238,7 @@ internal sealed partial class FalloutReferenceWorld
         if (reference != records.RuntimeFormKey(0x14)) _ = Actor(reference);
         var inventory = Inventory(reference, level, globals);
         if (slot != 5) _ = EquippedArmor(reference, level, globals);
-        if ((slot == 5 || slot >= 20) && inventory.Contents.Items.Any(item => item.RecordType == "WEAP" &&
+        if ((slot == 5 || slot >= 20) && !inventory.WeaponSelectionResolved && inventory.Contents.Items.Any(item => item.RecordType == "WEAP" &&
                 !inventory.Unequipped.Contains(item.FormKey)) && !inventory.Contents.Equipped.Any(id => records.GetEffective(records.RuntimeFormKey(id)).Signature == "WEAP"))
             throw new NotSupportedException("Actor weapon selection is not yet owned by its active process.");
         return inventory.Contents.EquippedObject(records, slot);

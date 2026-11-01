@@ -22,7 +22,12 @@ public partial class NativeNifInstanceAudit
         var paths = order.Select(shape => NativeNpcMaterial.Alternate(part, nif, shape)).ToArray();
         if (paths[0]?[0] != "textures/replacement.dds" || paths[1] is not null || paths[2]?[0] != "textures/other.dds")
             throw new InvalidDataException("Model texture overrides redirected by names, omitted a repeated name or lost index replacement order.");
-        foreach (var invalid in new[] { -1, 3 })
+        var unset = Entry("surface", -1, "textures/unset.dds");
+        if (NativeNpcMaterial.Alternate(part with { AlternateTextures = [unset] }, nif, order[0]) is not null ||
+            NativeNpcMaterial.Alternate(part with { AlternateTextures = [unset, Entry("surface", 0, "textures/valid.dds")] }, nif, order[0])?[0] != "textures/valid.dds" ||
+            NativeNpcMaterial.Alternate(part with { AlternateTextures = [Entry("surface", 0, "textures/valid.dds"), unset] }, nif, order[0])?[0] != "textures/valid.dds")
+            throw new InvalidDataException("Unset source model texture key became an override or erased a valid indexed entry.");
+        foreach (var invalid in new[] { -2, 3 })
         {
             try
             {

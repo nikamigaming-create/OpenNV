@@ -10,6 +10,7 @@ internal static partial class QuestStateQueryContracts
 {
     internal static void Run(string? selected = null)
     {
+        ExplicitNullQuestArguments();
         foreach (var query in selected is null ? new[] { "GetQuestRunning", "GetQuestCompleted" } : new[] { selected })
         {
             foreach (var shared in new[] { false, true }) Exercise(query, shared);
@@ -194,6 +195,7 @@ internal static partial class QuestStateQueryContracts
             activePlugins: RuntimeLiveContentSource.ResolveVanillaPlugins(game), includeImplicitPlugins: false);
         using var content = RuntimeLiveContentSource.Current!;
         using var records = FalloutPluginStack.Load(content.PluginSources);
+        OwnedExplicitNullQuestArguments(records);
         var quest = FalloutDialogueTopic.Find(records, "QUST", "vDialogueEDE");
         var script = FalloutScriptLocals.AttachedScript(records, quest) ?? throw new InvalidDataException("Owned ED-E quest lacks its script.");
         var source = script;

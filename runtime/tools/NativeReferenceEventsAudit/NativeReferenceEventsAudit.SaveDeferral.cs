@@ -78,13 +78,22 @@ public partial class NativeReferenceEventsAudit
             Bind("_ingestibles", new FalloutPlayerIngestibles(records, inventory, null!, new(Key(0x702), []),
                 _ => throw new InvalidOperationException("Unexpected Aid evaluation."), _ => false, () => false));
             Bind("_imageSpaceState", new FalloutImageSpaceState());
+            Bind("_presentationActive", true);
             var reference = world.Get(Key(0x901));
             reference.ProcedureCaptureBlocker = "First native procedure snapshot is pending.";
+            var readinessQueries = 0;
+            reference.CanCaptureIdleRequests = () => { readinessQueries++; return true; };
             var source = records.GetEffective(Key(0x700));
             driver.ApplyNativeSourceCommand(source.FormKey, new(records, source, source, []), "AutoSave", []);
+            Require(!State().GetProperty("admissionObservation").GetProperty("sampled").GetBoolean() && readinessQueries == 0,
+                "Unsampled autosave telemetry performed readiness admission or invented an observation.");
             for (var frame = 0; frame < 3; frame++) driver._Process(0);
-            Require(driver.ExecutionError is null && State().GetProperty("requested").GetBoolean() &&
-                State().GetProperty("deferredBy").GetString() == "actor-procedure-initialization",
+            var observedQueries = readinessQueries;
+            var observed = State();
+            Require(driver.ExecutionError is null && observedQueries >= 3 && observed.GetProperty("requested").GetBoolean() &&
+                observed.GetProperty("deferredBy").GetString() == "actor-procedure-initialization" &&
+                observed.GetProperty("admissionObservation").GetProperty("sampled").GetBoolean() &&
+                readinessQueries == observedQueries,
                 "A temporary procedure capture blocker consumed or permanently failed the queued autosave.");
             try
             {
@@ -95,9 +104,29 @@ public partial class NativeReferenceEventsAudit
                 error.InnerException.Message.Contains("actor-procedure-initialization", StringComparison.Ordinal))
             { }
             reference.ProcedureCaptureBlocker = null;
-            Require(driver.ExecutionError is null && State().GetProperty("requested").GetBoolean() &&
-                State().GetProperty("deferredBy").ValueKind == JsonValueKind.Null && world.Capture().Count > 0,
+            Require(driver.ObserveManualSaveAdmission().Kind == RuntimeManualSaveAdmissionKind.Ready && world.Capture().Count > 0,
                 "Settled procedure did not release the same pending autosave for normal capture.");
+            observedQueries = readinessQueries;
+            var settled = State();
+            Require(driver.ExecutionError is null && settled.GetProperty("requested").GetBoolean() &&
+                settled.GetProperty("deferredBy").GetString() == "actor-procedure-initialization" &&
+                settled.GetProperty("admissionObservation").GetProperty("processFrame").GetUInt64() ==
+                    observed.GetProperty("admissionObservation").GetProperty("processFrame").GetUInt64() &&
+                readinessQueries == observedQueries,
+                "Historical autosave telemetry rescanned current readiness or rewrote its last actual admission.");
+            reference.AnimationSoundEvents.Fail(null, "Fixture source audio continuation is unowned.");
+            driver._Process(0);
+            observedQueries = readinessQueries;
+            for (var frame = 0; frame < 3; frame++) driver._Process(0);
+            Require(driver.ExecutionError is null && State().GetProperty("requested").GetBoolean() &&
+                State().GetProperty("deferredBy").GetString() == "animation-audio-pending" && readinessQueries == observedQueries,
+                "Waiting audio repeatedly captured unrelated actor readiness or admitted the automatic writer.");
+            try
+            {
+                _ = world.Capture();
+                throw new InvalidOperationException("Boolean audio deferral waived strict source-ledger capture.");
+            }
+            catch (NotSupportedException) { }
             const string captureFailure = "Reference Contact.esm:000901: Saved door motion has no retained source animation clock.";
             owner.GetMethod("RetainDriverFailure", flags)!.Invoke(driver, [new InvalidDataException(captureFailure)]);
             Require(driver.ObserveManualSaveAdmission() is

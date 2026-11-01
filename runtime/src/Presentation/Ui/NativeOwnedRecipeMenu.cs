@@ -256,9 +256,9 @@ internal sealed partial class NativeOwnedRecipeMenu : Control
         }
         catch (Exception error)
         {
+            Refresh();
             _message.Text = "Craft failed: " + error.Message;
             GD.PushError($"OPENNV_RECIPE_CRAFT_UNBOUND recipe={recipe.Record.FormKey} {error.Message}");
-            Refresh();
         }
     }
 

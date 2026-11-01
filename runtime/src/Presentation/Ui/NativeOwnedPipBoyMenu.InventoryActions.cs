@@ -6,6 +6,9 @@ namespace OpenNV.Runtime.Presentation.Ui;
 internal sealed partial class NativeOwnedPipBoyMenu
 {
     private string? _inventoryAction;
+    internal Func<bool>? RepairJuryRigging { get; init; }
+    private bool HasRepairJuryRigging() => (RepairJuryRigging ??
+        throw new NotSupportedException("Repair has no current player perk owner."))();
     private FalloutFormKey _actionItem;
     private int _actionVariant;
     private long _actionRevision;
@@ -25,10 +28,10 @@ internal sealed partial class NativeOwnedPipBoyMenu
         _actionRevision = _inventory.Revision; _offset = 0; Refresh();
     }
 
-    private void InventoryActionButton(string name, string label, Action action, bool enabled = true)
+    private void InventoryActionButton(string name, string label, Action action, bool enabled = true, bool forceVisible = false)
     {
         var tile = Tile(name);
-        _tiles.Bind(tile, "visible", 1);
+        if (forceVisible) _tiles.Bind(tile, "visible", 1);
         _tiles.Text[tile] = label;
         _tiles.Bind(tile, "target", enabled ? 1 : 0);
         Target(tile, label, action);
@@ -39,19 +42,19 @@ internal sealed partial class NativeOwnedPipBoyMenu
     {
         if (DropItem is not null && !selected.UnequipLocked &&
             FalloutInventoryAccess.CanTransfer(_records, _records.GetEffective(selected.FormKey), true))
-            InventoryActionButton("IM_DropButton", "Drop", () => BeginInventoryAction("drop", selected));
+            InventoryActionButton("IM_DropButton", "Drop", () => BeginInventoryAction("drop", SelectedInventoryItem()));
         var canRepair = selected.RecordType is "WEAP" or "ARMO" && !selected.UnequipLocked &&
-            _inventory.RepairMaterials(_records, selected.FormKey, _selectedVariant, _references.FormLists).Count != 0;
+            _inventory.RepairMaterials(_records, selected.FormKey, _selectedVariant, _references.FormLists, HasRepairJuryRigging).Count != 0;
         InventoryActionButton("IM_RepairButton", Setting("sInventoryRepair"),
-            () => BeginInventoryAction("repair", selected), canRepair);
+            () => BeginInventoryAction("repair", SelectedInventoryItem()), canRepair);
         if (selected.RecordType is "WEAP" or "ARMO" or "ALCH" or "INGR")
-            InventoryActionButton("IM_HotkeyButton", "Hotkey", () => BeginInventoryAction("hotkey", selected));
+            InventoryActionButton("IM_HotkeyButton", "Hotkey", () => BeginInventoryAction("hotkey", SelectedInventoryItem()));
         var instance = _inventory.Instances(selected.FormKey)[_selectedVariant].Extra;
         var canModify = selected.RecordType == "WEAP" && FalloutWeaponModifications.Read(_records, selected.FormKey)
             .Any(modification => (instance.WeaponMods & (1 << modification.Slot)) == 0 &&
                 _inventory.Item(modification.Item) is { Count: > 0 });
         InventoryActionButton("IM_ModButton", Setting("sInventoryMod"),
-            () => BeginInventoryAction("mod", selected), canModify);
+            () => BeginInventoryAction("mod", SelectedInventoryItem()), canModify);
     }
 
     private bool BuildInventoryActionList()
@@ -62,6 +65,7 @@ internal sealed partial class NativeOwnedPipBoyMenu
             _inventoryAction = null;
             return false;
         }
+        Hide("IM_EquipButton", "IM_DropButton", "IM_RepairButton", "IM_HotkeyButton", "IM_ModButton");
         var rows = new List<(string Label, Action Action, bool Equipped)>();
         var selected = _inventory.Instances(_actionItem)[_actionVariant].Extra;
         var title = _inventoryAction switch
@@ -73,13 +77,13 @@ internal sealed partial class NativeOwnedPipBoyMenu
             _ => throw new InvalidOperationException("Unknown inventory action.")
         };
         if (_inventoryAction == "repair")
-            foreach (var donor in _inventory.RepairMaterials(_records, _actionItem, _actionVariant, _references.FormLists))
+            foreach (var donor in _inventory.RepairMaterials(_records, _actionItem, _actionVariant, _references.FormLists, HasRepairJuryRigging))
             {
                 var material = _inventory.Item(donor.Form)!;
                 rows.Add((InventoryInstanceLabel(material, donor.Extra), () =>
                 {
                     _inventory.Repair(_records, _actionItem, _actionVariant, donor.Form, donor.Variant,
-                        (_actorValue ?? throw new InvalidOperationException("Repair has no player skill owner."))("Repair"), _actionRevision, _references.FormLists);
+                        (_actorValue ?? throw new InvalidOperationException("Repair has no player skill owner."))("Repair"), _actionRevision, _references.FormLists, HasRepairJuryRigging);
                     EndInventoryAction();
                 }, false));
             }
@@ -123,7 +127,7 @@ internal sealed partial class NativeOwnedPipBoyMenu
         }
         AddText(NameOf(_actionItem) + "\n" + title, new(470, 440), new(400, 140));
         ListRows(Tile("IM_InventoryList"), "IM_InventoryListTemplate", rows);
-        InventoryActionButton("IM_CancelButton", "Cancel", () => { _inventoryAction = null; _offset = 0; Refresh(); });
+        InventoryActionButton("IM_CancelButton", "Cancel", () => { _inventoryAction = null; _offset = 0; Refresh(); }, forceVisible: true);
         if (rows.Count == 0) AddText("No eligible items", new(470, 590), new(400, 50));
         return true;
     }

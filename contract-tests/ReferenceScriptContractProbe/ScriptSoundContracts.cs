@@ -50,6 +50,29 @@ internal static partial class ScriptSoundContracts
                 if (request.Selection.Path!.EndsWith("bad.wav", StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("Synthetic decode failure.");
                 var voice = new Voice(); voices.Add(request.Id, voice); return voice.Prepare(request);
             }, stereo: true);
+            // Explicit menu cues and KF/script requests share the SOUN pitch rule.
+            var pitchSource = FalloutSoundRecordReader.Read(records, Key(0x100)) with
+            {
+                Flags = FalloutSoundFlags.RandomFrequencyShift | FalloutSoundFlags.MuteWhenSubmerged,
+                FrequencyAdjustment = 5,
+            };
+            var pitchRandom = new FalloutSoundRandomState(9);
+            var pitchExpected = new FalloutSoundRandomState(9);
+            var expectedPitch = 1 + (pitchExpected.NextUnitFloat() * 2 - 1) * .05f;
+            Require(Math.Abs(FalloutSoundPlaybackContract.SelectPitch(pitchSource, pitchRandom) - expectedPitch) < .000001f &&
+                pitchRandom.State == pitchExpected.State,
+                "Random SOUN pitch used a fixed positive shift or consumed the wrong random count.");
+            var positivePitchState = pitchRandom.State;
+            pitchSource = pitchSource with { FrequencyAdjustment = -5 };
+            pitchRandom.Restore(9);
+            Require(Math.Abs(FalloutSoundPlaybackContract.SelectPitch(pitchSource, pitchRandom) - expectedPitch) < .000001f &&
+                pitchRandom.State == positivePitchState,
+                "Random SOUN frequency magnitude depended on its sign.");
+            pitchSource = pitchSource with { Flags = FalloutSoundFlags.MenuSound, FrequencyAdjustment = 5 };
+            var fixedBefore = pitchRandom.State;
+            Require(FalloutSoundPlaybackContract.SelectPitch(pitchSource, pitchRandom) == 1.05f && pitchRandom.State == fixedBefore,
+                "Fixed menu SOUN pitch consumed randomness or lost its source adjustment.");
+            Reject(() => FalloutSoundPlaybackContract.SelectPitch(pitchSource with { FrequencyAdjustment = -128 }, pitchRandom));
             var caller = Key(0x600);
             sounds.Play(caller, Key(0x100)); sounds.Play(caller, Key(0x100));
             Require(sounds.LastRequest is { Source.LogicalPath: "sound\\fx\\winner.wav", Source.StaticAttenuationHundredthsDb: 200 } &&

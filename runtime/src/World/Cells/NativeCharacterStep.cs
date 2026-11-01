@@ -47,6 +47,21 @@ internal static partial class NativeCharacterStep
     internal static bool TryQuery(CharacterBody3D body, Transform3D from, Vector3 motion, float maximumHeight,
         out Vector3 destination, out string? blocked, out NativeNavigationContact? contact, bool floorSupported = false,
         QueryResources? resources = null)
+        => TryQueryCore(body, from, motion, maximumHeight, out destination, out blocked, out contact,
+            floorSupported, resources, null, null);
+
+    // Borrow only the just-completed blocked horizontal query, as TrySlope
+    // already does. The sole production caller is synchronous EdgeQuery:
+    // no yield, movement or source callback occurs before this consumption.
+    internal static bool TryQueryAfterObstruction(CharacterBody3D body, Transform3D from, Vector3 motion,
+        float maximumHeight, PhysicsTestMotionParameters3D observedParameters, PhysicsTestMotionResult3D observedResult,
+        out Vector3 destination, out string? blocked, out NativeNavigationContact? contact, QueryResources resources)
+        => TryQueryCore(body, from, motion, maximumHeight, out destination, out blocked, out contact,
+            false, resources, observedParameters, observedResult);
+
+    private static bool TryQueryCore(CharacterBody3D body, Transform3D from, Vector3 motion, float maximumHeight,
+        out Vector3 destination, out string? blocked, out NativeNavigationContact? contact, bool floorSupported,
+        QueryResources? resources, PhysicsTestMotionParameters3D? observedParameters, PhysicsTestMotionResult3D? observedResult)
     {
         destination = default; contact = null;
         var floorCosine = MathF.Cos(body.FloorMaxAngle);
@@ -55,15 +70,21 @@ internal static partial class NativeCharacterStep
         {
             if (!TrySupport(body, from.Origin, maximumHeight, out _, resources)) return false;
         }
+        // Both owners create ordinary default-filter motion parameters. A
+        // changed margin or request must perform the original fresh query.
+        // Check before obtaining mutable resources: they may alias the witness.
+        var reuse = observedParameters is not null && observedResult is not null &&
+            observedParameters.From == from && observedParameters.Motion == motion &&
+            observedParameters.Margin == body.SafeMargin && observedParameters.MaxCollisions == 4;
         using var ownedParameters = resources is null ? new PhysicsTestMotionParameters3D
         { Margin = body.SafeMargin, MaxCollisions = 4 } : null;
         var parameters = resources?.MotionParameters(body) ?? ownedParameters!;
         parameters.From = from; parameters.Motion = motion;
-        using var ownedResult = resources is null ? new PhysicsTestMotionResult3D() : null;
-        var result = resources?.MotionResult(body) ?? ownedResult!;
+        using var ownedResult = resources is null && !reuse ? new PhysicsTestMotionResult3D() : null;
+        var result = reuse ? observedResult! : resources?.MotionResult(body) ?? ownedResult!;
         var rid = body.GetRid();
         blocked = "no-obstruction";
-        if (!TestMotion(rid, parameters, result)) return false;
+        if (!reuse && !TestMotion(rid, parameters, result)) return false;
         var wall = -1;
         var wallScore = 0f;
         var collisionCount = result.GetCollisionCount();

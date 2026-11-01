@@ -9,10 +9,19 @@ internal sealed class FalloutVatsSession(FalloutPlayerVitals vitals)
 {
     internal enum Phase { Selecting, Executing, Completed, Cancelled, Faulted }
     internal sealed record Target(FalloutFormKey Reference, byte Part, string ActorName, string PartName,
-        float Chance, float ActionPointCost, bool Visible);
-    internal sealed record Attack(long Ordinal, FalloutFormKey Weapon, Guid WeaponInstance, Target Target, bool Success, double? Roll);
+        float Chance, float ActionPointCost, bool Visible, FalloutFormKey Base, int PartActorValue);
+    internal sealed record Attack(long Ordinal, FalloutFormKey Weapon, Guid WeaponInstance, Target Target, bool Success, double? Roll,
+        FalloutVatsAction Action);
+    internal sealed record Impact(long Ordinal, FalloutFormKey Reference, byte Part, float HealthBefore, float HealthAfter);
+    internal sealed class Publication(FalloutVatsSession owner, long ordinal)
+    {
+        internal FalloutVatsSession Owner => owner;
+        internal long Ordinal => ordinal;
+    }
     private readonly List<Attack> _queue = [];
     private readonly HashSet<long> _committed = [];
+    private readonly HashSet<Publication> _publications = [];
+    private readonly List<Impact> _impacts = [];
     private long _ordinal;
     private int _next;
     internal Phase CurrentPhase { get; private set; }
@@ -23,17 +32,21 @@ internal sealed class FalloutVatsSession(FalloutPlayerVitals vitals)
     internal Attack? CurrentAttack => CurrentPhase == Phase.Executing && _next < _queue.Count ? _queue[_next] : null;
     internal int CompletedAttacks => _next;
     internal bool CurrentShotCommitted => CurrentAttack is { } attack && _committed.Contains(attack.Ordinal);
+    internal int PendingPublications => _publications.Count;
+    internal IReadOnlyList<Impact> Impacts => _impacts.ToArray();
 
-    internal void Add(FalloutFormKey weapon, Guid weaponInstance, Target target, Func<uint> nextRandom, bool alwaysHit)
+    internal void Add(FalloutFormKey weapon, Guid weaponInstance, Target target, Func<uint> nextRandom, bool alwaysHit,
+        FalloutVatsAction action)
     {
         Require(Phase.Selecting);
         if (weaponInstance == Guid.Empty || !target.Visible || !float.IsFinite(target.Chance) || target.Chance is < 0 or > 100 ||
-            !float.IsFinite(target.ActionPointCost) || target.ActionPointCost < 0 || target.Reference.ObjectId == 0 || target.Part > 14)
+            !float.IsFinite(target.ActionPointCost) || target.ActionPointCost < 0 || target.Reference.ObjectId == 0 || target.Part > 14 ||
+            target.Base.ObjectId == 0 || !Enum.IsDefined(action))
             throw new InvalidOperationException("The selected VATS body part is unavailable.");
         if (ReservedActionPoints + target.ActionPointCost > AvailableActionPoints)
             throw new InvalidOperationException("Not enough action points for another attack.");
         var roll = alwaysHit ? (double?)null : nextRandom() / 4294967296.0;
-        _queue.Add(new(checked(++_ordinal), weapon, weaponInstance, target, alwaysHit || target.Chance / 100 >= roll!.Value, roll));
+        _queue.Add(new(checked(++_ordinal), weapon, weaponInstance, target, alwaysHit || target.Chance / 100 >= roll!.Value, roll, action));
     }
 
     internal void RemoveLast()
@@ -63,6 +76,8 @@ internal sealed class FalloutVatsSession(FalloutPlayerVitals vitals)
     {
         var attack = CurrentAttack ?? throw new InvalidOperationException("VATS has no current queued attack.");
         if (fired != _committed.Contains(attack.Ordinal)) throw new InvalidOperationException("VATS shot and AP publication disagree.");
+        if (_publications.Any(publication => publication.Ordinal == attack.Ordinal))
+            throw new InvalidOperationException("VATS attack still owns unfinished projectile publications.");
         ++_next;
         if (_next == _queue.Count) CurrentPhase = Phase.Completed;
     }
@@ -73,7 +88,28 @@ internal sealed class FalloutVatsSession(FalloutPlayerVitals vitals)
         CurrentPhase = Phase.Cancelled;
     }
 
-    internal void Fail(Exception error) { Error = error.Message; CurrentPhase = Phase.Faulted; }
+    internal Publication BeginPublication()
+    {
+        var attack = CurrentAttack ?? throw new InvalidOperationException("Projectile publication has no queued VATS action.");
+        var publication = new Publication(this, attack.Ordinal);
+        _publications.Add(publication);
+        return publication;
+    }
+
+    internal void FinishPublication(Publication publication)
+    {
+        if (!ReferenceEquals(publication.Owner, this) || !_publications.Remove(publication))
+            throw new InvalidOperationException("VATS projectile publication has no retained owner or finished twice.");
+    }
+
+    internal void RecordImpact(long ordinal, FalloutFormKey reference, byte part, float before, float after)
+    {
+        if (!_queue.Any(attack => attack.Ordinal == ordinal) || !float.IsFinite(before) || !float.IsFinite(after))
+            throw new InvalidDataException("VATS impact has no actual queued action/health result.");
+        _impacts.Add(new(ordinal, reference, part, before, after));
+    }
+
+    internal void Fail(Exception error) { Error ??= error.Message; CurrentPhase = Phase.Faulted; }
     private void Require(Phase phase)
     {
         if (CurrentPhase != phase) throw new InvalidOperationException("VATS action is unavailable in this phase.");

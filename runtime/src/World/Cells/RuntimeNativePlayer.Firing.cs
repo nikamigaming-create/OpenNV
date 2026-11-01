@@ -237,6 +237,10 @@ internal partial class RuntimeNativePlayer
                 var audioDone = System.Diagnostics.Stopwatch.GetTimestamp();
                 var damage = isInstantRay ? ApplyProjectileTraces(traces) : new PlayerProjectileDamageSummary(0, 0, 0, 0, 0, null);
                 if (isInstantRay) PublishVatsShot();
+                // A source discharge already consumed ammunition and owns AP.
+                // Unsupported damage must fault that action, not report success.
+                if (isInstantRay && VatsBurstActive && _damageError is { } vatsDamageError)
+                    throw new InvalidOperationException(vatsDamageError);
                 var damageDone = System.Diagnostics.Stopwatch.GetTimestamp();
                 if (_shot.Projectile.Type == 4)
                     foreach (var trace in traces)
@@ -251,7 +255,7 @@ internal partial class RuntimeNativePlayer
                 var casingDone = System.Diagnostics.Stopwatch.GetTimestamp();
                 var impactCount = damage.ImpactRequests;
                 foreach (var flight in preparedFlights)
-                { _shotEffects!.LaunchProjectile(flight); PublishVatsShot(); }
+                { LaunchVatsProjectile(flight); PublishVatsShot(); }
                 var impactDone = System.Diagnostics.Stopwatch.GetTimestamp();
                 var lastTrace = traces.LastOrDefault(trace => trace.Collider is not null) ?? traces.LastOrDefault();
                 _lastShot = new

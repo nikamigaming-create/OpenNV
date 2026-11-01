@@ -663,7 +663,7 @@ public partial class RuntimeCoordinator
             FalloutImageSpaceReader.ForWorld(_nativePluginStack!, cell.Worldspace ??
                 throw new InvalidDataException("Exterior environment has no worldspace."));
         sky.Compositor = AddNativeImageSpace(root, imageSpace,
-            () => _nativeSkyLighting!.ImageSpaceModifiers(_nativeGameTime!.Hour));
+            () => _nativeSkyLighting!.ImageSpaceModifiers(_nativeGameTime!.Hour), sunlightDimmer: sky.BindSunlightDimmer);
         sky.ImageSpace = imageSpace;
         var diameter = checked((int)FalloutInstallationSettings.Read(RuntimeLiveContentSource.Current!).Unsigned("General", "uGridsToLoad"));
         // Cover the complete resident square, including its diagonal when the

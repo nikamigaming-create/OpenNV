@@ -40,6 +40,7 @@ internal static class CellLightingContracts
             foreach (var length in new[] { 35, 37, 39, 41 }) Reject(() => Read(new byte[length]));
             var malformed = Lighting(40); BinaryPrimitives.WriteSingleLittleEndian(malformed.AsSpan(36), float.NaN); Reject(() => Read(malformed));
             Reject(() => Read(Lighting(36), inherit: true, template: Lighting(36)));
+            GrassWater(directory);
             Console.WriteLine("OPENNV_CELL_LIGHTING_CONTRACTS_PASS scope=legacy-prefix-presence-inheritance-and-fail-closed-use");
         }
         finally { Directory.Delete(directory, true); }
@@ -50,7 +51,9 @@ internal static class CellLightingContracts
         var mods = options.Length == 0 ? Array.Empty<FalloutModSelection>() :
             options.Length >= 3 && options[0] == "--mod" ? [new FalloutModSelection(options[1], options[2], options[3..])] :
             throw new ArgumentException("--audit-cell-lighting <installation> <private-output> [--mod <id> <root> <dependency-root> ...]");
-        using var content = new FalloutModStackSelection(mods).Resolve(installation).OpenSource();
+        using var content = mods.Length == 0
+            ? RuntimeLiveContentSource.Open(installation, DevelopmentLabSource.Campaign(installation))
+            : new FalloutModStackSelection(mods).Resolve(installation).OpenSource();
         using var records = FalloutPluginStack.Load(content.PluginSources);
         var layouts = records.EffectiveRecords("CELL").SelectMany(record => record.ReadSubrecords().Where(field => field.Signature == "XCLL")
             .Select(field => new { Record = record, Bytes = field.Data.Length })).ToArray();
@@ -68,11 +71,69 @@ internal static class CellLightingContracts
                 winner = layout.Record.Plugin.Name, sha256 = Convert.ToHexString(SHA256.HashData(layout.Record.ReadData())),
                 sourceExtent = source.Length, references = scene.References.Count, lighting, presentationDefaultOwned = false });
         }
-        Require(legacy.Count != 0, "Owned audit did not reach a legacy XCLL.");
+        var localWorldWater = OwnedLocalWorldWater(records);
+        Require(legacy.Count != 0 || localWorldWater.Length != 0, "Owned audit did not reach legacy XCLL or local parent-world water.");
         File.WriteAllText(output, JsonSerializer.Serialize(new { content.SaveCompatibilityId, runtimeBuild = typeof(FalloutCellLighting).Module.ModuleVersionId,
             layouts = layouts.GroupBy(layout => new { layout.Bytes, layout.Record.FormVersion }).Select(group => new { group.Key, count = group.Count() }),
-            legacy, sourceReadOnly = true, nativePresentationVerified = false }, new JsonSerializerOptions(JsonSerializerDefaults.Web) { WriteIndented = true }));
-        Console.WriteLine("OPENNV_OWNED_CELL_LIGHTING_PASS scope=all-winning-legacy-XCLL count=" + legacy.Count);
+            legacy, localWorldWater, sourceReadOnly = true, nativePresentationVerified = false }, new JsonSerializerOptions(JsonSerializerDefaults.Web) { WriteIndented = true }));
+        Console.WriteLine($"OPENNV_OWNED_CELL_LIGHTING_PASS scope=legacy-XCLL-and-local-parent-world-water legacy={legacy.Count} water={localWorldWater.Length}");
+    }
+
+    private static void GrassWater(string directory)
+    {
+        float Read(byte[] parentFlags, uint parent = 0x201, string parentType = "WRLD")
+        {
+            var header = new byte[12]; BinaryPrimitives.WriteSingleLittleEndian(header, 1.34f);
+            var defaults = new byte[8]; BinaryPrimitives.WriteSingleLittleEndian(defaults.AsSpan(4), -2300);
+            var parentDefaults = new byte[8]; BinaryPrimitives.WriteSingleLittleEndian(parentDefaults.AsSpan(4), 125);
+            var cell = Record("CELL", 0x101, 15, Field("DATA", [2]), Field("XCLW", BitConverter.GetBytes(float.MaxValue)));
+            File.WriteAllBytes(Path.Combine(directory, "Water.esm"),
+                Record("TES4", 0, 15, Field("HEDR", header)).Concat(cell)
+                .Concat(Record("WRLD", 0x200, 15, Field("WNAM", BitConverter.GetBytes(parent)),
+                    Field("PNAM", parentFlags), Field("DNAM", defaults)))
+                .Concat(Record(parentType, 0x201, 15, Field("DNAM", parentDefaults))).ToArray());
+            using var records = FalloutPluginStack.Load(directory, ["Water.esm"]);
+            return FalloutGrassWater.Read(records, new(new("Water.esm", 0x101), "", 2, null, new("Water.esm", 0x200), null));
+        }
+        Require(Read(BitConverter.GetBytes((ushort)4)) == -2300,
+            "Map-only WRLD parent replaced its own DNAM water with its parent's height.");
+        Require(Read(BitConverter.GetBytes((ushort)0)) == -2300,
+            "Non-inheriting WRLD parent lost its own DNAM water.");
+        Reject(() => Read(BitConverter.GetBytes((ushort)8)));
+        Reject(() => Read(BitConverter.GetBytes((ushort)12)));
+        Reject(() => Read([]));
+        Reject(() => Read([4]));
+        Reject(() => Read([4, 0, 0]));
+        Reject(() => Read(BitConverter.GetBytes((ushort)4), parentType: "STAT"));
+    }
+
+    private static object[] OwnedLocalWorldWater(FalloutPluginStack records)
+    {
+        var rows = new List<object>();
+        var checkedWorlds = new HashSet<FalloutFormKey>();
+        foreach (var cell in records.EffectiveRecords("CELL"))
+        {
+            var fields = cell.ReadSubrecords().ToArray();
+            var data = fields.SingleOrDefault(field => field.Signature == "DATA").Data;
+            var water = fields.SingleOrDefault(field => field.Signature == "XCLW").Data;
+            if (data.IsEmpty || (data.Span[0] & 3) != 2 || water.Length != 4 ||
+                BinaryPrimitives.ReadSingleLittleEndian(water.Span) != float.MaxValue ||
+                FalloutCellSceneReader.ParentWorldspace(cell) is not { } world || checkedWorlds.Contains(world)) continue;
+            var source = records.GetEffective(world);
+            var worldFields = source.ReadSubrecords().ToArray();
+            var flags = worldFields.SingleOrDefault(field => field.Signature == "PNAM").Data;
+            var defaults = worldFields.SingleOrDefault(field => field.Signature == "DNAM").Data;
+            if (!worldFields.Any(field => field.Signature == "WNAM") || flags.Length != 2 ||
+                (BinaryPrimitives.ReadUInt16LittleEndian(flags.Span) & 8) != 0 || defaults.Length != 8) continue;
+            var expected = BinaryPrimitives.ReadSingleLittleEndian(defaults.Span[4..]);
+            var actual = FalloutGrassWater.Read(records, new(cell.FormKey, "", data.Span[0], null, world, null));
+            Require(actual == expected, "Owned bit-clear parent WRLD lost its own default water.");
+            checkedWorlds.Add(world);
+            rows.Add(new { cell = cell.FormKey.ToString(), world = world.ToString(),
+                parentFlags = BinaryPrimitives.ReadUInt16LittleEndian(flags.Span), expected, actual,
+                sha256 = Convert.ToHexString(SHA256.HashData(source.ReadData())) });
+        }
+        return rows.ToArray();
     }
 
     private static byte[] Lighting(int length)

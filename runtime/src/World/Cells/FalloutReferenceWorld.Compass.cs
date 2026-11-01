@@ -273,7 +273,7 @@ internal sealed partial class FalloutReferenceWorld
         var inventory = actor.Inventory ??
             throw new NotSupportedException("Detection target equipment has no inventory owner.");
         var equipped = inventory.Contents.Equipped.Select(records.RuntimeFormKey).ToHashSet();
-        var weaponResolved = equipped.Any(key => records.GetEffective(key).Signature == "WEAP");
+        var weaponResolved = inventory.WeaponSelectionResolved || equipped.Any(key => records.GetEffective(key).Signature == "WEAP");
         foreach (var item in inventory.Contents.Items)
         {
             var source = records.GetEffective(item.FormKey);

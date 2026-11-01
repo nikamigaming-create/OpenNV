@@ -23,6 +23,34 @@ internal sealed class FalloutInventoryCommands(FalloutPluginStack records, Fallo
     internal FalloutFormKey? EquippedObject(FalloutFormKey target, uint slot) => IsPlayer(target)
         ? player.EquippedObject(records, slot) : world.EquippedObject(target, slot, level(), globals);
 
+    internal bool IsWeaponInList(FalloutFormKey target, FalloutFormKey list)
+    {
+        FalloutFormKey? weapon;
+        if (IsPlayer(target)) weapon = player.EquippedObject(records, 5);
+        else
+        {
+            if (records.GetEffective(target).Signature is not ("ACHR" or "ACRE")) return false;
+            var process = world.Get(target);
+            if (!world.IsResident(target) || !world.IsEnabled(target) ||
+                process.QuerySpatialPlacement is null || process.QueryNativeCondition is null)
+                throw new NotSupportedException("Weapon-list query has no current resident actor process owner.");
+            var selected = world.Inventory(target, level(), globals);
+            weapon = world.EquippedObject(target, 5, level(), globals);
+            if (weapon is null && !selected.WeaponSelectionResolved)
+                throw new NotSupportedException("Weapon-list query has no published unarmed process selection.");
+        }
+        if (weapon is null)
+        {
+            var fallback = records.RuntimeFormKey(0x1f4);
+            if (!records.TryGetEffective(fallback, out var fists) || fists.Signature != "WEAP")
+                throw new NotSupportedException("Engine unarmed fallback requires its winning weapon source.");
+            weapon = fallback;
+        }
+        foreach (var member in FalloutFormList.Entries(records, list, world.FormLists))
+            if (member == weapon) return true;
+        return false;
+    }
+
     internal bool IsWeaponOut(FalloutFormKey target) =>
         (weaponDrawn ?? throw new NotSupportedException("Weapon draw query has no active actor owner."))(target);
 

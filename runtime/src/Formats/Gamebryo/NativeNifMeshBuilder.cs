@@ -767,7 +767,11 @@ internal static partial class RuntimeNativeNifMeshBuilder
                     throw new NotSupportedException("Multi-bound shape has no supported culling contract.");
             }
             if (_oneBoneSkinInstances.TryGetValue(source.Block.Index, out var skinInstance))
+            {
+                if (source.Value is { Flags: not 0 })
+                    throw new NotSupportedException("BSValueNode one-bone world-axis skin publication is unbound.");
                 return BuildOneBoneSkeleton(source, skinInstance);
+            }
             RequirePlainVisualState(source.Block, -1, [], [], -1);
             var collision = ValidateVisualCollision(source.Block, source.CollisionObject);
             if (source.Effects.Any(reference => reference != -1))
@@ -777,6 +781,9 @@ internal static partial class RuntimeNativeNifMeshBuilder
             var inheritedEditorMarkers = _omitInheritedEditorMarkers;
             try
             {
+                var children = source.Value is { } value ? NativeNifWorldAxes.Attach(result, value.Flags) : result;
+                if (children != result && collision is not null)
+                    throw new NotSupportedException("BSValueNode world-axis collision publication has no qualified Havok owner.");
                 if (source.Block.TypeName == "BSFadeNode") result.SetMeta("opennv_nif_fade_node", true);
                 if (source.Range is { } range)
                 {
@@ -794,7 +801,7 @@ internal static partial class RuntimeNativeNifMeshBuilder
                 }
                 _nodes.Add(source.Block.Index, result);
                 PreserveCollisionMetadata(result, collision);
-                AddCollision(result, collision);
+                AddCollision(children, collision);
                 ValidateNodeController(source, result);
                 var reachableCollision = HasReachableCollision(source.Block.Index, []);
                 var omitEditorMarkers = ValidateExtraData(
@@ -818,12 +825,12 @@ internal static partial class RuntimeNativeNifMeshBuilder
                         {
                             var omitted = CreateNode(_source.ReadGeometry(child).Name, child, _source.ReadGeometry(child).Transform, 0);
                             omitted.SetMeta("opennv_nif_geometry_disposition", "not-selected-by-equipment");
-                            result.AddChild(omitted);
+                            children.AddChild(omitted);
                         }
                         else if (DeferStaticChild is { } defer)
-                            defer(result, child, omitEditorMarkers);
+                            defer(children, child, omitEditorMarkers);
                         else
-                            result.AddChild(Build(child));
+                            children.AddChild(Build(child));
                     }
                 if (source.ParticleMaster is { } master)
                 {
@@ -833,23 +840,23 @@ internal static partial class RuntimeNativeNifMeshBuilder
                     {
                         if (_source.ReadObject(system) is not FalloutNifParticleSystem)
                             throw new InvalidDataException("Particle master refers to a non-particle system.");
-                        if (!_nodes.ContainsKey(system)) result.AddChild(Build(system));
+                        if (!_nodes.ContainsKey(system)) children.AddChild(Build(system));
                     }
                     result.SetMeta("opennv_particle_master_capacity", master.MaximumEmitters);
                 }
-                if (source.Value is { } addon) BindAddon(result, addon);
+                if (source.Value is { } addon) BindAddon(result, addon, children);
                 if (source.SortBound is { } sort)
                 {
                     var sorting = new NativeNifAlphaSortBound();
                     sorting.SetMeta("center", ConvertVector(sort.Center) * _unitsToMetres);
                     sorting.SetMeta("radius", sort.Radius * _unitsToMetres);
                     sorting.SetMeta("static", sort.Static);
-                    result.AddChild(sorting);
+                    children.AddChild(sorting);
                 }
                 if (source.Billboard is { } mode)
                 {
                     var billboard = new NativeNifBillboard();
-                    result.AddChild(billboard); billboard.Configure(result, mode);
+                    children.AddChild(billboard); billboard.Configure(children, mode);
                 }
                 return result;
             }
@@ -2742,7 +2749,7 @@ internal sealed class RuntimeNativeNifPrototype
         _source = source;
         _unitsToMetres = unitsToMetres;
         Scene = scene;
-        _requiresFreshOwners = Scene.Root.FindChildren("*", "", true, false).Any(node => node is RuntimeNifControllerPlayer or RuntimeNifParticleSystem or NativeNifBillboard or RuntimeNifHingeJoint);
+        _requiresFreshOwners = Scene.Root.FindChildren("*", "", true, false).Any(node => node is RuntimeNifControllerPlayer or RuntimeNifParticleSystem or NativeNifBillboard or RuntimeNifHingeJoint or NativeNifWorldAxes);
     }
 
     internal Node3D Instantiate(bool autoStartManagedLoops = true)

@@ -67,8 +67,11 @@ internal sealed partial class FalloutQuestStages(FalloutPluginStack records, Fal
                 var conditions = entry.Where(field => field.Signature == "CTDA").Select(field => FalloutCondition.Read(quest, field.Data.Span)).ToArray();
                 if (FalloutCondition.AllPass(conditions, evaluate, evaluateRunOn))
                 {
-                    if ((flags.Span[0] & 2) != 0) throw new NotSupportedException("Failed quest presentation and state are unbound.");
+                    // Entry flags precede the result program. Completion wins
+                    // when both flags are authored; failure retains Running.
                     if ((flags.Span[0] & 1) != 0) quests.Complete(key);
+                    if ((flags.Span[0] & 2) != 0) quests.Fail(key);
+                    if ((flags.Span[0] & 3) != 0) quests.ClearActive(key);
                     var sources = entry.Where(field => field.Signature == "SCTX").ToArray();
                     if (sources.Length > 1) throw new InvalidDataException("Quest stage entry has ambiguous source.");
                     if (sources.Length == 1)

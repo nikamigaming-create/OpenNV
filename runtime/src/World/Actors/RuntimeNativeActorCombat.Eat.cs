@@ -69,14 +69,14 @@ internal sealed partial class RuntimeNativeActorCombat
 
         if (meal.NoIdle)
         {
-            HoldEating(package, weaponDrawn, activity, standalone, delta);
+            activity = HoldEating(package, weaponDrawn, activity, standalone, delta);
             _state.PackageMotion = _state.PackageMotion! with { Eat = meal };
             if (source is null || !retryIdle) return;
         }
 
         if (meal.Idle is null && source is not null && !retryIdle)
         {
-            HoldEating(package, weaponDrawn, activity, standalone, delta);
+            activity = HoldEating(package, weaponDrawn, activity, standalone, delta);
             _state.PackageMotion = _state.PackageMotion! with { Eat = meal };
             return;
         }
@@ -110,7 +110,7 @@ internal sealed partial class RuntimeNativeActorCombat
             }
             else if (!hadIdle)
             {
-                HoldEating(package, weaponDrawn, activity, standalone, delta);
+                activity = HoldEating(package, weaponDrawn, activity, standalone, delta);
                 _state.PackageMotion = _state.PackageMotion! with { Eat = meal };
             }
 
@@ -226,7 +226,7 @@ internal sealed partial class RuntimeNativeActorCombat
         if (activity is not null) _state.ObserveInitialSandboxMotion(package.FormKey);
     }
 
-    private void HoldEating(FalloutPluginRecord package, bool weaponDrawn, FalloutSandboxActivityProgress? activity,
+    private FalloutSandboxActivityProgress? HoldEating(FalloutPluginRecord package, bool weaponDrawn, FalloutSandboxActivityProgress? activity,
         FalloutActorEatPackageProgress? standalone, double delta)
     {
         if (activity is not null) activity = ObserveSandboxPhase(3);
@@ -242,6 +242,9 @@ internal sealed partial class RuntimeNativeActorCombat
         }
         if (activity is not null && _state.ProcedureCaptureBlocker?.StartsWith(FalloutSandboxPackage.CaptureBlockerPrefix, StringComparison.Ordinal) == true)
             _state.ProcedureCaptureBlocker = null;
+        // The phase publication can create a new activity record. The queued
+        // physical request must retain this actual owner, not its old phase.
+        return activity;
     }
 
     private FalloutActorEatProgress SelectMeal(FalloutFormKey? worldTarget, NativeActorCombatContext context, FalloutEatPackage? source)

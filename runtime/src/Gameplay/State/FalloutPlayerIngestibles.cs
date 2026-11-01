@@ -5,7 +5,8 @@ namespace OpenNV.Runtime.Gameplay.State;
 
 internal sealed record FalloutIngestibleActiveEffect(FalloutFormKey Item, int Index, string ItemHash,
     string EffectHash, float Magnitude, double Elapsed, double Duration);
-internal sealed record FalloutIngestiblesSnapshot(IReadOnlyList<FalloutIngestibleActiveEffect> Effects);
+internal sealed record FalloutIngestiblesSnapshot(IReadOnlyList<FalloutIngestibleActiveEffect> Effects,
+    IReadOnlyList<FalloutIngestibleScriptReceipt>? ScriptReceipts = null);
 internal sealed record FalloutIngestibleUseResult(FalloutFormKey Item, bool Consumed, float HealthBefore, float HealthAfter);
 internal sealed record FalloutIngestibleUse(FalloutFormKey? Sound, Func<FalloutIngestibleUseResult> Commit);
 
@@ -17,7 +18,11 @@ internal sealed class FalloutPlayerIngestibles(FalloutPluginStack records, Fallo
 {
     private readonly Dictionary<FalloutFormKey, FalloutIngestible> _definitions = [];
     private readonly List<FalloutIngestibleActiveEffect> _active = [];
-    internal FalloutIngestiblesSnapshot Capture() => new(_active.ToArray());
+    private readonly List<FalloutIngestibleScriptReceipt> _scriptReceipts = [];
+    private bool _executingScript;
+    internal FalloutIngestiblesSnapshot Capture() => !_executingScript
+        ? new(_active.ToArray(), _scriptReceipts.ToArray())
+        : throw new NotSupportedException("Ingestible script invocation cannot be captured before its transaction completes.");
     private FalloutIngestible Definition(FalloutFormKey form)
     {
         if (!_definitions.TryGetValue(form, out var value))
@@ -31,13 +36,22 @@ internal sealed class FalloutPlayerIngestibles(FalloutPluginStack records, Fallo
     }
 
     internal FalloutIngestibleUse Prepare(FalloutFormKey form) => Prepare(form, consume: true);
+    internal FalloutIngestibleUse Prepare(FalloutFormKey form, int variant, long expectedRevision) =>
+        Prepare(form, consume: true, variant, expectedRevision);
 
     // Callers must establish the source and delivery of the actor effect;
     // this owns its selected value changes and their cold continuation only.
     internal FalloutIngestibleUse PrepareActorEffect(FalloutFormKey form) => Prepare(form, consume: false);
 
-    private FalloutIngestibleUse Prepare(FalloutFormKey form, bool consume)
+    private FalloutIngestibleUse Prepare(FalloutFormKey form, bool consume, int? variant = null, long? expectedRevision = null)
     {
+        if (variant is { } selectedVariant)
+        {
+            if (!consume || inventory.Revision != expectedRevision)
+                throw new InvalidOperationException("Selected Aid inventory revision is stale.");
+            if (selectedVariant < 0 || selectedVariant >= inventory.Instances(form).Count)
+                throw new InvalidOperationException("Selected Aid instance is no longer available.");
+        }
         if (consume && inventory.Item(form) is not { Count: > 0 }) throw new InvalidOperationException("Consumed item is absent from inventory.");
         if (vitals.State.HitPoints == 0) throw new InvalidOperationException("A dead player cannot receive an effect.");
         var signature = records.GetEffective(form).Signature;
@@ -49,13 +63,39 @@ internal sealed class FalloutPlayerIngestibles(FalloutPluginStack records, Fallo
         if (source.Effects.Count > 0 && source.Effects.All(effect => (effect.Flags & 5) == 5))
             throw new NotSupportedException("Poison application requires its equipped-weapon owner.");
         var selected = source.Effects.Where(effect => FalloutCondition.AllPass(effect.Conditions, Condition)).ToArray();
+        var programs = selected.Where(effect => effect.Archetype == 1)
+            .Select(effect => (Effect: effect, Program: new FalloutInstantIngestibleScript(records, effect))).ToArray();
+        if (programs.Length != 0 && (!consume || selected.Any(effect => effect.Archetype != 1)))
+            throw new NotSupportedException("Actor/mixed script effects require their ordered staged lifecycle owner.");
+        var scriptInputs = new Dictionary<int, float>();
+        float ReadScriptValue(int value)
+        {
+            if (scriptInputs.TryGetValue(value, out var known)) return known;
+            var current = actorValue(value);
+            if (!float.IsFinite(current)) throw new InvalidDataException("Ingestible script AV input is not finite.");
+            scriptInputs.Add(value, current); return current;
+        }
+        if (programs.Length != 0)
+        {
+            // Settle actual read owners before capturing the transaction's AV/
+            // vitals baseline. Preparation never invokes a script on live state.
+            var preview = inventory.PrepareScriptStage();
+            foreach (var (_, program) in programs) _ = program.Execute(preview, ReadScriptValue);
+        }
         var before = vitals.State;
         var after = before;
         var timers = new List<FalloutIngestibleActiveEffect>();
         var modifiers = new Dictionary<int, float>();
+        var scripts = new List<(FalloutIngestibleEffect Effect, FalloutInstantIngestibleScript Program)>();
         var beforePools = pools?.Capture();
         foreach (var effect in selected)
         {
+            if (effect.Archetype == 1)
+            {
+                if (!consume) throw new NotSupportedException("Actor-effect script delivery requires its separate actor lifecycle owner.");
+                scripts.Add((effect, programs.Single(value => value.Effect.Index == effect.Index).Program));
+                continue;
+            }
             ValidateEffect(effect);
             var magnitude = FalloutIngestibleApplications.Magnitude(records, source, effect, actorValue);
             if (FalloutIngestibleApplications.Reversible(effect))
@@ -65,32 +105,72 @@ internal sealed class FalloutPlayerIngestibles(FalloutPluginStack records, Fallo
             if (FalloutIngestibleApplications.Reversible(effect))
                 timers.Add(new(form, effect.Index, source.Hash, effect.Hash, magnitude, 0, effect.EffectiveDuration));
         }
+        if (scripts.Count != 0 && selected.Any(effect => effect.Archetype != 1))
+            throw new NotSupportedException("Mixed scripted/value ingestibles require ordered staged actor-value effects.");
         foreach (var (value, amount) in modifiers)
             if (!float.IsFinite(amount) || !float.IsFinite(pools!.ReadCurrent(value) + amount))
                 throw new InvalidDataException("Ingestible modifier exceeds its actor-value pool.");
         after.Validate();
         var revision = inventory.Revision;
+        if (expectedRevision is { } requestedRevision && revision != requestedRevision)
+            throw new InvalidOperationException("Selected Aid inventory changed during preparation.");
         var activeBefore = _active.ToArray();
+        var scriptsBefore = _scriptReceipts.ToArray();
         var used = false;
         return new(source.Sound, () =>
         {
+            if (scriptInputs.Any(input => actorValue(input.Key) != input.Value))
+                throw new InvalidOperationException("Prepared ingestible script AV input changed.");
             if (used || consume && inventory.Revision != revision || !ReferenceEquals(vitals.State, before) ||
-                !_active.SequenceEqual(activeBefore) ||
+                !_active.SequenceEqual(activeBefore) || !_scriptReceipts.SequenceEqual(scriptsBefore) ||
                 beforePools is not null && !pools!.Capture().Values.OrderBy(row => row.Key).SequenceEqual(beforePools.Values.OrderBy(row => row.Key)))
                 throw new InvalidOperationException("Prepared Aid use is stale or already committed.");
             used = true;
+            var scriptResults = new List<FalloutIngestibleScriptReceipt>();
+            void StageScripts(FalloutPlayerInventory staged)
+            {
+                if (_executingScript) throw new InvalidOperationException("Ingestible script transactions cannot interleave.");
+                _executingScript = true;
+                try
+                {
+                    foreach (var (effect, program) in scripts)
+                    {
+                        var locals = program.Execute(staged, value => scriptInputs.TryGetValue(value, out var input) ? input :
+                            throw new InvalidOperationException("Staged script reached an unprepared actor value."));
+                        scriptResults.Add(new(checked((long)scriptsBefore.Length + scriptResults.Count + 1), form,
+                            effect.Index, source.Hash, effect.Hash, program.Script, program.Hash, locals));
+                    }
+                }
+                finally { _executingScript = false; }
+            }
+            var effectsStarted = false;
             var transaction = new FalloutInventoryChangeLease(() =>
             {
+                // Inventory preparation/presentation leases run before this
+                // boundary. They cannot invalidate and then be overwritten by
+                // the older prepared vitals/effect snapshot.
+                if (scriptInputs.Any(input => actorValue(input.Key) != input.Value) ||
+                    !ReferenceEquals(vitals.State, before) || !_active.SequenceEqual(activeBefore) ||
+                    !_scriptReceipts.SequenceEqual(scriptsBefore) ||
+                    beforePools is not null && !pools!.Capture().Values.OrderBy(row => row.Key)
+                        .SequenceEqual(beforePools.Values.OrderBy(row => row.Key)))
+                    throw new InvalidOperationException("Prepared Aid effect state changed during inventory publication.");
+                effectsStarted = true;
                 foreach (var (value, amount) in modifiers) pools!.AddModifier(value, FalloutActorValuePool.Temporary, amount);
                 vitals.Publish(after);
                 _active.AddRange(timers);
+                _scriptReceipts.AddRange(scriptResults);
             }, () =>
             {
+                // A refusal before our first write does not own or roll back
+                // changes made by another callback. Its lease owns that state.
+                if (!effectsStarted) return;
                 if (beforePools is not null) pools!.Restore(beforePools);
                 vitals.Publish(before);
                 _active.Clear(); _active.AddRange(activeBefore);
+                _scriptReceipts.Clear(); _scriptReceipts.AddRange(scriptsBefore);
             });
-            if (consume) inventory.ConsumeOne(form, transaction);
+            if (consume) inventory.ConsumeOne(form, transaction, variant, revision, scripts.Count == 0 ? null : StageScripts);
             else
             {
                 using (transaction) { transaction.Commit(); transaction.Complete(); }
@@ -136,7 +216,7 @@ internal sealed class FalloutPlayerIngestibles(FalloutPluginStack records, Fallo
 
     internal void Restore(FalloutIngestiblesSnapshot snapshot)
     {
-        if (_active.Count != 0) throw new InvalidOperationException("Ingestible restoration needs a fresh owner.");
+        if (_active.Count != 0 || _scriptReceipts.Count != 0) throw new InvalidOperationException("Ingestible restoration needs a fresh owner.");
         Validate(snapshot);
         foreach (var timer in snapshot.Effects)
         {
@@ -147,11 +227,29 @@ internal sealed class FalloutPlayerIngestibles(FalloutPluginStack records, Fallo
                 throw new InvalidDataException("Saved ingestible effect differs from its winning source.");
             ValidateEffect(source.Effects[timer.Index]);
         }
+        foreach (var receipt in snapshot.ScriptReceipts ?? [])
+        {
+            var source = Definition(receipt.Item);
+            if (receipt.EffectOrdinal >= source.Effects.Count || source.Hash != receipt.ItemHash)
+                throw new InvalidDataException("Saved ingestible script differs from its source item.");
+            var effect = source.Effects[receipt.EffectOrdinal];
+            var program = new FalloutInstantIngestibleScript(records, effect);
+            if (effect.Hash != receipt.EffectHash || program.Script != receipt.Script || program.Hash != receipt.ScriptHash)
+                throw new InvalidDataException("Saved ingestible script differs from its winning MGEF/SCPT.");
+            program.ValidateLocals(receipt.Locals);
+        }
+        // Completed Start invocations are receipts, never replayed on restore.
         _active.AddRange(snapshot.Effects);
+        _scriptReceipts.AddRange(snapshot.ScriptReceipts ?? []);
     }
 
     internal static void Validate(FalloutIngestiblesSnapshot snapshot)
     {
+        if (snapshot.ScriptReceipts?.Where((receipt, index) => receipt is null || receipt.Generation != index + 1L ||
+            receipt.Item.ObjectId == 0 || receipt.Script.ObjectId == 0 || receipt.EffectOrdinal < 0 ||
+            new[] { receipt.ItemHash, receipt.EffectHash, receipt.ScriptHash }.Any(hash =>
+                hash is not { Length: 64 } || !hash.All(Uri.IsHexDigit)) || receipt.Locals is null).Any() == true)
+            throw new InvalidDataException("Saved ingestible script receipts are invalid.");
         if (snapshot.Effects is null || snapshot.Effects.Any(effect => effect is null || effect.Index < 0 ||
             effect.ItemHash is null || effect.EffectHash is null || effect.ItemHash.Length != 64 || effect.EffectHash.Length != 64 ||
             !effect.ItemHash.All(Uri.IsHexDigit) || !effect.EffectHash.All(Uri.IsHexDigit) || !float.IsFinite(effect.Magnitude) ||

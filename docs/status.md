@@ -15,6 +15,43 @@ reproduced severe slowdown, but its checkpoint is unmatched and recording
 amplifies the cost. Scene parity and faster-than-retail performance remain open.
 See current-work.md for the measured limits and active repair batch.
 
+The current unpublished gameplay batch verifies ordinary weapon changes, VATS
+damage and ammo breakdown with cold persistence. Repair-kit cold reload retains
+three kits, the same rifle at 37.3% condition and one completed script receipt.
+The ordinary route reached Jean Sky Diving; F5 and cold reload pass after the
+Sandbox Eat repair. Diagnostic player-only authored arrivals with matched
+yaw/time cover Primm, Nipton, Novac, Boulder City, McCarran and Freeside North,
+with independent save/AI/weather and no travel or parity certification. Freeside
+North recovered after a loading stale-state timeout; responsiveness remains
+open. Ordinary McCarran gate `1287f5` now transfers `0dac34` -> `148dc4` in
+13.813 seconds, but the courtyard frame has severe exposure mismatch and 15
+reference divergences. The six-minute moving 4K run averaged 51.2097 FPS
+(first minute 57.91, last 42.81). A later indexed 179.468-second segment averaged
+55.2188 FPS; retail's 59.6318 FPS is not a matched-route comparison because its
+camera stopped responding after waypoint 32. Candidate waypoint 122 at the
+deadline does not establish ordinary Primm arrival. The NAVM index gate preserves
+the owned route's 228 waypoints and projection errors. PR341's initial 115-file
+revision `e71b60da` passes all five CI checks but remains unmerged after new VATS
+smoke failures. Additional TileImage RGB255 defaults, beard unset-index handling
+and reviewed navigation-query reuse pass the full gameplay-visible-final gate;
+the owned UI audit passes XML/runtime override checks with `ownedImages=1`.
+Live recovery of missing actor `0f570d` remains pending. VATS labels render;
+selecting torso at 54.704063% queues and completes two shots, spending 70 AP,
+changing ammo 5 -> 3 and target health 60 -> 31.402279 without errors or pending
+publications. Both physical impacts hit the head despite torso selection;
+retail outcome parity remains open. F5 checkpoint
+`58154d0fcad24219a19dbe183ca91783` cold-loads in PID21820 with ammo 3, weapon
+condition 0.2699999, target health 31.402279 and no opening error. Earlier 0% on
+the default leg did not establish a general mask failure; measured fragment
+visibility/native correspondence remains open. Prior cold proofs remain valid.
+The fresh publication full gate is running in `gameplay-publication-final-gate.log`;
+no further gameplay source edits are planned, and no live performance gain is
+claimed. The expanded source also repairs quest failure, actor
+values, equipment selection, source VATS layout and exact GPU mask reduction.
+The regional imposter packet requires actual regional temporary-CELL/script
+attachment and remains private, not integration-ready. Sustained native 4K60,
+matched-state parity and broad location/action coverage remain unverified.
+
 The checked PR339 batch completes the ordinary Doc-house exit after shared idle
 condition and Sandbox-phase repairs. An enabled Pip-Boy flashlight survives a
 committed save and cold restore; a later outdoor save retains the disabled light
@@ -53,7 +90,7 @@ and post-combat quicksave/move/quickload restored exact position and inventory,
 with recovery to 57+ FPS in 11.625 seconds. One reloading recipe consumed its
 input and produced the authored materials. These are bounded gameplay cases.
 
-Bounded native-4K capture-off observations reached approximately 59–60 draws/s
+Bounded native-4K capture-off observations reached approximately 59â€“60 draws/s
 on outdoor movement, an interior sequence and the stationary well scene. These
 are not long-run combat or whole-game acceptance. Restored base health now
 matches the qualified 220-health source inputs. Projectile rigid-body impulses,

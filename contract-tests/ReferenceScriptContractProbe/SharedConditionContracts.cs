@@ -11,6 +11,7 @@ internal static partial class SharedConditionContracts
 {
     internal static void Run()
     {
+        VatsLabelLayoutContracts();
         foreach (var id in Enum.GetValues<FalloutActorValueId>())
             Require(FalloutActorValueNames.Parse(FalloutActorValueNames.Name(id).ToUpperInvariant()) == id,
                 "Source AV identity/name roundtrip disagrees across dispatch paths.");
@@ -45,7 +46,7 @@ internal static partial class SharedConditionContracts
                 Record("AMMO", 0x74), Record("AMMO", 0x75),
                 Record("FLST", 0x76, Field("LNAM", U32(0x74))),
                 Record("FLST", 0x77, Field("LNAM", U32(0x71))),
-                Record("FLST", 0x78, Field("LNAM", U32(0))), Record("FLST", 0x79),
+                Record("FLST", 0x78, Field("LNAM", U32(0))), Record("FLST", 0x79), Record("FLST", 0x7a),
                 Record("CELL", 0x100, Field("EDID", Text("SharedRoom")), Field("DATA", [1])), Group(0x100,
                     Record("ACHR", 0x200, Field("EDID", Text("SharedActor")), Field("NAME", U32(0x20)), Field("DATA", new byte[24])),
                     Record("ACRE", 0x201, Field("NAME", U32(0x21)), Field("DATA", new byte[24])),
@@ -256,10 +257,62 @@ internal static partial class SharedConditionContracts
                 vatsScript.Invoke([new(6)]) == 0 &&
                 runtime.Evaluate(new FalloutCondition(owner, 0, 0, (ushort)Function.GetVATSValue, uint.MaxValue, uint.MaxValue, 0, 0), scope) == 0,
                 "Inactive VATS queried actor state or interpreted a selector without an action context.");
+            var rawSecondForm = new FalloutConditionQuery(vatsCondition with { Argument1 = 0, Argument2 = 0x01000071 });
+            var scriptSecondForm = rawSecondForm with { BoundSecondForm = FalloutScriptValue.Form(0x01000071) };
+            Require(rawSecondForm.FormArgument2(records) == Key(0x71) &&
+                scriptSecondForm.FormArgument2(records) == new FalloutFormKey("Other.esm", 0x71),
+                "Second-form binding confused declaring-plugin masters with runtime script identities.");
+            Require(vatsScript.Arguments[1] == FalloutScriptArgumentKind.OptionalNumber &&
+                vatsScript.Invoke([new(0), new(FalloutScriptValue.Form(0x01000071))]) == 0 &&
+                vatsScript.Invoke([new(0), new(FalloutScriptValue.Form(0xff000071))]) == 0 &&
+                vatsScript.Invoke([new(11), new(0x16f04558)]) == 0,
+                "Inactive or unused VATS operands were resolved before their actual consumer.");
             vatsActive = true;
             Reject(() => runtime.Evaluate(vatsCondition, scope));
+            Reject(() => runtime.Evaluate(scriptSecondForm, scope));
             Reject(() => vatsScript.Invoke([new(6), new(15)]));
+            float VatsValue(uint selector, uint second) => runtime.Evaluate(vatsCondition with { Argument1 = selector, Argument2 = second }, scope);
+            var preview = new FalloutVatsValueContext(Key(0x71), Key(0x200), Key(0x20), 25);
+            using (world.VatsConditions.BeginPreview(preview))
+            {
+                Require(runtime.Evaluate(rawSecondForm, scope) == 1 && runtime.Evaluate(scriptSecondForm, scope) == 0 &&
+                    vatsScript.Invoke([new(0), new(FalloutScriptValue.Form(0x71))]) == 1 &&
+                    vatsScript.Invoke([new(0), new(FalloutScriptValue.Form(0x01000071))]) == 0,
+                    "Active VATS adjusted an already bound second form or ignored CTDA masters.");
+                Require(VatsValue(2, 0x01000020) == 1 && VatsValue(2, 0x01000200) == 0 &&
+                    VatsValue(5, 25) == 1 && VatsValue(5, 29) == 0,
+                    "VATS preview lost actual base identity or BPTD actor-value identity.");
+                Require(VatsValue(1, 0x0100007a) == 0 && VatsValue(3, 0x0100007a) == 0,
+                    "Empty VATS form-list predicates invented a member.");
+                world.FormLists.Add(Key(0x7a), Key(0x71)); world.FormLists.Add(Key(0x7a), Key(0x20));
+                Require(VatsValue(1, 0x0100007a) == 1 && VatsValue(3, 0x0100007a) == 1,
+                    "VATS form-list predicates ignored current persistent scripted additions.");
+                using (world.VatsConditions.BeginPreview(preview with { PartActorValue = 29 }))
+                    Require(VatsValue(5, 29) == 1 && VatsValue(5, 25) == 0, "Nested VATS preview retained its outer part.");
+                Require(VatsValue(5, 25) == 1, "Nested VATS preview did not restore the outer owner.");
+                Reject(() => VatsValue(6, 3)); Reject(() => VatsValue(7, 0xffffffff));
+                Reject(() => runtime.Evaluate(Query(Function.GetVatsTargetHeight), scope));
+            }
+            Reject(() => VatsValue(5, 25));
+            FalloutVatsValueContext? queued = preview with { Action = FalloutVatsAction.Rifle, Success = false };
+            world.VatsConditions.BindCurrentAction(() => queued);
+            Require(VatsValue(6, 4) == 1 && VatsValue(6, 15) == 0 && VatsValue(7, 0x16f04558) == 0,
+                "Queued ordinary VATS action or chosen-success field used an inferred special action/unused operand.");
+            queued = queued with { Success = true };
+            Require(VatsValue(7, 0xffffffff) == 1, "Actual VATS success interpreted unused second bytes.");
+            Reject(() => VatsValue(11, 0x16f04558));
+            Reject(() => runtime.Evaluate(Query(Function.GetVatsTargetHeight), scope));
+            queued = preview with { Action = FalloutVatsAction.Pistol, Success = false };
+            Require(VatsValue(6, 3) == 1 && VatsValue(6, 4) == 0 && VatsValue(7, 0) == 0,
+                "VATS query retained the replaced action instead of reading the actual current owner.");
+            queued = null;
+            Require(VatsValue(uint.MaxValue, uint.MaxValue) == 0,
+                "A supplied no-action owner interpreted a selector or retained the retired attack.");
             vatsActive = false;
+            Require(VatsValue(6, 3) == 0 && VatsValue(7, 0xffffffff) == 0 &&
+                runtime.Evaluate(Query(Function.GetVATSMode), scope) == 0 &&
+                runtime.Evaluate(Query(Function.GetVatsTargetHeight), scope) == 0,
+                "Cancelled VATS retained an action value or camera phase.");
             Require(runtime.Evaluate(vatsCondition, scope) == 0,
                 "VATS retirement retained a stale action context.");
             Require(runtime.Evaluate(Query(Function.GetIsVoiceType, 0x01000031), scope) == 1 &&

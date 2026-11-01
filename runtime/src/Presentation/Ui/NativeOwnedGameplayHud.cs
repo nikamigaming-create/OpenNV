@@ -11,6 +11,7 @@ internal sealed record NativeHudAmmo(int Loaded, int Reserve);
 internal partial class NativeOwnedGameplayHud : Control
 {
     private readonly NativeOwnedMenuTree _tiles;
+    private readonly bool _showReticle;
     private readonly XElement _reticle, _info, _prompt, _name;
     private readonly Func<NativeHudTarget?> _target;
     private readonly Func<bool> _shown;
@@ -62,9 +63,10 @@ internal partial class NativeOwnedGameplayHud : Control
         Func<GameplayVitals>? vitals = null, Func<NativeHudAmmo?>? ammunition = null, Func<string?>? notice = null,
         FalloutUiComponentStore? scriptUi = null, Func<FalloutPlayerControlState>? controls = null,
         Func<float, OpenNV.Runtime.World.Cells.FalloutCompassFrame>? compass = null,
-        Func<NativeHudCondition?>? condition = null)
+        Func<NativeHudCondition?>? condition = null, bool showReticle = true)
     {
         Name = "HUDMainMenuGameplay"; MouseFilter = MouseFilterEnum.Ignore; ProcessMode = ProcessModeEnum.Always;
+        _showReticle = showReticle;
         _target = target; _shown = shown; _vitals = vitals; _ammunition = ammunition; _notice = notice;
         _scriptUi = scriptUi;
         _compassSnapshot = compass;
@@ -165,7 +167,7 @@ internal partial class NativeOwnedGameplayHud : Control
                 // DisablePlayerControls' movement flag suppresses HP, AP and
                 // the reticle. Rollover text independently owns the Info branch.
                 var movementVisible = controls.Movement ? 1 : 0;
-                _tiles.Bind(_reticle, "visible", movementVisible);
+                _tiles.Bind(_reticle, "visible", _showReticle ? movementVisible : 0);
                 if (_hp is not null) _tiles.Bind(_hp, "visible", movementVisible);
                 if (_ap is not null) _tiles.Bind(_ap, "visible", movementVisible);
                 QueueRedraw();

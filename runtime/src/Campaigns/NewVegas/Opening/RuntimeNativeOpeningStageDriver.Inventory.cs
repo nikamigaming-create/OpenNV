@@ -43,8 +43,7 @@ internal partial class RuntimeNativeOpeningStageDriver
         var item = _inventory.Item(selected.Form)!;
         if (item.RecordType is "ALCH" or "INGR")
         {
-            _inventory.SelectInstance(selected.Form, selected.Variant, _inventory.Revision);
-            UseAid(selected.Form);
+            UseAid(selected.Form, selected.Variant, _inventory.Revision);
         }
         else
         {

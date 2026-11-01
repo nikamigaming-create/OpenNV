@@ -4,6 +4,34 @@ This is a partial, implementation-neutral contract from private Win32 observe
 snapshots and owned-file declaration analysis. It does not certify startup
 event order or prescribe captured values as runtime state.
 
+## Quest stage terminal flags
+
+Eligible stage entries apply completion (QSDT bit 0), then failure (bit 1),
+before executing their result script. Failure sets both the failed and completed
+states while preserving the running state and objective states. An already
+completed quest cannot subsequently acquire the failed state through this setter;
+completion therefore takes precedence when both entry flags are present. Either
+terminal flag clears active selection only when that quest is selected.
+
+Failure is persisted separately from completion. Result receipts retain their
+existing no-replay behavior, including a source result that stops after partial
+effects. The failure HUD notification and sound remain unbound; these state and
+ordering contracts do not establish full quest-script or presentation support.
+
+## Explicit null quest condition arguments
+
+GetQuestRunning, GetStage, GetStageDone, GetQuestVariable and GetQuestCompleted
+initialize their numeric result to zero before testing the quest argument. An
+explicit null argument returns that zero without creating quest state or reading
+a stage/variable. Bound script arguments take precedence over raw declaration
+placeholders. A missing nonzero identity or a nonquest form remains a source
+fault; it is not an empty quest. Objective getters have a separate null-result
+contract that remains unqualified here.
+
+Missing-record faults in NPC animation evaluation enter its existing retained
+animation-error boundary. They stay visible and block unsupported continuation
+instead of escaping repeatedly through the engine's frame callback.
+
 ## Verified observations
 
 - The selected native lists contain 640 QUST and 3,707 SCPT objects. Every

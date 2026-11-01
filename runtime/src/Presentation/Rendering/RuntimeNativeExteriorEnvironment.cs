@@ -23,6 +23,7 @@ internal partial class RuntimeNativeExteriorEnvironment : Node
     private float _lastHour = -1;
     private Vector3 _ambient, _fog, _range;
     private bool _lightingBound;
+    private float? _sunlightDimmer;
     private float _shadowDistance = 100;
     internal Compositor? Compositor { get; set; }
     internal FalloutImageSpace? ImageSpace { get; set; }
@@ -34,6 +35,8 @@ internal partial class RuntimeNativeExteriorEnvironment : Node
         fadeStart = _sun.DirectionalShadowFadeStart,
         mode = _sun.DirectionalShadowMode.ToString(),
         enabled = _sun.ShadowEnabled,
+        sunlightDimmer = _sun.LightEnergy,
+        composedSunlightBound = _sunlightDimmer is not null,
         rangeOwner = "resident-exterior-grid",
         boundary = "source-geometry-casters;retail-shadow-filtering-and-LOD-shadows-unmatched"
     };
@@ -45,6 +48,14 @@ internal partial class RuntimeNativeExteriorEnvironment : Node
             throw new InvalidDataException("Exterior shadow distance must cover a positive finite region.");
         _records = records; _sky = sky; _hour = hour; _units = units; _sceneRoot = sceneRoot; _shadowDistance = shadowDistance;
         _sunSource = FalloutExteriorSun.Read(records);
+    }
+
+    internal void BindSunlightDimmer(float value)
+    {
+        if (!float.IsFinite(value) || value < 0)
+            throw new NotSupportedException("Exterior sunlight requires a finite nonnegative composed source dimmer.");
+        _sunlightDimmer = value;
+        if (_sun is not null && IsInstanceValid(_sun)) _sun.LightEnergy = value;
     }
 
     internal void Register(Node root)
@@ -116,7 +127,7 @@ internal partial class RuntimeNativeExteriorEnvironment : Node
         var direction = -GamebryoCoordinate.ConvertVector(new Vector3(ray.X, ray.Y, ray.Z));
         _sun.Basis = RetailLighting.DirectionalLightBasis(direction);
         _sun.LightColor = RetailLighting.GodotLightColor(ColorAt(4));
-        _sun.LightEnergy = ImageSpace?.RawTraits[11] ?? 1;
+        _sun.LightEnergy = _sunlightDimmer ?? ImageSpace?.RawTraits[11] ?? 1;
         _environment.AmbientLightColor = ambient;
         _environment.FogLightColor = fog;
         var declaration = _records.GetEffective(weather.Form).ReadSubrecords().Single(field => field.Signature == "FNAM").Data;

@@ -396,7 +396,9 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
             !OpenNV.Runtime.Diagnostics.Parity.RuntimeLiveHarness.IsHeadlessLookInput(motion)) return;
         if (_furniturePhase is 1 or 2 or 4) return;
         var look = FlatMouseLookScale;
-        if (_furniturePhase == 3) _furnitureLookYaw -= motion.Relative.X * look.Horizontal;
+        if (_furniturePhase == 3)
+            _furnitureLookYaw = Math.Clamp(_furnitureLookYaw - motion.Relative.X * look.Horizontal,
+                -MathF.PI / 2, MathF.PI / 2);
         else RotateY(-motion.Relative.X * look.Horizontal);
         _pitchRadians = Math.Clamp(
             _pitchRadians - motion.Relative.Y *

@@ -301,10 +301,50 @@ internal sealed partial class RuntimeNativeNifAnimation
         IReadOnlyList<FalloutNifAnimationSample> Samples, IReadOnlyList<RuntimeNifSnapshotTransform> Targets,
         IReadOnlyList<FalloutNifSnapshotScalar> Scalars, float SnapshotWeight, float IncomingWeight);
 
+    // A single attached interpolator normalizes to one, including zero ease
+    // or sequence weight. Keep the existing reduction/publication arithmetic,
+    // while avoiding three priority passes and repeated empty snapshot scans.
+    // External transform aliases retain the ordinary multi-target reducer.
+    private void ApplySingleController(float time, float ease)
+    {
+        var blend = _skeleton.AnimationBlend;
+        blend.Clear();
+        _snapshotBlendScratch.Clear();
+        if (UnboundChannels.Count != 0)
+            throw new NotSupportedException("Animation layers require one skeleton and complete source bindings.");
+        if (!float.IsFinite(ease) || ease < 0 || ease > 1 || !float.IsFinite(Sequence.Weight) || Sequence.Weight < 0 ||
+            !float.IsFinite(time) || time < Sequence.StartTime || time > Sequence.StopTime)
+            throw new InvalidDataException("Animation layer has an invalid ease, source weight or clock.");
+        foreach (var (bone, _, sampler) in _transforms)
+        {
+            ref var current = ref blend.Bones[bone];
+            current.Active = true;
+            current.Add(sampler.Sample(time), 1);
+        }
+        foreach (var binding in _scalars.Values)
+        {
+            var current = new NativeNifAnimationBlend.Scalar { Binding = binding };
+            current.Add(binding.Sample(time), 1);
+            blend.Scalars.Add(binding.Target, current);
+        }
+        blend.Publish(_skeleton);
+        foreach (var current in blend.Scalars.Values)
+            if (current.Weight > 0) current.Binding.Publish(current.Value);
+        blend.Scalars.Clear();
+        if (ease > 0 && Sequence.Weight > 0)
+            foreach (var apply in _otherChannels) apply(time);
+    }
+
     internal static void ApplyControllerLayers(ReadOnlySpan<(RuntimeNativeNifAnimation Animation, float Time, float Ease)> layers,
         ReadOnlySpan<ControllerSnapshot> snapshots)
     {
         if (layers.Length == 0) return;
+        if (layers.Length == 1 && snapshots.Length == 0 && layers[0].Animation._snapshotTargets.Count == 0)
+        {
+            var single = layers[0];
+            single.Animation.ApplySingleController(single.Time, single.Ease);
+            return;
+        }
         var skeleton = layers[0].Animation._skeleton;
         var blend = skeleton.AnimationBlend;
         blend.Clear();

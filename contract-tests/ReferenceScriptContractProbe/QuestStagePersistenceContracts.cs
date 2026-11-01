@@ -4,7 +4,7 @@ using System.Text.Json;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.World.Cells;
 
-internal static class QuestStagePersistenceContracts
+internal static partial class QuestStagePersistenceContracts
 {
     internal static void Run()
     {
@@ -118,6 +118,7 @@ internal static class QuestStagePersistenceContracts
             }
             finally { File.Delete(changedPath); Directory.Delete(changedDirectory); }
             IndependentPendingFailure(records);
+            FailureStageContracts(directory);
         }
         finally { File.Delete(path); Directory.Delete(directory); }
         Console.WriteLine("OPENNV_QUEST_STAGE_PERSISTENCE_CONTRACT_PASS syntheticFullReader=true nestedConsumedPrefix=true exactClosedFailure=true coldNoReplay=true pendingRefused=true malformedAtomic=true sourceDrift=true completedOnce=true untouchedPendingRetained=true");

@@ -112,6 +112,8 @@ public partial class RuntimeCoordinator
         {
             FastTravel = RequestNativeFastTravel,
             DropItem = DropNativeInventoryItem,
+            UseAidInstance = driver.UseAid,
+            RepairJuryRigging = () => driver.PlayerJuryRigging,
             LocalMap = color => CreateNativeLocalMap(player, color),
             ActiveEffects = () => driver.IngestibleState,
             DateTimeText = NativePipBoyDateTime,

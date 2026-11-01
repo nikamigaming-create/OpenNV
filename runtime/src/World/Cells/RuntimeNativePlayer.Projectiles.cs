@@ -28,6 +28,8 @@ internal partial class RuntimeNativePlayer
         internal FalloutActorHit? ActorHit { get; set; }
         internal bool ObjectDamageApplied { get; set; }
         internal bool HitEventMarked { get; set; }
+        internal VatsShotOwner? VatsOwner { get; init; }
+        internal FalloutVatsSession.Publication? VatsPublication { get; set; }
     }
 
     private readonly record struct PlayerProjectileDamageSummary(
@@ -152,7 +154,8 @@ internal partial class RuntimeNativePlayer
         {
             var delay = shot.Projectile.HitscanImpactDelaySeconds(origin.DistanceTo(point), UnitsToMeters);
             return new(pelletDirection, collision, collider, ShotReference(collider), HitReference(collider), point, delay,
-                terminalHavokLayer);
+                terminalHavokLayer)
+            { VatsOwner = CaptureVatsShotOwner() };
         }
     }
 
@@ -162,6 +165,7 @@ internal partial class RuntimeNativePlayer
         var shot = _shot ?? throw new InvalidOperationException("Projectile source is absent.");
         var effects = _shotEffects ?? throw new InvalidOperationException("Projectile effects owner is absent.");
         var flights = new List<RuntimeNativeProjectileFlight>(shot.Projectiles);
+        var vatsOwner = CaptureVatsShotOwner();
         FalloutWeaponDamage? explosionDamage = shot.Projectile.ExplosionSource is { } explosion
             ? (_damage ?? throw new InvalidOperationException("Player damage owner is absent.")).Resolve(shot, explosion.Damage)
             : null;
@@ -175,9 +179,16 @@ internal partial class RuntimeNativePlayer
                 var flight = effects.PrepareProjectile(shot.Projectile,
                     _configuration.Simulation.GravityMetersPerSecondSquared,
                     origin, projectileDirection, CollisionMask | CollisionLayer, SelfQueryBodies);
-                flight.OnContact = contact => ApplyProjectileFlightContact(shot, damage, contact);
+                flight.OnContact = contact =>
+                {
+                    ApplyProjectileFlightContact(shot, damage, contact, vatsOwner);
+                    if (vatsOwner is not null && _damageError is { } error) throw new InvalidOperationException(error);
+                };
                 if (shot.Projectile.ExplosionSource is not null)
-                    flight.OnDetonate = point => ApplyProjectileFlightDetonation(shot, explosionDamage!.Value, point);
+                    flight.OnDetonate = point =>
+                    {
+                        ApplyProjectileFlightDetonation(shot, explosionDamage!.Value, point);
+                    };
                 flights.Add(flight);
             }
             return flights;
@@ -190,10 +201,10 @@ internal partial class RuntimeNativePlayer
     }
 
     private void ApplyProjectileFlightContact(FalloutWeaponShot shot, FalloutWeaponDamage damage,
-        RuntimeNativeProjectileContact contact)
+        RuntimeNativeProjectileContact contact, VatsShotOwner? vatsOwner)
     {
-        if (shot.Projectile.ExplosionSource is not null) return;
         _damageError = null;
+        if (shot.Projectile.ExplosionSource is not null) return;
         var hitReference = HitReference(contact.Collider);
         var destructible = contact.Collider is { } objectCollider ? RuntimeNativeDestructible.Find(objectCollider) : null;
         FalloutActorHit? actorHit = null;
@@ -229,7 +240,9 @@ internal partial class RuntimeNativePlayer
             catch (Exception error) { _damageError = error.Message; GD.PushError("OPENNV_OBJECT_DAMAGE_UNBOUND " + error.Message); }
         }
         if (actorHit is null && _damageError is null)
-            MarkWeaponHit(hitReference, _presentationRecords!.RuntimeFormKey(0x14), shot.Weapon, FalloutReferenceHitKind.Projectile);
+            if (!MarkWeaponHit(hitReference, _presentationRecords!.RuntimeFormKey(0x14), shot.Weapon, FalloutReferenceHitKind.Projectile) &&
+                hitReference is not null) _damageError = _hitEventError;
+        RecordVatsImpact(vatsOwner, actorHit);
     }
 
     private void ApplyProjectileFlightDetonation(FalloutWeaponShot shot, FalloutWeaponDamage blastDamage, Vector3 point)
@@ -295,6 +308,7 @@ internal partial class RuntimeNativePlayer
 
             if (trace.DamageDelaySeconds > 0)
             {
+                if (trace.VatsOwner is { } owner) trace.VatsPublication = _vatsPublications.Begin(owner.Session);
                 _pendingProjectileImpacts.Add(new(records, shot, actorDamage || objectDamage ? resolvedDamage : null,
                     actorDamage ? combat : null, attacker, level, globals, trace));
                 pendingEvents++;
@@ -355,7 +369,11 @@ internal partial class RuntimeNativePlayer
             catch (Exception error) { _damageError = error.Message; GD.PushError("OPENNV_OBJECT_DAMAGE_UNBOUND " + error.Message); }
         }
         if (actorHit is null && _damageError is null)
+        {
             trace.HitEventMarked = MarkWeaponHit(trace.HitReference, attacker, shot.Weapon, FalloutReferenceHitKind.Projectile);
+            if (!trace.HitEventMarked && trace.HitReference is not null) _damageError = _hitEventError;
+        }
+        RecordVatsImpact(trace.VatsOwner, actorHit);
         return actorHit;
     }
 
@@ -368,6 +386,7 @@ internal partial class RuntimeNativePlayer
             pending.RemainingSeconds = Math.Max(0, pending.RemainingSeconds - delta);
             if (pending.RemainingSeconds > 0) continue;
             _pendingProjectileImpacts.RemoveAt(index);
+            _damageError = null;
             if (pending.Trace.Collider is not { } collider || !IsInstanceValid(collider) || collider.IsQueuedForDeletion())
             {
                 _damageError = "Hitscan target left the scene before source impact time.";
@@ -380,6 +399,8 @@ internal partial class RuntimeNativePlayer
                     error = _damageError
                 };
                 GD.PushError($"OPENNV_HITSCAN_TARGET_UNBOUND projectile={pending.Shot.Projectile.Form} reference={pending.Trace.Reference} {_damageError}");
+                RetainVatsPublicationFailure(pending.Trace.VatsOwner, new InvalidOperationException(_damageError));
+                if (pending.Trace.VatsPublication is { } missingTargetPublication) _vatsPublications.Finish(missingTargetPublication);
                 continue;
             }
             var combat = pending.Combat is { } target && IsInstanceValid(target) && !target.IsQueuedForDeletion()
@@ -390,8 +411,20 @@ internal partial class RuntimeNativePlayer
                 _damageError = "Hitscan actor combat owner left the scene before source impact time.";
                 GD.PushError($"OPENNV_HITSCAN_TARGET_UNBOUND projectile={pending.Shot.Projectile.Form} reference={pending.Trace.Reference} {_damageError}");
             }
-            var hit = CompleteProjectileImpact(pending.Trace, combat, pending.Damage, pending.Shot.ImpactDataSet,
-                pending.Records, pending.Shot, pending.Attacker, pending.AttackerLevel, pending.Globals);
+            FalloutActorHit? hit = null;
+            try
+            {
+                hit = CompleteProjectileImpact(pending.Trace, combat, pending.Damage, pending.Shot.ImpactDataSet,
+                    pending.Records, pending.Shot, pending.Attacker, pending.AttackerLevel, pending.Globals);
+            }
+            catch (Exception error)
+            {
+                _damageError = error.Message;
+                GD.PushError($"OPENNV_HITSCAN_IMPACT_UNBOUND projectile={pending.Shot.Projectile.Form} {error.Message}");
+            }
+            if (pending.Trace.VatsOwner is not null && _damageError is { } delayedError)
+                RetainVatsPublicationFailure(pending.Trace.VatsOwner, new InvalidOperationException(delayedError));
+            if (pending.Trace.VatsPublication is { } publication) _vatsPublications.Finish(publication);
             _lastHitscanImpact = new
             {
                 weapon = pending.Shot.Weapon.ToString(),

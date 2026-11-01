@@ -188,6 +188,28 @@ try
     WriteFixture();
     FalloutImageSpaceModifier modifier;
     using (var plugin = FalloutPlugin.Open(path)) modifier = FalloutImageSpaceModifierReader.Read(plugin.Records.Single(record => record.Signature == "IMAD"));
+    var sunlightModifier = modifier with
+    {
+        Animated = true, Duration = 2,
+        Multiply = Enumerable.Range(0, 21).Select(index => index == 11
+            ? new FalloutImageFloatKey[] { new(0, 2), new(1, 4) } : []).ToArray(),
+        Add = Enumerable.Range(0, 21).Select(_ => Array.Empty<FalloutImageFloatKey>()).ToArray(),
+        Effects = new Dictionary<string, FalloutImageFloatKey[]>(), Tint = [], Fade = []
+    };
+    var sunlightState = new FalloutImageSpaceState();
+    sunlightState.Apply(sunlightModifier); sunlightState.Advance(1);
+    var sunlightFrame = sunlightState.Compose(classic, sunlightOwned: true);
+    Require(MathF.Abs(sunlightFrame.SunlightDimmer - classic.RawTraits[11] * 3) < .000001f &&
+        !sunlightFrame.UnboundChannels.Any(value => value.EndsWith("/11IAD", StringComparison.Ordinal)) &&
+        sunlightState.Compose(classic).UnboundChannels.Any(value => value.EndsWith("/11IAD", StringComparison.Ordinal)),
+        "Sunlight composition lost its modifier clock or hid the absence of an actual light consumer.");
+    Require(sunlightState.Advance(1).Count == 1 && sunlightState.Compose(classic).SunlightDimmer == classic.RawTraits[11],
+        "Expired sunlight modifier did not restore the base light value.");
+    var sunlightWeather = new[] { new FalloutWeatherImageModifier(0, sunlightModifier with { Animated = false }, .25f),
+        new FalloutWeatherImageModifier(1, null, .75f) };
+    Require(MathF.Abs(sunlightState.Compose(classic, weather: sunlightWeather, sunlightOwned: true).SunlightDimmer -
+        classic.RawTraits[11] * 1.25f) < .000001f,
+        "Source weather strengths did not reach the independently composed sunlight channel.");
     var state = new FalloutImageSpaceState();
     state.Apply(modifier);
     var blurModifier = modifier with

@@ -145,6 +145,7 @@ internal sealed class NativeOwnedMenuTree
 {
     internal XElement Root { get; }
     internal Vector2 Screen { get; set; }
+    internal bool? Widescreen { get; set; }
     internal float ResolutionConverter { get; set; } = 1;
     internal Color Color { get; }
     internal readonly Dictionary<XElement, string> Text = [];
@@ -155,7 +156,7 @@ internal sealed class NativeOwnedMenuTree
     private readonly Dictionary<XElement, (string Filename, NativeOwnedUiArt Art)> _art = [];
     private readonly Dictionary<XElement, Vector2> _textureOffsets = [];
     private readonly Dictionary<int, NativeBitmapFontAsset> _fonts = [];
-    private readonly Dictionary<string, XElement> _named = new(StringComparer.OrdinalIgnoreCase);
+    private readonly NativeOwnedMenuNamedSources _named;
     private readonly FalloutInstallationSettings _settings;
     private readonly Func<string, string>? _stringSetting;
     private readonly FalloutUiComponentStore? _scriptUi;
@@ -165,6 +166,7 @@ internal sealed class NativeOwnedMenuTree
         FalloutUiComponentStore? scriptUi = null)
     {
         Root = root;
+        _named = new(root);
         _stringSetting = stringSetting;
         _scriptUi = scriptUi;
         _settings = FalloutInstallationSettings.Read(RuntimeLiveContentSource.Current!);
@@ -251,17 +253,8 @@ internal sealed class NativeOwnedMenuTree
         _ when string.Equals(source, (string?)Root.Attribute("name"), StringComparison.OrdinalIgnoreCase) => Root,
         _ when FalloutMenuXml.RelativeName(source, "sibling") is { } sibling => tile.Parent!.Elements().Single(value => string.Equals((string?)value.Attribute("name"), sibling, StringComparison.OrdinalIgnoreCase)),
         _ when FalloutMenuXml.RelativeName(source, "child") is { } childName => tile.Elements().Single(value => string.Equals((string?)value.Attribute("name"), childName, StringComparison.OrdinalIgnoreCase)),
-        _ => NamedOwner(source),
+        _ => _named.Resolve(tile, source),
     };
-    private XElement NamedOwner(string name)
-    {
-        if (_named.TryGetValue(name, out var found)) return found;
-        var matches = Root.DescendantsAndSelf().Where(tile => string.Equals((string?)tile.Attribute("name"), name, StringComparison.OrdinalIgnoreCase) &&
-            !tile.AncestorsAndSelf("template").Any()).ToArray();
-        if (matches.Length != 1) throw new NotSupportedException($"Owned tile source {name} is absent or ambiguous ({matches.Length}).");
-        _named.Add(name, matches[0]);
-        return matches[0];
-    }
     internal Color TileColor(XElement tile)
     {
         var value = tile.Element("systemcolor")?.Value.Trim().ToLowerInvariant();
@@ -319,6 +312,8 @@ internal sealed class NativeOwnedMenuTree
             return trait switch
             {
                 "alpha" or "brightness" => 255,
+                // TileImage initializes these traits before XML application.
+                "red" or "green" or "blue" when tile.Name == "image" => 255,
                 "zoom" => 100,
                 "cropx" or "cropy" => 0,
                 "visible" => 1,
@@ -337,8 +332,8 @@ internal sealed class NativeOwnedMenuTree
                     "width" => Screen.X,
                     "height" => Screen.Y,
                     "resolutionconverter" => ResolutionConverter,
-                    "cropx" => _settings.Number("Interface", Screen.X / Screen.Y > 4f / 3f ? "iSafeZoneXWide" : "iSafeZoneX"),
-                    "cropy" => _settings.Number("Interface", Screen.X / Screen.Y > 4f / 3f ? "iSafeZoneYWide" : "iSafeZoneY"),
+                    "cropx" => _settings.Number("Interface", (Widescreen ?? (double)Screen.Y / Screen.X != .75) ? "iSafeZoneXWide" : "iSafeZoneX"),
+                    "cropy" => _settings.Number("Interface", (Widescreen ?? (double)Screen.Y / Screen.X != .75) ? "iSafeZoneYWide" : "iSafeZoneY"),
                     _ => throw new NotSupportedException($"Screen trait {key} is unbound."),
                 };
                 return Number(Owner(tile, source), key);
@@ -382,25 +377,17 @@ internal sealed class NativeOwnedMenuTree
     {
         var property = tile.Element(trait) ?? throw new NotSupportedException($"Owned texture trait {trait} is unbound.");
         if (!property.HasElements) return property.Value.Trim();
-        var index = 0f;
-        string? value = null;
-        var operations = property.Elements().ToArray();
-        foreach (var operation in operations)
+        if (!_evaluating.Add((tile, trait)))
+            throw new InvalidDataException($"Owned texture expression cycle: {(string?)tile.Attribute("name")}/{trait}.");
+        try
         {
-            if (operation.Name != "copy" || operation.Attribute("src") is not { } source)
-                throw new NotSupportedException("Owned texture expression operator is unbound.");
-            var owner = Owner(tile, source.Value);
-            var key = (string?)operation.Attribute("trait") ?? throw new InvalidDataException("Texture expression has no trait.");
-            if (key.EndsWith('_'))
-            {
-                if (index != MathF.Truncate(index)) throw new InvalidDataException("Texture trait index is not integral.");
-                value = Filename(owner, key + index.ToString(CultureInfo.InvariantCulture));
-            }
-            else if (operation == operations[^1]) value = Filename(owner, key);
-            else index = Number(owner, key);
+            return FalloutMenuXml.Filename(property,
+                (source, key) => Number(Owner(tile, source), key),
+                (source, key) => Filename(Owner(tile, source), key));
         }
-        return value ?? throw new NotSupportedException("Texture expression did not resolve a source filename.");
+        finally { _evaluating.Remove((tile, trait)); }
     }
+
     internal void ValidateDrawing()
     {
         var errors = new List<string>();
@@ -432,13 +419,7 @@ internal sealed class NativeOwnedMenuTree
         var alpha = Number(tile, "alpha") / 255;
         if (brightness == -1)
         {
-            float Component(string channel)
-            {
-                if (tile.Element(channel) is null && !_values.ContainsKey((tile, channel)))
-                    throw new NotSupportedException($"Owned local color {(string?)tile.Attribute("name")}/{channel} has no source value.");
-                return Number(tile, channel) / 255;
-            }
-            return new(Component("red"), Component("green"), Component("blue"), alpha);
+            return new(Number(tile, "red") / 255, Number(tile, "green") / 255, Number(tile, "blue") / 255, alpha);
         }
         if (brightness < 0) throw new NotSupportedException($"Owned brightness {brightness} has no color owner.");
         var color = TileColor(tile);

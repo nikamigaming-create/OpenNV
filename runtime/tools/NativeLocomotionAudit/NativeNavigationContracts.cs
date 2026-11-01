@@ -417,7 +417,7 @@ internal static partial class NativeNavigationContracts
 
     private static void CheckProjectionBounds()
     {
-        var meshes = Enumerable.Range(0, 32).Select(index =>
+        var meshes = Enumerable.Range(0, 128).Select(index =>
         {
             var x = index % 4 * 100f - 200;
             var y = index / 4 % 4 * 100f - 200;
@@ -473,6 +473,11 @@ internal static partial class NativeNavigationContracts
         var tied = Graph([Mesh("B-form", 0, -1, broadBounds: true), Mesh("a-form", 0, 1, broadBounds: true)]);
         if (tied.FindNearestPoint(Vector3.Zero) != new Vector3(0, 0, 1))
             throw new InvalidOperationException("Equal bounds/floor distances lost case-insensitive FormID ties.");
+        var indexedTied = Graph(new[] { Mesh("B-form", 0, -1, broadBounds: true), Mesh("a-form", 0, 1, broadBounds: true) }
+            .Concat(Enumerable.Range(0, 96).Select(index => Mesh($"padding-{index:D3}", 10000 + index * 10, 0))).ToArray());
+        if (indexedTied.FindNearestPoint(Vector3.Zero) != new Vector3(0, 0, 1))
+            throw new InvalidOperationException("Indexed equal bounds/floor distances lost case-insensitive FormID ties.");
+        Refuses(indexedTied, new(float.MaxValue, 0, 0), "a-form");
         var pruned = Graph([Mesh("a-disabled", 100, 0, flags: 8), Mesh("z-floor", 0, 0)]);
         if (pruned.FindNearestPoint(Vector3.Zero) != Vector3.Zero)
             throw new InvalidOperationException("Projection visited a disabled mesh beyond the winning distance bound.");
@@ -504,12 +509,13 @@ internal static partial class NativeNavigationContracts
             if (!checksum.IsFinite()) throw new InvalidOperationException("Warmed projection produced a nonfinite checksum.");
             return allocated;
         }
-        var stackBytes = Allocated(graph);
+        var stackBytes = Allocated(Graph(meshes.Take(32).ToArray()));
+        var indexedBytes = Allocated(graph);
         var pooledBytes = Allocated(pooled);
-        if (stackBytes != 0 || pooledBytes != 0)
-            throw new InvalidOperationException($"Warmed projection still allocates: stack={stackBytes}, pooled={pooledBytes} bytes per 2048 queries.");
+        if (stackBytes != 0 || indexedBytes != 0 || pooledBytes != 0)
+            throw new InvalidOperationException($"Warmed projection still allocates: stack={stackBytes}, indexed={indexedBytes}, pooled={pooledBytes} bytes per 2048 queries.");
         Console.WriteLine($"OPENNV_NAVIGATION_PROJECTION_PASS exhaustiveAgreement=400 stackedFloors=true distantQueries=true formIdTies=true " +
             $"equalBounds=true strictPruning=true prunedDisabled=true visitedDisabledRefused=true nonfiniteRefused=true concurrentQueries=768 " +
-            $"pooledFailureRefused=true warmedQueries=2048 stackAllocatedBytes={stackBytes} pooledAllocatedBytes={pooledBytes}");
+            $"pooledFailureRefused=true warmedQueries=2048 stackAllocatedBytes={stackBytes} indexedAllocatedBytes={indexedBytes} pooledAllocatedBytes={pooledBytes}");
     }
 }

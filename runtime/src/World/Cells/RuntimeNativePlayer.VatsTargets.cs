@@ -38,7 +38,7 @@ internal partial class RuntimeNativePlayer
         try
         {
             samples = new(this, _xr?.Camera ?? _camera); _vatsVisibility = samples;
-            var targets = await MeasureVatsTargets(samples);
+            var targets = await MeasureVatsTargets(samples, session, generation);
             if (generation != _vatsGeneration || !ReferenceEquals(session, _vats) || !VatsMenuActive) return;
             _vatsTargets = targets; _vatsPreparing = false; _vatsMenu!.Refresh();
         }
@@ -48,12 +48,31 @@ internal partial class RuntimeNativePlayer
             _vatsError = error.Message; _vatsPreparing = false;
             RetireVats("visibility-failed"); GD.PushError("OPENNV_NATIVE_VATS_VISIBILITY_DIVERGENCE: " + error.Message);
         }
-        finally { samples?.Dispose(); if (ReferenceEquals(_vatsVisibility, samples)) _vatsVisibility = null; }
+        finally
+        {
+            samples?.Dispose();
+            if (ReferenceEquals(_vatsVisibility, samples)) _vatsVisibility = null;
+            if (ReferenceEquals(_vats, session))
+            {
+                _vatsPreparationElapsed = System.Diagnostics.Stopwatch.GetElapsedTime(_vatsPreparationStarted).TotalMilliseconds;
+                _vatsPreparationLastSamples = samples?.State;
+            }
+        }
     }
 
-    private async Task<IReadOnlyList<FalloutVatsSession.Target>> MeasureVatsTargets(NativeVatsVisibilitySamples samples)
+    private async Task<IReadOnlyList<FalloutVatsSession.Target>> MeasureVatsTargets(NativeVatsVisibilitySamples samples,
+        FalloutVatsSession session, long generation)
     {
         var weapon = RequireVatsWeapon();
+        var instance = _presentationInventory!.SelectedWeapon(weapon.Form).Extra.Instance;
+        void RequireCurrent()
+        {
+            if (generation != _vatsGeneration || !ReferenceEquals(session, _vats) || !VatsMenuActive ||
+                session.CurrentPhase != FalloutVatsSession.Phase.Selecting || RequireVatsWeapon().Form != weapon.Form ||
+                _presentationInventory.SelectedWeapon(weapon.Form).Extra.Instance != instance)
+                throw new InvalidOperationException("VATS visibility preparation lost its selected session/weapon instance.");
+        }
+        RequireCurrent();
         var records = _presentationRecords!;
         var world = _hitReferences!;
         var content = RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("VATS owned content source is absent.");
@@ -72,11 +91,17 @@ internal partial class RuntimeNativePlayer
         if (!float.IsFinite(maximumDistance) || maximumDistance < 0) throw new InvalidDataException("VATS maximum engage distance is invalid.");
         var chanceOwner = new FalloutVatsRangedChance(records);
         var targets = new List<FalloutVatsSession.Target>();
-        foreach (var actor in _vatsActors.Values.OrderBy(actor => GlobalPosition.DistanceSquaredTo(actor.Node.GlobalPosition)))
+        var candidates = _vatsActors.Values.Where(ActorAvailable)
+            .Where(actor => GlobalPosition.DistanceTo(actor.Node.GlobalPosition) / UnitsToMeters <= maximumDistance)
+            .OrderBy(actor => GlobalPosition.DistanceSquaredTo(actor.Node.GlobalPosition))
+            .Select(actor => (Actor: actor, Parts: world.BodyParts(actor.Reference).Parts)).ToArray();
+        _vatsPreparationCandidates = candidates.Sum(candidate => candidate.Parts.Count);
+        foreach (var candidate in candidates)
         {
-            if (!ActorAvailable(actor)) continue;
+            var actor = candidate.Actor;
+            if (!ActorAvailable(actor)) { _vatsPreparationSkipped += candidate.Parts.Count; continue; }
             var distance = GlobalPosition.DistanceTo(actor.Node.GlobalPosition) / UnitsToMeters;
-            if (distance > maximumDistance) continue;
+            if (distance > maximumDistance) { _vatsPreparationSkipped += candidate.Parts.Count; continue; }
             var bound = actor.Node switch
             {
                 RuntimeNativeNpc npc => npc.CurrentWorldBound(content),
@@ -88,21 +113,34 @@ internal partial class RuntimeNativePlayer
             var fields = source.ReadSubrecords().ToArray();
             var full = fields.SingleOrDefault(field => field.Signature == "FULL").Data;
             var name = full.IsEmpty ? FalloutDialogueTopic.Text(fields.Single(field => field.Signature == "EDID").Data.Span) : FalloutDialogueTopic.Text(full.Span);
-            foreach (var part in world.BodyParts(actor.Reference).Parts)
+            foreach (var part in candidate.Parts)
             {
-                if (!TryVatsPoint(actor.Reference, part.Type, out _, out var visible)) continue;
+                RequireCurrent();
+                if (!TryVatsPoint(actor.Reference, part.Type, out _, out var visible)) { ++_vatsPreparationSkipped; continue; }
                 var fraction = await samples.MeasureAsync(actor.Node, part.Type);
+                _vatsTargetMeasurements.Add(new
+                {
+                    reference = actor.Reference.ToString(),
+                    part = part.Type,
+                    projected = visible,
+                    fraction,
+                    samples = samples.State
+                });
+                RequireCurrent();
+                if (!ActorAvailable(actor)) throw new InvalidOperationException("VATS visibility target retired during source sampling.");
+                ++_vatsPreparationMeasured;
                 var chance = chanceOwner.Calculate(shot.ResolvedMinimumSpread, spread + _playerProjectileLaunch!.AimChaseRadians,
                     distance, diameter, fraction, part.HitChance);
                 _vatsConditionTarget = actor.Reference;
                 try
                 {
+                    using var context = world.VatsConditions.BeginPreview(new(weapon.Form, actor.Reference, source.FormKey, part.ActorValue));
                     chance = Math.Max(chance, FalloutPlayerPerkNumericEffects.ApplyContext(8, chance / 100,
                         _combatPerks?.Invoke() ?? [], VatsPerkCondition) * 100);
                 }
                 finally { _vatsConditionTarget = null; }
                 targets.Add(new(actor.Reference, part.Type, name, part.Name.Length == 0 ? "Part " + part.Type : part.Name,
-                    Math.Clamp(chance, 0, 100), cost, fraction > 0));
+                    Math.Clamp(chance, 0, 100), cost, fraction > 0, source.FormKey, part.ActorValue));
             }
         }
         return targets;
@@ -125,6 +163,24 @@ internal partial class RuntimeNativePlayer
             RuntimeNativeCreature creature => creature.CurrentBoneWorldBound(content, bone),
             _ => throw new InvalidOperationException("VATS miss actor presentation changed.")
         };
+    }
+
+    // Presentation projects the actual source target node; visibility/chance
+    // remains the prepared gameplay sample. No raycasts or actor scans per draw.
+    private Vector2? ProjectVatsTarget(FalloutVatsSession.Target target)
+    {
+        if (!_vatsActors.TryGetValue(target.Reference, out var actor) || !ActorAvailable(actor)) return null;
+        var part = _hitReferences!.BodyParts(target.Reference).Parts.Single(value => value.Type == target.Part);
+        if (target.Part == 14) throw new NotSupportedException("VATS weapon-part projection requires its current process weapon-node owner.");
+        if (string.IsNullOrEmpty(part.Target)) return null;
+        var bone = actor.Skeleton.BoneIndex(part.Target);
+        if (bone < 0) throw new NotSupportedException("VATS overlay lost its authored target node.");
+        var point = (actor.Skeleton.Node.GlobalTransform * actor.Skeleton.Node.GetBoneGlobalPose(bone)).Origin;
+        var camera = _xr?.Camera ?? _camera;
+        if (camera.IsPositionBehind(point)) return null;
+        var pixel = camera.UnprojectPosition(point);
+        var rect = camera.GetViewport().GetVisibleRect();
+        return pixel.X >= rect.Position.X && pixel.Y >= rect.Position.Y && pixel.X <= rect.End.X && pixel.Y <= rect.End.Y ? pixel : null;
     }
 
     private bool TryVatsPoint(FalloutFormKey reference, byte partType, out Vector3 point, out bool visible)

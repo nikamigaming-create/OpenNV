@@ -87,6 +87,15 @@ internal static class CaptureDiagnosticContracts
         Reject(world.Capture);
         Require(idleCalls > 3 && bindingCalls > 3 && state.SoundRandom.State == random && world.InstanceCount == instances,
             "Live readiness became save authority or changed source randomness/instance ownership.");
+        Require(world.HasPendingProcedureCapture, "Boolean admission lost the current procedure blocker.");
+        var beforeRecheck = idleCalls;
+        Require(world.HasPendingProcedureCapture && idleCalls > beforeRecheck,
+            "Waiting admission reused a stale readiness result rather than rechecking its actual blocker.");
+        bindingReady = true;
+        Require(!world.HasPendingProcedureCapture, "Resolved procedure owner remained blocked by its previous observation.");
+        bindingReady = false;
+        Require(world.HasPendingProcedureCapture, "A new live procedure refusal was hidden by a prior ready observation.");
+        Reject(world.Capture);
     }
 
     private static void Reject(Func<IReadOnlyList<FalloutReferenceSnapshot>> capture)

@@ -62,9 +62,40 @@ internal static class StageAndInventoryContracts
             Require(inventory.Item(Key(1))?.Count == 4 && inventory.Item(Key(2)) is null, "Insufficient crafting consumed items.");
             inventory.Add(records, Key(1), 1, 1, silent: true);
             var beforeFailedOutput = JsonSerializer.Serialize(inventory.Capture());
+            var preparationCount = 0;
+            var externalCommitted = false;
+            inventory.PrepareChange = (before, after) =>
+            {
+                preparationCount++;
+                Require(before.Inventory.Items.Single(item => item.FormKey == Key(1)).Count == 5 &&
+                    !after.Inventory.Items.Any(item => item.FormKey == Key(1)) &&
+                    after.Inventory.Items.Single(item => item.FormKey == Key(2)).Count == 2,
+                    "Crafting prepared an intermediate inventory rather than its complete result.");
+                return new(() => { externalCommitted = true; throw new InvalidOperationException("fixture craft publication failure"); },
+                    () => externalCommitted = false);
+            };
             Reject(() => inventory.Craft(records, recipe with { Outputs = [new(Key(2), 2), new(Key(15), 1)] }, 1, null));
             Require(JsonSerializer.Serialize(inventory.Capture()) == beforeFailedOutput, "Failed recipe output did not restore inventory and random state.");
+            Require(preparationCount == 0, "Failed recipe outputs reached an external inventory owner.");
+            var beforeCraftRevision = inventory.Revision;
+            Reject(() => inventory.Craft(records, recipe, 1, null));
+            Require(!externalCommitted && inventory.Revision == beforeCraftRevision &&
+                JsonSerializer.Serialize(inventory.Capture()) == beforeFailedOutput,
+                "Failed crafting publication retained items, RNG, revision or external effects.");
+            inventory.PrepareChange = (_, _) =>
+            {
+                preparationCount++;
+                return new(() => externalCommitted = true, () => externalCommitted = false);
+            };
             inventory.Craft(records, recipe, 1, null);
+            Require(preparationCount == 2 && externalCommitted && inventory.Revision == beforeCraftRevision + 1,
+                "Crafting did not publish one complete authoritative inventory transaction.");
+            inventory.PrepareChange = null;
+            var craftedSave = inventory.Capture();
+            var restoredCraft = new OpenNV.Runtime.Gameplay.State.FalloutPlayerInventory();
+            restoredCraft.Restore(craftedSave.Inventory, craftedSave.EquippedRuntimeFormIds.ToArray(), craftedSave.InventoryRandomState);
+            Require(JsonSerializer.Serialize(restoredCraft.Capture()) == JsonSerializer.Serialize(craftedSave),
+                "Crafted inventory and RNG did not survive cold restore.");
             Require(inventory.Item(Key(1)) is null && inventory.Item(Key(2))?.Count == 2, "Crafting did not conserve exact aggregated ingredients/output.");
             Reject(() => inventory.Craft(records, recipe, 1, null));
             Require(inventory.Item(Key(2))?.Count == 2, "Stale crafting repeated a consumed transaction.");
