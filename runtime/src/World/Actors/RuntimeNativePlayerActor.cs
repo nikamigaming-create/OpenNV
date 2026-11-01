@@ -227,7 +227,9 @@ internal sealed partial class RuntimeNativePlayerActor : Node3D
         {
             var group = _drawn && Weapon is { } weapon ? weapon.AimGroup(_first, aiming) : _first ? "mtidle" : "locomotion/mtidle";
             if (group != _group) { _active = Clip(group); _group = group; _seconds = 0; }
-            _seconds += delta * (Weapon?.AnimationMultiplier ?? 1);
+            // Base idle and steady aim follow simulation time. The weapon's
+            // animation multiplier belongs to the separate action-rate owner.
+            _seconds += delta;
             SelectMovement(delta, movement, grounded);
             Skeleton.ResetSourceBonePoses();
             Skeleton.Node.SetBonePose(Skeleton.BoneIndex(_idle!.Sequence.TargetName), Transform3D.Identity);

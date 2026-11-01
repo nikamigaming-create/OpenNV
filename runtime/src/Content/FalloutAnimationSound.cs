@@ -31,9 +31,10 @@ internal static class FalloutAnimationSound
         var paths = resources.Select(FalloutBsaArchive.CanonicalPath)
             .Where(path => path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) &&
                 !path[prefix.Length..].Contains('\\') &&
-                Path.GetExtension(path).Equals(".wav", StringComparison.OrdinalIgnoreCase))
+                (Path.GetExtension(path).Equals(".wav", StringComparison.OrdinalIgnoreCase) ||
+                    Path.GetExtension(path).Equals(".ogg", StringComparison.OrdinalIgnoreCase)))
             .Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase).ToArray();
-        if (paths.Length == 0) throw new FileNotFoundException($"SOUN {source.FormKey} has no owned WAV variants in {source.LogicalPath}.");
+        if (paths.Length == 0) throw new FileNotFoundException($"SOUN {source.FormKey} has no owned WAV or Ogg variants in {source.LogicalPath}.");
         return paths;
     }
 

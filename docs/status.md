@@ -15,7 +15,7 @@ reproduced severe slowdown, but its checkpoint is unmatched and recording
 amplifies the cost. Scene parity and faster-than-retail performance remain open.
 See current-work.md for the measured limits and active repair batch.
 
-The current local batch completes the ordinary Doc-house exit after shared idle
+The checked PR339 batch completes the ordinary Doc-house exit after shared idle
 condition and Sandbox-phase repairs. An enabled Pip-Boy flashlight survives a
 committed save and cold restore; a later outdoor save retains the disabled light
 and loads successfully. The Stats aid shortcut visibly consumes a Stimpak,
@@ -37,7 +37,8 @@ The current source repairs creature movement beneath grazing poses by sharing
 source-priority root accumulation with the displayed animation. Three paired
 bighorner takes completed; all205 sampled stationary grazing/Forward intervals
 had zero body travel. Exact magnitude and full skeleton parity remain unverified.
-Grass color and atlas-edge fragments were repaired, and a fresh outdoor save
+Grass now renders its texture and selected atlas-edge fragments are absent;
+final grass color remains under repair. A fresh outdoor save
 cold-loaded with exact saved position. The full required runtime gate and44-file,
 3288-block owned animation decode passed. Broad creature, room, audio, combat and
 campaign coverage remain open; these checks do not establish tester readiness.

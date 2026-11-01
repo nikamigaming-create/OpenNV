@@ -409,6 +409,7 @@ internal sealed partial class CellNavigationGraph
             Vertices = vertices;
             Triangles = triangles;
             ExternalConnections = externalConnections;
+            _internalComponents = new(ReadInternalComponents);
             _minimum = _maximum = vertices[0];
             foreach (var vertex in vertices)
             {
@@ -418,6 +419,7 @@ internal sealed partial class CellNavigationGraph
         }
 
         private readonly Vector3 _minimum, _maximum;
+        private readonly Lazy<int[]> _internalComponents;
         internal float BoundsDistanceSquared(Vector3 point)
         {
             var nearest = new Vector3(Math.Clamp(point.X, _minimum.X, _maximum.X),
@@ -467,28 +469,31 @@ internal sealed partial class CellNavigationGraph
             return best.Index >= 0 ? best : throw new InvalidDataException($"Owned NAVM {FormId} has no finite floor projection.");
         }
 
-        internal bool CanReach(int start, int destination)
+        internal bool CanReach(int start, int destination) => start == destination ||
+            _internalComponents.Value[start] == _internalComponents.Value[destination];
+
+        private int[] ReadInternalComponents()
         {
-            if (start == destination)
-                return true;
+            // IsInternalNeighbor requires reciprocal authored edges. Preserve
+            // exactly that immutable relation; collision, source-floor and
+            // permitted-portal checks remain live with their existing owners.
+            var components = new int[Triangles.Count];
+            Array.Fill(components, -1);
             var pending = new Queue<int>();
-            var visited = new HashSet<int> { start };
-            pending.Enqueue(start);
-            while (pending.TryDequeue(out var current))
+            for (var origin = 0; origin < components.Length; ++origin)
             {
-                foreach (var adjacent in Triangles[current].AdjacentTriangles
-                    .Where(value => IsInternalNeighbor(current, value))
-                    .Distinct()
-                    .Order())
-                {
-                    if (!visited.Add(adjacent))
-                        continue;
-                    if (adjacent == destination)
-                        return true;
-                    pending.Enqueue(adjacent);
-                }
+                if (components[origin] >= 0) continue;
+                components[origin] = origin;
+                pending.Enqueue(origin);
+                while (pending.TryDequeue(out var current))
+                    foreach (var adjacent in Triangles[current].AdjacentTriangles)
+                    {
+                        if (!IsInternalNeighbor(current, adjacent) || components[adjacent] >= 0) continue;
+                        components[adjacent] = origin;
+                        pending.Enqueue(adjacent);
+                    }
             }
-            return false;
+            return components;
         }
 
         internal Vector3 SharedEdgeMidpoint(int first, int second)

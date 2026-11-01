@@ -127,6 +127,8 @@ var modern = FalloutImageSpaceReader.Decode(form, 15, modernBytes);
 Require(classic.Cinematic == modern.Cinematic && classic.Tint == modern.Tint, "Versioned cinematic channels shifted.");
 Require(classic.SkinDimmer is null && modern.SkinDimmer == 2.75f, "Versioned Skin Dimmer lost its presence semantics.");
 Require(classic.RawTraits.Length == 32 && modern.RawTraits.Length == 33, "Reserved DNAM bytes became traits.");
+Require(classic.GrassDimmer == 13 / 40f && modern.GrassDimmer == classic.GrassDimmer &&
+    classic.GrassDimmer != classic.RawTraits[11], "Grass directional intensity used Sunlight Dimmer instead of its independent source trait.");
 var legacyExtended = new byte[148];
 classicBytes.CopyTo(legacyExtended, 0);
 legacyExtended.AsSpan(128).Fill(0xff);
@@ -137,6 +139,7 @@ foreach (var version in new ushort[] { 1, 9, 11, 13, 15 })
         "Record version shifted the 148-byte legacy layout and desaturated its image.");
     Require(extended.ReservedData.Length == 20 && extended.ReservedData.All(value => value == 0xff),
         "Opaque trailer became color traits or an invented cinematic enable mask.");
+    Require(extended.GrassDimmer == classic.GrassDimmer, "Legacy DNAM extent moved the independent Grass Dimmer channel.");
     Require(FalloutImageSpaceReader.Decode(form, version, modernBytes).Cinematic == modern.Cinematic,
         "The 152-byte layout was not selected by its DNAM extent.");
 }

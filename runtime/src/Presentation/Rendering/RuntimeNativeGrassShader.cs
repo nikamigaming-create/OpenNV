@@ -8,7 +8,7 @@ internal static class RuntimeNativeGrassShader
         render_mode unshaded, blend_mix, depth_draw_always, cull_disabled, fog_disabled, skip_vertex_transform;
         // Native grass diffuse stage clamps both axes. Authored cards extend
         // outside the atlas; wrapping samples unrelated opaque atlas fragments.
-        uniform sampler2D source_diffuse : source_color, filter_linear_mipmap, repeat_disable;
+        uniform sampler2D source_diffuse : filter_linear_mipmap, repeat_disable;
         uniform float source_alpha_cutoff;
         uniform float source_units;
         uniform bool source_fit_slope;

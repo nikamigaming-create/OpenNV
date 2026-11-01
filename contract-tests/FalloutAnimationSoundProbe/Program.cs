@@ -11,6 +11,22 @@ Reject(() => FalloutAnimationSound.EditorId("Sound: "));
 var variants = FalloutAnimationSound.Variants(source, new[] { "sound/fx/variants/b.wav", "sound/fx/variants/a.wav",
     "sound/fx/variants/A.wav", "sound/fx/variants/nested/skip.wav", "sound/fx/variants/skip.dds", "sound/fx/other/c.wav" });
 Require(variants.SequenceEqual(new[] { "sound\\fx\\variants\\a.wav", "sound\\fx\\variants\\b.wav" }), "Winning immediate-directory variants were not canonical and stable.");
+var mixedVariants = FalloutAnimationSound.Variants(source, variants.Concat(new[]
+{
+    "sound/fx/variants/c.ogg", "sound/fx/variants/C.OGG", "sound/fx/variants/nested/skip.ogg",
+    "sound/fx/variants/skip.flac", "sound/fx/other/skip.ogg"
+}));
+Require(mixedVariants.SequenceEqual(new[] { "sound\\fx\\variants\\a.wav", "sound\\fx\\variants\\b.wav", "sound\\fx\\variants\\c.ogg" }),
+    "Owned Ogg directory variants changed canonical ordering, duplicate handling or directory boundaries.");
+var oggOnly = FalloutAnimationSound.Variants(source, new[] { "sound/fx/variants/only.ogg" });
+var oggRandom = new FalloutSoundRandomState(91);
+var beforeOgg = oggRandom.State;
+Require(FalloutAnimationSound.Select(source with { Flags = FalloutSoundFlags.EnvironmentIgnored }, oggOnly, oggRandom).Path == oggOnly[0] &&
+    oggRandom.State == beforeOgg, "One owned Ogg variant did not retain exact single-variant selection and random-state ownership.");
+var missingVariantsRejected = false;
+try { _ = FalloutAnimationSound.Variants(source, new[] { "sound/fx/variants/unsupported.flac", "sound/fx/variants/nested/skip.ogg" }); }
+catch (FileNotFoundException) { missingVariantsRejected = true; }
+Require(missingVariantsRejected, "An unsupported codec or nested sound silently satisfied a missing source directory.");
 var first = new FalloutSoundRandomState(123); var second = new FalloutSoundRandomState(123);
 var choices = Enumerable.Range(0, 64).Select(_ => FalloutAnimationSound.Select(source, variants, first)).ToArray();
 var replay = Enumerable.Range(0, 64).Select(_ => FalloutAnimationSound.Select(source, variants, second)).ToArray();
@@ -28,6 +44,7 @@ Require(first.State == noRoll && fixedSelection.PitchScale == .95f, "Fixed-pitch
 Require(FalloutAnimationSound.Select(source with { Flags = FalloutSoundFlags.MuteWhenSubmerged, ReverbAttenuation = 80 }, variants, first)
     .Unbound.SequenceEqual(new[] { "source-environment-reverb-send", "authoritative-listener-submersion" }), "Unsupported wet/submerged lanes were hidden.");
 Reject(() => FalloutAnimationSound.Select(source with { Flags = FalloutSoundFlags.Loop }, variants, first));
+Reject(() => FalloutAnimationSound.Select(source with { Flags = FalloutSoundFlags.PlayAtRandom }, variants, first));
 var envelope = source with { Flags = FalloutSoundFlags.EnvelopeFast, LoopStartSample = 1200, LoopEndSample = 4800 };
 Reject(() => FalloutAnimationSound.Select(envelope, variants, first));
 Require(FalloutAnimationSound.Select(envelope, variants, first, ownsLoopStop: true).Play &&
@@ -43,6 +60,13 @@ if (args.Length != 1) throw new ArgumentException("Optional argument: owned Fall
 RuntimeLiveContentSource.Configure(args[0], RuntimeLiveContentSource.FalloutNewVegasGame);
 using var content = RuntimeLiveContentSource.Current!;
 using var records = FalloutPluginStack.Load(content.PluginSources);
+var ownedOggSound = FalloutSoundRecordReader.Read(records, FalloutSoundRecordReader.Find(records, "EMTFlagPole02").FormKey);
+var ownedOggVariants = FalloutAnimationSound.Variants(ownedOggSound, content.ResourcePathsUnder(ownedOggSound.LogicalPath));
+Require(ownedOggVariants.Count > 0 && ownedOggVariants.All(path => Path.GetExtension(path).Equals(".ogg", StringComparison.OrdinalIgnoreCase)),
+    "Owned flag-pole directory did not retain its authored Ogg variants.");
+foreach (var path in ownedOggVariants)
+    Require(content.TryRead(path, null, out var oggBytes, out _) && oggBytes.AsSpan().StartsWith("OggS"u8),
+        "Owned Ogg directory variant was not a readable Ogg container.");
 const string clipPath = "meshes/characters/_male/idleanims/SmokingStanding.kf";
 if (!content.TryRead(clipPath, null, out var bytes, out var identity)) throw new FileNotFoundException(clipPath);
 var nif = FalloutNifFile.Read(bytes);
@@ -69,6 +93,6 @@ void Cross(FalloutIdleAnimationInterval interval)
 phase.Advance(100, Cross);
 Require(events.SequenceEqual(new[] { "NPCIdleSmokingIn", "NPCIdleSmokingOut", "NPCIdleSmokingIn", "NPCIdleSmokingOut" }),
     "Intro/repeat/outro traversal duplicated, omitted or reordered source sound events.");
-Console.WriteLine($"OPENNV_ANIMATION_SOUND_OWNED_PASS source={identity} orderedEvents={events.Count} originalWav=true sourceVariance=true reverb=unbound submersion=unbound visualSmoke=unproven");
+Console.WriteLine($"OPENNV_ANIMATION_SOUND_OWNED_PASS source={identity} orderedEvents={events.Count} originalWav=true ownedOggDirectoryVariants={ownedOggVariants.Count} sourceVariance=true reverb=unbound submersion=unbound visualSmoke=unproven");
 static void Require(bool value, string message) { if (!value) throw new InvalidDataException(message); }
 static void Reject(Action action) { try { action(); } catch (NotSupportedException) { return; } throw new InvalidDataException("Unsupported event behavior did not fail closed."); }

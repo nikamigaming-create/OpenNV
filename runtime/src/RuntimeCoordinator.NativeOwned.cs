@@ -96,7 +96,11 @@ public partial class RuntimeCoordinator
         var cellChildren = _nativeCurrentCellRoot?.GetChildren();
         using var cellChildrenOwner = cellChildren is null ? null : (Godot.Collections.Array)cellChildren;
         var cellNodes = cellChildren?.ToArray() ?? [];
-        var captureReadiness = _nativeReferences?.ObserveCaptureReadiness(detailed);
+        // Ordinary publication observes cheap state, never rehearses capture
+        // across the retained world. Exhaustive continuation/readiness queries
+        // belong to the bounded explicit detailed request. Saves independently
+        // run Capture/CaptureSequence and cannot use this diagnostic result.
+        var captureReadiness = detailed ? _nativeReferences?.ObserveCaptureReadiness(includeCorpseReadiness: true) : null;
         var pendingCorpseCaptures = captureReadiness?.PendingCorpseCaptures;
         return new
         {
@@ -107,7 +111,7 @@ public partial class RuntimeCoordinator
             combatWheel = _nativeCombatWheel?.State,
             vats = _nativePlayer?.VatsState,
             xr = _nativeXr?.State,
-            detail = detailed ? "complete-runtime-snapshot" : "live-summary;request-state-for-actor-presentation-light-reference-controller-and-quest-details",
+            detail = detailed ? "complete-runtime-snapshot" : "live-summary;reference-readiness-and-inventories-unsampled;request-state-for-details",
             reviewScope = !detailed || _nativeActiveCell is null ? null : new
             {
                 sourceCompatibilityId = RuntimeLiveContentSource.Current!.SaveCompatibilityId,
@@ -127,17 +131,19 @@ public partial class RuntimeCoordinator
                 _nativeReferences.ResidentCellCount,
                 _nativeReferences.ScriptDefinitionCount,
                 pendingPackageEvents = _nativeReferences.PendingPackageEventCount,
-                pendingProcedureCaptures = captureReadiness!.PendingProcedures,
-                pendingProcedureCaptureOwners = captureReadiness!.ProcedureOwners,
+                captureReadinessScope = detailed ? "exhaustive-live-observation;independent-of-save-admission" :
+                    "not-sampled;explicit-engine.state-required;save-admission-remains-independent",
+                pendingProcedureCaptures = captureReadiness?.PendingProcedures,
+                pendingProcedureCaptureOwners = captureReadiness?.ProcedureOwners,
                 pendingCorpseCaptures,
-                corpseCaptureBlockers = captureReadiness!.CorpseOwners,
-                pendingAnimationSoundCaptures = captureReadiness!.PendingAnimationSounds,
-                pendingAnimationSoundCaptureOwners = captureReadiness!.AnimationSoundOwners,
+                corpseCaptureBlockers = captureReadiness?.CorpseOwners,
+                pendingAnimationSoundCaptures = captureReadiness?.PendingAnimationSounds,
+                pendingAnimationSoundCaptureOwners = captureReadiness?.AnimationSoundOwners,
                 detection = _nativeReferences.DetectionState,
-                stoppedScriptFrames = _nativeReferences.StoppedScriptFrames,
-                stoppedPackageBindings = captureReadiness!.StoppedPackageBindings,
-                talkingActivatorBindings = _nativeReferences.TalkingActivatorBindings,
-                unloadedActorPackages = _nativeReferences.UnloadedPackages?.State,
+                stoppedScriptFrames = detailed ? _nativeReferences.StoppedScriptFrames : null,
+                stoppedPackageBindings = captureReadiness?.StoppedPackageBindings,
+                talkingActivatorBindings = detailed ? _nativeReferences.TalkingActivatorBindings : null,
+                unloadedActorPackages = detailed ? _nativeReferences.UnloadedPackages?.State : null,
                 state = detailed && !_nativeReferences.PlayerMoves.Pending && _nativeReferences.PendingPackageEventCount == 0 &&
                     captureReadiness!.PendingProcedures == 0 && pendingCorpseCaptures == 0 && captureReadiness!.PendingAnimationSounds == 0
                     ? _nativeReferences.Capture() : null,
@@ -216,7 +222,7 @@ public partial class RuntimeCoordinator
             actorDivergences = _nativeActorDivergences.ToArray(),
             referenceDivergences = _nativeReferenceDivergences.ToArray(),
             playerMoves = _nativeReferences?.PlayerMoves.State,
-            mapMarkers = _nativeReferences?.KnownMapMarkers.Select(marker => new
+            mapMarkers = !detailed ? null : _nativeReferences?.KnownMapMarkers.Select(marker => new
             {
                 reference = marker.Source.Reference.ToString(),
                 marker.Source.Name,
@@ -307,6 +313,9 @@ public partial class RuntimeCoordinator
                     path = controller.GetPath().ToString(),
                     sequence = controller.ActiveSequence,
                     sourceSeconds = controller.SourceTimeSeconds,
+                    playing = controller.Playing,
+                    processing = controller.IsProcessing() && controller.CanProcess(),
+                    startup = controller.ObjectStartupState,
                     registered = controller.SequenceNames.ToArray(),
                 }).ToArray(),
             modelSounds = !detailed ? null : _nativeCurrentCellRoot?.FindChildren("*", "", true, false)
@@ -1194,14 +1203,15 @@ public partial class RuntimeCoordinator
                 $"collisionBodies={built.CollisionBodies} collisionShapes={built.CollisionShapes} " +
                 $"collisionTriangles={built.CollisionTriangles}");
         }
-        // A static base registers managed groups without requesting playback.
-        // Direct active controllers keep their authored clock; explicit source
-        // PlayGroup requests remain available after placement.
+        // Register managed groups first, then apply canonical object defaults
+        // after their source event handlers are bound. Direct clocks and
+        // explicit source playback retain their independent ownership.
+        // The same startup selector applies to every placed record class.
         var instance = preparedStaticRoot is not null
             ? RuntimeNativeNifPrototype.PlaceOwnedRoot(preparedStaticRoot, preparedModel ??
                 throw new InvalidDataException("Prepared static root has no source model."), ReferenceTransform(reference))
             : _nativeNifPrototypes[baseObject.ModelPath].InstantiatePlaced(ReferenceTransform(reference),
-                autoStartManagedLoops: baseObject.Signature != "STAT");
+                autoStartManagedLoops: false);
         instance.Name = $"Reference_{reference.FormKey}";
         instance.SetMeta("opennv_reference_form_key", reference.FormKey.ToString());
         instance.SetMeta("opennv_source_model", baseObject.ModelPath);
@@ -1223,6 +1233,7 @@ public partial class RuntimeCoordinator
             foreach (var controller in controllers.Where(controller => controller.HasTextKeys))
                 controller.TextKeyHandler = sounds.Dispatch;
         }
+        foreach (var controller in controllers) controller.ConfigureObjectDefaultStartup();
         if (controllers.Length != 0)
             GD.Print($"OPENNV_NATIVE_REFERENCE_CONTROLLERS source={reference.FormKey} " +
                 $"sequences={string.Join(',', controllers.SelectMany(controller => controller.SequenceNames))} binding=per-instance");

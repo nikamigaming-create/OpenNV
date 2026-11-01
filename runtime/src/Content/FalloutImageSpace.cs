@@ -11,6 +11,7 @@ internal sealed record FalloutImageSpace(
     internal float TargetLuminance => RawTraits[4];
     internal float BrightScale => RawTraits[6];
     internal float BrightClamp => RawTraits[7];
+    internal float GrassDimmer => RawTraits[12];
 }
 
 internal static class FalloutImageSpaceReader

@@ -7,6 +7,7 @@ public partial class NativeNifInstanceAudit
 {
     private void ExerciseRepeatedManagedSequences()
     {
+        ExerciseObjectDefaultStartup();
         // Managed group registration is not a placed static playback request.
         // Direct active source clocks retain their independent startup lane.
         var inactive = new RuntimeNifControllerPlayer { SourceController = 1, SourceSha256 = new string('0', 64) };

@@ -26,7 +26,7 @@ internal partial class RuntimeNativeExteriorEnvironment
         // The shared sky commits weather immediately. This follows that owner;
         // weather cross-fade support remains a shared sky capability gap.
         return new(hour, new(0, 1), minimum + (maximum - minimum) * _grassWind,
-            _ambient, new(-ray.X, -ray.Y, -ray.Z), new(color[0], color[1], color[2]), ImageSpace?.RawTraits[11] ?? 1,
+            _ambient, new(-ray.X, -ray.Y, -ray.Z), new(color[0], color[1], color[2]), ImageSpace?.GrassDimmer ?? 1,
             _fog, new(_range.Y, _range.Y - _range.X, _range.Z), new(start, fade),
             new(camera.Near / _units, camera.Far / _units));
     }

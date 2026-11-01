@@ -24,6 +24,23 @@ cannot be dropped merely because a point light can be constructed. Unknown flags
 invalid radius, cyclic or malformed enable graphs and independently requested
 child state remain visible failures.
 
+## Grass directional intensity
+
+Grass directional intensity reads the independent IMGS Grass Dimmer at trait 12,
+rather than the Sunlight Dimmer at trait 11. The grass frame binds that source
+value without changing its texture, vertex colors, ambient light or fog. An
+absent image-space owner retains the neutral factor 1. Dynamic IMAD grass-dimmer
+composition remains an explicitly unbound shared image-space capability; this
+binding does not claim native grass color-transfer or population parity.
+
+The grass diffuse sampler supplies encoded numeric RGB to the shared world HDR
+and cinematic compositor, matching the ordinary source NIF and sky materials.
+The compositor owns the final conversion for Godot's output transfer. Decoding
+the grass atlas at sampling time would feed a different color domain into the
+same lighting, fog and postprocessing arithmetic. This binding preserves the
+owned texture, UVs, alpha, vertex colors and population; matched final pixels
+remain a separate verification requirement.
+
 ## Zero-channel sequences
 
 `RuntimeNativeNifMeshBuilder` no longer rejects a sequence solely because its
