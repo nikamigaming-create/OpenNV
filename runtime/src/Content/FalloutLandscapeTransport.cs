@@ -70,7 +70,7 @@ internal static class FalloutLandscapeTransportResolver
     private const float HeightScale = 8.0f;
     private const float NormalLengthEpsilon = 0.000001f;
 
-    internal static FalloutLandscapeTransport Resolve(
+    internal static FalloutLandscapeTransport? Resolve(
         FalloutPluginStack stack,
         FalloutDoorTransition transition,
         FalloutLandscapeTexture? defaultTexture = null)
@@ -103,7 +103,7 @@ internal static class FalloutLandscapeTransportResolver
             transition.DestinationWorldspace, defaultTexture);
     }
 
-    internal static FalloutLandscapeTransport ResolveCell(FalloutPluginStack stack, FalloutCellDefinition cell, FalloutFormKey persistentCell,
+    internal static FalloutLandscapeTransport? ResolveCell(FalloutPluginStack stack, FalloutCellDefinition cell, FalloutFormKey persistentCell,
         FalloutLandscapeTexture? defaultTexture = null)
     {
         var records = stack.EffectiveCellChildren(cell.FormKey, new HashSet<string> { "LAND" }).ToArray();
@@ -113,7 +113,7 @@ internal static class FalloutLandscapeTransportResolver
             cell.Worldspace ?? throw new InvalidDataException("Landscape CELL has no worldspace."), defaultTexture);
     }
 
-    private static FalloutLandscapeTransport ReadLandscape(
+    private static FalloutLandscapeTransport? ReadLandscape(
         FalloutPluginStack stack,
         FalloutPluginRecord record,
         FalloutFormKey persistentDestinationCell,
@@ -122,21 +122,22 @@ internal static class FalloutLandscapeTransportResolver
         FalloutFormKey worldspace,
         FalloutLandscapeTexture? defaultTexture)
     {
+        RequireOwnLandData(stack, worldspace);
         var source = record.ReadSubrecords().ToArray();
         var data = RequiredSingle(source, "DATA", record);
         if (data.Length != sizeof(uint))
             throw Error(record, "DATA must contain one uint32 flag field");
         var flags = BinaryPrimitives.ReadUInt32LittleEndian(data.Span);
-        if ((flags & VertexDataFlag) == 0)
-            throw new NotSupportedException(
-                $"Native LAND {record.FormKey} has no authored vertex geometry.");
-        var heights = ReadHeights(RequiredSingle(source, "VHGT", record), record);
-        var normals = ReadNormals(RequiredSingle(source, "VNML", record), record);
+        var geometry = (flags & VertexDataFlag) != 0;
+        if (!geometry && source.Any(field => field.Signature is "VHGT" or "VNML"))
+            throw Error(record, "geometry-free DATA conflicts with authored vertex geometry");
+        var heights = geometry ? ReadHeights(RequiredSingle(source, "VHGT", record), record) : [];
+        var normals = geometry ? ReadNormals(RequiredSingle(source, "VNML", record), record) : [];
         var colorRows = source.Where(value => value.Signature == "VCLR").ToArray();
         if (colorRows.Length > 1)
             throw Error(record, $"contains {colorRows.Length} VCLR subrecords");
         var colors = colorRows.Length == 0
-            ? Enumerable.Repeat(byte.MaxValue, ColorBytes).ToArray()
+            ? geometry ? Enumerable.Repeat(byte.MaxValue, ColorBytes).ToArray() : []
             : ReadColors(colorRows[0].Data, record);
         var authoredBases = source.Where(value => value.Signature == "BTXT")
             .Select(value => ReadLayerHeader(record, value.Data, "BTXT", baseLayer: true))
@@ -180,6 +181,9 @@ internal static class FalloutLandscapeTransportResolver
         if (alphaLayers.Select(value => (value.Quadrant, value.LayerIndex)).Distinct().Count() !=
             alphaLayers.Count)
             throw Error(record, "duplicates an ATXT quadrant/layer index");
+        // Colors and texture metadata may exist without height/normal geometry.
+        // They do not authorize a fabricated surface or inherited height field.
+        if (!geometry) return null;
         var textures = baseLayers.Concat(alphaLayers).Select(value => value.Texture)
             .Distinct()
             .ToDictionary(key => key, key => key.ObjectId == 0
@@ -199,6 +203,25 @@ internal static class FalloutLandscapeTransportResolver
             baseLayers.OrderBy(value => value.Quadrant).ToArray(),
             alphaLayers.OrderBy(value => value.Quadrant).ThenBy(value => value.LayerIndex).ToArray(),
             textures);
+    }
+
+    private static void RequireOwnLandData(FalloutPluginStack stack, FalloutFormKey worldspace)
+    {
+        var world = stack.GetEffective(worldspace);
+        if (world.Signature != "WRLD") throw new InvalidDataException("LAND world owner is not WRLD.");
+        var fields = world.ReadSubrecords().ToArray();
+        var parents = fields.Where(field => field.Signature == "WNAM").ToArray();
+        var flags = fields.Where(field => field.Signature == "PNAM").ToArray();
+        if (parents.Length > 1 || parents.Length == 1 && parents[0].Data.Length != 4 ||
+            flags.Length > 1 || flags.Length == 1 && flags[0].Data.Length != 2)
+            throw new InvalidDataException("WRLD LAND parent has malformed WNAM/PNAM.");
+        if (parents.Length == 0) return;
+        if (flags.Length != 1) throw new NotSupportedException("WRLD LAND parent has no qualified PNAM flags.");
+        var parent = world.Plugin.AdjustOptionalFormId(BinaryPrimitives.ReadUInt32LittleEndian(parents[0].Data.Span));
+        if (parent is not null && stack.GetEffective(parent.Value).Signature != "WRLD")
+            throw new InvalidDataException("WRLD LAND parent is not WRLD.");
+        if ((BinaryPrimitives.ReadUInt16LittleEndian(flags[0].Data.Span) & 1) != 0)
+            throw new NotSupportedException($"WRLD {worldspace} LAND inheritance requires its native consumer owner.");
     }
 
     private static FalloutLandscapeLayer ReadLayerHeader(

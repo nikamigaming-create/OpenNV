@@ -500,6 +500,7 @@ internal partial class RetailHdrCompositorEffect : CompositorEffect
             if (_linearSampler.IsValid) _renderingDevice.FreeRid(_linearSampler);
             _pipeline = _shader = _pointSampler = _linearSampler = default;
             _uniformSets.Clear(); _sceneCopies.Clear(); _postHdrScenes.Clear();
+            _lightingSubmissions.Clear();
         }));
     }
 
@@ -687,6 +688,8 @@ internal partial class RetailHdrCompositorEffect : CompositorEffect
 
         Dispatch(passes);
         _writeAdaptationA[view] = !writeA;
+        _lightingSubmissions[view] = new(downsampleTextures[^1], nextAdaptation,
+            _renderParameters, Engine.GetFramesDrawn(), System.Diagnostics.Stopwatch.GetTimestamp());
         if (menuBackground is not null) _menuBackgroundCaptures[view] = menuBackground.Serial;
     }
 

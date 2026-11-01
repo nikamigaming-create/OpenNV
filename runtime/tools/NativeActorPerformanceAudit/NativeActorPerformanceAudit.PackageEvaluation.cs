@@ -205,20 +205,33 @@ public partial class NativeActorPerformanceAudit
                 if (JsonSerializer.Serialize(state.Capture()) != snapshot)
                     throw new InvalidDataException("Discarding prepared NPC geometry changed authoritative state.");
                 GD.Print("OPENNV_NPC_GEOMETRY_PREFETCH_PASS liveBindingsUnchanged=true captureUnchanged=true cancellationUnchanged=true");
-                foreach (var attached in new[] { false, true })
+                foreach (var ownership in new[] { "detached-actor", "attached-actor", "detached-cell" })
                 {
+                    var stagedCell = ownership == "detached-cell" ? new Node3D() : null;
                     var failedActor = RuntimeNativeNpc.Create(records, content, placed, units,
                         (_, _, _, _) => new StandardMaterial3D(), world.EquippedArmor(caller, 1), templates);
                     try
                     {
                         failedActor.Transform = Placement(placed);
-                        if (attached) presentation.AddChild(failedActor);
+                        if (ownership == "attached-actor") presentation.AddChild(failedActor);
+                        else stagedCell?.AddChild(failedActor);
                         failedActor.SetProcess(false); failedActor.SetPhysicsProcess(false);
                         failedActor.ConfigureAi(records, quests, cell, Placement, clock: clock, globals: globals, world: world);
                         if (ReferenceEquals(state.QueryCurrentPackage, query))
                             throw new InvalidDataException("Failed-construction fixture did not acquire the candidate's binding.");
                     }
-                    finally { RuntimeCoordinator.DiscardNativeActor(failedActor, actor); }
+                    finally
+                    {
+                        if (stagedCell is null) RuntimeCoordinator.DiscardNativeActor(failedActor, actor);
+                        else
+                        {
+                            var retirementError = RuntimeCoordinator.DiscardNativeStagedSubtree(stagedCell);
+                            actor.RestoreSourceBindings();
+                            if (retirementError is not null) throw retirementError;
+                            if (GodotObject.IsInstanceValid(stagedCell))
+                                throw new InvalidDataException("Failed detached CELL retained its native root.");
+                        }
+                    }
                     if (GodotObject.IsInstanceValid(failedActor) || !actor.IsInsideTree() ||
                         !ReferenceEquals(state.QueryCurrentPackage, query) || !ReferenceEquals(state.CapturePackageBindingFailure, capture) ||
                         !ReferenceEquals(state.CanCapturePackageBindingFailure, ready) || !ReferenceEquals(state.CapturePackageAssignment, assignment) ||

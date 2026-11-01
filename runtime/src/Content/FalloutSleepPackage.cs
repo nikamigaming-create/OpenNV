@@ -17,10 +17,19 @@ internal sealed record FalloutSleepPackage(FalloutFormKey Form, uint Flags, Fall
         if (source.Procedure != 4 || source.LocationDeclaration is not { Type: 0 or 1 or 2 or 3 } location)
             throw new NotSupportedException("Sleep requires its standard source location.");
         const uint supported = 0x1000 | 0x2000 | 0x20000 | FalloutScriptPackage.HeadTrackingOffFlag |
-            FalloutScriptPackage.WeaponsUnequippedFlag;
+            FalloutScriptPackage.WeaponsUnequippedFlag | FalloutScriptPackage.DoorStartEndFlags;
         if ((data.Flags & ~supported) != 0 || (data.Flags & 0x1000) == 0 && data.BehaviorFlags != 0 ||
             data.SpecificFlags is not (null or 0) || record.ReadSubrecords().Any(field => field.Signature is "PLD2" or "PTDT" or "PTD2"))
             throw new NotSupportedException("Sleep has additional unowned behavior or target inputs.");
+        if ((data.Flags & FalloutScriptPackage.DoorStartEndFlags) != 0)
+        {
+            // Only the source-proven empty door-work case is owned. Keep
+            // event/door ordering explicit when authored results could change
+            // doors or actor placement during this lifecycle transition.
+            if (source.Events.Values.Any(idle => idle is not null))
+                throw new NotSupportedException("Sleep door actions with event idles require their ordered execution owner.");
+            foreach (var program in source.EventPrograms.Values) program.RequireEmptyScript();
+        }
         if (location.Type == 1 && location.Form is null)
             throw new InvalidDataException("In-cell Sleep has no source CELL.");
         return new(record.FormKey, data.Flags, location);

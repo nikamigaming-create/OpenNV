@@ -91,6 +91,14 @@ internal partial class RuntimeNativeNpc
         try
         {
             if (!ReferenceEquals(state.CaptureHeadTracking, _headCapture)) return;
+            if (_headRestore is { } pending && !IsInsideTree())
+            {
+                // Detached staging has not advanced or published the restored
+                // head owner. Retain that validated source snapshot verbatim;
+                // an unentered candidate is not a failed live restoration.
+                state.HeadTracking = pending.Copy();
+                return;
+            }
             if (_headRestore is not null) throw new NotSupportedException("Head restoration has not reached native readiness.");
             state.HeadTracking = CaptureHeadTracking().Copy();
         }

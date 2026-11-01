@@ -10,14 +10,14 @@ internal sealed record FalloutWeatherImageModifier(int Slot, FalloutImageSpaceMo
 
 internal sealed record FalloutImageSpaceFrame(float TargetLuminance, Vector4 Cinematic, Vector4 Tint, Vector4 Fade,
     IReadOnlyList<FalloutActiveImageModifier> Active, IReadOnlyList<string> UnboundChannels, float BlurRadius = 0,
-    Vector2 DoubleVisionOffset = default, IReadOnlyList<FalloutWeatherImageModifier>? Weather = null, float SunlightDimmer = 1);
+    Vector2 DoubleVisionOffset = default, IReadOnlyList<FalloutWeatherImageModifier>? Weather = null, float SunlightDimmer = 1, float SkyScale = 1);
 
 /// <summary>Gameplay-clock IMAD lifetime and source IMGS/IMAD composition, independent of captured state.</summary>
 internal sealed class FalloutImageSpaceState
 {
     // IMAD channel order differs from IMGS storage: Skin Dimmer is channel 2;
-    // cinematic order is saturation, contrast, average luminance, brightness.
-    private static readonly int[] TraitIndices = [0, 1, 14, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15, 16, 17, 25, 27, 26, 28];
+    // cinematic order is saturation, average luminance, contrast, brightness.
+    private static readonly int[] TraitIndices = [0, 1, 14, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15, 16, 17, 25, 26, 27, 28];
     private readonly Dictionary<FalloutFormKey, FalloutActiveImageModifier> _active = [];
     internal IReadOnlyCollection<FalloutActiveImageModifier> Active => _active.Values;
 
@@ -43,7 +43,7 @@ internal sealed class FalloutImageSpaceState
 
     internal FalloutImageSpaceFrame Compose(FalloutImageSpace source, float? gameHour = null, FalloutDoubleVisionPhase? phase = null,
         FalloutImageSpaceModifier? presentationModifier = null, IReadOnlyList<FalloutWeatherImageModifier>? weather = null,
-        bool sunlightOwned = false)
+        bool sunlightOwned = false, bool skyOwned = false)
     {
         if (gameHour is { } hour && !float.IsFinite(hour)) throw new ArgumentOutOfRangeException(nameof(gameHour));
         // Static menu backgrounds temporarily apply an IMAD while drawing the
@@ -99,7 +99,7 @@ internal sealed class FalloutImageSpaceState
                 var add = FalloutImageSpaceModifier.Sample(modifier.Add[index], 0, 0);
                 multipliers[index] += (multiplier - 1) * strength;
                 adds[index] += add * strength;
-                if (strength > 0 && index is not (4 or 17 or 18 or 19 or 20) && !(sunlightOwned && index == 11) && (multiplier != 1 || add != 0))
+                if (strength > 0 && index is not (4 or 17 or 18 or 19 or 20) && !(sunlightOwned && index == 11) && !(skyOwned && index == 8) && (multiplier != 1 || add != 0))
                     unbound.Add($"{modifier.Form}/{index}IAD");
             }
             weatherTint += FalloutImageSpaceModifier.Sample(modifier.Tint, 0, new Vector4(1, 1, 1, 0)) * strength;
@@ -128,7 +128,7 @@ internal sealed class FalloutImageSpaceState
                 var add = FalloutImageSpaceModifier.Sample(modifier.Add[index], time, 0);
                 multipliers[index] += multiplier - 1;
                 adds[index] += add;
-                if (index is not (4 or 17 or 18 or 19 or 20) && !(sunlightOwned && index == 11) && (multiplier != 1 || add != 0))
+                if (index is not (4 or 17 or 18 or 19 or 20) && !(sunlightOwned && index == 11) && !(skyOwned && index == 8) && (multiplier != 1 || add != 0))
                     unbound.Add($"{modifier.Form}/{index}IAD");
             }
             var tint = FalloutImageSpaceModifier.Sample(modifier.Tint, time, new Vector4(1, 1, 1, 0));
@@ -163,6 +163,6 @@ internal sealed class FalloutImageSpaceState
         var angle = phase?.Angle(gameHour.GetValueOrDefault()) ?? 0;
         var doubleVisionOffset = new Vector2((float)(Math.Cos(angle) * doubleVision), (float)(Math.Sin(angle) * doubleVision));
         return new(traits[4], new Vector4(traits[25], traits[26], traits[27], traits[28]), finalTint, finalFade,
-            activeModifiers, unbound.Order(StringComparer.Ordinal).ToArray(), blurRadius, doubleVisionOffset, weather, traits[11]);
+            activeModifiers, unbound.Order(StringComparer.Ordinal).ToArray(), blurRadius, doubleVisionOffset, weather, traits[11], traits[8]);
     }
 }

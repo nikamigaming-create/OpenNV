@@ -18,9 +18,10 @@ internal sealed record FalloutAccompanyPortalArrival(FalloutFormKey SourceDoor, 
         FalloutPluginRecord package)
     {
         Validate();
-        if (records.GetEffective(world.Get(actor).Base).Signature != "CREA")
-            throw new InvalidDataException("Accompany portal receipt has no creature continuation owner.");
-        _ = FalloutFollowPackage.ReadAccompany(package);
+        if (records.GetEffective(actor).Signature is not ("ACHR" or "ACRE") ||
+            records.GetEffective(world.Get(actor).Base).Signature is not ("NPC_" or "CREA"))
+            throw new InvalidDataException("Follower portal receipt has no actor continuation owner.");
+        _ = FalloutFollowContinuation.ReadResident(package);
         if (world.Get(actor).PackageAssignment is not { Done: false } assignment || assignment.Package != package.FormKey)
             throw new InvalidDataException("Accompany portal receipt has no matching unfinished package assignment.");
         world.ValidateCommittedPortalPlacement(actor, SourceDoor, DestinationDoor);

@@ -21,6 +21,7 @@ internal sealed partial class RuntimeNativeActorCombat
     private void AdvanceRadiusWarning(RuntimeNativePlayer? player, double delta)
     {
         if (_state.AggroWarning is not { } warning) return;
+        RequireFollowCombatPolicy("retained aggro-warning continuation");
         var target = warning.Target == _records.RuntimeFormKey(0x14) ? player :
             CombatActors.SingleOrDefault(actor => actor._state.Reference == warning.Target)?._actor;
         if (target is null) { ClearRadiusWarning(); return; }

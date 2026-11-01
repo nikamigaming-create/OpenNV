@@ -121,7 +121,7 @@ public partial class RuntimeCoordinator
         var records = _nativePluginStack!;
         using var cancellation = new CancellationTokenSource();
         var token = cancellation.Token;
-        var pending = new Queue<Task<FalloutLandscapeTransport>>();
+        var pending = new Queue<Task<FalloutLandscapeTransport?>>();
         var next = 0;
         var total = Stopwatch.GetTimestamp();
         var slice = total;
@@ -135,10 +135,11 @@ public partial class RuntimeCoordinator
                 while (next < grid.Cells.Count && pending.Count < FalloutContentWorkers.Concurrency)
                 {
                     var cell = grid.Cells[next++];
-                    pending.Enqueue(FalloutContentWorkers.Run(() =>
+                    pending.Enqueue(FalloutContentWorkers.Run<FalloutLandscapeTransport?>(() =>
                     {
                         token.ThrowIfCancellationRequested();
                         var landscape = FalloutLandscapeTransportResolver.ResolveCell(records, cell, grid.PersistentCell);
+                        if (landscape is null) return null;
                         foreach (var path in landscape.Textures.Values.SelectMany(texture =>
                             new[] { texture.DiffusePath, texture.NormalPath }).OfType<string>().Distinct(StringComparer.OrdinalIgnoreCase))
                         {
@@ -152,6 +153,7 @@ public partial class RuntimeCoordinator
                 var source = await pending.Dequeue();
                 if (_nativeSessionTransitioning || _retiringNativeSession)
                     throw new OperationCanceledException("Landscape construction session retired.");
+                if (source is null) continue;
                 using var assembly = new RuntimeNativeLandscapeTransportBuilder.Assembly(source,
                     _configuration.World.GameUnitsToMeters, _nativeLandscapeTextures);
                 while (true)

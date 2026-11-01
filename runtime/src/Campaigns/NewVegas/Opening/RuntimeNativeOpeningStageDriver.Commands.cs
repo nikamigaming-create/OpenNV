@@ -20,6 +20,8 @@ internal partial class RuntimeNativeOpeningStageDriver
     private string? _saveAdmissionBlocker;
     private CanvasLayer? _recipeLayer;
     private NativeOwnedRecipeMenu? _recipeMenu;
+    private IDisposable? _recipeBackground;
+    private bool _recipeWasPaused, _recipeOwnsPause;
     private CanvasLayer? _barterLayer;
     private NativeOwnedBarterMenu? _barterMenu;
     private Action? _releaseRecipeInput;
@@ -285,6 +287,7 @@ internal partial class RuntimeNativeOpeningStageDriver
             FormLists = _scripts.References.FormLists.Capture(),
             LeveledItems = _scripts.References.LeveledItems.Capture(),
             PipBoyLight = _player.CapturePipBoyLight(),
+            PlayerRegions = _scripts.References.CapturePlayerRegions(),
             ActorBaseFlags = _scripts.References.ActorBaseFlags.Capture(),
             PlayerNotes = _scripts.References.PlayerNotes.Capture(),
             PlayerCaravanCards = _scripts.References.PlayerCaravanCards.Capture(),
@@ -309,15 +312,23 @@ internal partial class RuntimeNativeOpeningStageDriver
 
         var category = FalloutRecipeCategory.Read(_pluginStack, categoryForm);
         var recipes = FalloutRecipe.ReadCategory(_pluginStack, categoryForm);
-        var layer = new CanvasLayer { Layer = 94 };
+        var layer = new CanvasLayer { Layer = 94, ProcessMode = ProcessModeEnum.Always };
         var menu = new NativeOwnedRecipeMenu(_pluginStack, _inventory, category, recipes, EvaluateRecipeCondition,
-            value => _playerSkills.Value(value), recipe => _inventory.Craft(_pluginStack, recipe, SourcePlayerLevel, _globals),
+            value => _playerSkills.Value(value), (recipe, quantity, revision) =>
+            {
+                if (!FalloutCondition.AllPass(recipe.Conditions, EvaluateRecipeCondition, evaluateRunOn: true) ||
+                    recipe.RequiredSkill != -1 && _playerSkills.Value(recipe.RequiredSkill) < recipe.RequiredLevel)
+                    throw new InvalidOperationException("Crafting requirements changed before confirmation.");
+                _inventory.Craft(_pluginStack, recipe, SourcePlayerLevel, _globals, quantity, revision);
+            },
             CloseRecipeMenu);
         _recipeLayer = layer;
         _recipeMenu = menu;
         try
         {
             _releaseRecipeInput = AcquireInteractionInput();
+            _recipeWasPaused = GetTree().Paused; GetTree().Paused = true; _recipeOwnsPause = true;
+            _recipeBackground = _imageSpacePresenter().BeginMenuBackground(_pluginStack, FalloutMenuBackgroundKind.Popup);
             layer.TreeExiting += CloseRecipeMenu;
             menu.TreeExiting += CloseRecipeMenu;
             AddChild(layer);
@@ -350,8 +361,19 @@ internal partial class RuntimeNativeOpeningStageDriver
         _recipeMenu = null;
         var release = _releaseRecipeInput;
         _releaseRecipeInput = null;
-        try { release?.Invoke(); }
-        finally { if (layer is not null && !layer.IsQueuedForDeletion()) layer.QueueFree(); }
+        var background = _recipeBackground;
+        _recipeBackground = null;
+        try { background?.Dispose(); }
+        finally
+        {
+            try { release?.Invoke(); }
+            finally
+            {
+                if (_recipeOwnsPause && IsInsideTree()) GetTree().Paused = _recipeWasPaused;
+                _recipeOwnsPause = false;
+                if (layer is not null && !layer.IsQueuedForDeletion()) layer.QueueFree();
+            }
+        }
     }
 
     private void OpenBarterMenu(FalloutFormKey actorReference, int discount)

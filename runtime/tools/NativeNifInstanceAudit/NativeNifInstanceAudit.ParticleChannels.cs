@@ -7,7 +7,9 @@ public partial class NativeNifInstanceAudit
 {
     private void ExerciseParticleChannels()
     {
-        var file = FalloutNifFile.Read(ParticleChannelFixture());
+        // This smoke verifies an inelastic plane stopping downward motion.
+        // Elastic, two-sided outgoing deflection is exercised separately below.
+        var file = FalloutNifFile.Read(ParticleChannelFixture(bounce: 0));
         var fixture = new Node3D(); AddChild(fixture);
         try
         {
@@ -38,7 +40,22 @@ public partial class NativeNifInstanceAudit
                 throw new InvalidDataException("Lifespan publication mutated old particles or another instance.");
             for (var frame = 0; frame < 40; frame++) Advance(1f / 60);
             if (first.CollisionCount == 0 || first.Positions.Any(position => position.Y < -.0001f))
-                throw new InvalidDataException("Source particle collision plane did not stop downward traversal.");
+            {
+                var packed = Convert.FromBase64String(JsonSerializer.SerializeToElement(first.Observation).GetProperty("state").GetString()!);
+                var lowest = first.Positions.Select((position, index) => new
+                {
+                    index,
+                    x = position.X,
+                    y = position.Y,
+                    z = position.Z,
+                    vx = BitConverter.ToSingle(packed, index * 64 + 12),
+                    vy = BitConverter.ToSingle(packed, index * 64 + 16),
+                    vz = BitConverter.ToSingle(packed, index * 64 + 20),
+                    age = BitConverter.ToSingle(packed, index * 64 + 24),
+                }).OrderBy(value => value.y).Take(4).ToArray();
+                throw new InvalidDataException("Source particle collision plane did not stop downward traversal: " +
+                    JsonSerializer.Serialize(new { first.CollisionCount, first.ActiveCount, first.BirthCount, first.SimulatedSeconds, lowest }));
+            }
             Reject(() => first.Bind(file, life with { Variable1 = "Absent" }));
             Reject(() => first.Bind(file, life with { Interpolator = 15 }).Apply(0));
             Reject(() => ConfigureInvalid(true));
@@ -48,6 +65,8 @@ public partial class NativeNifInstanceAudit
             if (reset.GetProperty("lifespan").GetSingle() != 1 || first.CollisionCount != 0)
                 throw new InvalidDataException("Particle reset did not restore its source lifespan and contacts.");
             ExerciseParticlePlane();
+            ExerciseParticleContactSelection();
+            ExerciseParticleMetadata();
             GD.Print("OPENNV_PARTICLE_CHANNELS_PASS sourceLifespan=true newBirthOnly=true independentInstances=true linkedPlane=true boundedContact=true sourceReset=true invalidBindingsAndChainsRejected=true retailCollisionParity=unverified");
 
             void ConfigureInvalid(bool cycle)
@@ -83,11 +102,26 @@ public partial class NativeNifInstanceAudit
         var hit = FalloutNifParticlePlane.Sweep(new(0, 0, 1), new(0, 0, -2), 1, 2, 2, x, y);
         if (hit is not { Fraction: .5f, Point: { } point } || point != System.Numerics.Vector3.Zero ||
             FalloutNifParticlePlane.Sweep(new(2, 0, 1), new(0, 0, -2), 1, 2, 2, x, y) is not null ||
-            FalloutNifParticlePlane.Sweep(new(0, 0, -1), new(0, 0, 2), 1, 2, 2, x, y) is not null)
-            throw new InvalidDataException("Particle plane footprint or front-face sweep differs.");
+            FalloutNifParticlePlane.Sweep(new(0, 0, -1), new(0, 0, 2), 1, 2, 2, x, y) is not { Fraction: .5f })
+            throw new InvalidDataException("Particle plane footprint or two-sided sweep differs.");
+        var stationary = new System.Numerics.Vector3(0, 0, .0005f);
+        if (FalloutNifParticlePlane.Sweep(stationary, System.Numerics.Vector3.Zero, 1, 2, 2, x, y) is not { Fraction: 0, Point: var near } ||
+            near != stationary || FalloutNifParticlePlane.Sweep(new(1, 0, 1), new(0, 0, -2), 1, 2, 2, x, y) is not null)
+            throw new InvalidDataException("Particle near-plane contact or strict rectangle edge differs.");
+        var outgoing = System.Numerics.Vector3.UnitZ;
+        var deflected = FalloutNifParticlePlane.Sweep(stationary, outgoing, 1f / 60, 2, 2, x, y);
+        var outgoingResponse = FalloutNifParticlePlane.Respond(outgoing, System.Numerics.Vector3.UnitZ, .5f, false);
+        if (deflected is not { Fraction: 0, Point: var retained } || retained != stationary ||
+            outgoingResponse != new System.Numerics.Vector3(0, 0, -.5f) || (retained + outgoingResponse / 60).Z >= 0)
+            throw new InvalidDataException("Native two-sided near-plane deflection was replaced by a solid-floor policy.");
+        var velocity = new System.Numerics.Vector3(4, 0, -2); var normal = System.Numerics.Vector3.UnitZ;
+        if (FalloutNifParticlePlane.Respond(velocity, normal, .25f, false) != new System.Numerics.Vector3(1, 0, .5f) ||
+            FalloutNifParticlePlane.Respond(velocity, normal, .25f, true) != new System.Numerics.Vector3(4, 0, 0) ||
+            FalloutNifParticlePlane.Respond(velocity, normal, 0, false) != System.Numerics.Vector3.Zero)
+            throw new InvalidDataException("Particle full-velocity bounce or frame-end response differs.");
     }
 
-    private static byte[] ParticleChannelFixture(bool cycle = false, bool wrongManager = false)
+    private static byte[] ParticleChannelFixture(bool cycle = false, bool wrongManager = false, float bounce = .5f)
     {
         static void Object(BinaryWriter writer, int name)
         {
@@ -110,7 +144,7 @@ public partial class NativeNifInstanceAudit
             ("NiPSysEmitterLifeSpanCtlr", Bytes(w => { w.Write(-1); w.Write((ushort)108); w.Write(1f); w.Write(0f); w.Write(0f); w.Write(1f); w.Write(0); w.Write(6); w.Write(1); })),
             ("NiNode", Bytes(w => { Object(w, 5); w.Write(0); w.Write(0); })),
             ("NiPSysColliderManager", Bytes(w => { Header(w, 6, 5000); w.Write(12); })),
-            ("NiPSysPlanarCollider", Bytes(w => { w.Write(.5f); w.Write(false); w.Write(false); w.Write(-1); w.Write(wrongManager ? 0 : 11); w.Write(cycle ? 12 : -1); w.Write(13); w.Write(4f); w.Write(4f); foreach(var value in new[] {1f,0f,0f,0f,1f,0f}) w.Write(value); })),
+            ("NiPSysPlanarCollider", Bytes(w => { w.Write(bounce); w.Write(false); w.Write(false); w.Write(-1); w.Write(wrongManager ? 0 : 11); w.Write(cycle ? 12 : -1); w.Write(13); w.Write(4f); w.Write(4f); foreach(var value in new[] {1f,0f,0f,0f,1f,0f}) w.Write(value); })),
             ("NiNode", Bytes(w => { Object(w, 7); w.Write(0); w.Write(0); })),
             ("NiFloatInterpolator", Bytes(w => { w.Write(.1f); w.Write(-1); })),
             ("NiFloatInterpolator", Bytes(w => { w.Write(-.1f); w.Write(-1); })),

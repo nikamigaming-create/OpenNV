@@ -53,7 +53,8 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
     FalloutActorSandboxMarkerContinuation? SandboxMarker = null,
     FalloutSandboxIdleSelectionSnapshot? SandboxIdleSelection = null,
     FalloutActorLastIdleRequest? LastIdleRequest = null, bool ReferenceEssential = false, FalloutActorEssentialKnockout? EssentialKnockout = null,
-    FalloutHitKnockback? HitKnockback = null, FalloutAmbientIdleSnapshot? AmbientIdle = null)
+    FalloutHitKnockback? HitKnockback = null, FalloutAmbientIdleSnapshot? AmbientIdle = null,
+    bool RegionCellAttached = false, bool RegionImposterRole = false)
 {
     internal static void Validate(IReadOnlyList<FalloutReferenceSnapshot> snapshots)
     {
@@ -65,6 +66,7 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
             if (snapshot is null || !seen.Add(snapshot.Reference) || !ValidKey(snapshot.Reference) ||
                 !ValidKey(snapshot.Cell) || !ValidKey(snapshot.Base) || snapshot.Variables is null ||
                 snapshot.Variables.Values.Any(value => !double.IsFinite(value)) ||
+                snapshot.RegionCellAttached && snapshot.Placement is null ||
                 snapshot.Deleted && snapshot.DeletePending || snapshot.DeathCount is < 0 ||
                 snapshot.ObjectHealthPresent == true && snapshot.Destruction is null ||
                 !float.IsFinite(snapshot.Opacity) || snapshot.Opacity is < 0 or > 1 ||
@@ -587,7 +589,8 @@ internal sealed partial class FalloutReferenceInstance
             IdleRequests: CaptureIdleRequests is { } captureIdles ? captureIdles() : IdleRequests?.Copy(),
             SandboxMarker: CaptureSandboxMarker is { } captureMarker ? captureMarker() : SandboxMarker?.Copy(),
             SandboxIdleSelection: SandboxIdleSelection, LastIdleRequest: LastIdleRequest, ReferenceEssential: ReferenceEssential, EssentialKnockout: EssentialKnockout,
-            HitKnockback: HitKnockback, AmbientIdle: AmbientIdle?.Capture());
+            HitKnockback: HitKnockback, AmbientIdle: AmbientIdle?.Capture(),
+            RegionCellAttached: RegionCellAttached, RegionImposterRole: RegionImposterRole);
     }
 }
 
@@ -1002,6 +1005,11 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
             instance.NoFade = snapshot.NoFade ?? instance.NoFade;
             instance.Destroyed = snapshot.Destroyed;
             instance.ObjectHealthPresent = snapshot.ObjectHealthPresent;
+            if ((snapshot.RegionCellAttached || snapshot.RegionImposterRole) &&
+                records.GetEffective(instance.Base).Signature is "NPC_" or "CREA")
+                throw new NotSupportedException("Saved regional actor process-tier state is unqualified.");
+            instance.RegionCellAttached = snapshot.RegionCellAttached;
+            instance.RegionImposterRole = snapshot.RegionImposterRole;
             if (snapshot.Destruction is { } destruction)
             {
                 var declaration = FalloutDestructible.Read(records, instance.Base) ??

@@ -43,6 +43,7 @@ internal sealed partial class RuntimeNativeActorCombat
             bool? visible = eligible ? CanSeePoint(candidate.Actor?.BodyTargetPoint() ?? player!.CombatTargetPoint, candidate.Actor) : null;
             decisions.Add(new { reference = candidate.Reference, candidate.DistanceSquared, relation, eligible, visible, warns });
             if (visible != true) continue;
+            if (!PackageAllowsUnprovokedCombat()) continue;
             selected = true;
             _relation = relation;
             if (initiates || candidate.DistanceSquared <= maximumDistanceSquared / 4)

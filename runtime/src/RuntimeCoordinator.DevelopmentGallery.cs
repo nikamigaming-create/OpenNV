@@ -104,7 +104,7 @@ public partial class RuntimeCoordinator
                     else if (cell.Cell.Lighting is null)
                         throw new NotSupportedException("Interior subject has no source lighting declaration.");
                     _nativeSkyLighting?.EnterCell(cell.Cell, _nativeGlobals, reference.Position);
-                    root = BuildNativeCellRoot(cell, null, sourceSide: true);
+                    root = BuildNativeCellRoot(cell, null, sourceSide: true, reference.Position);
                     if (exterior is not null) AddExteriorLandscape(root, exterior);
                     AddChild(root);
                     if (exterior is null) AddNativeCellEnvironment(root, cell);

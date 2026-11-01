@@ -55,7 +55,7 @@ internal partial class RuntimeNativeNpc
     internal int SittingState => _seat?.Sleeping == true ? 0 : FurniturePhase;
     internal int SleepingState => _seat?.Sleeping == true ? FurniturePhase : 0;
     internal FalloutFormKey? CurrentFurniture => _sitting is 1 or 2 or 4 ? _furnitureReference : null;
-    internal bool Traveling => _travelActive || (_furnitureApproaching || _escortPackage is not null || _editorTravel is not null || _dialogueNativeMovement) && Combat?.PackageMoving == true;
+    internal bool Traveling => _travelActive || (_furnitureApproaching || _escortPackage is not null || _followPackage is not null || _editorTravel is not null || _dialogueNativeMovement) && Combat?.PackageMoving == true;
     internal FalloutFormKey? CurrentPackage => _sourceSelectionKnown ? _selectedSourcePackage : _aiPackage?.FormKey;
 
     // These are script-visible engine procedure codes. The currently owned
@@ -65,6 +65,7 @@ internal partial class RuntimeNativeNpc
         : _sandboxPackage is not null ? CurrentSandboxAiProcedure
         : _sitting == 2
         ? throw new NotSupportedException("Furniture entry needs its native script-visible procedure code.")
+        : _followPackage is not null ? throw new NotSupportedException("Follow script-visible procedure code is not qualified.")
         : _guardPackage is not null ? throw new NotSupportedException("Guard script-visible procedure code has no source declaration.")
         : _pendingCurrentLocationSleep is not null ? throw new NotSupportedException("Sleep awaits its native package-start location.")
         : _sleepPackage is not null ? _sitting == 1 && _seat?.Sleeping == true ? 8 :
@@ -138,6 +139,7 @@ internal partial class RuntimeNativeNpc
     internal object AiState => new
     {
         retainedPackageMotion = Combat?.PackageMotion,
+        follow = FollowState,
         package = _aiPackage?.FormKey.ToString(),
         selectedPackage = CurrentPackage?.ToString(),
         evaluationPending = _requestedSelection is not null,
@@ -187,7 +189,7 @@ internal partial class RuntimeNativeNpc
             Activity.Revision,
         },
         factions = _factions.Select(value => new { faction = value.Key.ToString(), rank = value.Value }).ToArray(),
-        currentProcedure = Combat?.ScriptCombatProcedure ?? Combat?.ScriptEatProcedure ?? (_sitting == 2 || _requestedSelection is not null || _aiError is not null || _guardPackage is not null ||
+        currentProcedure = Combat?.ScriptCombatProcedure ?? Combat?.ScriptEatProcedure ?? (_sitting == 2 || _requestedSelection is not null || _aiError is not null || _guardPackage is not null || _followPackage is not null ||
             _sandboxPackage is not null && !(_furnitureSandboxActivity && _seat is not null &&
                 (_sitting == 1 || _sitting == 4 && !_sandboxFurniturePackageExit) || AdmittedSandboxMarkerProcedure is not null)
             ? (int?)null : CurrentAiProcedure),
@@ -387,6 +389,11 @@ internal partial class RuntimeNativeNpc
         var package = _aiStack!.GetEffective(assignment.Package);
         if (package.Signature != "PACK") return;
         var declaration = FalloutScriptPackage.Read(package);
+        if (declaration.Procedure is 1 or 7 && state.FurnitureContinuation is null)
+        {
+            FalloutFollowContinuation.BindAccepted(_aiStack!, package, assignment, state.PackageMotion!, _packageEvents!);
+            return;
+        }
         if (declaration.Procedure == 3 && state.FurnitureContinuation is null && state.PackageMotion?.EatPackage is { } eating)
         {
             FalloutEatPackage.Read(package).Validate(_aiStack!, _aiWorld!, Appearance.Reference!.Value, eating);
@@ -436,6 +443,9 @@ internal partial class RuntimeNativeNpc
 
     private void DispatchPackageActions(FalloutScriptPackage package, string kind)
     {
+        if ((package.Flags & FalloutScriptPackage.DoorStartEndFlags) != 0)
+            (_aiWorld ?? throw new NotSupportedException("Package door actions have no reference world."))
+                .RequirePackageDoorActions(Appearance.Reference!.Value, package, kind);
         // Result scripts precede the event's topic and idle. An unsupported
         // reached effect keeps this event failed, rather than replaying it.
         if (package.EventPrograms.GetValueOrDefault(kind) is { } program)
@@ -520,6 +530,12 @@ internal partial class RuntimeNativeNpc
                 _selectedSourcePackage = sandbox.Form;
                 return;
             }
+            if (_aiError is null && _followPackage is { ContinueIfPlayerNear: true } follow && selected?.FormKey != follow.Form &&
+                follow.RetainsSelection(Combat!.PackagePlayerInSameCell(), forced))
+            {
+                _selectedSourcePackage = follow.Form;
+                return;
+            }
             if (_aiReferenceState is not null) ClearBindingFailure();
             ClearSandboxAdmissionFailure();
             // A failed procedure cannot freeze a later eligible package. Event
@@ -575,6 +591,7 @@ internal partial class RuntimeNativeNpc
                 if (_aiReferenceState?.ProcedureCaptureBlocker == FindFurnitureCaptureBlocker)
                     _aiReferenceState.ProcedureCaptureBlocker = null;
                 ClearDialoguePackage();
+                ClearFollow();
                 _patrol = null; _patrolProgress = null;
                 _guardPackage = null; _guardProgress = null;
                 _sandboxPackage = null; _sandboxWander = null; _pendingCurrentLocationSandbox = null;
@@ -598,6 +615,7 @@ internal partial class RuntimeNativeNpc
                 idle => _idleConditions!.AllPass(idle, EvaluateAiCondition));
             if (_packageIdleSource.Procedure == 0) { BeginFindFurniture(selected); return; }
             if (_packageIdleSource.Procedure == 12) { BeginSandbox(selected, initializing); return; }
+            if (_packageIdleSource.Procedure is 1 or 7) { BeginFollow(selected, initializing); return; }
             if (_packageIdleSource.Procedure == 2) { BeginEscort(selected, initializing); return; }
             if (_packageIdleSource.Procedure == 4) { BeginSleep(selected, initializing); return; }
             if (_packageIdleSource.Procedure == 3) { BeginEat(selected, initializing); return; }

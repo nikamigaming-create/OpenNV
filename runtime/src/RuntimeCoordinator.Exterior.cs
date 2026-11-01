@@ -4,6 +4,7 @@ using OpenNV.Runtime.Presentation.Rendering;
 using OpenNV.Runtime.World.Cells;
 using OpenNV.Runtime.World.Actors;
 using System.Diagnostics;
+using System.Runtime.CompilerServices;
 using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.Formats.Gamebryo;
 
@@ -14,7 +15,7 @@ public partial class RuntimeCoordinator
     private FalloutExteriorGrid? _nativeExteriorGrid;
     private readonly Dictionary<string, Texture2D> _nativeLandscapeTextures = new(StringComparer.OrdinalIgnoreCase);
     private Node3D? _nativeStreamRoot;
-    private sealed record PreparedExteriorGrid(FalloutExteriorGridScene Grid, IReadOnlyDictionary<FalloutFormKey, FalloutLandscapeTransport> Landscapes,
+    private sealed record PreparedExteriorGrid(FalloutExteriorGridScene Grid, IReadOnlyDictionary<FalloutFormKey, FalloutLandscapeTransport?> Landscapes,
         IReadOnlyDictionary<string, FalloutNifFile> Models);
     private Task<PreparedExteriorGrid>? _nativeGridRead;
     private readonly List<Task> _retiredGridReads = [];
@@ -34,6 +35,20 @@ public partial class RuntimeCoordinator
     private (int X, int Y)? _nativeGridTarget;
     private string? _nativeGridError;
     private readonly HashSet<(int X, int Y)> _nativeWalkableGrid = [];
+    // Accepted source CELL residency belongs to the scene root, including CELLs
+    // which intentionally have no LAND mesh. Pending roots/grids cannot replace it.
+    private readonly ConditionalWeakTable<Node3D, FalloutCellDefinition[]> _nativeExteriorCells = new();
+    private IReadOnlyList<FalloutCellDefinition> NativeExteriorCells(Node3D root) =>
+        _nativeExteriorCells.TryGetValue(root, out var cells) ? cells :
+            throw new InvalidOperationException("Exterior root has no accepted source CELL grid.");
+    private void PublishNativeExteriorCells(Node3D root, FalloutExteriorGridScene grid)
+    {
+        var cells = grid.Cells.ToArray();
+        if (cells.Any(cell => cell.Coordinates is null || cell.Worldspace != grid.Scene.Cell.Worldspace))
+            throw new InvalidDataException("Exterior residency has invalid source CELL identities.");
+        _nativeExteriorCells.Remove(root);
+        _nativeExteriorCells.Add(root, cells);
+    }
     private readonly Dictionary<FalloutFormKey, ulong> _nativeLandLastUse = [];
     private readonly Queue<HashSet<string>> _nativeRecentModelSets = [];
     private readonly NativePrototypeRetirement<RuntimeNativeNifPrototype> _nativePrototypeRetirements = new();
@@ -144,10 +159,13 @@ public partial class RuntimeCoordinator
                 target = (ahead.X, ahead.Y);
             }
             if (target == _nativeActiveCell.Cell.Coordinates || target == _nativeGridFailed) return;
-            _nativeStreamRoot = _nativeCurrentCellRoot;
+            var currentRoot = _nativeCurrentCellRoot ?? throw new InvalidOperationException("Exterior stream has no current CELL root.");
+            _nativeStreamRoot = currentRoot;
             _nativeGridTarget = target;
             _nativeGridError = null;
             var resident = _nativeWalkableGrid.ToHashSet();
+            var residentLand = currentRoot.GetChildren().OfType<RuntimeNativeLandscapeTransport>()
+                .Select(land => land.Source.ActiveCell).ToHashSet();
             var residentModels = _nativeNifPrototypes.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
             var content = RuntimeLiveContentSource.Current!;
             _nativeGridReadCancellation = new();
@@ -157,18 +175,18 @@ public partial class RuntimeCoordinator
                 var (grid, lands) = await FalloutContentWorkers.Run(() =>
                 {
                     var resolved = ResolveExterior(world, [(target.Item1 + .5f) * 4096, (target.Item2 + .5f) * 4096, position.Y / units]);
-                    var landscapes = resolved.Cells.Where(cell => !resident.Contains(cell.Coordinates!.Value)).ToDictionary(cell => cell.FormKey,
+                    var landscapes = resolved.Cells.Where(cell => !resident.Contains(cell.Coordinates!.Value) || !residentLand.Contains(cell.FormKey)).ToDictionary(cell => cell.FormKey,
                         cell =>
                         {
                             cancellation.ThrowIfCancellationRequested();
                             return FalloutLandscapeTransportResolver.ResolveCell(_nativePluginStack!, cell, resolved.PersistentCell);
                         });
-                    foreach (var land in landscapes.Values)
+                    foreach (var land in landscapes.Values.OfType<FalloutLandscapeTransport>())
                     {
                         cancellation.ThrowIfCancellationRequested();
                         RuntimeNativeLandscapeTransportBuilder.Prepare(land, units);
                     }
-                    foreach (var path in landscapes.Values.SelectMany(land => land.Textures.Values)
+                    foreach (var path in landscapes.Values.OfType<FalloutLandscapeTransport>().SelectMany(land => land.Textures.Values)
                         .SelectMany(texture => new[] { texture.DiffusePath, texture.NormalPath }).OfType<string>().Distinct(StringComparer.OrdinalIgnoreCase))
                     {
                         cancellation.ThrowIfCancellationRequested();
@@ -276,7 +294,8 @@ public partial class RuntimeCoordinator
         var oldLand = root.GetChildren().OfType<RuntimeNativeLandscapeTransport>().Select(land => land.Source.ActiveCell).ToHashSet();
         foreach (var cell in grid.Cells.Where(cell => !oldLand.Contains(cell.FormKey)))
         {
-            var preparation = new RuntimeNativeLandscapeTransportBuilder.Assembly(prepared.Landscapes[cell.FormKey],
+            if (prepared.Landscapes[cell.FormKey] is not { } source) continue;
+            var preparation = new RuntimeNativeLandscapeTransportBuilder.Assembly(source,
                 _configuration.World.GameUnitsToMeters, _nativeLandscapeTextures);
             _nativeLandPreparations.Add(preparation);
             _nativeGridUploads.Enqueue((cell.FormKey.ToString(), () =>
@@ -461,10 +480,14 @@ public partial class RuntimeCoordinator
         sky.Restore(_nativeSkyLighting.Capture());
         var position = _nativePlayer!.GlobalPosition / _configuration.World.GameUnitsToMeters;
         sky.EnterCell(grid.Scene.Cell, _nativeGlobals, [position.X, -position.Z, position.Y]);
+        using var regionEntry = _nativeReferences!.BeginRegionCellEntry(grid.Scene.Cell, [position.X, -position.Z, position.Y]);
+        grid = grid with { Scene = _nativeReferences.ComposeResidency(grid.Scene, _configuration.World.GameUnitsToMeters, grid.Cells) };
         _nativeReferences!.LoadCell(grid.Scene);
         _nativeReferences.UnloadCell(previous);
         _nativeActiveCell = grid.Scene;
+        regionEntry.Commit();
         _nativeSkyLighting.Restore(sky.Capture());
+        EnterNativeImposterCell(_nativeReferencePresentation!, root, grid.Scene, [position.X, -position.Z, position.Y]);
         Mark("world-and-weather");
         var center = grid.Scene.Cell.Coordinates!.Value;
         DiscoverNativeCellReferences(grid.Scene);
@@ -559,6 +582,7 @@ public partial class RuntimeCoordinator
         root.GetChildren().OfType<RuntimeNativeGrassOwner>().Single().Register(
             root.GetChildren().OfType<RuntimeNativeLandscapeTransport>().Where(land => !land.IsQueuedForDeletion()));
         _nativeReferenceEvents!.SetResidency(grid.Scene, root);
+        _nativeReferencePresentation!.PublishImposterRegions();
         Mark("reference-events");
         ObserveNativeResidentReferences(grid.Scene);
         Mark("runtime-observation");
@@ -570,6 +594,7 @@ public partial class RuntimeCoordinator
         foreach (var actor in _nativeGridModels.Values.OfType<RuntimeNativeNpc>())
             actor.BeginPackageDialogue = (package, completed) => _nativeOpeningStageDriver!.RequestPackageDialogue(actor.Appearance.Reference!.Value, package, completed);
         foreach (var actor in _nativeReferencePresentation.Actors) actor.UpdateResidentScene(grid.Scene);
+        PublishNativeExteriorCells(root, grid);
         _nativeWalkableGrid.Clear(); foreach (var cell in grid.Cells) _nativeWalkableGrid.Add(cell.Coordinates!.Value);
         _nativeGridUploads = null; _nativeGridPending = null; _nativeGridStaged.Clear(); _nativeGridModels.Clear();
         _nativeGridFailed = null; _nativeGridTarget = null;
@@ -606,7 +631,7 @@ public partial class RuntimeCoordinator
         finally { _nativePrototypeRetirementTiming.RecordStep(source, NativePublicationBudget.Complete(started), faulted); }
     }
 
-    private Node3D? MaterializeNativeReference(Node3D root, FalloutCellScene cell, FalloutPlacedReference reference)
+    private Node3D? MaterializeNativeReference(Node3D root, FalloutCellScene cell, FalloutPlacedReference reference, bool observe = true)
     {
         Node3D? Find() => root.GetChildren().OfType<Node3D>().SingleOrDefault(node => !node.IsQueuedForDeletion() &&
             (node is RuntimeNativeNpc actor ? actor.Appearance.Reference == reference.FormKey :
@@ -620,7 +645,14 @@ public partial class RuntimeCoordinator
             return null;
         }
         var before = root.GetChildCount();
-        try { PlaceNativeReference(root, cell, reference, materializeDisabled: true); return Find(); }
+        try
+        {
+            PlaceNativeReference(root, cell, reference, materializeDisabled: true, observe: observe);
+            var materialized = Find();
+            if (materialized is not null)
+                root.GetChildren().OfType<RuntimeNativeExteriorEnvironment>().SingleOrDefault()?.Register(materialized);
+            return materialized;
+        }
         catch (Exception error) when (error is InvalidDataException or NotSupportedException or FileNotFoundException)
         {
             while (root.GetChildCount() > before) root.GetChild(before).Free();
@@ -641,9 +673,9 @@ public partial class RuntimeCoordinator
     private void AddExteriorLandscape(Node3D root, FalloutExteriorGridScene grid)
     {
         foreach (var cell in grid.Cells)
-            root.AddChild(RuntimeNativeLandscapeTransportBuilder.Build(
-                FalloutLandscapeTransportResolver.ResolveCell(_nativePluginStack!, cell, grid.PersistentCell),
-                _configuration.World.GameUnitsToMeters, _nativeLandscapeTextures));
+            if (FalloutLandscapeTransportResolver.ResolveCell(_nativePluginStack!, cell, grid.PersistentCell) is { } source)
+                root.AddChild(RuntimeNativeLandscapeTransportBuilder.Build(source,
+                    _configuration.World.GameUnitsToMeters, _nativeLandscapeTextures));
         CompleteExteriorLandscape(root, grid);
     }
 
@@ -654,6 +686,7 @@ public partial class RuntimeCoordinator
         var lod = new RuntimeNativeExteriorLod();
         lod.Configure(_nativePluginStack!, RuntimeLiveContentSource.Current!, grid, _configuration.World.GameUnitsToMeters);
         root.AddChild(lod);
+        PublishNativeExteriorCells(root, grid);
     }
 
     private void AddExteriorEnvironment(Node3D root, FalloutCellDefinition cell)
@@ -663,7 +696,7 @@ public partial class RuntimeCoordinator
             FalloutImageSpaceReader.ForWorld(_nativePluginStack!, cell.Worldspace ??
                 throw new InvalidDataException("Exterior environment has no worldspace."));
         sky.Compositor = AddNativeImageSpace(root, imageSpace,
-            () => _nativeSkyLighting!.ImageSpaceModifiers(_nativeGameTime!.Hour), sunlightDimmer: sky.BindSunlightDimmer);
+            () => _nativeSkyLighting!.ImageSpaceModifiers(_nativeGameTime!.Hour), sunlightDimmer: sky.BindSunlightDimmer, skyScale: sky.BindSkyScale);
         sky.ImageSpace = imageSpace;
         var diameter = checked((int)FalloutInstallationSettings.Read(RuntimeLiveContentSource.Current!).Unsigned("General", "uGridsToLoad"));
         // Cover the complete resident square, including its diagonal when the

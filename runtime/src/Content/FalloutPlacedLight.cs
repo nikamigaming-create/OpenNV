@@ -65,7 +65,7 @@ internal static class FalloutPlacedLightResolver
 
     internal static void RequirePoint(FalloutLightDefinition source, FalloutFormKey form)
     {
-        if (source.Duration != StaticDuration || (source.Flags & ~FalloutLightFlicker.Flags) != 0 ||
+        if (source.Duration != StaticDuration || (source.Flags & ~(FalloutLightFlicker.Flags | FalloutLightPulse.Flags)) != 0 ||
             source.Falloff != StaticFalloff ||
             source.FieldOfViewDegrees != StaticFieldOfViewDegrees ||
             source.NearClip != StaticNearClip || source.Period != StaticPeriod ||

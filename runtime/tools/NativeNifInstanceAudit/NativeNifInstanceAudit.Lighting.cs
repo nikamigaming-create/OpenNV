@@ -33,6 +33,7 @@ public partial class NativeNifInstanceAudit
             finally { light.Free(); }
         }
         ExerciseLightFlicker(source, reference);
+        ExerciseLightPulse(source, reference);
         ExercisePointLightOverflow();
         GD.Print("OPENNV_PLACED_LIGHT_BINDING_PASS signedAdjustment=true sourceReach=true units=true pixels=unverified");
     }

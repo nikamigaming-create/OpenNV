@@ -24,6 +24,7 @@ public partial class NativeLandscapeTransportAudit
         var world = cell.Worldspace ?? throw new ArgumentException("Impact audit requires an exterior CELL.");
         var persistent = new FalloutExteriorGrid(records).PersistentCell(world);
         var source = FalloutLandscapeTransportResolver.ResolveCell(records, cell, persistent);
+        if (source is null) throw new InvalidDataException("Selected impact audit CELL has no authored LAND geometry.");
         var units = RuntimeConfiguration.Load().World.GameUnitsToMeters;
         var sourceX = point.X / units; var sourceY = -point.Z / units;
         var (quadrant, vertex) = FalloutLandscapeImpactMaterial.Vertex(source.ActiveCoordinates, sourceX, sourceY);

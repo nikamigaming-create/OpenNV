@@ -16,6 +16,12 @@ internal partial class RuntimeNativeSkyLayers : Node3D
     private readonly double[] _cloudOffsets = new double[4];
     private float[] _cloudRates = new float[4];
 
+    internal void BindScale(float value)
+    {
+        foreach (var material in _atmosphere) material.SetShaderParameter("rgb_multiplier", value);
+        foreach (var cloud in _clouds) cloud.Material.SetShaderParameter("rgb_multiplier", value);
+    }
+
     internal void Build(FalloutPluginStack records, FalloutSkyLightingState sky, float units)
     {
         // Engine sky resources are read from the same loose/BSA namespace as

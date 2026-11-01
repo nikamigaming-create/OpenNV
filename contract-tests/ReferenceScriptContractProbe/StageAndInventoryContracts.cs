@@ -99,6 +99,35 @@ internal static class StageAndInventoryContracts
             Require(inventory.Item(Key(1)) is null && inventory.Item(Key(2))?.Count == 2, "Crafting did not conserve exact aggregated ingredients/output.");
             Reject(() => inventory.Craft(records, recipe, 1, null));
             Require(inventory.Item(Key(2))?.Count == 2, "Stale crafting repeated a consumed transaction.");
+            var batch = new OpenNV.Runtime.Gameplay.State.FalloutPlayerInventory(456);
+            batch.Add(records, Key(1), 600, 1, true);
+            Require(batch.MaximumCraftCount(recipe) == 100, "Crafting lost the native batch ceiling.");
+            batch.Remove(Key(1), 395, true);
+            Require(batch.MaximumCraftCount(recipe) == 41, "Craft maximum did not aggregate duplicate ingredient quantities.");
+            var batchBefore = JsonSerializer.Serialize(batch.Capture()); var batchRevision = batch.Revision;
+            Reject(() => batch.Craft(records, recipe, 1, null, 42, batchRevision));
+            Reject(() => batch.Craft(records, recipe, 1, null, 0, batchRevision));
+            Reject(() => batch.Craft(records, recipe, 1, null, 40, batchRevision - 1));
+            batch.PrepareChange = (_, _) => new(() => throw new InvalidOperationException("batch refusal"), () => { });
+            Reject(() => batch.Craft(records, recipe, 1, null, 40, batchRevision));
+            Require(batch.Revision == batchRevision && JsonSerializer.Serialize(batch.Capture()) == batchBefore,
+                "Refused batch retained any item/output/quantity/revision/RNG publication.");
+            batch.PrepareChange = null;
+            batch.Craft(records, recipe, 1, null, 40, batchRevision);
+            Require(batch.Revision == batchRevision + 1 && batch.Item(Key(1))?.Count == 5 && batch.Item(Key(2))?.Count == 80,
+                "Batch crafting did not publish one multiplied, conserved transaction.");
+            var batchGrant = batch.Capture(); var batchCold = new OpenNV.Runtime.Gameplay.State.FalloutPlayerInventory();
+            batchCold.Restore(batchGrant.Inventory, batchGrant.EquippedRuntimeFormIds.ToArray(), batchGrant.InventoryRandomState);
+            Require(JsonSerializer.Serialize(batchCold.Capture()) == JsonSerializer.Serialize(batchGrant),
+                "Batch quantity/outputs did not survive cold restore.");
+            try
+            {
+                batch.Craft(records, recipe with { Outputs = [new(Key(2), int.MaxValue)] }, 1, null, 2);
+                throw new InvalidOperationException("Output quantity overflow was admitted.");
+            }
+            catch (OverflowException) { }
+            Require(JsonSerializer.Serialize(batch.Capture()) == JsonSerializer.Serialize(batchGrant),
+                "Output quantity overflow mutated a batch inventory.");
             var notes = new OpenNV.Runtime.Gameplay.State.FalloutPlayerNotes(records);
             float? InventoryCondition(ushort function, uint argument, uint runOn = 0, uint reference = 0) =>
                 OpenNV.Runtime.Gameplay.State.FalloutInventoryConditions.Evaluate(records, inventory, form => form == Key(4),
@@ -164,7 +193,7 @@ internal static class StageAndInventoryContracts
     private static void Reject(Action action)
     {
         try { action(); }
-        catch (Exception error) when (error is NotSupportedException or InvalidDataException or InvalidOperationException) { return; }
+        catch (Exception error) when (error is NotSupportedException or InvalidDataException or InvalidOperationException or ArgumentOutOfRangeException) { return; }
         throw new InvalidDataException("Invalid input or reached failure was accepted.");
     }
     private static byte[] Quest(uint id, uint script, string name, byte flags, string body, uint other) => Record("QUST", id,

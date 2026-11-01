@@ -10,24 +10,28 @@ internal sealed partial class RuntimeNativePlacedLight : OmniLight3D
     private float[]? _lastColor;
     internal void ConfigureRegionColor(Func<float[]> color) => _regionColor = color;
     private FalloutLightFlicker? _flicker;
+    private FalloutLightPulse? _pulse;
     private Transform3D _placement;
     private float _units, _sourceIntensity, _energyScale, _minimumEnergy;
 
-    internal void ConfigureFlicker(FalloutPlacedLight source, float units, float movement,
+    internal void ConfigureAnimation(FalloutPlacedLight source, float units, float movement,
         float energyScale, float minimumEnergy)
     {
-        if (_flicker is not null) throw new InvalidOperationException("Placed-light animation is already bound.");
-        _flicker = new(source.AnimationFlags, movement,
-            static () => FalloutSharedUnsignedRandom.Process.NextBounded(uint.MaxValue));
+        if (_flicker is not null || _pulse is not null) throw new InvalidOperationException("Placed-light animation is already bound.");
+        // Either source flicker flag has precedence over both pulse flags.
+        if ((source.AnimationFlags & FalloutLightFlicker.Flags) != 0)
+            _flicker = new(source.AnimationFlags & FalloutLightFlicker.Flags, movement,
+                static () => FalloutSharedUnsignedRandom.Process.NextBounded(uint.MaxValue));
+        else _pulse = new(source.AnimationFlags, source.Intensity);
         _placement = Transform; _units = units; _sourceIntensity = source.Intensity;
         _energyScale = energyScale; _minimumEnergy = minimumEnergy;
         SetMeta("opennv_ligh_animation_flags", source.AnimationFlags);
-        SetMeta("opennv_ligh_animation_owner", "point-light-lifetime;shared-process-unsigned-rng");
+        SetMeta("opennv_ligh_animation_owner", _flicker is not null ? "point-light-lifetime;shared-process-unsigned-rng" : "point-light-lifetime;source-frame-step;pulse-no-rng");
     }
 
     public override void _Process(double delta)
     {
-        if (_regionColor is null && _flicker is null) return;
+        if (_regionColor is null && _flicker is null && _pulse is null) return;
         try
         {
             if (_flicker is not null)
@@ -37,6 +41,8 @@ internal sealed partial class RuntimeNativePlacedLight : OmniLight3D
                 Position = _placement.Origin + _placement.Basis * offset;
                 LightEnergy = MathF.Max(_minimumEnergy, _sourceIntensity * sample.Intensity * _energyScale);
             }
+            if (_pulse is not null)
+                LightEnergy = MathF.Max(_minimumEnergy, _pulse.Advance(delta) * _energyScale);
             if (_regionColor is not null)
             {
                 var color = _regionColor();

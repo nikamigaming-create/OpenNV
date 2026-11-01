@@ -83,6 +83,7 @@ public partial class NativeLandscapeTransportAudit
             foreach (var cell in grid.Cells)
             {
                 var landSource = FalloutLandscapeTransportResolver.ResolveCell(records, cell, grid.PersistentCell);
+                if (landSource is null) continue;
                 var terrain = RuntimeNativeLandscapeTransportBuilder.Build(landSource, units, textureCache);
                 terrains.Add(terrain); fixture.AddChild(terrain);
                 GD.Print(JsonSerializer.Serialize(new

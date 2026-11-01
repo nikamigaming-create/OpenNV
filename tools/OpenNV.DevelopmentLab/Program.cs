@@ -421,10 +421,11 @@ if (args[0] == "exterior")
             return new
             {
                 cell = cell.FormKey.ToString(),
-                land = land.Landscape.ToString(),
-                textures = land.Textures.Select(pair => new { key = pair.Key.ToString(), pair.Value.DiffusePath, pair.Value.NormalPath }),
-                bases = land.BaseLayers,
-                alpha = land.AlphaLayers
+                land = land?.Landscape.ToString() ?? records.EffectiveCellChildren(cell.FormKey, new HashSet<string> { "LAND" }).Single().FormKey.ToString(),
+                geometry = land is not null,
+                textures = land?.Textures.Select(pair => new { key = pair.Key.ToString(), pair.Value.DiffusePath, pair.Value.NormalPath }),
+                bases = land?.BaseLayers,
+                alpha = land?.AlphaLayers
             };
         }),
         limitation = "Source inventory only; runtime presence and visual parity are unverified."

@@ -47,69 +47,92 @@ internal sealed partial class RuntimeNifParticleSystem
         while (_collisionWork.TryDequeue(out var identity))
         {
             if (!_particleIndices.TryGetValue(identity, out var index)) continue;
-            var collisions = 0;
-            while (_particles[index].MotionSeconds > 0)
+            // The source manager admits one selected contact per particle per update.
+            // Its position modifier consumes the remaining time after that response.
+            if (_particles[index].MotionSeconds <= 0) continue;
+
+            // Node poses stay fixed during a synchronous modifier pass.
+            // Resolve native transforms and their inverses once per pass,
+            // then reuse them for every particle and spawned descendant.
+            if (refreshPoses)
             {
-                // Node poses stay fixed during a synchronous modifier pass.
-                // Resolve native transforms and their inverses once per pass,
-                // then reuse them for every particle and spawned descendant.
-                if (refreshPoses)
-                {
-                    for (var colliderIndex = 0; colliderIndex < colliders.Length; colliderIndex++)
-                    {
-                        var transform = TransformOf(colliders[colliderIndex].Object);
-                        _colliderPoses[colliderIndex] = new(transform, transform.AffineInverse(), transform.Basis.Inverse().Transposed());
-                    }
-                    refreshPoses = false;
-                }
-                FalloutNifParticleCollider? selected = null;
-                FalloutNifParticleCollisionHit? closest = null;
-                var selectedPose = default(ColliderPose);
                 for (var colliderIndex = 0; colliderIndex < colliders.Length; colliderIndex++)
                 {
-                    var candidateCollider = colliders[colliderIndex];
-                    var pose = _colliderPoses[colliderIndex];
-                    var position = pose.Inverse * _particles[index].Position;
-                    var velocity = pose.Inverse.Basis * _particles[index].Velocity;
-                    FalloutNifParticleCollisionHit? hit;
-                    if (candidateCollider is FalloutNifParticlePlanarCollider plane)
-                    {
-                        var x = Convert(plane.XAxis); var y = Convert(plane.YAxis);
-                        hit = FalloutNifParticlePlane.Sweep(new(position.X, position.Y, position.Z), new(velocity.X, velocity.Y, velocity.Z),
-                            _particles[index].MotionSeconds, plane.Width * _units, plane.Height * _units, new(x.X, x.Y, x.Z), new(y.X, y.Y, y.Z));
-                    }
-                    else if (candidateCollider is FalloutNifParticleSphericalCollider sphere)
-                        hit = FalloutNifParticleSphere.Sweep(new(position.X, position.Y, position.Z), new(velocity.X, velocity.Y, velocity.Z),
-                            _particles[index].MotionSeconds, sphere.Radius * _units);
-                    else throw new NotSupportedException("Particle collider shape has no trajectory owner.");
-                    if (hit is null || closest is { } previous && hit.Value.Fraction >= previous.Fraction) continue;
-                    selected = candidateCollider; closest = hit; selectedPose = pose;
+                    var transform = TransformOf(colliders[colliderIndex].Object);
+                    _colliderPoses[colliderIndex] = new(transform, transform.AffineInverse(), transform.Basis.Inverse().Transposed());
                 }
-                if (closest is not { } contact) break;
-                if (++collisions > 16) throw new NotSupportedException("Particle collision response exceeded its bounded contact continuation.");
-                var collider = selected ?? throw new InvalidDataException("Particle contact has no declared collider.");
-                CollisionCount = checked(CollisionCount + 1);
-                var normal = (selectedPose.Normal * new Vector3(contact.Normal.X, contact.Normal.Y, contact.Normal.Z)).Normalized();
-                ref var particle = ref _particles[index];
-                particle.Position = selectedPose.Transform * new Vector3(contact.Point.X, contact.Point.Y, contact.Point.Z);
-                var incoming = particle.Velocity.Dot(normal);
-                particle.Velocity -= normal * ((1 + collider.Bounce) * incoming);
-                particle.MotionSeconds *= 1 - contact.Fraction;
-                var atContact = particle;
-                // A lifecycle observer may synchronously move a source node.
-                // Refresh after its callbacks before testing the next contact.
-                refreshPoses = LifecycleEvent is not null;
-                RecordLifecycle("collision", atContact, collider.Block.Index, "source-contact");
-                if (collider.DieOnCollide)
+                refreshPoses = false;
+            }
+            FalloutNifParticleCollider? selected = null;
+            FalloutNifParticleCollisionHit? closest = null;
+            var selectedPose = default(ColliderPose);
+            var selectedPoint = default(Vector3);
+            for (var colliderIndex = 0; colliderIndex < colliders.Length; colliderIndex++)
+            {
+                var candidateCollider = colliders[colliderIndex];
+                var pose = _colliderPoses[colliderIndex];
+                var position = pose.Inverse * _particles[index].Position;
+                var velocity = pose.Inverse.Basis * _particles[index].Velocity;
+                var motionSeconds = _particles[index].MotionSeconds;
+                var querySeconds = closest is { } bound ? motionSeconds * bound.Fraction : motionSeconds;
+                FalloutNifParticleCollisionHit? hit;
+                if (candidateCollider is FalloutNifParticlePlanarCollider plane)
                 {
-                    RetireParticle(index, collider.Block.Index, "collision-death");
-                    if (collider.SpawnOnCollide)
-                        Spawn(atContact, collider.Spawn, collider.Block.Index, "collision", atContact.MotionSeconds, _collisionWork);
-                    break;
+                    var x = Convert(plane.XAxis); var y = Convert(plane.YAxis);
+                    hit = FalloutNifParticlePlane.Sweep(new(position.X, position.Y, position.Z), new(velocity.X, velocity.Y, velocity.Z),
+                        querySeconds, plane.Width * _units, plane.Height * _units, new(x.X, x.Y, x.Z), new(y.X, y.Y, y.Z),
+                        .001f * _units * (pose.Normal * x.Cross(y).Normalized()).Length());
                 }
+                else if (candidateCollider is FalloutNifParticleSphericalCollider sphere)
+                    hit = FalloutNifParticleSphere.Sweep(new(position.X, position.Y, position.Z), new(velocity.X, velocity.Y, velocity.Z),
+                        querySeconds, sphere.Radius * _units);
+                else throw new NotSupportedException("Particle collider shape has no trajectory owner.");
+                if (hit is not { } candidate) continue;
+                if (closest is not null)
+                    candidate = candidate with { Fraction = candidate.Fraction * querySeconds / motionSeconds };
+                var point = pose.Transform * new Vector3(candidate.Point.X, candidate.Point.Y, candidate.Point.Z);
+                if (candidateCollider is FalloutNifParticlePlanarCollider)
+                {
+                    var candidateNormal = (pose.Normal * new Vector3(candidate.Normal.X, candidate.Normal.Y, candidate.Normal.Z)).Normalized();
+                    var before = _particles[index].Position;
+                    var origin = pose.Transform.Origin;
+                    var corrected = FalloutNifParticlePlane.CorrectPoint(new(before.X, before.Y, before.Z),
+                        new(point.X, point.Y, point.Z), new(candidateNormal.X, candidateNormal.Y, candidateNormal.Z), new(origin.X, origin.Y, origin.Z));
+                    point = candidate.Fraction == 0 ? before : new(corrected.X, corrected.Y, corrected.Z);
+                }
+                selected = candidateCollider; closest = candidate; selectedPose = pose; selectedPoint = point;
+                // An immediate planar contact returns before traversing the rest of the chain.
+                if (candidateCollider is FalloutNifParticlePlanarCollider && candidate.Fraction == 0) break;
+            }
+            if (closest is not { } contact) continue;
+            var collider = selected ?? throw new InvalidDataException("Particle contact has no declared collider.");
+            CollisionCount = checked(CollisionCount + 1);
+            var normal = (selectedPose.Normal * new Vector3(contact.Normal.X, contact.Normal.Y, contact.Normal.Z)).Normalized();
+            ref var particle = ref _particles[index];
+            particle.Position = selectedPoint;
+            var incoming = particle.Velocity.Dot(normal);
+            if (collider is FalloutNifParticlePlanarCollider)
+            {
+                var response = FalloutNifParticlePlane.Respond(new(particle.Velocity.X, particle.Velocity.Y, particle.Velocity.Z),
+                    new(normal.X, normal.Y, normal.Z), collider.Bounce, contact.Fraction == 1, .001f * _units);
+                particle.Velocity = new(response.X, response.Y, response.Z);
+            }
+            else particle.Velocity -= normal * ((1 + collider.Bounce) * incoming);
+            particle.MotionSeconds *= 1 - contact.Fraction;
+            var atContact = particle;
+            // A lifecycle observer may synchronously move a source node.
+            // Refresh after its callbacks before testing the next particle.
+            refreshPoses = LifecycleEvent is not null;
+            RecordLifecycle("collision", atContact, collider.Block.Index, "source-contact");
+            if (collider.DieOnCollide)
+            {
+                RetireParticle(index, collider.Block.Index, "collision-death");
                 if (collider.SpawnOnCollide)
                     Spawn(atContact, collider.Spawn, collider.Block.Index, "collision", atContact.MotionSeconds, _collisionWork);
+                continue;
             }
+            if (collider.SpawnOnCollide)
+                Spawn(atContact, collider.Spawn, collider.Block.Index, "collision", atContact.MotionSeconds, _collisionWork);
         }
     }
 }

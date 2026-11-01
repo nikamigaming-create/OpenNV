@@ -107,10 +107,19 @@ internal static partial class CellGraphAudit
                 var definition = graph.Definitions.GetValueOrDefault(cell) ?? throw new InvalidDataException("LAND owner has no bound CELL definition.");
                 var world = definition.Worldspace ?? throw new InvalidDataException("LAND CELL has no source worldspace.");
                 var persistent = queries.PersistentCell(world);
-                var baseRows = lands.Length == 1 ? lands[0].ReadSubrecords().Where(field => field.Signature == "BTXT").ToArray() : [];
-                var needsDefault = baseRows.Length < 4 || baseRows.Any(field => field.Data.Length >= 4 && BinaryPrimitives.ReadUInt32LittleEndian(field.Data.Span) == 0);
+                var landRows = lands.Length == 1 ? lands[0].ReadSubrecords().ToArray() : [];
+                var baseRows = landRows.Where(field => field.Signature == "BTXT").ToArray();
+                var flags = landRows.SingleOrDefault(field => field.Signature == "DATA").Data;
+                var geometry = flags.Length == 4 && (BinaryPrimitives.ReadUInt32LittleEndian(flags.Span) & 1) != 0;
+                var needsDefault = geometry && (baseRows.Length < 4 || baseRows.Any(field => field.Data.Length >= 4 && BinaryPrimitives.ReadUInt32LittleEndian(field.Data.Span) == 0));
                 var defaults = needsDefault ? FalloutLandscapeTransportResolver.ReadDefaultTexture(FalloutInstallationSettings.Read(source)) : null;
                 var land = FalloutLandscapeTransportResolver.ResolveCell(records, definition, persistent, defaults);
+                if (land is null)
+                {
+                    result.Landscapes.Add(new { cell = cell.ToString(), landscape = lands.Single().FormKey.ToString(),
+                        persistent = persistent.ToString(), vertices = 0, geometry = false, source = "authored-no-vertex-LAND" });
+                    continue;
+                }
                 foreach (var texture in land.Textures.Values)
                 {
                     _ = ReadResource(texture.DiffusePath, "texture");

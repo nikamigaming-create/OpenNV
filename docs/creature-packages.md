@@ -1,4 +1,26 @@
-# Creature package movement
+# Resident actor package movement
+
+Resident humanoid and creature Follow/Accompany share winning target identity,
+current target CELL, source-root movement, navigation and source door ownership.
+An unfinished accepted assignment retains its source hash, motion and lifecycle
+on cold restore; waiting within range does not complete the package. Missing
+resident targets or an unqualified waiting pose retain a capture refusal.
+
+The DefensiveCombat flag has native consumers outside Accompany. Its normal
+Follow target/radius/combat-controller policy is not yet reproduced. Peaceful
+movement remains admitted; a reached visible threat, nearby visible assistance,
+companion threat or actual engagement retains a package-owned refusal. Ordinary
+eligibility polling does not ask this unbound policy. Refusal blocks capture and
+package motion, is retained once, and retires only with its matching package.
+Follow Continue During Combat likewise refuses concurrent movement/firing when
+an actual engagement is reached. Accompany keeps its separate existing flag
+policy. A capture before the next process update independently rejects unowned
+combat continuation without inventing or mutating a decision.
+
+Cached/unloaded targets, exact native distance hysteresis, waiting-idle
+collections, additional source behaviors and script-visible procedure phases
+remain explicit gaps. Synthetic and owned-source admission do not establish
+resident humanoid movement or retail timing/pixels; those need ordinary play.
 
 Creature package selection follows winning PKID priority and source conditions.
 Follow and Dialogue declarations may omit PLDT; requiring a start location for

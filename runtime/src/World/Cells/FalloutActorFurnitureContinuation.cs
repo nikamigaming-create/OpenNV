@@ -1,6 +1,5 @@
 using System.Buffers.Binary;
 using System.Numerics;
-using System.Security.Cryptography;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Gameplay.State;
 
@@ -165,7 +164,7 @@ internal sealed record FalloutActorFurnitureContinuation(FalloutActorPackageAssi
             throw new InvalidDataException("Saved furniture clock differs from its selected animation.");
     }
 
-    internal static string RecordHash(FalloutPluginRecord record) => Convert.ToHexString(SHA256.HashData(record.ReadData()));
+    internal static string RecordHash(FalloutPluginRecord record) => record.ReadDataHash();
     internal FalloutActorFurnitureContinuation Copy() => this with
     {
         Pose = (float[])Pose.Clone(),

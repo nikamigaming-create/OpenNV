@@ -567,8 +567,8 @@
         {"name": "bloomAlphaInterior", "traitIndex": 16},
         {"name": "bloomAlphaExterior", "traitIndex": 17},
         {"name": "cinematicSaturation", "traitIndex": 25},
-        {"name": "cinematicContrast", "traitIndex": 27},
         {"name": "cinematicContrastAverageLuminance", "traitIndex": 26},
+        {"name": "cinematicContrast", "traitIndex": 27},
         {"name": "cinematicBrightness", "traitIndex": 28}
       ],
       "traitIndices": {

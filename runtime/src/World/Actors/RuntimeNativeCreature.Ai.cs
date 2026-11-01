@@ -22,7 +22,9 @@ internal sealed partial class RuntimeNativeCreature
     private Func<int>? _sittingQuery;
     private Func<FalloutActorPackageAssignment?>? _packageAssignmentCapture;
     private FalloutPluginRecord? _aiPackage;
+    private const string FollowCaptureBlocker = "Follow lifecycle awaits its first native motion observation.";
     private FalloutFollowPackage? _followPackage;
+    private string? _followOwnedBlocker;
     private FalloutGuardPackage? _guardPackage;
     private FalloutTravelProgress? _guardProgress;
     private FalloutSandboxPackage? _sandboxPackage;
@@ -40,13 +42,15 @@ internal sealed partial class RuntimeNativeCreature
     private FalloutFormKey? _waitingForTarget;
     internal Action<FalloutDialoguePackage, Action>? BeginPackageDialogue { get; set; }
     internal bool FollowingPlayer => _aiState?.PlayerTeammate == true && _aiError is null &&
-        _followPackage?.Target == _aiRecords?.RuntimeFormKey(0x14) && Combat?.Dead == false && !_aiState.Restrained;
+        _followPackage?.Target == _aiRecords?.RuntimeFormKey(0x14) && Combat?.Dead == false &&
+        Combat.FollowCombatError is null && !_aiState.Restrained;
     internal object AiState => new
     {
         package = _aiPackage?.FormKey.ToString(),
         failedSelection = _failedPackage?.ToString(),
         selectionAttempts = _packageSelectionAttempts,
         follow = _followPackage,
+        followCombatError = Combat?.FollowCombatError,
         accompanyPortal = new
         {
             door = _accompanyDoor?.ToString(),
@@ -253,13 +257,17 @@ internal sealed partial class RuntimeNativeCreature
         var restoreGuard = assignedMotion && retained!.Guard is not null;
         var restoreSandbox = assignedMotion && (retained!.Wander is not null || retained.Sandbox is not null);
         var restoreAccompany = assignedMotion && retained!.AccompanyPortal is not null;
+        var retainedSource = assignedMotion ? _aiRecords!.GetEffective(retained!.Package) : null;
+        var restoreFollow = retainedSource is not null && _aiState!.PackageAssignment is { Done: false } &&
+            FalloutPackageData.Read(retainedSource).Procedure is 1 or 7;
+        if (restoreFollow) FalloutFollowContinuation.ValidateMotion(retainedSource!, retained!);
         // A retired package may retain its last physical pose. That motion is
         // not an active assignment and must not restart its procedure on load.
         var restorePatrol = assignedMotion && retained!.Patrol is not null;
         var deferred = !_initialPackageSelected && _aiState!.DeferredPackageContinuation?.RetainedAssignment is not null
             ? _aiState.DeferredPackageContinuation : null;
         var selected = deferred is not null ? _aiRecords!.GetEffective(deferred.Assignment.Package) :
-            restoreTravel || restoreGuard || restoreAccompany || restorePatrol || restoreSandbox ? _aiRecords!.GetEffective(retained!.Package) :
+            restoreTravel || restoreGuard || restoreAccompany || restoreFollow || restorePatrol || restoreSandbox ? _aiRecords!.GetEffective(retained!.Package) :
             FalloutAiPackages.Select(_aiRecords!, Appearance.Creature, PackageCondition, _aiState!.Templates, _aiClock,
                 evaluateRunOn: true,
                 eligible: package => _aiWorld!.PackageEligible(Appearance.Reference!.Value, package, _aiClock,
@@ -272,6 +280,8 @@ internal sealed partial class RuntimeNativeCreature
         if (_aiError is null && _sandboxPackage is { ContinueIfPlayerNear: true } current &&
             selected?.FormKey != current.Form && !forced &&
             current.RetainsSelection(Combat!.PackagePlayerInSameCell(), forced)) return;
+        if (_aiError is null && _followPackage is { ContinueIfPlayerNear: true } currentFollow && selected?.FormKey != currentFollow.Form &&
+            currentFollow.RetainsSelection(Combat!.PackagePlayerInSameCell(), forced)) return;
         _aiError = null;
         if (_aiPackage?.FormKey == selected?.FormKey)
         {
@@ -293,10 +303,10 @@ internal sealed partial class RuntimeNativeCreature
         FalloutPatrolRoute? patrol = null;
         if (source is not null)
         {
-            if (source.Procedure == 1) follow = FalloutFollowPackage.Read(selected!);
+            if (source.Procedure == 1) follow = FalloutFollowContinuation.ReadResident(selected!).ResolveTarget(() => _aiWorld!.GetLinkedRef(Appearance.Reference!.Value));
             else if (source.Procedure == 7)
             {
-                follow = FalloutFollowPackage.ReadAccompany(selected!);
+                follow = FalloutFollowContinuation.ReadResident(selected!).ResolveTarget(() => _aiWorld!.GetLinkedRef(Appearance.Reference!.Value));
                 if (follow.DefensiveCombat && _aiRecords!.RuntimeFormId(follow.Target) == 0x14)
                     throw new NotSupportedException("Defensive Accompany of the player requires its player-hit assistance owner.");
             }
@@ -314,6 +324,12 @@ internal sealed partial class RuntimeNativeCreature
                     throw new NotSupportedException("Creature dialogue start/end location is unbound.");
             }
             else throw new NotSupportedException($"Creature package {source.Form} procedure {source.Procedure} is unbound.");
+        }
+        if (follow is not null)
+        {
+            NativeActorFollowTarget.ValidateReference(_aiRecords!, follow.Target);
+            if (follow.Target == Appearance.Reference!.Value)
+                throw new NotSupportedException("Self-target follower needs its native termination policy.");
         }
         var restoredDialogue = assignedMotion && dialogue?.Type == 1 && retained is { DialogueCompleted: true } motion && motion.Package == source!.Form;
         if (travel is not null) BeginTravel(selected!, restoreTravel);
@@ -346,18 +362,23 @@ internal sealed partial class RuntimeNativeCreature
         if (patrol is not null) BeginPatrol(patrol, restorePatrol);
         else { _patrol = null; _patrolProgress = null; _patrolDestination = null; }
         _initialPackageSelected = true;
-        var restoreFollow = assignedMotion && follow is not null && retained!.Package == source!.Form &&
-            _aiState!.PackageAssignment is { } followAssignment && followAssignment.Package == source.Form;
         if (restoreTravel || restoreGuard || restoreAccompany || restoreFollow || restorePatrol || restoreSandbox || restoredDialogue)
             _packageEvents!.Restore(source!, restoreFollow ? _aiState!.PackageAssignment!.Done :
                 restorePatrol ? _aiState!.PackageAssignment?.Done == true :
                 restoreGuard || restoreAccompany || restoreSandbox ? false : restoreTravel ? _travelProgress!.Complete : true);
         else _packageEvents!.Change(source);
+        if (_followPackage is { } retiringFollow) Combat!.RetireFollowCombatPolicy(retiringFollow.Form);
+        ClearFollowCaptureBlocker();
+        _actorPackagePortal?.Retire();
         _aiPackage = selected; _followPackage = follow; _dialoguePackage = dialogue; _dialogueRequested = restoredDialogue;
-        _accompanyDoor = null; _accompanyDoorDestination = null; _accompanyTargetRegion = null;
-        _accompanyPortalRequested = false; _accompanyPortalTransferred = false; _accompanyPortalWait = null;
+        _actorPackagePortal = null; _accompanyPlaybackWait = null;
         if (travel is null && guard is null && patrol is null)
             _aiState!.ProcedureCaptureBlocker = dialogue is not null && !restoredDialogue ? DialogueCaptureBlocker : null;
+        if (follow is not null && !restoreFollow)
+        {
+            _followOwnedBlocker = FollowCaptureBlocker;
+            _aiState!.ProcedureCaptureBlocker = _followOwnedBlocker;
+        }
         if (sandbox is not null && !restoreSandbox)
             _aiState!.ProcedureCaptureBlocker = FalloutSandboxPackage.CaptureBlockerPrefix + "awaiting first native movement observation.";
         if (deferred is null && !restoredDialogue && _aiState!.PackageMotion is { DialogueCompleted: true } previousMotion)
@@ -367,6 +388,20 @@ internal sealed partial class RuntimeNativeCreature
         if (restoreTravel) _evaluateRequested = true;
         _failedPackage = null;
         GD.Print($"OPENNV_CREATURE_PACKAGE reference={Appearance.Reference} package={source?.Form} procedure={source?.Procedure}");
+    }
+
+    private void RefuseFollowWait(string reason)
+    {
+        _waitingForTarget = _followPackage!.Target;
+        _followOwnedBlocker = $"Follow has no qualified current waiting-motion continuation: {reason}.";
+        _aiState!.ProcedureCaptureBlocker = _followOwnedBlocker;
+    }
+
+    private void ClearFollowCaptureBlocker()
+    {
+        if (_followOwnedBlocker is { } owned && _aiState!.ProcedureCaptureBlocker == owned)
+            _aiState.ProcedureCaptureBlocker = null;
+        _followOwnedBlocker = null;
     }
 
     internal Func<FalloutFormKey, Node3D?>? ResolvePackageTarget { get; set; }
@@ -393,7 +428,7 @@ internal sealed partial class RuntimeNativeCreature
         if (ScriptIdleActive && !AmbientIdleActive) { ObserveScriptIdleInterruption(); return; }
         if (SandboxMotionError is not null) return;
         if (SandboxAdmissionError is not null || HasDetachedSandboxAdmission || HasDetachedPendingSandboxStart) return;
-        if (_aiRecords is null || Combat is null || Combat.OwnsPose ||
+        if (_aiRecords is null || Combat is null || Combat.OwnsPose && (Combat.FollowCombatError is null || !_evaluateRequested) ||
             !Combat.PackageMovementReady || _conversationTarget is not null) return;
         if (_aiState?.ScriptError is { } scriptError) { _aiError = scriptError; return; }
         var selecting = false;
@@ -425,7 +460,7 @@ internal sealed partial class RuntimeNativeCreature
                     SelectPackage(forced);
                 selecting = false;
             }
-            if (_aiError is not null) return;
+            if (_aiError is not null || _evaluateRequested || Combat.OwnsPose || Combat.FollowCombatError is not null) return;
             if (_travelPackage is not null)
             {
                 using var scope = OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Measure(OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Owner.CreatureTravel);
@@ -447,18 +482,18 @@ internal sealed partial class RuntimeNativeCreature
                 _guardProgress = Combat.AdvanceGuard(_aiPackage!, guard, _guardProgress!, delta);
             else if (_followPackage is { } follow)
             {
-                if (follow.Accompany && AdvanceAccompanyPortal(follow, delta)) return;
-                var target = TargetNode(follow.Target);
-                if (target is null) { _waitingForTarget = follow.Target; return; }
-                var running = target switch
-                {
-                    RuntimeNativePlayer player => player.Activity.Running,
-                    RuntimeNativeNpc npc => npc.Activity.Running,
-                    RuntimeNativeCreature creature => creature.Activity.Running,
-                    _ => false,
-                };
-                if (follow.Accompany) AdvanceAccompany(follow, target, running, delta);
-                else Combat.AdvancePackageMotion(_aiPackage!, target.GlobalPosition, follow.Distance * Skeleton.UnitsToMetres, running, delta);
+                if (!_aiWorld!.IsEnabled(follow.Target)) { RefuseFollowWait("waiting-for-enabled-target"); return; }
+                if (follow.Target == _aiRecords.RuntimeFormKey(0x14) && Combat.PackagePlayerCell is null)
+                { RefuseFollowWait("waiting-for-player-cell-owner"); return; }
+                if (AdvanceAccompanyPortal(follow, delta)) { ClearFollowCaptureBlocker(); return; }
+                var target = NativeActorFollowTarget.Node(_aiRecords!, _aiWorld!, Combat, follow.Target, ResolvePackageTarget);
+                var plan = target is null ? NativeActorFollowTarget.RetainedPlan(_aiWorld!, follow, Skeleton.UnitsToMetres) :
+                    NativeActorFollowTarget.Plan(follow, GlobalPosition, target, Skeleton.UnitsToMetres);
+                if (target is null && plan is null) { RefuseFollowWait("waiting-for-qualified-target-process"); return; }
+                if (plan is not { } movement) { RefuseFollowWait("waiting-for-leader-destination"); return; }
+                Combat.AdvancePackageMotion(_aiPackage!, movement.Destination, movement.Distance, movement.Running,
+                    delta, requireArrivalHeight: true);
+                ClearFollowCaptureBlocker();
             }
             else if (_dialoguePackage is { } dialogue && !_dialogueRequested)
             {
@@ -499,7 +534,15 @@ internal sealed partial class RuntimeNativeCreature
             if (!selecting && _sandboxPackage is not null && error is FalloutSandboxAdmissionException admission &&
                 admission.Package == _aiPackage?.FormKey && _sandboxWander is null && _aiState!.PackageMotion is null)
                 _sandboxAdmissionFailure = admission;
-            if (!selecting) _failedPackage = _aiPackage?.FormKey;
+            if (!selecting)
+            {
+                _failedPackage = _aiPackage?.FormKey;
+                if (_followPackage is not null)
+                {
+                    _followOwnedBlocker = error.Message;
+                    _aiState!.ProcedureCaptureBlocker = _followOwnedBlocker;
+                }
+            }
             if (changed) GD.PushError($"OPENNV_CREATURE_AI_DIVERGENCE reference={Appearance.Reference}: {_aiError}");
         }
     }

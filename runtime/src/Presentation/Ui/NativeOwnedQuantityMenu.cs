@@ -11,18 +11,18 @@ internal sealed partial class NativeOwnedQuantityMenu : Control
     private readonly XElement _meter, _amount;
     private readonly List<(XElement Tile, Control Control)> _targets = [];
     private readonly Action<int?> _complete;
-    private readonly int _maximum;
+    private readonly int _maximum, _minimum;
     private bool _closed;
     private NativeViewportLayout? _viewportLayout;
     internal int Quantity { get; private set; }
     internal string? Error { get; private set; }
 
-    internal NativeOwnedQuantityMenu(FalloutPluginStack records, int maximum, Action<int?> complete)
+    internal NativeOwnedQuantityMenu(FalloutPluginStack records, int maximum, Action<int?> complete, int minimum = 1)
     {
-        if (maximum < 1) throw new ArgumentOutOfRangeException(nameof(maximum));
+        if (maximum < 1 || minimum < 0 || minimum > maximum) throw new ArgumentOutOfRangeException(nameof(maximum));
         Name = "OwnedQuantityMenu"; TopLevel = true; ZIndex = 100;
         ProcessMode = ProcessModeEnum.Always; MouseFilter = MouseFilterEnum.Stop;
-        _maximum = maximum; _complete = complete; Quantity = maximum;
+        _maximum = maximum; _minimum = minimum; _complete = complete; Quantity = maximum;
         var menu = FalloutMenuXml.Expand(FalloutMenuXml.Read("menus/quantity_menu.xml")).Elements("menu").Single();
         _tiles = new(menu, name => FalloutGameSettingStrings.Read(records, name));
         XElement Named(string name) => menu.DescendantsAndSelf().Single(tile => (string?)tile.Attribute("name") == name);
@@ -37,8 +37,9 @@ internal sealed partial class NativeOwnedQuantityMenu : Control
             if (input is InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: true } button) Slide(button.Position.X);
             else if (input is InputEventMouseMotion { ButtonMask: MouseButtonMask.Left } motion) Slide(motion.Position.X);
         };
-        void Slide(float x) => Select((int)Math.Round(1 + Math.Clamp(x / slider.Size.X, 0, 1) * (_maximum - 1)));
+        void Slide(float x) => Select((int)Math.Round(_minimum + Math.Clamp(x / slider.Size.X, 0, 1) * (_maximum - _minimum)));
         AddChild(slider); _targets.Add((_meter, slider));
+        SetMeta("opennv_menu_id", 1016);
         SetMeta("opennv_ui_source", "menus/quantity_menu.xml; source-fonts-and-atlas");
         SetMeta("opennv_ui_unverified", "retail-input-timing,matched-pixels");
     }
@@ -54,7 +55,7 @@ internal sealed partial class NativeOwnedQuantityMenu : Control
     private void Select(int value)
     {
         if (_closed) return;
-        Quantity = Math.Clamp(value, 1, _maximum);
+        Quantity = Math.Clamp(value, _minimum, _maximum);
         _tiles.Bind(_meter, "user0", _maximum); _tiles.Bind(_meter, "user2", Quantity);
         _tiles.Bind(_meter, "_Value", Quantity / (float)_maximum);
         _tiles.Text[_amount] = Quantity.ToString(CultureInfo.InvariantCulture);
@@ -94,7 +95,7 @@ internal sealed partial class NativeOwnedQuantityMenu : Control
             {
                 case Key.Left: Select(Quantity - 1); break;
                 case Key.Right: Select(Quantity + 1); break;
-                case Key.Home: Select(1); break;
+                case Key.Home: Select(_minimum); break;
                 case Key.End: Select(_maximum); break;
                 case Key.Enter or Key.KpEnter or Key.A when !key.Echo: Complete(Quantity); break;
                 case Key.Escape or Key.Tab or Key.E when !key.Echo: Complete(null); break;

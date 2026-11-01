@@ -54,6 +54,21 @@ internal static class OwnedSleepProbe
             throw new InvalidDataException("Owned Sleep source portal chain did not reach its declared interior CELL.");
         if (retained.Any(pair => !pair.Value.SequenceEqual(SHA256.HashData(records.GetEffective(pair.Key).ReadData()))))
             throw new InvalidDataException("Owned Sleep audit changed its source records.");
+        using (var store = new FalloutReferenceWorld(records))
+        {
+            var storeActor = new FalloutFormKey("FalloutNV.esm", 0x104c79);
+            var storeRecord = records.GetEffective(new("FalloutNV.esm", 0x168fad));
+            var storeSleep = FalloutSleepPackage.Read(storeRecord);
+            var storeLifecycle = FalloutScriptPackage.Read(storeRecord);
+            var sourceHash = SHA256.HashData(storeRecord.ReadData());
+            if (storeSleep.Flags != 0x88 || storeSleep.Location.Type != 1 || storeSleep.Location.Form != store.Placement(storeActor).Cell)
+                throw new InvalidDataException("Owned store Sleep lost its door flags or current interior scope.");
+            foreach (var kind in new[] { "POBA", "POEA", "POCA" }) store.RequirePackageDoorActions(storeActor, storeLifecycle, kind);
+            var storeBeds = storeSleep.Candidates(records, store, storeActor);
+            if (storeBeds.Count == 0 || !sourceHash.SequenceEqual(SHA256.HashData(storeRecord.ReadData())))
+                throw new InvalidDataException("Owned store Sleep has no source bed or changed its source.");
+            Console.WriteLine($"OPENNV_OWNED_SLEEP_EMPTY_DOOR_WORK_PASS actor={storeActor} package={storeSleep.Form} flags={storeSleep.Flags:x} beds={storeBeds.Count} sourceReadonly=true actualSleepMotion=uninspected");
+        }
         Console.WriteLine($"OPENNV_OWNED_SLEEP_PASS actor={actor} package={source.Form} cell={scope.Cell} bed={bed.FormKey} " +
             $"seats={seats.Count} model={identity} modelSha256={nif.Sha256} portals={string.Join(',', portals)} " +
             "sourceLocation=true access=true reservations=true parentComplete=false sourceReadonly=true nativeArrivalAndWake=separate");

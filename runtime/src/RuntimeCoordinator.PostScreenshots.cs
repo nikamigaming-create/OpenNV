@@ -178,7 +178,7 @@ public partial class RuntimeCoordinator
                     if (exterior is not null) scene = exterior.Scene;
                     _nativeActorDivergences.Clear(); _nativeReferenceDivergences.Clear();
                     _nativeSkyLighting!.EnterCell(scene.Cell, _nativeGlobals, [sourcePosition.X, sourcePosition.Y, sourcePosition.Z]);
-                    root = BuildNativeCellRoot(scene, null, sourceSide: true);
+                    root = BuildNativeCellRoot(scene, null, sourceSide: true, [sourcePosition.X, sourcePosition.Y, sourcePosition.Z]);
                     if (exterior is not null) AddExteriorLandscape(root, exterior);
                     AddChild(root);
                     if (exterior is null) AddNativeCellEnvironment(root, scene); else AddExteriorEnvironment(root, scene.Cell);

@@ -257,6 +257,13 @@ internal partial class RuntimeNativeNpc : CharacterBody3D
         _idleTextKeyEvents.Clear();
         if (Combat?.Dead == true || Combat?.OwnsPose == true || Combat?.Restrained == true)
         {
+            // A retained unbound Follow decision must not prevent actual source
+            // package replacement from retiring that decision's capture owner.
+            // Keep ordinary combat scheduling unchanged; only an explicitly
+            // accepted source reevaluation may enter here.
+            if (Combat is { Dead: false, FollowCombatError: not null } &&
+                _requestedSelection is not null && _conversationTarget is null)
+                AdvanceAi(delta: delta);
             InterruptSandboxFurniture();
             InterruptSleepFurniture();
             InterruptEatFurniture();

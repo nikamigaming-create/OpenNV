@@ -54,6 +54,7 @@ internal static class ActorSourceContracts
                     Field("EPFD", BitConverter.GetBytes(2f)), Field("PRKF", [])),
                 Record("CSTY", 0x8e3, Field("CSSD", new byte[64])),
                 Cell(0x881, Record("REFR", 0x908, Field("NAME", BitConverter.GetBytes(0x844u)),
+                    Field("XSRF", BitConverter.GetBytes(0x0a080002u)), Field("XSRD", BitConverter.GetBytes(0u)),
                     Field("DATA", new float[] { 10, 20, 30, 0, 0, 1 }.SelectMany(BitConverter.GetBytes).ToArray()))),
                 NavigationFloor(0xb100, 0x881, 5),
                 Record("STAT", 0x844), Record("ACTI", 0x845, Field("SCRI", BitConverter.GetBytes(0x891u))),
@@ -98,10 +99,27 @@ internal static class ActorSourceContracts
                         BitConverter.GetBytes((short)40), BitConverter.GetBytes((short)-10)))),
                 Record("WRLD", 0x8f2, Field("WNAM", BitConverter.GetBytes(0x8f0u)), Field("PNAM", BitConverter.GetBytes((ushort)4)),
                     Field("ONAM", new float[] { 2, -20, 30 }.SelectMany(BitConverter.GetBytes).ToArray())),
-                Group(1, 0x8f0, Record("CELL", 0x882, Field("DATA", [0]), Field("XCLC", new byte[8]))),
+                Group(1, 0x8f0, Record("CELL", 0x882, Field("DATA", [0]), Field("XCLC", new byte[8]),
+                    Field("XCLR", Join(BitConverter.GetBytes(0x8f1u), BitConverter.GetBytes(0x8f7u),
+                        BitConverter.GetBytes(0xbeefu), BitConverter.GetBytes(0x844u), BitConverter.GetBytes(0u))))),
                 Group(1, 0x8f2, Record("CELL", 0x883, Field("DATA", [0]), Field("XCLC", new byte[8]))),
+                Group(1, 0x8f0, Record("CELL", 0x884, Field("DATA", [0]),
+                    Field("XCLC", Join(BitConverter.GetBytes(2), BitConverter.GetBytes(2))),
+                    Field("XCLR", BitConverter.GetBytes(0x8f9u)))),
                 Record("REGN", 0x8f1, Field("WNAM", BitConverter.GetBytes(0x8f0u)),
-                    Field("RPLD", new float[] { 0, 0, 10, 0, 0, 10 }.SelectMany(BitConverter.GetBytes).ToArray())),
+                    Field("RPLD", new float[] { 0, 0, 10, 0, 0, 10 }.SelectMany(BitConverter.GetBytes).ToArray()),
+                    Field("RDAT", [8, 0, 0, 0, 0, 50, 0, 0]),
+                    Field("RDID", Join(BitConverter.GetBytes(0x908u), BitConverter.GetBytes(0xbeefu),
+                        BitConverter.GetBytes(0u), BitConverter.GetBytes(0x844u)))),
+                Record("REGN", 0x8f7, Field("WNAM", BitConverter.GetBytes(0x8f0u)),
+                    Field("RPLD", new float[] { 0, 0, 10, 0, 0, 10 }.SelectMany(BitConverter.GetBytes).ToArray()),
+                    Field("RDAT", [8, 0, 0, 0, 0, 50, 0, 0]),
+                    Field("RDID", Join(BitConverter.GetBytes(0x908u), BitConverter.GetBytes(0x905u)))),
+                Record("REGN", 0x8f8, Field("RDID", BitConverter.GetBytes(0x908u))),
+                Record("REGN", 0x8f9, Field("WNAM", BitConverter.GetBytes(0x8f0u)),
+                    Field("RPLD", new float[] { 9000, 9000, 9010, 9000, 9000, 9010 }.SelectMany(BitConverter.GetBytes).ToArray()),
+                    Field("RDAT", [8, 0, 0, 0, 0, 50, 0, 0]),
+                    Field("RDID", Join(BitConverter.GetBytes(0x908u), BitConverter.GetBytes(0x905u)))),
                 Record("INFO", 0x860, Field("DATA", [0, 0, 0, 0]), Field("QSTI", BitConverter.GetBytes(0x870u)),
                     Field("TRDT", Response()), Field("NAM1", Text("Source response")))));
             // Override keeps the original voice identity; it is not a new line
@@ -131,6 +149,108 @@ internal static class ActorSourceContracts
                 !FalloutExteriorClimate.ContainsRegion(records, Key(0x8f1), null, 1, 1) &&
                 !FalloutExteriorClimate.ContainsRegion(records, Key(0x8f1), Key(0x8f2), 1, 1),
                 "Player region membership ignored the source polygon or world.");
+            var special = FalloutSpecialRendering.Read(records.GetEffective(Key(0x908)));
+            Check(special is { Flags: 0x0a080002u, OpaqueData: 0 } && special.Imposter,
+                "Special render metadata lost opaque flags/data or imposter role.");
+            var regionMembership = FalloutPlayerRegionMembership.Enter(records,
+                FalloutCellSceneReader.ReadDefinition(records, Key(0x882)), [1, 1, 0]);
+            Check(regionMembership.CellRegions.SequenceEqual(new[] { Key(0x8f7), Key(0x8f1) }) &&
+                regionMembership.Current.SequenceEqual(new[] { Key(0x8f1), Key(0x8f7) }) &&
+                regionMembership.DroppedSourceRegions?.Count == 3,
+                "CELL/player region-list prepend ordering or source polygon membership changed.");
+            Check(FalloutPlayerRegionMembership.Enter(records,
+                FalloutCellSceneReader.ReadDefinition(records, Key(0x882)), [20, 20, 0]).Current.Count == 0,
+                "Player region membership did not use the actual CELL-entry source position.");
+            using (var regionalWorld = new FalloutReferenceWorld(records))
+            using (var regionalCold = new FalloutReferenceWorld(records))
+            {
+                var beforePlacement = regionalWorld.Placement(Key(0x908)).Copy();
+                var enabledBefore = regionalWorld.IsEnabled(Key(0x908));
+                var targetCell = FalloutCellSceneReader.ReadDefinition(records, Key(0x884));
+                using (regionalWorld.BeginRegionCellEntry(targetCell, [9001, 9001, 0]))
+                {
+                    Check(regionalWorld.Placement(Key(0x908)).Cell == Key(0x884) &&
+                        regionalWorld.Placement(Key(0x908)).Position.SequenceEqual(beforePlacement.Position) &&
+                        regionalWorld.IsEnabled(Key(0x908)) == enabledBefore,
+                        "Regional CELL attachment changed position or source gameplay enable.");
+                    regionalWorld.AdoptRegionImposter(Key(0x905));
+                }
+                Check(regionalWorld.Placement(Key(0x908)).Cell == beforePlacement.Cell &&
+                    !regionalWorld.Get(Key(0x908)).RegionCellAttached && !regionalWorld.Get(Key(0x905)).RegionImposterRole &&
+                    regionalWorld.CapturePlayerRegions() is null,
+                    "Rejected CELL entry retained regional attachment/role state.");
+                using (var entry = regionalWorld.BeginRegionCellEntry(targetCell, [9001, 9001, 0]))
+                {
+                    regionalWorld.AdoptRegionImposter(Key(0x905));
+                    Check(regionalWorld.RegionPublicationPending, "New CELL entry lost its activation receipt.");
+                    regionalWorld.CompleteRegionPublication();
+                    var composed = regionalWorld.ComposeResidency(FalloutCellSceneReader.Read(records, Key(0x884)),
+                        .0142875f, [targetCell]);
+                    Check(composed.References.Any(reference => reference.FormKey == Key(0x908)),
+                        "Regional reference attachment was incorrectly filtered by its distant XY grid.");
+                    entry.Commit();
+                }
+                var attachedRevision = regionalWorld.Get(Key(0x908)).PlacementRevision;
+                using (var sameCell = regionalWorld.BeginRegionCellEntry(targetCell, [9500, 9500, 0]))
+                {
+                    Check(regionalWorld.CapturePlayerRegions()!.Current.SequenceEqual(new[] { Key(0x8f9) }),
+                        "Same-CELL movement incorrectly rescanned the accepted region cache.");
+                    Check(!regionalWorld.RegionPublicationPending && regionalWorld.Get(Key(0x908)).PlacementRevision == attachedRevision,
+                        "Same-CELL entry repeated source reference attachment or activation.");
+                    sameCell.Commit();
+                }
+                var regionSnapshot = JsonSerializer.Deserialize<FalloutPlayerRegionMembership>(JsonSerializer.Serialize(regionalWorld.CapturePlayerRegions()))!;
+                regionalCold.RestorePlayerRegions(regionSnapshot, targetCell.FormKey);
+                using (var resumed = regionalCold.BeginRegionCellEntry(targetCell, [9500, 9500, 0]))
+                {
+                    Check(regionalCold.CapturePlayerRegions()!.Current.SequenceEqual(new[] { Key(0x8f9) }),
+                        "Cold same-CELL continuation rescanned the current position instead of the accepted entry cache.");
+                    resumed.Commit();
+                }
+                regionalCold.Restore(JsonSerializer.Deserialize<FalloutReferenceSnapshot[]>(JsonSerializer.Serialize(regionalWorld.Capture()))!);
+                Check(regionalCold.Get(Key(0x908)).RegionCellAttached && regionalCold.Get(Key(0x905)).RegionImposterRole &&
+                    regionalCold.Placement(Key(0x908)).Cell == Key(0x884),
+                    "Cold continuation lost actual regional parent-CELL or adopted role state.");
+            }
+            var regionImposters = FalloutRegionImposters.Read(records, Key(0x8f1))!;
+            Check(regionImposters.References.SequenceEqual(new[] { Key(0x908) }) && regionImposters.DroppedLinks.Count == 3,
+                "RDID fixup failed to retain valid source order and explicit null/missing/non-reference diagnostics.");
+            var imposters = new FalloutRegionImposterVisibility(records);
+            Check(imposters.AdmittedAtLoad(Key(0x908), [], [Key(0x8f1)]) &&
+                !imposters.AdmittedAtLoad(Key(0x905), [Key(0x8f1)], [Key(0x8f7)]),
+                "Imposter startup membership lost CELL fallback or scanned fallback despite a populated player cache.");
+            var steps = new List<string>();
+            void LoadImposter(FalloutFormKey key) => steps.Add($"load:{key.ObjectId:x}");
+            void ShowImposter(FalloutFormKey key, bool visible) => steps.Add($"{(visible ? "show" : "hide")}:{key.ObjectId:x}");
+            Check(imposters.Publish([Key(0x8f1)], LoadImposter, ShowImposter), "Initial imposter publication refused.");
+            steps.Clear();
+            Check(imposters.Publish([Key(0x8f7)], LoadImposter, ShowImposter) &&
+                steps.SequenceEqual(new[] { "hide:908", "load:908", "show:908", "load:905", "show:905" }),
+                "Region handoff did not retire old draws before ensuring/showing current references in source order.");
+            Check(!imposters.RenderAdmitted(Key(0x908), true, false) &&
+                imposters.RenderAdmitted(Key(0x905), false, true),
+                "Render membership replaced gameplay enable or failed to adopt a source type-eight member.");
+            steps.Clear();
+            Check(imposters.Publish([], LoadImposter, ShowImposter) &&
+                !imposters.RenderAdmitted(Key(0x908), true, true) &&
+                !imposters.RenderAdmitted(Key(0x905), false, true) &&
+                steps.SequenceEqual(new[] { "hide:908", "hide:905" }), "Region retirement retained an imposter draw.");
+            Check(imposters.Publish([Key(0x8f1)], LoadImposter, ShowImposter), "Source region reentry refused.");
+            steps.Clear();
+            Check(imposters.Publish([Key(0x8f1)], LoadImposter, ShowImposter) &&
+                steps.SequenceEqual(new[] { "load:908", "show:908" }),
+                "Retained current region was incorrectly retired before current source publication.");
+            var restoredVisibility = new FalloutRegionImposterVisibility(records);
+            restoredVisibility.RestorePublished([Key(0x8f1)]);
+            Check(restoredVisibility.Selected.SetEquals(new[] { Key(0x908) }) && restoredVisibility.Adopted(Key(0x908)),
+                "Restored completed visibility owner lost selected/adopted bookkeeping.");
+            steps.Clear();
+            Check(restoredVisibility.Publish([], LoadImposter, ShowImposter) && steps.SequenceEqual(new[] { "hide:908" }),
+                "Cold visibility owner failed to retire a prior region's still-resident reference.");
+            var malformedImposters = new FalloutRegionImposterVisibility(records);
+            Check(!malformedImposters.Publish([Key(0x8f8)], LoadImposter, ShowImposter) &&
+                malformedImposters.Error is not null && !malformedImposters.Publish([], LoadImposter, ShowImposter),
+                "Malformed region data did not retain its original publication fault.");
             var appearance = FalloutCreatureAppearanceResolver.Resolve(records, Key(0x801), Key(0x900));
             Check(FalloutActorTemplateOwner.Resolve(records, records.GetEffective(Key(0x80c)), 64).FormKey == Key(0x80c) &&
                 FalloutActorTemplateOwner.Resolve(records, records.GetEffective(Key(0x80d)), 64).FormKey == Key(0x80d),

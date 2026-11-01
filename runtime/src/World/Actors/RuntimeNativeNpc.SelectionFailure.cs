@@ -43,6 +43,7 @@ internal partial class RuntimeNativeNpc
         Refuse(_furnitureApproaching, "furniture-approach");
         Refuse(_travelActive, "travel-active");
         Refuse(_escortPackage is not null, "escort-package");
+        Refuse(_followPackage is not null, "follow-package");
         Refuse(_editorTravel is not null, "editor-travel");
         Refuse(_dialoguePackage is not null, "dialogue-package");
         Refuse(_guardPackage is not null, "guard-package");
@@ -79,7 +80,7 @@ internal partial class RuntimeNativeNpc
         _selectedSourcePackage is null && _failedPackage is null && _aiPackage is null &&
         _packageEvents is { Active: null, Done: false, Error: null } && _packageIdleSource is null &&
         _findFurniture is null && _seat is null && _sitting == 0 && !_furnitureApproaching && !_travelActive &&
-        _escortPackage is null && _editorTravel is null && _dialoguePackage is null && _guardPackage is null && _patrol is null &&
+        _escortPackage is null && _followPackage is null && _editorTravel is null && _dialoguePackage is null && _guardPackage is null && _patrol is null &&
         _animation is null && !_responseIdleActive && _packageIdleError is null && AnimationError is null &&
         _idleReplays.Remaining.Count == 0 && _conversationTarget is null && CanCaptureStoppedAiPose(allowFiniteSoundWait) &&
         !_baseLocomotionMoving && _baseClock.Resource.Length != 0;

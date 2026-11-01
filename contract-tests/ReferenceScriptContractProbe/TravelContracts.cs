@@ -156,7 +156,7 @@ internal static class TravelContracts
                 Package(0x40e, 0, 0x0c021204, radius: 0), Package(0x40f, 0, 0x1200, radius: 0),
                 Package(0x410, 0, 0x2004, target: 0x907),
                 Package(0x411, 3, 0),
-                AccompanyPackage(),
+                AccompanyPackage(), AccompanyPackage(0x412, 7, 0x908), AccompanyPackage(0x413, 1, 0x908),
                 GuardPackage(0x404, 0, 0x14001000, 180, 240), GuardPackage(0x405, 3, 0x10001000, 0, 0),
                 Record("IDLE", 0x500, Field("MODL", Text("actor/event.kf")), Field("DATA", [0x54, 0, 0, 0, 0, 0]))));
             File.WriteAllBytes(Path.Combine(directory, "Patch.esp"), Join(Header("Base.esm"), Package(0x400, 0, 0x1404, radius: 3, legacy: true)));
@@ -195,6 +195,46 @@ internal static class TravelContracts
                 Require(invalidGuard.Capture().Count == 0, "Invalid Guard location partially mutated cold state.");
             }
             world.Get(actor).PackageMotion = null;
+            var combatBoundary = new FalloutFollowCombatBoundary();
+            var peacefulFollower = new FalloutFollowPackage(Key(0x800), actor, 512, 0);
+            var defensiveFollower = peacefulFollower with { Flags = 0x04400000 };
+            var followerState = world.Get(actor);
+            combatBoundary.Require(peacefulFollower, followerState, "unused peaceful decision");
+            Require(combatBoundary.Error is null && followerState.ProcedureCaptureBlocker is null,
+                "Peaceful Follow invented a combat refusal during source admission.");
+            Reject(() => combatBoundary.Require(defensiveFollower, followerState, "visible eligible threat"));
+            var firstCombatRefusal = combatBoundary.Error ?? throw new InvalidOperationException("Reached Follow policy lost its refusal.");
+            Require(followerState.ProcedureCaptureBlocker == firstCombatRefusal,
+                "Reached Follow combat policy did not retain an owned capture refusal.");
+            try
+            {
+                _ = followerState.Capture();
+                throw new InvalidOperationException("Unowned Follow combat was admitted into a save.");
+            }
+            catch (NotSupportedException error) when (error.Message.Contains(firstCombatRefusal, StringComparison.Ordinal)) { }
+            Reject(() => combatBoundary.Require(defensiveFollower, followerState, "later assistance event"));
+            Require(combatBoundary.Error == firstCombatRefusal && combatBoundary.Retire(Key(0x801), followerState) is null &&
+                followerState.ProcedureCaptureBlocker == firstCombatRefusal,
+                "Repeated Follow proposals or a foreign retirement replaced the actual refusal owner.");
+            followerState.ProcedureCaptureBlocker = "independent source procedure refusal";
+            Require(combatBoundary.Retire(defensiveFollower.Form, followerState) == firstCombatRefusal &&
+                combatBoundary.Error is null && followerState.ProcedureCaptureBlocker == "independent source procedure refusal",
+                "Follow retirement cleared another source procedure's refusal.");
+            followerState.ProcedureCaptureBlocker = null;
+            Reject(() => combatBoundary.Require(defensiveFollower, followerState, "actual engagement"));
+            Require(combatBoundary.Retire(defensiveFollower.Form, followerState) is not null &&
+                followerState.ProcedureCaptureBlocker is null,
+                "A replaced Follow left its owned combat capture refusal behind.");
+            combatBoundary.Require(peacefulFollower, followerState, "replacement peaceful decision");
+            var concurrentFollower = peacefulFollower with { Flags = 0x04000000 };
+            combatBoundary.Require(concurrentFollower, followerState, "ordinary eligibility");
+            Require(combatBoundary.Error is null, "Continue During Combat incorrectly blocked ordinary Follow eligibility.");
+            Reject(() => combatBoundary.RequireContinuation(concurrentFollower, followerState, "actual engagement"));
+            Require(combatBoundary.Retire(concurrentFollower.Form, followerState) is not null &&
+                followerState.ProcedureCaptureBlocker is null, "Concurrent Follow refusal did not retire with its source package.");
+            combatBoundary.RequireContinuation(concurrentFollower with { Accompany = true }, followerState, "Accompany engagement");
+            Require(combatBoundary.Error is null, "Accompany inherited Follow's unsupported concurrent-movement flag policy.");
+            Console.WriteLine("OPENNV_FOLLOW_COMBAT_BOUNDARY_CONTRACT_PASS peacefulAdmission=true reachedRefusal=true captureBlocked=true firstFaultRetained=true matchingRetirement=true foreignBlockerPreserved=true");
             var travel = FalloutTravelPackage.Read(record);
             Require(travel.Reference == marker && travel.Radius == 3 && travel.MustReach && travel.OncePerDay && !travel.Running,
                 "Travel lost winning fields, adjusted marker or movement flags.");
@@ -384,6 +424,8 @@ internal static class TravelContracts
             CheckPortalTravel(records, record, npcMotion);
             CheckEditorPortalTravel(records, npcMotion);
             CheckAccompanyPortal(records, npcMotion);
+            CheckAccompanyPortal(records, npcMotion, 0x901, 0x412);
+            CheckAccompanyPortal(records, npcMotion, 0x901, 0x413);
             CheckCreatureTravelPortal(records, record, npcMotion);
         }
         finally
@@ -479,12 +521,13 @@ internal static class TravelContracts
         Console.WriteLine("OPENNV_PORTAL_OVERLAY_CONTRACT_PASS finiteClockWait=true actualRetirementRequired=true endlessAndErrorRefused=true orphanAnioAndResponseRefused=true");
     }
 
-    private static void CheckAccompanyPortal(FalloutPluginStack records, FalloutActorPackageMotion template)
+    private static void CheckAccompanyPortal(FalloutPluginStack records, FalloutActorPackageMotion template,
+        uint actorId = 0x900, uint packageId = 0x40d)
     {
         FalloutFormKey Key(uint id) => new("Base.esm", id);
         using var world = new FalloutReferenceWorld(records);
         world.LoadCell(FalloutCellSceneReader.Read(records, Key(0x800)));
-        var actor = Key(0x900); var door = Key(0x903); var package = records.GetEffective(Key(0x40d));
+        var actor = Key(actorId); var door = Key(0x903); var package = records.GetEffective(Key(packageId));
         Require(!world.CanNpcOpenDoor(door, actor), "Creature opened a locked door without ownership.");
         world.UnlockReference(door);
         Require(world.CanNpcOpenDoor(door, actor) && !world.CanNpcOpenDoor(door, Key(0x906)),
@@ -577,13 +620,13 @@ internal static class TravelContracts
         Console.WriteLine("OPENNV_CREATURE_TRAVEL_PORTAL_CONTRACT_PASS sharedRoute=true committedReceipt=true coldPlacement=true noFinalArrival=true malformedAtomic=true");
     }
 
-    private static byte[] AccompanyPackage()
+    private static byte[] AccompanyPackage(uint id = 0x40d, byte procedure = 7, uint targetId = 0x901)
     {
-        var data = new byte[12]; data[4] = 7;
-        BinaryPrimitives.WriteUInt32LittleEndian(data, 0x04501000);
-        var target = new byte[16]; BinaryPrimitives.WriteUInt32LittleEndian(target.AsSpan(4), 0x901u);
+        var data = new byte[12]; data[4] = procedure;
+        BinaryPrimitives.WriteUInt32LittleEndian(data, procedure == 7 ? 0x04501000u : 0u);
+        var target = new byte[16]; BinaryPrimitives.WriteUInt32LittleEndian(target.AsSpan(4), targetId);
         BinaryPrimitives.WriteInt32LittleEndian(target.AsSpan(8), 128);
-        return Record("PACK", 0x40d, Field("EDID", Text("AccompanyPortalFixture")), Field("PKDT", data), Field("PTDT", target));
+        return Record("PACK", id, Field("EDID", Text("AccompanyPortalFixture")), Field("PKDT", data), Field("PTDT", target));
     }
 
     private static void CheckPortalTravel(FalloutPluginStack records, FalloutPluginRecord package, FalloutActorPackageMotion template)
