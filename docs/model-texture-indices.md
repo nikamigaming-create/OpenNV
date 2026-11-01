@@ -10,7 +10,9 @@ Stored shape names remain source labels. The observed native apply path does not
 compare them or use them to redirect an index. Owned models can legitimately
 contain repeated names and record labels that differ from the indexed shape.
 OpenNV retains those declarations while applying the indexed source texture set.
-It rejects out-of-range indices, cyclic/shared scene-child traversal and unknown
+The unset UInt32 key `0xffffffff` remains a declaration without selecting a
+shape. It neither redirects by name nor replaces a valid indexed entry.
+OpenNV rejects other out-of-range indices, cyclic/shared scene-child traversal and unknown
 scene objects. Particle texture substitution remains visibly unbound.
 
 The immutable geometry order is reused within each decoded NIF's lifetime.

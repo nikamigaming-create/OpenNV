@@ -21,6 +21,8 @@ internal partial class RuntimeNativePlayer
     private FalloutActorProjectileLaunch? _playerProjectileLaunch;
     private NativeVatsVisibilitySamples? _vatsVisibility;
     private IReadOnlyList<FalloutVatsSession.Target>? _vatsTargets;
+    private readonly List<object> _vatsTargetMeasurements = [];
+    internal object VatsTargetMeasurements => _vatsTargetMeasurements.ToArray();
     private long _vatsGeneration;
     private long _vatsPreparationStarted;
     private double _vatsPreparationElapsed;
@@ -109,7 +111,7 @@ internal partial class RuntimeNativePlayer
             var session = new FalloutVatsSession(_vatsVitals);
             _vats = session; _vatsError = null; _vatsLastReason = null;
             DiscoverVatsActors();
-            _vatsTargets = null; _vatsPreparing = true;
+            _vatsTargets = null; _vatsTargetMeasurements.Clear(); _vatsPreparing = true;
             _vatsPreparationStarted = System.Diagnostics.Stopwatch.GetTimestamp(); _vatsPreparationElapsed = 0;
             _vatsPreparationCandidates = null; _vatsPreparationMeasured = 0; _vatsPreparationSkipped = 0;
             _vatsPreparationLastSamples = null;

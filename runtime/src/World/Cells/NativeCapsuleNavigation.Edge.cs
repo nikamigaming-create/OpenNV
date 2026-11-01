@@ -73,8 +73,8 @@ internal static partial class NativeCapsuleNavigation
                 if (!allowStep) return Reject("flat-clearance", obstacle);
                 if (obstacle is not null)
                 {
-                    if (!NativeCharacterStep.TryQuery(body, new(basis, from), motion, stepHeight,
-                        out var stepped, out var reason, out var contact, resources: stepQueries)) return Reject("step-" + reason, contact ?? obstacle);
+                    if (!NativeCharacterStep.TryQueryAfterObstruction(body, new(basis, from), motion, stepHeight, query, hit,
+                        out var stepped, out var reason, out var contact, stepQueries)) return Reject("step-" + reason, contact ?? obstacle);
                     drop += stepped.Y - from.Y;
                     supportedFrom = stepped;
                 }

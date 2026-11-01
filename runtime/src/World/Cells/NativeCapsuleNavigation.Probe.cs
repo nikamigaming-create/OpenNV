@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using Godot;
 using OpenNV.Runtime.Content;
 
@@ -17,6 +18,14 @@ internal sealed record NativeNavigationRejection(string Reason, Vector3 From, Ve
 internal sealed class NativeNavigationProbe(NativeNavigationContact? corridorContact, Func<ulong, FalloutFormKey?>? source = null)
 {
     private readonly record struct RawContact(ulong Collider, int Shape, Vector3 Point, Vector3 Normal);
+    private readonly record struct ResolvedContact(RawContact Raw, FalloutFormKey? Reference);
+    [InlineArray(4)]
+    private struct ContactScratch { private ResolvedContact _first; }
+    private ResolvedContact[] _downwardContacts = [];
+    private int _downwardCount;
+    private bool _hasDownward, _downwardCollided;
+    private Vector3 _downwardFrom, _downwardDesired, _downwardTravel;
+    private NativeNavigationSweep? _lastDownwardSweep;
     internal NativeNavigationContact? CorridorContact { get; } = corridorContact is null ? null :
         corridorContact with { Reference = source?.Invoke(corridorContact.Collider) };
     internal NativeNavigationContact? RejectedContact { get; private set; }
@@ -25,7 +34,7 @@ internal sealed class NativeNavigationProbe(NativeNavigationContact? corridorCon
     internal long SampledEdges { get; private set; }
     internal NativeNavigationRejection? LastRejection { get; private set; }
     internal NativeNavigationRejection? GuideRejection { get; private set; }
-    internal NativeNavigationSweep? LastDownwardSweep { get; private set; }
+    internal NativeNavigationSweep? LastDownwardSweep => _lastDownwardSweep ??= _hasDownward ? CaptureDownward() : null;
     internal NativeNavigationSweep? FirstDownwardSweep { get; private set; }
     internal NativeNavigationSweep? GuideDownwardSweep { get; private set; }
     internal int ReconciledLandings { get; private set; }
@@ -42,7 +51,18 @@ internal sealed class NativeNavigationProbe(NativeNavigationContact? corridorCon
         if (_rejections.ContainsKey(reason) || _rejections.Count < 16) _rejections[reason] = LastRejection;
         else OmittedRejectionObservations++;
     }
-    internal void BeginEdge() { SampledEdges++; LastDownwardSweep = null; }
+    internal void BeginEdge() { SampledEdges++; _lastDownwardSweep = null; _hasDownward = false; }
+    private NativeNavigationSweep CaptureDownward()
+    {
+        var contacts = _downwardCount == 0 ? Array.Empty<NativeNavigationContact>() : new NativeNavigationContact[_downwardCount];
+        for (var index = 0; index < contacts.Length; index++)
+        {
+            var value = _downwardContacts[index]; var raw = value.Raw;
+            contacts[index] = new(raw.Collider, raw.Shape, raw.Point, raw.Normal, _downwardFrom, _downwardDesired,
+                value.Reference, _downwardTravel);
+        }
+        return new(_downwardFrom, _downwardDesired, _downwardTravel, _downwardCollided, contacts);
+    }
     internal void ObserveDownward(PhysicsTestMotionResult3D hit, Vector3 from, Vector3 desired, bool collided)
     {
         var travel = hit.GetTravel();
@@ -54,29 +74,36 @@ internal sealed class NativeNavigationProbe(NativeNavigationContact? corridorCon
         for (var index = 0; index < count; index++)
             raw[index] = new(hit.GetColliderId(index), hit.GetColliderShape(index),
                 hit.GetCollisionPoint(index), hit.GetCollisionNormal(index));
-        var contacts = count == 0 ? Array.Empty<NativeNavigationContact>() : new NativeNavigationContact[count];
+        // Resolve every source identity now, preserving lookup/error timing.
+        // Inline staging also keeps nested callbacks from aliasing this edge.
+        ContactScratch scratch = default;
+        Span<ResolvedContact> resolved = scratch;
+        if (count > resolved.Length) resolved = new ResolvedContact[count];
+        resolved = resolved[..count];
         for (var index = 0; index < count; index++)
-        {
-            var value = raw[index];
-            contacts[index] = new(value.Collider, value.Shape, value.Point, value.Normal, from, desired,
-                source?.Invoke(value.Collider), travel);
-        }
-        LastDownwardSweep = new(from, desired, travel, collided, contacts);
+            resolved[index] = new(raw[index], source?.Invoke(raw[index].Collider));
+        if (_downwardContacts.Length < count) Array.Resize(ref _downwardContacts, Math.Max(4, count));
+        resolved.CopyTo(_downwardContacts);
+        _downwardFrom = from; _downwardDesired = desired; _downwardTravel = travel;
+        _downwardCollided = collided; _downwardCount = count;
+        _lastDownwardSweep = null; _hasDownward = true;
         FirstDownwardSweep ??= LastDownwardSweep;
     }
     internal void ObserveDownward(NativeNavigationSweep sweep)
     {
-        LastDownwardSweep = sweep with
+        var captured = sweep with
         {
             Contacts = sweep.Contacts.Select(contact => contact with { Reference = source?.Invoke(contact.Collider) }).ToArray()
         };
-        FirstDownwardSweep ??= LastDownwardSweep;
+        _lastDownwardSweep = captured; _hasDownward = false;
+        FirstDownwardSweep ??= captured;
     }
     internal void ObserveReconciledLanding(NativeNavigationContact support)
     {
-        var sweep = LastDownwardSweep ?? throw new InvalidOperationException("Root support requires its downward capsule observation.");
+        if (_lastDownwardSweep is null && !_hasDownward)
+            throw new InvalidOperationException("Root support requires its downward capsule observation.");
         ReconciledLandings++;
-        FirstReconciledLanding ??= new(sweep, support with { Reference = source?.Invoke(support.Collider) });
+        FirstReconciledLanding ??= new(LastDownwardSweep!, support with { Reference = source?.Invoke(support.Collider) });
     }
     internal void RejectGuide()
     {

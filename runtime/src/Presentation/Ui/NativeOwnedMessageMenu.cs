@@ -312,6 +312,8 @@ internal sealed class NativeOwnedMenuTree
             return trait switch
             {
                 "alpha" or "brightness" => 255,
+                // TileImage initializes these traits before XML application.
+                "red" or "green" or "blue" when tile.Name == "image" => 255,
                 "zoom" => 100,
                 "cropx" or "cropy" => 0,
                 "visible" => 1,
@@ -417,13 +419,7 @@ internal sealed class NativeOwnedMenuTree
         var alpha = Number(tile, "alpha") / 255;
         if (brightness == -1)
         {
-            float Component(string channel)
-            {
-                if (tile.Element(channel) is null && !_values.ContainsKey((tile, channel)))
-                    throw new NotSupportedException($"Owned local color {(string?)tile.Attribute("name")}/{channel} has no source value.");
-                return Number(tile, channel) / 255;
-            }
-            return new(Component("red"), Component("green"), Component("blue"), alpha);
+            return new(Number(tile, "red") / 255, Number(tile, "green") / 255, Number(tile, "blue") / 255, alpha);
         }
         if (brightness < 0) throw new NotSupportedException($"Owned brightness {brightness} has no color owner.");
         var color = TileColor(tile);

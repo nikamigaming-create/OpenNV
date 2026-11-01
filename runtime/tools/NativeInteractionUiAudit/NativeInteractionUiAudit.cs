@@ -21,6 +21,7 @@ public partial class NativeInteractionUiAudit : Node
             var root = args[0]; var cellId = args[1];
             RuntimeLiveContentSource.Configure(root, RuntimeLiveContentSource.FalloutNewVegasGame);
             using var content = RuntimeLiveContentSource.Current!;
+            VerifyImageColorDefaults();
             using var records = FalloutPluginStack.Load(content.PluginSources);
             var cell = FalloutCellSceneReader.Read(records, FalloutDialogueTopic.Find(records, "CELL", cellId).FormKey);
             using var world = new FalloutReferenceWorld(records); world.LoadCell(cell);
@@ -143,5 +144,28 @@ public partial class NativeInteractionUiAudit : Node
             menu.Free(); hud.Free(); GetTree().Quit();
         }
         catch (Exception error) { GD.PushError($"OPENNV_NATIVE_INTERACTION_UI_FAIL {error}"); GetTree().Quit(1); }
+    }
+
+    private static void VerifyImageColorDefaults()
+    {
+        var source = FalloutMenuXml.Expand(FalloutMenuXml.Read("menus/vats_menu.xml")).Elements("menu").Single();
+        var tree = new NativeOwnedMenuTree(source);
+        var images = source.Descendants("image").Where(tile =>
+            tile.Element("brightness")?.Value.Trim() == "entity_uselocalcolor" &&
+            new[] { "red", "green", "blue" }.All(channel => tile.Element(channel) is null)).ToArray();
+        if (images.Length == 0) throw new InvalidDataException("Owned VATS has no omitted local image RGB witness.");
+        foreach (var image in images)
+        {
+            tree.Bind(image, "alpha", 127);
+            if (tree.DrawingColor(image) != new Color(1, 1, 1, 127 / 255f))
+                throw new InvalidDataException("TileImage lost its initialized RGB traits.");
+            image.Add(new System.Xml.Linq.XElement("red", 31));
+            if (tree.DrawingColor(image).R != 31 / 255f)
+                throw new InvalidDataException("Image XML did not replace its initialized red trait.");
+            tree.Bind(image, "red", 67);
+            if (tree.DrawingColor(image).R != 67 / 255f)
+                throw new InvalidDataException("Image runtime binding did not replace its XML red trait.");
+        }
+        GD.Print($"OPENNV_NATIVE_IMAGE_COLOR_DEFAULTS_PASS ownedImages={images.Length} xmlOverride=true runtimeOverride=true");
     }
 }

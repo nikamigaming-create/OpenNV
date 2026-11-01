@@ -118,6 +118,14 @@ internal partial class RuntimeNativePlayer
                 RequireCurrent();
                 if (!TryVatsPoint(actor.Reference, part.Type, out _, out var visible)) { ++_vatsPreparationSkipped; continue; }
                 var fraction = await samples.MeasureAsync(actor.Node, part.Type);
+                _vatsTargetMeasurements.Add(new
+                {
+                    reference = actor.Reference.ToString(),
+                    part = part.Type,
+                    projected = visible,
+                    fraction,
+                    samples = samples.State
+                });
                 RequireCurrent();
                 if (!ActorAvailable(actor)) throw new InvalidOperationException("VATS visibility target retired during source sampling.");
                 ++_vatsPreparationMeasured;

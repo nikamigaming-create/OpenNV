@@ -9,13 +9,17 @@ classic asset-import edits.
 
 Active branch: `codex/gameplay-actions-quest-and-scene-owners`, based on checked
 PR340 (`9e034a0a`). Local main was verified equal to origin/main after merge.
-The broad batch is unpublished. Its earlier required gate and refreshed owned
-equipment audit pass. The source NAVM spatial index and McCarran grass-water
-guard are integrated. The final combined gate and optimized packaging pass.
+PR341 remains unmerged. Its initial 115-file revision `e71b60da` passes all five
+CI checks, but visible-target VATS smoke exposed further blockers. Subsequent
+integrated UI, texture-sentinel and navigation-query repairs pass the full
+`gameplay-visible-final-gate`. Detailed-only per-part VATS instrumentation then
+supported a successful two-shot UI execution and cold restore. The fresh
+publication full gate passed (`gameplay-publication-final-gate.log`); no
+further gameplay source edits are planned before publication. Performance gains
+and native visibility/outcome correspondence remain unverified.
 The owned water audit covers 17 qualifying child worldspaces; vanilla has no
-legacy XCLL rows. The new package cold-loads the forward checkpoint and is
-undergoing paired native-4K movement checks before checked PR merge. Sustained
-performance gains and the repaired McCarran transition remain unverified.
+legacy XCLL rows. Root owns the remaining live diagnosis, packaging/performance
+checks and checked PR merge.
 
 ## Current route and target
 
@@ -38,11 +42,12 @@ helper reported more than five seconds of stale state during loading and then
 recovered fresh loaded state. This does not pass load responsiveness. Freeside
 East arrival is underway.
 
-Ordinary E on McCarran's gate started loading its courtyard, then the old
-parent-water guard refused the destination world and rolled the transfer back.
-The integrated guard preserves the world's own DNAM water when UseWater is clear;
-actual water inheritance remains unsupported. Live gate retry awaits the new
-package.
+Ordinary E on McCarran gate `1287f5` now completes the exterior-to-courtyard
+transfer `0dac34` -> `148dc4` in 13.813 seconds. The guard preserves the world's
+own DNAM water when UseWater is clear; actual water inheritance remains
+unsupported. The paired courtyard frame shows a severe exposure difference
+and 15 reference divergences. Successful transfer does not establish a matched
+or complete courtyard.
 
 Retail's character-confirmation menu interrupted departure. It was completed
 through ordinary input. The private walker now stops on stalled rendering or
@@ -64,9 +69,18 @@ checks and temporary raw frames are removed after inspection.
   cold reload pass: three kits remain, the same rifle retains 37.3% condition,
   and one completed receipt is restored without replay.
 - The GPU VATS path prepared 24 parts in about 2508 ms and reached Selecting
-  without the cloned-label failure. It uses full-size RGBA8 masks and eight
-  count-readback bytes. Queue/execution of the final UI remains pending; the
-  preceding build's two-shot result does not verify this revised UI path.
+  without the cloned-label failure. Visible labels render. Selecting torso with
+  Up then Enter queued actor `106b16` part 0 at 54.704063%; two shots completed,
+  ammo changed 5 -> 3, 70 AP was spent and health changed
+  60 -> 45.68938 -> 31.402279, with no error or pending publications. The actual
+  pose-freeze witness stayed identical over one second. Both physical impacts
+  hit head part 1 despite torso selection; retail outcome parity remains open.
+- F5 checkpoint `58154d0fcad24219a19dbe183ca91783` cold-loaded in PID21820 with
+  ammo 3, weapon condition 0.2699999, target health 31.402279 and no opening
+  error. Prior Jean, crafting and repair-kit cold persistence proofs remain valid.
+- Earlier 0% on the unavailable default leg did not establish a general mask
+  pipeline failure. Measured fragment visibility and its native correspondence
+  remain an independent unresolved evidence lane.
 
 These are selected gameplay observations with incompletely matched save,
 actor, clock and camera state. They do not establish retail parity.
@@ -93,31 +107,49 @@ F5 and cold-loads successfully.
 The immutable source NAVM spatial index is integrated. Its full spatial-index
 gate passes; the selected owned route retains exactly the same 228 waypoints
 and projection errors. This establishes the checked navigation result, not a
-live performance improvement. The indexed package and live gain are pending.
+live performance improvement. Indexed live movement has been measured below;
+its gain over an equivalent earlier run remains unverified.
 
 A reviewed single-controller pose path removes redundant blend passes without
 changing samples, arithmetic, events or physics frequency. Posed-bound sampling
 reuses its world-transform read only within the synchronous invocation.
-No speed improvement is claimed before measurement on the optimized package.
+The moving measurements below do not isolate a gain from this pose change.
+
+Additional integrated repairs restore native TileImage initialization defaults:
+omitted image RGB channels retain 255, scoped to image tiles. The owned UI
+audit passes with `ownedImages=1`, including XML and runtime overrides. The
+beard texture fix preserves the source unset index `-1` without inventing a
+shape target. It addresses the appearance failure that left actor `0f570d`
+missing. The rebuilt ordinary gate visit now materializes that NPC: 16 actors
+instead of 15, and 14 reference divergences instead of 15. Navigation diagnostics defer
+immutable sweep-snapshot allocation while retaining immediate native/source
+reads, and step admission reuses the exact synchronous obstructed sweep.
+Independent source review preserves support, clearance and mismatch fallbacks;
+the full gate passes, while live performance gains remain unverified.
 
 ## Performance and next owners
 
 The optimized six-minute moving native-4K run averaged 51.2097 FPS. Its first
 minute averaged 57.91 FPS and its last minute 42.81 FPS. Sustained 4K60 remains
-open; the decline is not attributed to one subsystem. The source-index package
-has not yet repeated this run. The pending-autosave path still needs a fresh
-actual interaction-driven check; a checkpoint without a pending request does
-not exercise it.
+open; the decline is not attributed to one subsystem. A subsequent indexed
+ordinary movement segment lasted 179.468 seconds and averaged 55.2188 FPS.
+Retail averaged 59.6318 FPS but stopped responding to camera input after
+waypoint 32. The candidate reached waypoint 122 before the deadline; this is
+not a matched-route speed comparison or an ordinary Primm arrival. The latest
+query-reuse package has no verified live gain yet.
 
-- Root: finish combined gate and owned audits, indexed optimized package,
-  McCarran ordinary gate retry, final VATS UI queue/execution and moving
-  route/performance checks, then checked PR, merge and local/origin main
-  verification.
+The pending-autosave path still needs a fresh interaction-driven check; a
+checkpoint without a pending request does not exercise it.
+
+- Root: publish the checked follow-up, finish performance/live checks,
+  then update/check PR341, merge and verify local/origin main. Native VATS
+  visibility/outcome comparison remains open after the working UI/cold case.
 - Reviewed private next batch: source recipe/quantity UI, resident Follow and
   Accompany ownership, and Sleep door events with an empty effective lock set.
   These are not integrated or live-verified. The regional imposter owner packet
-  is private and not integration-ready. Nonempty lock events and exterior
-  scopes remain unqualified. No guessed CELL-public-state write is proposed.
+  requires actual regional temporary-CELL/script attachment and remains private
+  and not integration-ready. Nonempty lock events and exterior scopes remain
+  unqualified. No guessed CELL-public-state write is proposed.
 - Ordinary player T/wait has no current menu binding. VATS cinematics/control
   paths, local-map rendering, LOD seams, full animation/actor process behavior,
   radio persistence, room completeness and campaign/plugin execution remain

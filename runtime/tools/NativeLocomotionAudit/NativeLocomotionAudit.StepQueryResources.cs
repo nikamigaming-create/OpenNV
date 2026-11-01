@@ -1,5 +1,6 @@
 using System.Reflection;
 using Godot;
+using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Diagnostics;
 using OpenNV.Runtime.World.Cells;
 using OpenNV.Runtime.World.Actors;
@@ -34,6 +35,28 @@ public partial class NativeLocomotionAudit
                 calls[(int)RuntimeFrameWork.Owner.NativeCapsuleSweep] - sweeps,
                 calls[(int)RuntimeFrameWork.Owner.NativeSupportRay] - rays);
         }
+        StepQueryOutcome Borrowed(Transform3D from, Vector3 motion, bool mismatch = false)
+        {
+            using var parameters = new PhysicsTestMotionParameters3D { From = from, Motion = motion, Margin = body.SafeMargin, MaxCollisions = 4 };
+            using var result = new PhysicsTestMotionResult3D();
+            if (!NativeCharacterStep.TestMotion(body.GetRid(), parameters, result))
+                throw new InvalidDataException("Observed step fixture lacks an actual obstructed horizontal sweep.");
+            if (mismatch) parameters.Margin += .002f;
+            var sweeps = calls[(int)RuntimeFrameWork.Owner.NativeCapsuleSweep];
+            var rays = calls[(int)RuntimeFrameWork.Owner.NativeSupportRay];
+            var accepted = NativeCharacterStep.TryQueryAfterObstruction(body, from, motion, .4f, parameters, result,
+                out var destination, out var reason, out var contact, resources);
+            return new(accepted, destination, reason, contact,
+                calls[(int)RuntimeFrameWork.Owner.NativeCapsuleSweep] - sweeps,
+                calls[(int)RuntimeFrameWork.Owner.NativeSupportRay] - rays);
+        }
+        void SameObservedStep(Transform3D from, Vector3 motion)
+        {
+            var original = Query(from, motion, resources);
+            var borrowed = Borrowed(from, motion);
+            if (borrowed with { Sweeps = borrowed.Sweeps + 1 } != original || Borrowed(from, motion, mismatch: true) != original)
+                throw new InvalidDataException("Borrowed obstruction changed step/support/contact or bypassed a mismatched margin query.");
+        }
         StepQueryOutcome Pair(Transform3D from, Vector3 motion)
         {
             var fresh = Query(from, motion, null);
@@ -46,9 +69,11 @@ public partial class NativeLocomotionAudit
         {
             await SettleCorridorBody(body);
             var pose = body.GlobalTransform;
+            CheckDeferredNavigationProbe(body);
             var from = new Transform3D(body.GlobalBasis, new(0, pose.Origin.Y, 1.35f));
             var motion = new Vector3(0, 0, -.16f);
             var supported = Pair(from, motion);
+            SameObservedStep(from, motion);
             if (!supported.Accepted || supported.Sweeps < 3 || supported.SupportRays < 2 || supported.Contact is null)
                 throw new InvalidDataException("Reusable step fixture did not exercise a supported riser, headroom and forward sweeps.");
             var parameters = resources.MotionParameters(body); var result = resources.MotionResult(body); var ray = resources.SupportRay(body);
@@ -58,6 +83,8 @@ public partial class NativeLocomotionAudit
             ceiling.Position = new(0, 1.98f, -1);
             await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
             if (Pair(from, motion).Accepted) throw new InvalidDataException("Reusable query bypassed real low-ceiling clearance.");
+            SameObservedStep(from, motion);
+            GD.Print("OPENNV_OBSTRUCTED_STEP_REUSE_PASS supportedRiser=true lowCeilingRefused=true exactContactAndSupport=true oneSweepRemoved=true marginMismatchFreshQuery=true");
             ceiling.Position = new(0, 2.18f, -1);
             await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
             var mask = body.CollisionMask; var margin = body.SafeMargin;
@@ -128,4 +155,64 @@ public partial class NativeLocomotionAudit
         }
         finally { scene.Free(); isolatedWorld?.Dispose(); }
     }
+    private static void CheckDeferredNavigationProbe(CharacterBody3D body)
+    {
+        using var parameters = new PhysicsTestMotionParameters3D
+        {
+            From = body.GlobalTransform.Translated(Vector3.Up * .2f),
+            Motion = Vector3.Down * .8f,
+            Margin = body.SafeMargin,
+            MaxCollisions = 4,
+        };
+        using var hit = new PhysicsTestMotionResult3D();
+        if (!NativeCharacterStep.TestMotion(body.GetRid(), parameters, hit) || hit.GetCollisionCount() == 0)
+            throw new InvalidDataException("Probe allocation fixture has no real native downward contact.");
+        var firstIdentity = new FalloutFormKey("Synthetic.esm", 1);
+        var currentIdentity = firstIdentity;
+        var lookups = 0;
+        var refuseLookup = false;
+        var probe = new NativeNavigationProbe(null, _ =>
+        {
+            ++lookups;
+            if (refuseLookup) throw new InvalidOperationException("Synthetic source identity lookup refusal.");
+            return currentIdentity;
+        });
+        var from = parameters.From.Origin; var desired = from + parameters.Motion;
+        var count = hit.GetCollisionCount();
+        void Observe() { probe.BeginEdge(); probe.ObserveDownward(hit, from, desired, true); }
+        Observe();
+        var first = probe.FirstDownwardSweep ?? throw new InvalidDataException("First native sweep was not retained.");
+        for (var index = 0; index < 64; index++) Observe();
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        for (var index = 0; index < 256; index++) Observe();
+        var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+        if (allocated != 0 || lookups != count * 321)
+            throw new InvalidDataException($"Warmed unretained probe snapshots allocate or skip source resolution: bytes={allocated}, lookups={lookups}.");
+        currentIdentity = new("Synthetic.esm", 2);
+        // Overwrite the borrowed native result before reading the retained last
+        // values; neither fields nor identities may be read lazily from it.
+        parameters.From = body.GlobalTransform; parameters.Motion = Vector3.Up * .01f;
+        _ = NativeCharacterStep.TestMotion(body.GetRid(), parameters, hit);
+        var last = probe.LastDownwardSweep ?? throw new InvalidDataException("Last native sweep disappeared.");
+        if (last.From != first.From || last.Desired != first.Desired || last.Travel != first.Travel ||
+            last.Collided != first.Collided || !last.Contacts.SequenceEqual(first.Contacts) ||
+            last.Contacts.Any(contact => contact.Reference != firstIdentity))
+            throw new InvalidDataException("Deferred probe snapshot changed native values, lookup timing or frozen first receipt.");
+        probe.RejectGuide(); probe.BeginEdge();
+        if (probe.LastDownwardSweep is not null || !ReferenceEquals(probe.GuideDownwardSweep, last) ||
+            !ReferenceEquals(probe.FirstDownwardSweep, first) || !last.Contacts.SequenceEqual(first.Contacts))
+            throw new InvalidDataException("The next probe edge mutated a retained immutable receipt.");
+        parameters.From = new(body.GlobalBasis, from); parameters.Motion = desired - from;
+        if (!NativeCharacterStep.TestMotion(body.GetRid(), parameters, hit) || hit.GetCollisionCount() == 0)
+            throw new InvalidDataException("Probe source-refusal fixture lost its actual native contact.");
+        refuseLookup = true;
+        var refused = false;
+        try { Observe(); }
+        catch (InvalidOperationException error) when (error.Message == "Synthetic source identity lookup refusal.") { refused = true; }
+        if (!refused || probe.LastDownwardSweep is not null || !ReferenceEquals(probe.FirstDownwardSweep, first) ||
+            !ReferenceEquals(probe.GuideDownwardSweep, last))
+            throw new InvalidDataException("Source identity lookup failure was delayed, hidden or corrupted retained receipts.");
+        GD.Print($"OPENNV_NAVIGATION_PROBE_REUSE_PASS nativeContact=true lookupTiming=true lookupFailurePropagated=true frozenReceipts=true borrowedResultOverwritten=true warmedObservations=256 allocatedBytes={allocated}");
+    }
+
 }

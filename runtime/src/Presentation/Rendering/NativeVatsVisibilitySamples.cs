@@ -30,6 +30,8 @@ internal sealed class NativeVatsVisibilitySamples : IDisposable
     private NativeVatsGpuCounts? _gpu; // Access/release only on the render thread.
     private int _sampleFormat = -1, _capturedTextures;
     private long _readbackBytes;
+    private int _sourceMeshes;
+    private uint? _totalPixels, _visiblePixels;
     private string _phase = "not-started", _method = "unobserved";
     private byte? _part;
     internal object State => new
@@ -41,6 +43,9 @@ internal sealed class NativeVatsVisibilitySamples : IDisposable
         height = _extent.Y,
         format = Volatile.Read(ref _sampleFormat) is var format && format >= 0 ? ((RenderingDevice.DataFormat)format).ToString() : null,
         capturedTextures = _capturedTextures,
+        sourceMeshes = _sourceMeshes,
+        totalPixels = _totalPixels,
+        visiblePixels = _visiblePixels,
         readbackBytes = _readbackBytes,
         disposed = Volatile.Read(ref _disposed) != 0
     };
@@ -106,6 +111,7 @@ internal sealed class NativeVatsVisibilitySamples : IDisposable
         var meshes = actor.FindChildren("*", "", true, false).OfType<MeshInstance3D>()
             .Where(mesh => mesh.Visible && mesh.Mesh is not null && mesh.HasMeta("opennv_nif_body_part") &&
                 mesh.GetMeta("opennv_nif_body_part").AsInt32() == part).ToArray();
+        _sourceMeshes = meshes.Length; _totalPixels = null; _visiblePixels = null;
         if (meshes.Length == 0) { _phase = "no-presented-source-meshes"; _measuring = false; return 0; }
         try
         {
@@ -168,6 +174,7 @@ internal sealed class NativeVatsVisibilitySamples : IDisposable
                 if (!await CaptureGpuAsync(3)) throw new InvalidDataException("VATS GPU format changed between paired masks.");
                 _phase = "gpu-reduction-and-eight-byte-readback";
                 var counts = await ReadGpuCountsAsync();
+                _totalPixels = counts.Total; _visiblePixels = counts.Visible;
                 _phase = "complete";
                 return counts.Total == 0 ? 0 : Math.Clamp(counts.Visible / (float)counts.Total, 0, 1);
             }
@@ -177,12 +184,14 @@ internal sealed class NativeVatsVisibilitySamples : IDisposable
             var totalPair = await ColorsAsync();
             _phase = "isolated-cpu-count";
             var total = Count(totalPair, totalPair);
+            _totalPixels = (uint)total; _visiblePixels = 0;
             if (total == 0) { _phase = "complete"; return 0; }
             _camera.CullMask = _worldMask | _queryLayer;
             _phase = "world-cpu-readbacks";
             var measured = await ColorsAsync();
             _phase = "world-cpu-count";
             var visible = Count(measured, totalPair);
+            _visiblePixels = (uint)visible;
             RequireActive(); _phase = "complete";
             return Math.Clamp(visible / (float)total, 0, 1);
         }

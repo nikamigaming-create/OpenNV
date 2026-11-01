@@ -61,6 +61,9 @@ internal static class NativeNpcMaterial
         var shapes = FalloutNifGeometryOrder.Read(nif);
         foreach (var entry in part.AlternateTextures)
         {
+            // The source texture-index lookup excludes its unset UInt32 key.
+            // Retain the declaration without inventing an indexed shape for it.
+            if (entry.ShapeIndex == -1) continue;
             if (entry.ShapeIndex < 0 || entry.ShapeIndex >= shapes.Count)
                 throw new InvalidDataException($"Record alternate texture index is outside its source model: {part.Source}/{entry.ShapeIndex}/{entry.ShapeName}.");
             if (shapes[entry.ShapeIndex].Block.TypeName == "NiParticleSystem")
@@ -68,7 +71,7 @@ internal static class NativeNpcMaterial
         }
         // The model loader keys entries by 3D index, with later entries replacing
         // the texture at that index. Stored names do not redirect or validate it.
-        var selected = part.AlternateTextures.LastOrDefault(entry => shapes[entry.ShapeIndex].Block.Index == geometry.Block.Index);
+        var selected = part.AlternateTextures.LastOrDefault(entry => entry.ShapeIndex != -1 && shapes[entry.ShapeIndex].Block.Index == geometry.Block.Index);
         if (selected is null) return null;
         var properties = geometry.Properties.Where(index => index >= 0).Select(nif.ReadObject).ToArray();
         var shader = properties.OfType<FalloutNifShaderProperty>().SingleOrDefault();

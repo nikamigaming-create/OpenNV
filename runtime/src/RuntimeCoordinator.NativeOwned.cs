@@ -110,6 +110,7 @@ public partial class RuntimeCoordinator
             manualSave = new { receipt = _nativeManualSaves.Receipt, history = detailed ? _nativeManualSaves.History : null },
             combatWheel = _nativeCombatWheel?.State,
             vats = _nativePlayer?.VatsState,
+            vatsTargetMeasurements = detailed ? _nativePlayer?.VatsTargetMeasurements : null,
             xr = _nativeXr?.State,
             detail = detailed ? "complete-runtime-snapshot" : "live-summary;reference-readiness-and-inventories-unsampled;request-state-for-details",
             reviewScope = !detailed || _nativeActiveCell is null ? null : new
