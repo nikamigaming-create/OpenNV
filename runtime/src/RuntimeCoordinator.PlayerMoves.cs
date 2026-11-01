@@ -1,5 +1,6 @@
 using Godot;
 using OpenNV.Runtime.Content;
+using OpenNV.Runtime.Presentation.Rendering;
 using OpenNV.Runtime.World.Cells;
 
 namespace OpenNV.Runtime;
@@ -61,10 +62,12 @@ public partial class RuntimeCoordinator
         IReadOnlyList<TravelFollower> followers = transferFollowers ? BeginFollowerTransfer(current, placement) : [];
         Node3D? root = null;
         var previousPresentation = _nativeReferencePresentation!;
+        FalloutReferenceWorld.RegionCellEntry? regionEntry = null;
         IReadOnlyList<(FalloutFormKey Reference, Transform3D Pose, Vector3 Velocity)> retiredActors = [];
         (CollisionObject3D Body, CollisionObject3D.DisableModeEnum Mode)[] arrivalCollision = [];
         try
         {
+            regionEntry = _nativeReferences!.BeginRegionCellEntry((grid?.Scene ?? scene).Cell, placement.Position);
             scene = _nativeReferences!.ComposeResidency(grid?.Scene ?? scene, _configuration.World.GameUnitsToMeters, grid?.Cells);
             if (grid is not null) grid = grid with { Scene = scene };
             sky.EnterCell(scene.Cell, _nativeGlobals, placement.Position);
@@ -74,7 +77,7 @@ public partial class RuntimeCoordinator
             current.ProcessMode = ProcessModeEnum.Disabled;
             scripts.ProcessMode = ProcessModeEnum.Disabled;
             previousPresentation.RetireOverlappingActors(scene.References, out retiredActors);
-            root = await BuildNativeCellRootResponsive(scene, null, sourceSide: false);
+            root = await BuildNativeCellRootResponsive(scene, null, sourceSide: false, placement.Position);
             root.ProcessMode = ProcessModeEnum.Disabled;
             if (grid is not null) await AddExteriorLandscapeResponsive(root, grid);
             AddChild(root);
@@ -88,9 +91,11 @@ public partial class RuntimeCoordinator
                 await root.GetChildren().OfType<Presentation.Rendering.RuntimeNativeExteriorLod>().Single().PrepareInitialSelection(transform.Origin);
             }
             CommitNativeWorldTransfer(current, active, root, scene, transform);
+            regionEntry.Commit();
         }
         catch (Exception error) when (root is not null && ReferenceEquals(_nativeCurrentCellRoot, root))
         {
+            regionEntry?.Commit();
             // Publication committed. Retiring the outgoing presentation is
             // irreversible; never free the authoritative incoming root here.
             _nativeOpeningStageDriver!.RetainDriverFailure(error);
@@ -98,19 +103,26 @@ public partial class RuntimeCoordinator
             GetTree().Paused = true;
             throw;
         }
-        catch
+        catch (Exception error)
         {
-            root?.Free();
+            regionEntry?.Dispose();
+            var retirementError = DiscardNativeStagedSubtree(root);
             sky.Restore(previousSky);
+            // Staged environment construction also changes shared material
+            // uniforms. Republish their surviving source owner on rollback.
+            current.GetChildren().OfType<RuntimeNativeCellLighting>().SingleOrDefault()?.Publish();
+            current.GetChildren().OfType<RuntimeNativeExteriorEnvironment>().SingleOrDefault()?.Republish();
             RollbackFollowerTransfer(followers);
             previousPresentation.RestoreRetiredActors(retiredActors);
             current.GetChildren().OfType<RuntimeNativeReferenceEvents>().Single().SetResidency(active, current);
             current.ProcessMode = previousMode;
             DiscoverNativeCellReferences(active);
             ObserveNativeResidentReferences(active);
+            if (retirementError is not null)
+                throw new AggregateException("Player transfer and staged actor retirement failed after rollback.", error, retirementError);
             throw;
         }
-        finally { scripts.ProcessMode = previousScriptMode; }
+        finally { regionEntry?.Dispose(); scripts.ProcessMode = previousScriptMode; }
         foreach (var (body, mode) in arrivalCollision) body.DisableMode = mode;
     }
 

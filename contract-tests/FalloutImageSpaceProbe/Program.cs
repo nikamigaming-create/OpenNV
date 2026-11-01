@@ -175,7 +175,7 @@ try
     var header = new byte[244];
     BinaryPrimitives.WriteUInt32LittleEndian(header, 1);
     BinaryPrimitives.WriteSingleLittleEndian(header.AsSpan(4), 2);
-    BinaryPrimitives.WriteUInt32LittleEndian(header.AsSpan(152), 3); // contrast multiplier key count
+    BinaryPrimitives.WriteUInt32LittleEndian(header.AsSpan(152), 3); // average-luminance multiplier key count
     BinaryPrimitives.WriteUInt32LittleEndian(header.AsSpan(236), 2); // fade color key count
     var fade = Floats(0, 0.2f, 0.4f, 0.6f, 1, 1, 0.2f, 0.4f, 0.6f, 0);
     var path = Path.Combine(directory, "Synthetic.esm");
@@ -210,6 +210,51 @@ try
     Require(MathF.Abs(sunlightState.Compose(classic, weather: sunlightWeather, sunlightOwned: true).SunlightDimmer -
         classic.RawTraits[11] * 1.25f) < .000001f,
         "Source weather strengths did not reach the independently composed sunlight channel.");
+    var skyModifier = sunlightModifier with
+    {
+        Animated = false,
+        Multiply = Enumerable.Range(0, 21).Select(index => index == 8
+            ? new FalloutImageFloatKey[] { new(0, .93f), new(1, .8f) } : []).ToArray(),
+    };
+    var skyState = new FalloutImageSpaceState();
+    var skyWeather = new[] { new FalloutWeatherImageModifier(4, skyModifier, .3f),
+        new FalloutWeatherImageModifier(1, skyModifier, .7f) };
+    var skyFrame = skyState.Compose(classic, weather: skyWeather, skyOwned: true);
+    Require(MathF.Abs(skyFrame.SkyScale - classic.RawTraits[8] * .93f) < .000001f &&
+        !skyFrame.UnboundChannels.Any(value => value.EndsWith("/8IAD", StringComparison.Ordinal)) &&
+        skyState.Compose(classic, weather: skyWeather).UnboundChannels.Any(value => value.EndsWith("/8IAD", StringComparison.Ordinal)),
+        "Weather sky scale was duplicated across slots or hid a missing sky consumer.");
+    skyState.Apply(skyModifier with { Animated = true }); skyState.Advance(1);
+    Require(MathF.Abs(skyState.Compose(classic, skyOwned: true).SkyScale - classic.RawTraits[8] * .865f) < .000001f,
+        "Sky scale lost the independent animated modifier clock.");
+    var gradingBase = classic with { Cinematic = new Vector4(1, .25f, 2, 1) };
+    var gradingModifier = modifier with
+    {
+        Animated = false,
+        Multiply = Enumerable.Range(0, 21).Select(index => index switch
+        {
+            18 => new FalloutImageFloatKey[] { new(0, 3) },
+            19 => new FalloutImageFloatKey[] { new(0, .5f) },
+            _ => [],
+        }).ToArray(),
+        Add = Enumerable.Range(0, 21).Select(index => index switch
+        {
+            18 => new FalloutImageFloatKey[] { new(0, .125f) },
+            19 => new FalloutImageFloatKey[] { new(0, .25f) },
+            _ => [],
+        }).ToArray(),
+        Effects = new Dictionary<string, FalloutImageFloatKey[]>(), Tint = [], Fade = [],
+    };
+    var gradingState = new FalloutImageSpaceState();
+    var gradingWeather = new[] { new FalloutWeatherImageModifier(4, gradingModifier, .3f),
+        new FalloutWeatherImageModifier(1, gradingModifier, .7f) };
+    var weatherGrading = gradingState.Compose(gradingBase, weather: gradingWeather);
+    gradingState.Apply(gradingModifier);
+    var activeGrading = gradingState.Compose(gradingBase);
+    Require(MathF.Abs(weatherGrading.Cinematic.Y - .875f) < .000001f &&
+        MathF.Abs(weatherGrading.Cinematic.Z - 1.25f) < .000001f &&
+        activeGrading.Cinematic == weatherGrading.Cinematic,
+        "Distinct IMAD18/19 multiply/add channels did not reach average luminance/contrast for both weather and active modifiers.");
     var state = new FalloutImageSpaceState();
     state.Apply(modifier);
     var blurModifier = modifier with
@@ -245,8 +290,8 @@ try
     state.Apply(modifier);
     state.Advance(1);
     var frame = state.Compose(classic);
-    Require(MathF.Abs(frame.Cinematic.Z - classic.Cinematic.Z * 3) < 0.000001f && frame.Cinematic.Y == classic.Cinematic.Y,
-        "IMAD contrast bound to a different cinematic channel in a legacy IMGS.");
+    Require(MathF.Abs(frame.Cinematic.Y - classic.Cinematic.Y * 3) < 0.000001f && frame.Cinematic.Z == classic.Cinematic.Z,
+        "IMAD average luminance bound to a different cinematic channel in a legacy IMGS.");
     Require(frame.Fade == new Vector4(0.2f, 0.4f, 0.6f, 0.5f), "Fade did not use the modifier duration.");
     Require(state.Advance(1).Single().Form == modifier.Form && state.Compose(classic).Fade == Vector4.Zero,
         "Expired animated modifier retained a final color.");

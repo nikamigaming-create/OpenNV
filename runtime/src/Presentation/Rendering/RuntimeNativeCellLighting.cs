@@ -21,7 +21,9 @@ internal partial class RuntimeNativeCellLighting : Node
         _unitsToMeters = unitsToMeters;
     }
 
-    public override void _EnterTree()
+    public override void _EnterTree() => Publish();
+
+    internal void Publish()
     {
         NativeNifMaterialEnvironment.PublishExterior(
             NativeNifMaterialEnvironment.Rgb(_lighting.AmbientRgb),

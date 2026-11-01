@@ -57,6 +57,7 @@ public partial class NativeLandscapeTransportAudit : Node3D
             foreach (var cell in grid.Cells)
             {
                 var source = FalloutLandscapeTransportResolver.ResolveCell(records, cell, grid.PersistentCell);
+                if (source is null) continue;
                 var prepared = await FalloutContentWorkers.Run(() => RuntimeNativeLandscapeTransportBuilder.Prepare(source, units));
                 using var assembly = new RuntimeNativeLandscapeTransportBuilder.Assembly(source, units, textureCache);
                 var steps = 0;

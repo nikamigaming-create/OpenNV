@@ -6,6 +6,7 @@ namespace OpenNV.Runtime.Content;
 internal sealed record FalloutScriptPackage(FalloutFormKey Form, string EditorId, byte IdleFlags,
     float IdleTimer, IReadOnlyList<FalloutFormKey> Idles, IReadOnlyDictionary<string, FalloutFormKey?> Events)
 {
+    internal const uint DoorStartEndFlags = 0x000000d8;
     internal const uint HeadTrackingOffFlag = 0x100000;
     internal const uint AllowFallsFlag = 0x00080000;
     internal const uint WeaponsUnequippedFlag = 0x200000;

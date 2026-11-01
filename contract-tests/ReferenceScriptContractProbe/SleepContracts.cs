@@ -18,6 +18,22 @@ internal static partial class FurnitureContracts
         var actor = Key(0x900); var bed = Key(0x908);
         var package = records.GetEffective(new("Find.esp", 0x406));
         var source = FalloutSleepPackage.Read(package);
+        var flaggedRecord = records.GetEffective(new("Find.esp", 0x411));
+        var flagged = FalloutSleepPackage.Read(flaggedRecord);
+        var lifecycle = FalloutScriptPackage.Read(flaggedRecord);
+        Require(flagged.Flags == 0x88, "Sleep erased its authored start/end door actions.");
+        Reject(() => FalloutSleepPackage.Read(records.GetEffective(new("Find.esp", 0x412))));
+        foreach (var kind in new[] { "POBA", "POEA", "POCA" }) world.RequirePackageDoorActions(actor, lifecycle, kind);
+        Require(world.Get(Key(0x90c)).LockState is null && world.Get(Key(0x90d)).LockState is null,
+            "Empty package door actions created a lock on a lockless source door.");
+        // Unlocked is not lockless. The linked side and runtime overrides must
+        // participate in admission, and refusal must preserve their state.
+        world.LockReference(Key(0x90d), 50); world.UnlockReference(Key(0x90d));
+        var retainedLock = world.Get(Key(0x90d)).LockState;
+        foreach (var kind in new[] { "POBA", "POEA", "POCA" }) Reject(() => world.RequirePackageDoorActions(actor, lifecycle, kind));
+        Require(world.Get(Key(0x90d)).LockState == retainedLock && world.Get(Key(0x90c)).LockState is null,
+            "Refused package door work changed a real linked lock.");
+        Console.WriteLine("OPENNV_SLEEP_EMPTY_DOOR_WORK_CONTRACT_PASS flagsRetained=true noLockCreated=true unlockedLockRefused=true linkedOverride=true allLifecyclePhases=true refusalNonMutating=true");
         var progress = new FalloutActorSleepProgress(cell.Cell.FormKey, bed, false);
         source.Validate(records, world, actor, progress);
         Require(source.Location.Form == cell.Cell.FormKey && source.Candidates(records, world, actor).Single().FormKey == bed,

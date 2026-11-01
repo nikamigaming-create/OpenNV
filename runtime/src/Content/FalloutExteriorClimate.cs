@@ -136,6 +136,8 @@ internal static class FalloutExteriorClimate
         return region.ReadSubrecords().Where(field => field.Signature == "RPLD").Any(field => Contains(field.Data.Span, x, y));
     }
 
+    internal static bool ContainsPolygon(ReadOnlySpan<byte> polygon, float x, float y) => Contains(polygon, x, y);
+
     private static bool Contains(ReadOnlySpan<byte> polygon, float x, float y)
     {
         if (polygon.Length < 24 || polygon.Length % 8 != 0) throw new InvalidDataException("Region polygon has an invalid extent.");

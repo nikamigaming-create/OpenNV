@@ -17,7 +17,7 @@ internal static partial class FurnitureContracts
                 Record("NPC_", 0x700, Field("EDID", Text("SeatActorBase")), Field("ACBS", new byte[24]),
                     Field("SNAM", Join(BitConverter.GetBytes(0x730u), new byte[] { 3, 0, 0, 0 }))),
                 Record("NPC_", 0x701, Field("ACBS", new byte[24])), Record("FACT", 0x730),
-                Record("STAT", 0x3b), Record("IDLE", 0x712), Record("FURN", 0x710, Field("MNAM", BitConverter.GetBytes(0x40000001u))),
+                Record("DOOR", 0x717), Record("STAT", 0x3b), Record("IDLE", 0x712), Record("FURN", 0x710, Field("MNAM", BitConverter.GetBytes(0x40000001u))),
                 Record("FURN", 0x711, Field("MNAM", BitConverter.GetBytes(0x80000001u))),
                 Record("FURN", 0x714, Field("MNAM", BitConverter.GetBytes(0x40000003u))),
                 Record("GMST", 0x720, Field("EDID", Text("fFurnitureMarker14DeltaX")), Field("DATA", BitConverter.GetBytes(.25f))),
@@ -36,7 +36,8 @@ internal static partial class FurnitureContracts
                 SleepFixture(0x0100040a, 4, 0), SleepFixture(0x0100040b, 1, 0x800, flags: 0x40000000),
                 EatFixture(0x0100040c), EatFixture(0x0100040d, foodType: 1, food: 0x715),
                 EatFixture(0x0100040e, foodType: 0, food: 0x901), EatFixture(0x0100040f, count: 1),
-                EatFixture(0x01000410, location: 4),
+                EatFixture(0x01000410, location: 4), SleepFixture(0x01000411, 1, 0x800, flags: 0x88),
+                SleepFixture(0x01000412, 1, 0x800, flags: 0x20),
                 Record("SCPT", 0x01000500, Field("SCRO", BitConverter.GetBytes(0x900u)),
                     Field("SCRO", BitConverter.GetBytes(0x90au)),
                     Field("SCRO", BitConverter.GetBytes(0x901u)), Field("SCRO", BitConverter.GetBytes(0x14u))),
@@ -55,6 +56,7 @@ internal static partial class FurnitureContracts
             var cell = FalloutCellSceneReader.Read(records, Key(0x800)); world.LoadCell(cell);
             SleepContracts(records, cell);
             EatContracts(records, cell);
+            LinkedSandboxContracts();
             var source = FalloutFindFurniturePackage.Read(records.GetEffective(new("Find.esp", 0x400)));
             var actor = Key(0x900); var chair = Key(0x901); var otherActor = Key(0x90a); var player = Key(0x14);
             var sandbox = new FalloutSandboxPackage(new("Find.esp", 0x400), 0, 0, Key(0x905), 5, new(31));
@@ -267,7 +269,13 @@ internal static partial class FurnitureContracts
             Field("NAME", BitConverter.GetBytes(baseId)), Field("DATA", new float[] { x, 0, 0, 0, 0, 0 }.SelectMany(BitConverter.GetBytes).ToArray()),
             owner is { } key ? Field("XOWN", BitConverter.GetBytes(key)) : [], name is null ? [] : Field("EDID", Text(name)),
             linked is { } link ? Field("XLKR", BitConverter.GetBytes(link)) : []);
-        var body = Join(Ref("ACHR", 0x900, 0x700, 0, name: "SeatActor", linked: 0x90a), Ref("ACHR", 0x90a, 0x701, 0, name: "OtherActor"),
+        byte[] Door(uint id, uint target)
+        {
+            var teleport = new byte[32]; BitConverter.GetBytes(target).CopyTo(teleport, 0);
+            return Record("REFR", id, Field("NAME", BitConverter.GetBytes(0x717u)),
+                Field("DATA", new byte[24]), Field("XTEL", teleport));
+        }
+        var body = Join(Door(0x90c, 0x90d), Door(0x90d, 0x90c), Ref("ACHR", 0x900, 0x700, 0, name: "SeatActor", linked: 0x90a), Ref("ACHR", 0x90a, 0x701, 0, name: "OtherActor"),
             Ref("REFR", 0x901, 0x710, 1), Ref("REFR", 0x902, 0x710, 5), Ref("REFR", 0x903, 0x710, 3, 0x700),
             Ref("REFR", 0x904, 0x710, 4, 0x701), Ref("REFR", 0x905, 0x3b, 0), Ref("REFR", 0x907, 0x710, 6),
             Ref("REFR", 0x908, 0x711, 1), Ref("REFR", 0x909, 0x710, 2, 0x730), Ref("REFR", 0x90b, 0x713, 1));

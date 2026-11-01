@@ -61,12 +61,16 @@ internal sealed partial class RuntimeNativeActorCombat
     internal bool Restrained => _state.Restrained;
     internal int? ScriptCombatProcedure => _state.Engagement is null ? null : _state.Engagement.Action == "flee" ? 16 : 13;
     internal int? ScriptCombatPackage => _state.Engagement is null ? null : _state.Engagement.Action == "flee" ? 10 : 5;
-    private bool PackageAllowsUnprovokedCombat(FalloutFormKey? attackedTarget = null) => _actor switch
+    private bool PackageAllowsUnprovokedCombat(FalloutFormKey? attackedTarget = null)
     {
-        RuntimeNativeCreature creature => creature.PackageAllowsUnprovokedCombat(attackedTarget),
-        RuntimeNativeNpc npc => npc.PackageAllowsUnprovokedCombat,
-        _ => true
-    };
+        RequireFollowCombatPolicy("combat eligibility");
+        return _actor switch
+        {
+            RuntimeNativeCreature creature => creature.PackageAllowsUnprovokedCombat(attackedTarget),
+            RuntimeNativeNpc npc => npc.PackageAllowsUnprovokedCombat(attackedTarget),
+            _ => true
+        };
+    }
     private object EngagementObservation => new
     {
         state = _state.Engagement,
@@ -85,6 +89,7 @@ internal sealed partial class RuntimeNativeActorCombat
         lastExplosion = _lastExplosion,
         error = _engagementError,
         assistanceError = _assistanceError,
+        followCombatError = FollowCombatError,
         acquisition = _lastAcquisition,
         warning = _state.AggroWarning,
         warningSounds = _warningSounds?.State,
@@ -107,6 +112,16 @@ internal sealed partial class RuntimeNativeActorCombat
     {
         if (!Dead && _hitKnockbackError is { } knockbackFailure)
             throw new NotSupportedException($"Living actor hit knockback continuation remains unowned: {knockbackFailure}");
+        // A hit can create an engagement before the next physics update. A
+        // capture must not publish unsupported combat merely because its policy
+        // boundary has not been reached by that update yet. This read does not
+        // select a target or mutate the capability latch.
+        if (!Dead && FollowCombatSource is { } follow &&
+            (follow.RequiresDefensiveCombatOwner && (_state.Engagement is not null || _state.AggroWarning is not null) ||
+             !follow.Accompany && (follow.Flags & 0x04000000) != 0 && _state.Engagement is not null))
+            throw new NotSupportedException($"Follow package {follow.Form} has an unowned combat-policy continuation.");
+        if (!Dead && FollowCombatError is { } followFailure)
+            throw new NotSupportedException($"Living actor Follow continuation remains unowned: {followFailure}");
         if (_state.Engagement is not { } state) return null;
         if (!Dead && (Error ?? _engagementError ?? _assistanceError) is { } failure)
             throw new NotSupportedException($"Living actor combat continuation remains unowned: {failure}");
@@ -161,7 +176,17 @@ internal sealed partial class RuntimeNativeActorCombat
         RuntimeNativePlayer? player, RuntimeNativeActorCombat? opponent, bool attacked, bool factionAssistance)
     {
         if (attacker == _state.Reference || Dead || !EffectiveEnabled || _state.Unconscious || _state.Restrained || _state.Engagement is not null ||
-            _engagementError is not null || !_context!.Resident(_actor.GlobalPosition)) return false;
+            _engagementError is not null || FollowCombatError is not null || !_context!.Resident(_actor.GlobalPosition)) return false;
+        if (HasUnboundFollowCombat)
+        {
+            // An actual notification is still not a nearby visible proposal.
+            // Do not refuse peaceful followers for every remote actor event.
+            var candidateRadius = ThreatRadius(CurrentThreat());
+            if (!float.IsFinite(candidateRadius) || candidateRadius <= 0 ||
+                _actor.GlobalPosition.DistanceTo(origin) > candidateRadius ||
+                !CanSeePoint(opponent?.BodyTargetPoint() ?? player!.CombatTargetPoint, opponent)) return false;
+            RequireFollowCombatPolicy("nearby visible assistance notification");
+        }
         var passiveCombat = PackageAllowsUnprovokedCombat();
         if (!PackageAllowsUnprovokedCombat(attacked ? victim.Reference : null)) return false;
         var defendingPackageTarget = attacked && !passiveCombat;
@@ -212,7 +237,7 @@ internal sealed partial class RuntimeNativeActorCombat
             }
         }
         if (Dead) { RestoreDeath(); return; }
-        if (_context is null || !EffectiveEnabled || _state.Unconscious) return;
+        if (_context is null || !EffectiveEnabled || _state.Unconscious || FollowCombatError is not null) return;
         RefreshProcessEquipment();
         var player = _context.Player();
         if (!_context.Resident(_actor.GlobalPosition)) return;
@@ -222,6 +247,7 @@ internal sealed partial class RuntimeNativeActorCombat
         {
             try
             {
+                RequireFollowCombatPolicy("hit-reaction combat continuation", continuation: true);
                 if (_actor is RuntimeNativeNpc npc) npc.RequireTravelCombatContinuation();
                 PrepareCombatPresentation();
             }
@@ -242,8 +268,8 @@ internal sealed partial class RuntimeNativeActorCombat
                 {
                     _detectionClock = .2; // broad-phase scheduling; source rules own eligibility
                     _threat = CurrentThreat();
-                    if (!PackageAllowsUnprovokedCombat() || _state.PlayerTeammate || _threat.Confidence == 0 ||
-                        _threat.Aggression == 0) ClearRadiusWarning();
+                    if (_state.PlayerTeammate || _threat.Confidence == 0 || _threat.Aggression == 0 ||
+                        !HasUnboundFollowCombat && !PackageAllowsUnprovokedCombat()) ClearRadiusWarning();
                     else TryAcquireThreat(player);
                 }
                 if (_state.Engagement is null)
@@ -256,6 +282,7 @@ internal sealed partial class RuntimeNativeActorCombat
             // The package's destination cannot be silently replaced by enemy
             // pursuit. Continue During Combat needs simultaneous route and
             // firing ownership; refuse that phase before either advances.
+            RequireFollowCombatPolicy("active combat continuation", continuation: true);
             _state.AggroWarning = null;
             if (_actor is RuntimeNativeNpc npc) npc.RequireTravelCombatContinuation();
             if (!ResolveTarget(player)) return;

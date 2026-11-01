@@ -159,6 +159,7 @@ public partial class RuntimeCoordinator
             cell = _nativeActiveCell?.Cell.FormKey.ToString(),
             exteriorLod = cellNodes.OfType<RuntimeNativeExteriorLod>().SingleOrDefault()?.State,
             exteriorGrass = !detailed ? null : cellNodes.OfType<RuntimeNativeGrassOwner>().SingleOrDefault()?.State,
+            imposters = _nativeReferencePresentation?.ImposterState,
             exteriorStreaming = CaptureNativeStreamingState(cellNodes),
             resourceCache = RuntimeLiveContentSource.Current?.CacheState,
             player = _nativePlayer is null ? null : new
@@ -276,6 +277,7 @@ public partial class RuntimeCoordinator
                     modifier.EngineDefault,
                 }).ToArray(),
                 unbound = presenter.Frame?.UnboundChannels,
+                lightingDiagnostics = detailed ? presenter.Effect.CaptureLightingDiagnostics() : null,
                 finalStageOperational = presenter.GetMeta("opennv_image_space_operational", false).AsBool(),
             }).ToArray(),
             actors = !detailed ? null : _nativeReferencePresentation?.Actors
@@ -676,6 +678,7 @@ public partial class RuntimeCoordinator
             _nativeReferences.TransientExplosions.Restore(restore.State.TransientExplosions);
             if (restore.State.References is { } savedReferences) _nativeReferences.Restore(savedReferences);
             else SetMeta("opennv_reference_state_divergence", "Legacy save has no reference-instance state.");
+            _nativeReferences.RestorePlayerRegions(restore.State.PlayerRegions, restore.State.ActiveCell);
             _nativeReferences.RestoreActorOverrides(restore.State.ActorOverrides);
             _nativeReferences.RestoreDetection(restore.State.DetectionEvents);
             _nativeReferences.RestoreFactionRelations(restore.State.FactionRelations);
@@ -746,13 +749,14 @@ public partial class RuntimeCoordinator
                 activeScene = grid.Scene;
             }
         }
+        using var regionEntry = _nativeReferences!.BeginRegionCellEntry(activeScene.Cell, position);
         activeScene = _nativeReferences!.ComposeResidency(activeScene, _configuration.World.GameUnitsToMeters, grid?.Cells);
         if (grid is not null) grid = grid with { Scene = activeScene };
         _nativeSkyLighting?.EnterCell(activeScene.Cell, _nativeGlobals, position);
         SetLoadingStatus("Loading the world");
         var root = sourceSide && _nativePrewarmedInitialCellRoot is not null
             ? _nativePrewarmedInitialCellRoot
-            : await BuildNativeCellRootResponsive(activeScene, transition, sourceSide);
+            : await BuildNativeCellRootResponsive(activeScene, transition, sourceSide, position);
         _nativePrewarmedInitialCellRoot = null;
         try
         {
@@ -791,6 +795,7 @@ public partial class RuntimeCoordinator
             await YieldNativeLoadingFrame();
             MeasureNativeLoadStep("player-and-state", () => AddNativePlayer(cell, startupPlacement));
             MeasureNativeLoadStep("activate-cell", () => SetNativeActiveCell(root, activeScene));
+            regionEntry.Commit();
             _nativeBootstrap?.AttachPlayerPackages(_nativeOpeningStageDriver!.AttachBootstrapPlayerPackage);
             if (startupPlacement is not null)
                 _nativeReferences.PlayerMoves.Complete(_nativeReferences.PlayerMoves.Next ??
@@ -807,9 +812,11 @@ public partial class RuntimeCoordinator
                 $"OPENNV_NATIVE_ACTIVE_CELL cell={activeScene.Cell.FormKey} " +
                 $"restored={(restore is not null)} sourceSide={sourceSide}");
         }
-        catch
+        catch (Exception error)
         {
-            if (GodotObject.IsInstanceValid(root) && root.GetParent() is null) root.Free();
+            if (GodotObject.IsInstanceValid(root) && root.GetParent() is null &&
+                DiscardNativeStagedSubtree(root) is { } retirementError)
+                throw new AggregateException("Initial CELL publication and staged actor retirement failed.", error, retirementError);
             throw;
         }
     }
@@ -841,31 +848,32 @@ public partial class RuntimeCoordinator
     private Node3D BuildNativeCellRoot(
         FalloutCellScene cell,
         FalloutDoorTransition? transition,
-        bool sourceSide)
+        bool sourceSide, float[]? playerSourcePosition = null)
     {
         var root = new Node3D { Name = $"NativeCell_{cell.Cell.FormKey}" };
         try
         {
-            PopulateNativeCellRoot(root, cell, transition, sourceSide);
+            PopulateNativeCellRoot(root, cell, transition, sourceSide, playerSourcePosition);
             return root;
         }
-        catch
+        catch (Exception error)
         {
-            root.Free();
+            if (DiscardNativeStagedSubtree(root) is { } retirementError)
+                throw new AggregateException("CELL construction and staged actor retirement failed.", error, retirementError);
             throw;
         }
     }
 
     private void PopulateNativeCellRoot(Node3D root, FalloutCellScene cell,
-        FalloutDoorTransition? transition, bool sourceSide)
+        FalloutDoorTransition? transition, bool sourceSide, float[]? playerSourcePosition)
     {
         BeginNativeCellRoot(cell);
         foreach (var reference in cell.References) PlaceNativeCellReference(root, cell, reference);
-        CompleteNativeCellRoot(root, cell);
+        CompleteNativeCellRoot(root, cell, playerSourcePosition);
     }
 
     private async Task<Node3D> BuildNativeCellRootResponsive(FalloutCellScene cell,
-        FalloutDoorTransition? transition, bool sourceSide)
+        FalloutDoorTransition? transition, bool sourceSide, float[]? playerSourcePosition = null)
     {
         _ = transition;
         _ = sourceSide;
@@ -916,7 +924,7 @@ public partial class RuntimeCoordinator
             }
             if (_nativeSessionTransitioning || _retiringNativeSession)
                 throw new OperationCanceledException("CELL construction session retired.");
-            CompleteNativeCellRoot(root, cell);
+            CompleteNativeCellRoot(root, cell, playerSourcePosition);
             GD.Print($"OPENNV_NATIVE_CELL_BUILD cell={cell.Cell.FormKey} references={cell.References.Count} " +
                 $"elapsedMs={total.Elapsed.TotalMilliseconds:F1} frameYields={yields} " +
                 $"assemblyWorkMs={budget.WorkMilliseconds:F1} assemblyWorkFrames={budget.WorkFrames} " +
@@ -925,9 +933,10 @@ public partial class RuntimeCoordinator
                 $"referenceTiming=wall-including-yields maxMainThreadStepMs={maximumStepMilliseconds:F1} maxStepReference={maximumStepReference}");
             return root;
         }
-        catch
+        catch (Exception error)
         {
-            root.Free();
+            if (DiscardNativeStagedSubtree(root) is { } retirementError)
+                throw new AggregateException("CELL construction and staged actor retirement failed.", error, retirementError);
             throw;
         }
     }
@@ -957,11 +966,12 @@ public partial class RuntimeCoordinator
         }
     }
 
-    private void CompleteNativeCellRoot(Node3D root, FalloutCellScene cell)
+    private void CompleteNativeCellRoot(Node3D root, FalloutCellScene cell, float[]? playerSourcePosition)
     {
         const string parityScope = "world/active-cell";
         var presentation = new RuntimeNativeReferencePresentation(_nativeReferences!, cell.References,
             reference => MaterializeNativeReference(root, cell, reference));
+        EnterNativeImposterCell(presentation, root, cell, playerSourcePosition);
         var identities = cell.References.ToDictionary(reference => reference.FormKey.ToString(), reference => reference.FormKey);
         foreach (var node in root.GetChildren().OfType<Node3D>())
         {
@@ -970,6 +980,7 @@ public partial class RuntimeCoordinator
             if (key is { } found) presentation.Register(found, node);
         }
         root.AddChild(presentation);
+        presentation.PublishImposterRegions();
         var coverage = _parityObservations.Snapshot();
         var missing = coverage.Missing.Count(identity =>
             identity.StartsWith(parityScope + "/", StringComparison.Ordinal));
@@ -1061,6 +1072,7 @@ public partial class RuntimeCoordinator
                         return _nativePlayer?.Camera.GlobalPosition;
                     return (_nativeReferencePresentation?.Nodes.GetValueOrDefault(target) as RuntimeNativeNpc)?.HeadTargetPoint;
                 });
+                actor.ResolvePackageTarget = target => _nativeReferencePresentation?.Nodes.GetValueOrDefault(target);
                 actor.ResolveDialogueTarget = target => _nativePluginStack!.RuntimeFormId(target) == 0x14 ?
                     _nativePlayer : _nativeReferencePresentation?.Nodes.GetValueOrDefault(target);
                 actor.BeginPackageDialogue = (package, completed) => (_nativeOpeningStageDriver ??
@@ -1333,10 +1345,12 @@ public partial class RuntimeCoordinator
         Node3D? targetRoot = null;
         var previousPresentation = _nativeReferencePresentation!;
         IReadOnlyList<(FalloutFormKey Reference, Transform3D Pose, Vector3 Velocity)> retiredActors = [];
+        FalloutReferenceWorld.RegionCellEntry? regionEntry = null;
         (CollisionObject3D Body, CollisionObject3D.DisableModeEnum Mode)[] arrivalCollision = [];
         try
         {
             await ShowNativeLoadingScreens(targetScene.Cell.FormKey);
+            regionEntry = _nativeReferences!.BeginRegionCellEntry(targetScene.Cell, entry.Position);
             targetScene = _nativeReferences!.ComposeResidency(targetScene, _configuration.World.GameUnitsToMeters, grid?.Cells);
             if (grid is not null) grid = grid with { Scene = targetScene };
             sky.EnterCell(targetScene.Cell, _nativeGlobals, entry.Position);
@@ -1346,7 +1360,7 @@ public partial class RuntimeCoordinator
             current.ProcessMode = ProcessModeEnum.Disabled;
             scripts.ProcessMode = ProcessModeEnum.Disabled;
             previousPresentation.RetireOverlappingActors(targetScene.References, out retiredActors);
-            targetRoot = await BuildNativeCellRootResponsive(targetScene, null, sourceSide: false);
+            targetRoot = await BuildNativeCellRootResponsive(targetScene, null, sourceSide: false, entry.Position);
             targetRoot.ProcessMode = ProcessModeEnum.Disabled;
             if (grid is not null) await AddExteriorLandscapeResponsive(targetRoot, grid);
             AddChild(targetRoot);
@@ -1362,30 +1376,39 @@ public partial class RuntimeCoordinator
                 await targetRoot.GetChildren().OfType<RuntimeNativeExteriorLod>().Single().PrepareInitialSelection(arrival.Origin);
             }
             CommitNativeWorldTransfer(current, active, targetRoot, targetScene, arrival);
+            regionEntry.Commit();
             // Persistent exterior doors can be authored in a different CELL
             // from the grid selected by their XTEL arrival coordinates.
             _botInteractions.CommitPortal(reference.FormKey.ToString(), portalRequest, targetScene.Cell.FormKey.ToString());
         }
         catch (Exception error) when (targetRoot is not null && ReferenceEquals(_nativeCurrentCellRoot, targetRoot))
         {
+            regionEntry?.Commit();
             _nativeOpeningStageDriver!.RetainDriverFailure(error);
             foreach (var (body, mode) in arrivalCollision) body.DisableMode = mode;
             GetTree().Paused = true;
             throw;
         }
-        catch
+        catch (Exception error)
         {
-            targetRoot?.Free();
+            regionEntry?.Dispose();
+            var retirementError = DiscardNativeStagedSubtree(targetRoot);
             sky.Restore(previousSky);
+            // The staged destination changed shared material uniforms. Restore
+            // their surviving owner even when source values have not changed.
+            current.GetChildren().OfType<RuntimeNativeCellLighting>().SingleOrDefault()?.Publish();
+            current.GetChildren().OfType<RuntimeNativeExteriorEnvironment>().SingleOrDefault()?.Republish();
             RollbackFollowerTransfer(followers);
             previousPresentation.RestoreRetiredActors(retiredActors);
             current.GetChildren().OfType<RuntimeNativeReferenceEvents>().Single().SetResidency(active, current);
             current.ProcessMode = previousMode;
             DiscoverNativeCellReferences(active);
             ObserveNativeResidentReferences(active);
+            if (retirementError is not null)
+                throw new AggregateException("Door transfer and staged actor retirement failed after rollback.", error, retirementError);
             throw;
         }
-        finally { scripts.ProcessMode = previousScriptMode; CloseNativeLoadingScreens(); }
+        finally { regionEntry?.Dispose(); scripts.ProcessMode = previousScriptMode; CloseNativeLoadingScreens(); }
         foreach (var (body, mode) in arrivalCollision) body.DisableMode = mode;
         // The destination's actors have only just entered the tree. Use the
         // shared autosave owner so their first updates can publish capturable
@@ -1403,6 +1426,7 @@ public partial class RuntimeCoordinator
         RequireNativeActorPublication(root);
         ArgumentNullException.ThrowIfNull(root);
         ArgumentNullException.ThrowIfNull(cell);
+        var residentCells = cell.Cell.Worldspace is null ? Array.Empty<FalloutCellDefinition>() : NativeExteriorCells(root);
         if (_nativeReferences is { } references)
         {
             if (_nativeActiveCell?.Cell.FormKey != cell.Cell.FormKey) _nativeReferenceEvents?.SetProcess(false);
@@ -1413,7 +1437,7 @@ public partial class RuntimeCoordinator
         _nativeCurrentCellRoot = root;
         _nativeActiveCell = cell;
         _nativeWalkableGrid.Clear();
-        foreach (var land in root.GetChildren().OfType<RuntimeNativeLandscapeTransport>()) _nativeWalkableGrid.Add(land.Source.ActiveCoordinates);
+        foreach (var resident in residentCells) _nativeWalkableGrid.Add(resident.Coordinates!.Value);
         BindNativeReferenceEvents(root, cell);
     }
 
@@ -1607,14 +1631,15 @@ public partial class RuntimeCoordinator
     }
 
     private Compositor? AddNativeImageSpace(Node3D root, FalloutImageSpace? imageSpace,
-        Func<IReadOnlyList<FalloutWeatherImageModifier>>? weather = null, Action<float>? sunlightDimmer = null)
+        Func<IReadOnlyList<FalloutWeatherImageModifier>>? weather = null, Action<float>? sunlightDimmer = null,
+        Action<float>? skyScale = null)
     {
         if (imageSpace is null) return null;
         var application = RetailImageSpaceRenderer.CreateFromSource(imageSpace,
             _configuration.FalloutEnvironment.ImageSpace, _configuration.Capture,
             _configuration.ActorCompiler.FaceGenMaterial.RuntimeAlbedoTransfer);
         var presenter = new RuntimeNativeImageSpace();
-        presenter.Configure(imageSpace, _nativeImageSpaceState, application.Effect, _nativeGameTime, weather, sunlightDimmer);
+        presenter.Configure(imageSpace, _nativeImageSpaceState, application.Effect, _nativeGameTime, weather, sunlightDimmer, skyScale);
         root.AddChild(presenter);
         root.SetMeta("opennv_source_image_space", imageSpace.Form.ToString());
         root.SetMeta("opennv_source_image_space_version", imageSpace.FormVersion);

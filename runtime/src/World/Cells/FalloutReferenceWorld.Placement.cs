@@ -96,6 +96,7 @@ internal sealed partial class FalloutReferenceWorld
         var relocated = stopped?.Relocate(next);
         // All admission and copies precede the authoritative placement commit.
         instance.Placement = next;
+        instance.RegionCellAttached = false;
         instance.SandboxAdmissionFailure = relocated;
         instance.PackageMotion = null;
         instance.Engagement = null;
@@ -140,11 +141,13 @@ internal sealed partial class FalloutReferenceWorld
         if (!float.IsFinite(unitsToMetres) || unitsToMetres <= 0)
             throw new ArgumentOutOfRangeException(nameof(unitsToMetres));
         var coordinates = exteriorCells?.Select(cell => cell.Coordinates!.Value).ToHashSet();
-        bool Resident(FalloutReferencePlacement placement)
+        bool Resident(FalloutReferencePlacement placement, bool regionAttached)
         {
             var cell = FalloutCellSceneReader.ReadDefinition(records, placement.Cell);
             if (scene.Cell.Worldspace is null) return placement.Cell == scene.Cell.FormKey;
             if (cell.Worldspace != scene.Cell.Worldspace) return false;
+            if (regionAttached)
+                return exteriorCells?.Any(value => value.FormKey == placement.Cell) ?? placement.Cell == scene.Cell.FormKey;
             var coordinate = ((int)MathF.Floor(placement.Position[0] / 4096), (int)MathF.Floor(placement.Position[1] / 4096));
             return coordinates?.Contains(coordinate) ?? coordinate == scene.Cell.Coordinates;
         }
@@ -158,7 +161,7 @@ internal sealed partial class FalloutReferenceWorld
             var placement = instance.PackageMotion is not null || instance.Engagement is not null
                 ? SpatialPlacement(instance.Reference, null, unitsToMetres, requireFacing: true)
                 : Placement(instance.Reference);
-            if (!Resident(placement)) { references.Remove(instance.Reference); continue; }
+            if (!Resident(placement, instance.RegionCellAttached)) { references.Remove(instance.Reference); continue; }
             var source = PlacementSource(instance);
             var reference = source.References.Single(value => value.FormKey == instance.Reference);
             references[instance.Reference] = reference with

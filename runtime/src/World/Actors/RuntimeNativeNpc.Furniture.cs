@@ -158,6 +158,12 @@ internal partial class RuntimeNativeNpc
             // Sandman assassination or a Cannibal corpse action. Those other
             // action contexts still require their own gameplay executor.
             226 or 227 => 0,
+            // The accepted Sandbox already owns its actual data phase during
+            // entry preflight/approach. Use that existing public query owner;
+            // the requested sitting pose does not invent another procedure.
+            143 when sitting == 2 && condition.RunOn == 0 && condition.Argument1 == 0 && condition.Argument2 == 0 &&
+                _sandboxPackage is not null && _furnitureSandboxActivity &&
+                Combat?.CurrentSandboxActivity is { } activity && activity.Target == _reservedFurniture => CurrentSandboxAiProcedure,
             143 when sitting == 2 => throw new NotSupportedException("Furniture entry condition needs its native script-visible procedure code."),
             _ => EvaluateAiCondition(condition),
         });

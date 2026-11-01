@@ -10,7 +10,10 @@ internal partial class RuntimeNativeNpc
     private FalloutWanderProgress? _sandboxWander;
     private (FalloutPluginRecord Package, bool Initializing)? _pendingCurrentLocationSandbox;
 
-    internal bool PackageAllowsUnprovokedCombat => _sandboxPackage?.DefensiveCombat != true;
+    internal FalloutFollowPackage? FollowCombatSource => _followPackage;
+
+    internal bool PackageAllowsUnprovokedCombat(FalloutFormKey? attackedTarget) =>
+        _sandboxPackage?.DefensiveCombat != true && _followPackage?.AllowsUnprovokedCombat(attackedTarget) != false;
 
     private void BeginSandbox(FalloutPluginRecord package, bool initializing)
     {

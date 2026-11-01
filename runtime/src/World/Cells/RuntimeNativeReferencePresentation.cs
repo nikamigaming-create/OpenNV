@@ -248,6 +248,7 @@ internal partial class RuntimeNativeReferencePresentation : Node
         if (node.GetChildren().OfType<RuntimeNativeDestructible>().SingleOrDefault() is { } destruction)
             destruction.ModelChanged = () => RefreshGeometry(key, node);
         GamebryoReferenceEnableRuntime.Apply(node, _world.IsEnabled(key));
+        ApplyImposterVisibility(key, node);
         PublishOpacity(key);
     }
 
@@ -344,7 +345,11 @@ internal partial class RuntimeNativeReferencePresentation : Node
                 if (!enabled) { _enabled[reference.FormKey] = false; continue; }
                 node = Resolve(reference.FormKey);
             }
-            if (node is not null) GamebryoReferenceEnableRuntime.Apply(node, enabled);
+            if (node is not null)
+            {
+                GamebryoReferenceEnableRuntime.Apply(node, enabled);
+                ApplyImposterVisibility(reference.FormKey, node);
+            }
             _enabled[reference.FormKey] = enabled;
             PublishOpacity(reference.FormKey);
         }

@@ -24,6 +24,7 @@ internal partial class RuntimeNativeExteriorEnvironment : Node
     private Vector3 _ambient, _fog, _range;
     private bool _lightingBound;
     private float? _sunlightDimmer;
+    private float? _skyScale;
     private float _shadowDistance = 100;
     internal Compositor? Compositor { get; set; }
     internal FalloutImageSpace? ImageSpace { get; set; }
@@ -56,6 +57,15 @@ internal partial class RuntimeNativeExteriorEnvironment : Node
             throw new NotSupportedException("Exterior sunlight requires a finite nonnegative composed source dimmer.");
         _sunlightDimmer = value;
         if (_sun is not null && IsInstanceValid(_sun)) _sun.LightEnergy = value;
+    }
+
+    internal void BindSkyScale(float value)
+    {
+        if (!float.IsFinite(value) || value < 0)
+            throw new NotSupportedException("Exterior sky requires a finite nonnegative composed source scale.");
+        if (_skyScale == value) return;
+        _skyScale = value;
+        if (_layers is not null) _layers.BindScale(value);
     }
 
     internal void Register(Node root)
@@ -115,14 +125,16 @@ internal partial class RuntimeNativeExteriorEnvironment : Node
         if (Math.Abs(_hour() - _lastHour) > 1f / 3600) Sample();
     }
 
-    private void Sample()
+    internal void Republish() => Sample(force: true);
+
+    private void Sample(bool force = false)
     {
         var hour = _lastHour = _hour();
         var weather = _sky.ActiveWeather;
         var weights = FalloutWeatherTimeWeights.Sample(_sky.Climate, hour, _sky.DaytimeExtension, weather.TimeSamples);
         Color ColorAt(int kind) { var rgb = weather.Sample(weights, kind); return new(rgb[0], rgb[1], rgb[2]); }
         var ambient = ColorAt(3); var fog = ColorAt(1);
-        _layers.Sample(_records, weather, weights, ImageSpace?.RawTraits[8] ?? 1f);
+        _layers.Sample(_records, weather, weights, _skyScale ?? ImageSpace?.RawTraits[8] ?? 1f);
         var ray = _sunSource.RayDirection(_sky.Climate, hour);
         var direction = -GamebryoCoordinate.ConvertVector(new Vector3(ray.X, ray.Y, ray.Z));
         _sun.Basis = RetailLighting.DirectionalLightBasis(direction);
@@ -149,7 +161,7 @@ internal partial class RuntimeNativeExteriorEnvironment : Node
         var nextAmbient = new Vector3(ambient.R, ambient.G, ambient.B);
         var nextFog = new Vector3(fog.R, fog.G, fog.B);
         var nextRange = new Vector3(near, far, power);
-        if (!_lightingBound || _ambient != nextAmbient || _fog != nextFog || _range != nextRange)
+        if (force || !_lightingBound || _ambient != nextAmbient || _fog != nextFog || _range != nextRange)
         {
             _ambient = nextAmbient; _fog = nextFog; _range = nextRange; _lightingBound = true;
             NativeNifMaterialEnvironment.PublishExterior(_ambient, _fog, _range, _units);

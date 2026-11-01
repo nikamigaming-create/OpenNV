@@ -2,6 +2,7 @@ using System.Buffers;
 using System.Buffers.Binary;
 using System.Collections.ObjectModel;
 using System.IO.Compression;
+using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Win32.SafeHandles;
 
@@ -99,6 +100,8 @@ internal sealed class FalloutPluginRecord
         ReadObserver?.Invoke(this, data);
         return data;
     }
+
+    internal string ReadDataHash() => _plugin.ReadRecordDataHash(this);
 
     private byte[] ReadDataCore()
         => _plugin.ReadRecordData(this);
@@ -299,6 +302,7 @@ internal sealed class FalloutPlugin : IDisposable
     private readonly object _recordDataGate = new();
     private readonly Dictionary<FalloutPluginRecord, LinkedListNode<(FalloutPluginRecord Record, byte[] Data)>> _recordData = [];
     private readonly LinkedList<(FalloutPluginRecord Record, byte[] Data)> _recordDataLru = [];
+    private readonly Dictionary<FalloutPluginRecord, string> _recordDataHashes = [];
     private long _recordDataBytes, _recordDataDecodes;
     private ReadOnlyCollection<string> _masters;
     private ReadOnlyCollection<string> _namespaces;
@@ -492,38 +496,67 @@ internal sealed class FalloutPlugin : IDisposable
     internal byte[] ReadRecordData(FalloutPluginRecord record)
     {
         byte[] data;
+        lock (_recordDataGate) data = ReadRecordDataLocked(record);
+        // Returned payloads and observer inputs remain independently mutable.
+        return data.ToArray();
+    }
+
+    internal string ReadRecordDataHash(FalloutPluginRecord record)
+    {
+        byte[] observed;
+        Action<FalloutPluginRecord, ReadOnlyMemory<byte>>? observer;
         lock (_recordDataGate)
         {
-            // Cache lifetime is the open source handle, including cache hits.
-            // Serialize misses with retirement and other reads of this plugin.
-            EnsureUnchanged();
-            if (_recordData.TryGetValue(record, out var cached))
+            var data = ReadRecordDataLocked(record);
+            observer = FalloutPluginRecord.ReadObserver;
+            if (observer is null)
             {
-                _recordDataLru.Remove(cached);
-                _recordDataLru.AddLast(cached);
-                data = cached.Value.Data;
-            }
-            else
-            {
-                data = record.ReadUncachedData();
-                _recordDataDecodes++;
-                if (data.Length <= RecordCacheBudgetBytes)
+                if (!_recordDataHashes.TryGetValue(record, out var hash))
                 {
-                    while ((_recordDataBytes + data.Length > RecordCacheBudgetBytes ||
-                            _recordData.Count >= RecordCacheCapacity) && _recordDataLru.First is { } oldest)
-                    {
-                        _recordData.Remove(oldest.Value.Record);
-                        _recordDataBytes -= oldest.Value.Data.Length;
-                        _recordDataLru.RemoveFirst();
-                    }
-                    _recordData.Add(record, _recordDataLru.AddLast((record, data)));
-                    _recordDataBytes += data.Length;
+                    hash = Convert.ToHexString(SHA256.HashData(data));
+                    if (_recordData.ContainsKey(record)) _recordDataHashes.Add(record, hash);
                 }
+                return hash;
+            }
+            // Observers can intentionally mutate their private input or throw.
+            // Preserve both effects without contaminating the canonical digest.
+            observed = data.ToArray();
+        }
+        observer(record, observed);
+        return Convert.ToHexString(SHA256.HashData(observed));
+    }
+
+    private byte[] ReadRecordDataLocked(FalloutPluginRecord record)
+    {
+        byte[] data;
+        // Cache lifetime is the open source handle, including cache hits.
+        // Serialize misses with retirement and other reads of this plugin.
+        EnsureUnchanged();
+        if (_recordData.TryGetValue(record, out var cached))
+        {
+            _recordDataLru.Remove(cached);
+            _recordDataLru.AddLast(cached);
+            data = cached.Value.Data;
+        }
+        else
+        {
+            data = record.ReadUncachedData();
+            _recordDataDecodes++;
+            if (data.Length <= RecordCacheBudgetBytes)
+            {
+                while ((_recordDataBytes + data.Length > RecordCacheBudgetBytes ||
+                        _recordData.Count >= RecordCacheCapacity) && _recordDataLru.First is { } oldest)
+                {
+                    _recordData.Remove(oldest.Value.Record);
+                    _recordDataHashes.Remove(oldest.Value.Record);
+                    _recordDataBytes -= oldest.Value.Data.Length;
+                    _recordDataLru.RemoveFirst();
+                }
+                _recordData.Add(record, _recordDataLru.AddLast((record, data)));
+                _recordDataBytes += data.Length;
             }
         }
-        // ReadData, observation callbacks and subrecords previously owned a
-        // fresh buffer. Never expose the canonical cached bytes to mutation.
-        return data.ToArray();
+        return data;
     }
 
     public void Dispose()
@@ -531,6 +564,7 @@ internal sealed class FalloutPlugin : IDisposable
         lock (_recordDataGate)
         {
             _recordData.Clear();
+            _recordDataHashes.Clear();
             _recordDataLru.Clear();
             _recordDataBytes = 0;
             _handle.Dispose();

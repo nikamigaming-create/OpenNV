@@ -1,10 +1,12 @@
+using System.Globalization;
+using System.Xml.Linq;
 using Godot;
 using OpenNV.Runtime.Content;
+using OpenNV.Runtime.Content.Definitions;
 using OpenNV.Runtime.Gameplay.State;
 
 namespace OpenNV.Runtime.Presentation.Ui;
 
-/// <summary>Source-category recipe choices over the shared player inventory.</summary>
 internal sealed partial class NativeOwnedRecipeMenu : Control
 {
     private readonly FalloutPluginStack _records;
@@ -12,273 +14,268 @@ internal sealed partial class NativeOwnedRecipeMenu : Control
     private readonly IReadOnlyList<FalloutRecipe> _recipes;
     private readonly Func<FalloutCondition, float> _evaluateCondition;
     private readonly Func<int, float> _skillValue;
-    private readonly Action<FalloutRecipe> _craft;
+    private readonly Action<FalloutRecipe, int, long> _craft;
     private readonly Action _close;
     private readonly FalloutRecipeCategory _category;
-    private readonly VBoxContainer _rows;
-    private readonly HFlowContainer _subcategories;
-    private readonly Label _details, _message;
-    private readonly Button _craftButton;
-    private readonly List<Button> _recipeButtons = [];
+    private readonly NativeOwnedMenuTree _tiles;
+    private readonly XElement _template, _recipeList, _componentList, _title, _accept, _icon, _data;
+    private readonly List<(XElement Tile, NativeOwnedTileTarget Control)> _actions = [];
+    private readonly FalloutMenuPcButtonBindings<Key> _shortcuts;
+    private readonly Dictionary<XElement, Action> _actionOwners = [];
+    private readonly IReadOnlyList<FalloutRecipeCategory> _filters;
+    private readonly IReadOnlyDictionary<int, string> _skillNames;
+    private NativeViewportLayout? _viewportLayout;
+    private NativeOwnedQuantityMenu? _quantity;
     private FalloutRecipe? _selected;
-    private FalloutFormKey? _subcategory;
-    private bool _allSubcategories = true, _closed;
+    private int _filter = -1, _displayedMaximum;
+    private long _revision = -1;
+    private bool _closed, _building;
+    internal bool QuantityOpen => _quantity is not null;
+    internal string? Error { get; private set; }
+    internal string? ActionError { get; private set; }
+    internal object State => new
+    {
+        source = "menus/recipe_menu.xml",
+        selected = _selected?.Record.FormKey.ToString(),
+        category = _category.Form.ToString(),
+        filter = _filter < 0 ? null : _filters[_filter].Form.ToString(),
+        maximum = _displayedMaximum,
+        inventoryRevision = _revision,
+        observation = "last-source-UI-binding",
+        quantity = _quantity?.Quantity,
+        quantityError = _quantity?.Error,
+        error = Error,
+        actionError = ActionError,
+        unbound = "item-stat-publication;non-C-name-collation;native-sort-ties;controller-and-XR-input;focus-sounds;menu-fades;matched-pixels"
+    };
 
     internal NativeOwnedRecipeMenu(FalloutPluginStack records, FalloutPlayerInventory inventory,
         FalloutRecipeCategory category, IReadOnlyList<FalloutRecipe> recipes,
         Func<FalloutCondition, float> evaluateCondition, Func<int, float> skillValue,
-        Action<FalloutRecipe> craft, Action close)
+        Action<FalloutRecipe, int, long> craft, Action close)
     {
-        Name = "OwnedRecipeMenu";
-        ProcessMode = ProcessModeEnum.Always;
-        MouseFilter = MouseFilterEnum.Stop;
+        Name = "OwnedRecipeMenu"; ProcessMode = ProcessModeEnum.Always; MouseFilter = MouseFilterEnum.Stop;
         _records = records; _inventory = inventory; _category = category; _recipes = recipes;
         _evaluateCondition = evaluateCondition; _skillValue = skillValue; _craft = craft; _close = close;
-        SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
-        AddChild(new ColorRect
+        var source = FalloutMenuXml.Expand(FalloutMenuXml.Read("menus/recipe_menu.xml")).Elements("menu").Single();
+        _tiles = new(source, name => FalloutGameSettingStrings.Read(records, name));
+        XElement Named(string name, string? kind = null) => source.DescendantsAndSelf().Single(tile =>
+            (string?)tile.Attribute("name") == name && (kind is null || tile.Name == kind));
+        _template = new(Named("RM_list_template").Elements().Single());
+        _recipeList = Named("RM_Items_InventoryList"); _componentList = Named("RM_Items_IngredientList", "hotrect");
+        _title = Named("RM_ItemsTitle"); _accept = Named("RM_ButtonX"); _icon = Named("RM_ItemIcon"); _data = Named("RM_ItemData");
+        _filters = recipes.Where(recipe => recipe.Subcategory is not null).Select(recipe => recipe.Subcategory!.Value)
+            .Distinct().Select(form => FalloutRecipeCategory.Read(records, form)).OrderBy(value => value.Name, StringComparer.Ordinal).ToArray();
+        _skillNames = FalloutNativeTagSkillResolver.ResolveSkills(records).ToDictionary(skill =>
+            (int)FalloutActorValueNames.Parse(FalloutNativeTagSkillResolver.ActorValueName(records, skill)), skill => skill.DisplayName);
+        _tiles.Bind(source, "_IsContainerListSelected", 0);
+        _tiles.Bind(_data, "visible", 0); // The separate generic native stat formatter remains unbound.
+        _tiles.Bind(_icon, "visible", 0);
+        foreach (var (tile, action) in new[]
         {
-            Name = "Backdrop",
-            Color = new(0.015f, 0.02f, 0.03f, 0.88f),
-            MouseFilter = MouseFilterEnum.Stop,
-            AnchorRight = 1,
-            AnchorBottom = 1
+            (Named("RM_Items_LeftFilterArrow"), (Action)(() => Filter(-1))),
+            (Named("RM_Items_RightFilterArrow"), (Action)(() => Filter(1))),
+            (_accept, (Action)Accept), (Named("RM_ButtonB"), (Action)Close)
+        }) AddAction(tile, action);
+        _shortcuts = NativeMenuPcButtons.Bind(source, declaration =>
+        {
+            return declaration.Target is { } tile && _actionOwners.TryGetValue(tile, out var action) ? action :
+                () => throw new NotSupportedException("Recipe shortcut has no source target owner.");
         });
-        var center = new CenterContainer { Name = "Center" };
-        center.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
-        AddChild(center);
-        var panel = new PanelContainer { Name = "RecipePanel", CustomMinimumSize = new(900, 700) };
-        panel.AddThemeStyleboxOverride("panel", new StyleBoxFlat
-        {
-            BgColor = new(0.035f, 0.045f, 0.055f, 0.98f),
-            BorderColor = new(0.64f, 0.74f, 0.54f),
-            BorderWidthLeft = 2,
-            BorderWidthTop = 2,
-            BorderWidthRight = 2,
-            BorderWidthBottom = 2,
-            ContentMarginLeft = 24,
-            ContentMarginTop = 20,
-            ContentMarginRight = 24,
-            ContentMarginBottom = 20
-        });
-        center.AddChild(panel);
-        var column = new VBoxContainer { Name = "RecipeColumn", SizeFlagsHorizontal = SizeFlags.ExpandFill };
-        column.AddThemeConstantOverride("separation", 12);
-        panel.AddChild(column);
-        var title = new Label
-        {
-            Name = "RecipeTitle",
-            Text = category.Name,
-            HorizontalAlignment = HorizontalAlignment.Center
-        };
-        title.AddThemeFontSizeOverride("font_size", 28);
-        column.AddChild(title);
-        _subcategories = new() { Name = "RecipeSubcategories", SizeFlagsHorizontal = SizeFlags.ExpandFill };
-        column.AddChild(_subcategories);
-        var body = new HBoxContainer { Name = "RecipeBody", SizeFlagsVertical = SizeFlags.ExpandFill };
-        body.AddThemeConstantOverride("separation", 16);
-        column.AddChild(body);
-        var listPanel = new PanelContainer { CustomMinimumSize = new(450, 0), SizeFlagsVertical = SizeFlags.ExpandFill };
-        body.AddChild(listPanel);
-        var scroll = new ScrollContainer { Name = "RecipeScroll", SizeFlagsHorizontal = SizeFlags.ExpandFill, SizeFlagsVertical = SizeFlags.ExpandFill };
-        listPanel.AddChild(scroll);
-        _rows = new VBoxContainer { Name = "RecipeRows", SizeFlagsHorizontal = SizeFlags.ExpandFill };
-        _rows.AddThemeConstantOverride("separation", 4);
-        scroll.AddChild(_rows);
-        var detailPanel = new PanelContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill, SizeFlagsVertical = SizeFlags.ExpandFill };
-        body.AddChild(detailPanel);
-        var detailColumn = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
-        detailColumn.AddThemeConstantOverride("separation", 12);
-        detailPanel.AddChild(detailColumn);
-        _details = new Label { Name = "RecipeDetails", AutowrapMode = TextServer.AutowrapMode.WordSmart, SizeFlagsVertical = SizeFlags.ExpandFill };
-        detailColumn.AddChild(_details);
-        _message = new Label { Name = "RecipeMessage", AutowrapMode = TextServer.AutowrapMode.WordSmart };
-        detailColumn.AddChild(_message);
-        _craftButton = new Button { Name = "CraftSelected", Text = "Craft", CustomMinimumSize = new(0, 48), FocusMode = FocusModeEnum.All };
-        _craftButton.Pressed += CraftSelected;
-        detailColumn.AddChild(_craftButton);
-        var closeButton = new Button { Name = "CloseRecipeMenu", Text = "Close", CustomMinimumSize = new(0, 42), FocusMode = FocusModeEnum.All };
-        closeButton.Pressed += Close;
-        column.AddChild(closeButton);
-        BuildSubcategoryFilters();
-        Refresh();
-        SetMeta("opennv_ui_source", "RCPE-and-RCCT; shared-native-recipe-menu");
-        SetMeta("opennv_ui_unverified", "matched-menu-pixels,retail-input-timing,physical-headset-acceptance");
+        source.Elements("template").Remove();
+        InitializeList(_recipeList); InitializeList(_componentList);
+        SetMeta("opennv_menu_id", 1077); SetMeta("opennv_ui_source", "menus/recipe_menu.xml;RM_list_template;RCPE/RCCT;source-PC-shortcuts");
+        try { Refresh(); } catch { Free(); throw; }
     }
 
-    private void BuildSubcategoryFilters()
+    private (bool Visible, int Maximum, string? Failure) Available(FalloutRecipe recipe)
     {
-        AddFilter("All", null, all: true);
-        foreach (var form in _recipes.Select(recipe => recipe.Subcategory).Where(form => form is not null)
-                     .Select(form => form!.Value).Distinct())
+        try
         {
-            var category = FalloutRecipeCategory.Read(_records, form);
-            if (!category.IsSubcategory) throw new InvalidDataException($"Recipe subcategory {form} is marked as a category.");
-            AddFilter(category.Name, form, all: false);
+            if (!FalloutCondition.AllPass(recipe.Conditions, _evaluateCondition, evaluateRunOn: true)) return (false, 0, null);
+            if (recipe.RequiredSkill != -1 && _skillValue(recipe.RequiredSkill) < recipe.RequiredLevel) return (true, 0, null);
+            return (true, _inventory.MaximumCraftCount(recipe), null);
         }
-        if (_recipes.Any(recipe => recipe.Subcategory is null)) AddFilter("Other", null, all: false);
-    }
-
-    private void AddFilter(string label, FalloutFormKey? form, bool all)
-    {
-        var button = new Button { Text = label, FocusMode = FocusModeEnum.All };
-        button.Pressed += () =>
-        {
-            _subcategory = form; _allSubcategories = all; _selected = null; _message.Text = ""; Refresh();
-        };
-        _subcategories.AddChild(button);
+        catch (Exception error) { return (true, 0, error.Message); }
     }
 
     private void Refresh()
     {
-        foreach (var child in _rows.GetChildren()) { _rows.RemoveChild(child); child.QueueFree(); }
-        _recipeButtons.Clear();
-        var filtered = _recipes.Where(recipe => _allSubcategories || recipe.Subcategory == _subcategory).ToArray();
-        var visible = filtered.Select(recipe => (Recipe: recipe, Availability: Availability(recipe)))
-            .Where(value => value.Availability.Visible).ToArray();
-        if (_selected is null || !visible.Any(value => value.Recipe.Record.FormKey == _selected.Record.FormKey))
-            _selected = visible.Select(value => (FalloutRecipe?)value.Recipe).FirstOrDefault();
-        foreach (var item in visible)
-        {
-            var recipe = item.Recipe;
-            var status = item.Availability.CanCraft ? "" : "  —  " + item.Availability.Status;
-            var button = new Button
-            {
-                Name = "Recipe_" + recipe.Record.FormKey,
-                Text = recipe.Name + status,
-                TextOverrunBehavior = TextServer.OverrunBehavior.TrimEllipsis,
-                Alignment = HorizontalAlignment.Left,
-                FocusMode = FocusModeEnum.All,
-                SizeFlagsHorizontal = SizeFlags.ExpandFill
-            };
-            button.Pressed += () => Select(recipe);
-            _rows.AddChild(button); _recipeButtons.Add(button);
-        }
-        if (visible.Length == 0)
-        {
-            _rows.AddChild(new Label { Text = filtered.Length == 0 ? "No recipes in this category." : "No recipes meet their visibility requirements." });
-            _selected = null;
-        }
-        else if (_selected is { } selected) Select(selected);
-        else ShowSelected();
-    }
-
-    private (bool Visible, bool CanCraft, string Status) Availability(FalloutRecipe recipe)
-    {
+        if (_building || _closed) return;
+        _building = true; _pendingFocus = null;
         try
         {
-            if (!FalloutCondition.AllPass(recipe.Conditions, _evaluateCondition, evaluateRunOn: true))
-                return (false, false, "requirements not met");
+            var available = _recipes.Where(recipe => _filter < 0 || recipe.Subcategory == _filters[_filter].Form)
+                .Select(recipe => (Recipe: recipe, Admission: Available(recipe))).Where(value => value.Admission.Visible)
+                .OrderBy(value => value.Admission.Maximum > 0 ? 0 : 1)
+                .ThenBy(value => value.Recipe.Name, StringComparer.Ordinal).ToArray();
+            if (_selected is null || !available.Any(value => value.Recipe.Record.FormKey == _selected.Record.FormKey))
+                _selected = available.FirstOrDefault().Recipe;
+            SetRows(_recipeList, available.Select(value => new SourceRow(
+                value.Recipe.Outputs[0].Count > 1 ? value.Recipe.Name + " (" + value.Recipe.Outputs[0].Count.ToString(CultureInfo.InvariantCulture) + ")" : value.Recipe.Name,
+                value.Admission.Maximum > 0 ? 255 : 127,
+                () => Select(value.Recipe), () => { Select(value.Recipe); Accept(); }, value.Recipe.Record.FormKey)).ToArray());
+            _tiles.Text[_title] = _filter < 0 ? FalloutGameSettingStrings.Read(_records, "sRecipes") : _filters[_filter].Name;
+            BindDetails(); _revision = _inventory.Revision;
+            LayoutLists(); LayoutActions(); QueueRedraw();
         }
-        catch (Exception error)
-        {
-            return (true, false, "requirement unbound: " + error.Message);
-        }
-        if (recipe.RequiredSkill != -1)
-        {
-            try
-            {
-                var value = _skillValue(recipe.RequiredSkill);
-                if (value < recipe.RequiredLevel) return (true, false, $"requires skill {recipe.RequiredLevel}");
-            }
-            catch (Exception error) { return (true, false, "skill unbound: " + error.Message); }
-        }
-        return _inventory.CanCraft(recipe) ? (true, true, "ready") : (true, false, "missing ingredients");
+        finally { _building = false; }
     }
 
-    private void Select(FalloutRecipe recipe)
+    private void BindDetails()
     {
-        _selected = recipe;
-        ShowSelected();
-    }
-
-    private void ShowSelected()
-    {
+        XElement Named(string name, string? kind = null) => _tiles.Root.DescendantsAndSelf().Single(tile =>
+            (string?)tile.Attribute("name") == name && (kind is null || tile.Name == kind));
+        _tiles.Text[Named("RM_MadeAtVariable")] = _selected?.Category is { } category
+            ? FalloutRecipeCategory.Read(_records, category).Name : "";
         if (_selected is not { } recipe)
         {
-            _details.Text = "Select a recipe."; _craftButton.Disabled = true; return;
+            _displayedMaximum = 0;
+            SetRows(_componentList, []); _tiles.Text[Named("RM_SkillRequirement")] = "";
+            _tiles.Bind(_accept, "target", 0); _tiles.Bind(_icon, "visible", 0); return;
         }
-        var availability = Availability(recipe);
-        var requirement = recipe.RequiredSkill == -1 ? "No skill requirement" :
-            SkillRequirement(recipe);
-        var lines = new List<string> { recipe.Name, "", requirement, "", "Ingredients:" };
-        lines.AddRange(recipe.Ingredients.Count == 0 ? ["  None"] : recipe.Ingredients.Select(item =>
-            $"  {NameOf(item.Form)}  {_inventory.Item(item.Form)?.Count ?? 0} / {item.Count}"));
-        lines.AddRange(["", "Produces:"]);
-        lines.AddRange(recipe.Outputs.Select(item => $"  {NameOf(item.Form)}  x{item.Count}"));
-        _details.Text = string.Join('\n', lines);
-        _message.Text = availability.CanCraft ? "" : availability.Status;
-        _craftButton.Disabled = !availability.CanCraft;
+        var admission = Available(recipe); _displayedMaximum = admission.Maximum;
+        if (admission.Failure is { } failure) ActionError = failure;
+        _tiles.Bind(_accept, "target", admission.Maximum > 0 ? 1 : 0);
+        var skill = Named("RM_SkillRequirement");
+        _tiles.Text[skill] = recipe.RequiredSkill == -1 ? "" :
+            (_skillNames.TryGetValue(recipe.RequiredSkill, out var name) ? name : throw new NotSupportedException("Recipe skill has no source AVIF label.")) +
+            " (" + ((int)_skillValue(recipe.RequiredSkill)).ToString(CultureInfo.InvariantCulture) + "/" + recipe.RequiredLevel.ToString(CultureInfo.InvariantCulture) + ")";
+        _tiles.Bind(skill, "alpha", recipe.RequiredSkill == -1 || _skillValue(recipe.RequiredSkill) >= recipe.RequiredLevel ? 255 : 127);
+        var breakdown = recipe.Outputs.Count > 1 && recipe.Ingredients.Count == 1;
+        _tiles.Text[Named("RM_Items_IngredientList", "text")] = breakdown && recipe.Subcategory is { } subcategory
+            ? FalloutRecipeCategory.Read(_records, subcategory).Name : FalloutGameSettingStrings.Read(_records, "sIngredients");
+        var components = breakdown ? recipe.Outputs : recipe.Ingredients;
+        ResetList(_componentList);
+        SetRows(_componentList, components.OrderBy(component => NameOf(component.Form), StringComparer.Ordinal)
+            .Select(component => new SourceRow(NameOf(component.Form) + " (" +
+                (breakdown ? "" : (_inventory.Item(component.Form)?.Count ?? 0).ToString(CultureInfo.InvariantCulture) + "/") +
+                component.Count.ToString(CultureInfo.InvariantCulture) + ")",
+                breakdown || (_inventory.Item(component.Form)?.Count ?? 0) >= component.Count ? 255 : 127,
+                () => ShowIcon(component.Form), () => ShowIcon(component.Form), component.Form)).ToArray());
+        ShowIcon(recipe.Outputs[0].Form);
     }
 
-    private string SkillRequirement(FalloutRecipe recipe)
+    private void ShowIcon(FalloutFormKey form)
     {
-        try { return $"{SkillName(recipe.RequiredSkill)}: {recipe.RequiredLevel} required (you have {_skillValue(recipe.RequiredSkill):0})"; }
-        catch (Exception) { return $"{SkillName(recipe.RequiredSkill)}: {recipe.RequiredLevel} required (current value unavailable)"; }
+        var fields = _records.GetEffective(form).ReadSubrecords().ToArray();
+        var icon = fields.SingleOrDefault(field => field.Signature == "ICON").Data;
+        _tiles.Bind(_icon, "visible", icon.IsEmpty ? 0 : 1);
+        if (!icon.IsEmpty) _tiles.SetFilename(_icon, FalloutDialogueTopic.Text(icon.Span));
+        QueueRedraw();
     }
-
-    private static string SkillName(int skill) => skill switch
-    {
-        32 => "Barter",
-        33 => "Big Guns",
-        34 => "Energy Weapons",
-        35 => "Explosives",
-        36 => "Lockpick",
-        37 => "Medicine",
-        38 => "Melee Weapons",
-        39 => "Repair",
-        40 => "Science",
-        41 => "Guns",
-        42 => "Sneak",
-        43 => "Speech",
-        44 => "Survival",
-        45 => "Unarmed",
-        _ => $"Actor value {skill}"
-    };
-
     private string NameOf(FalloutFormKey form)
     {
-        var record = _records.GetEffective(form);
-        var full = record.ReadSubrecords().SingleOrDefault(field => field.Signature == "FULL").Data;
-        if (!full.IsEmpty) return FalloutDialogueTopic.Text(full.Span);
-        return FalloutDialogueTopic.Text(record.ReadSubrecords().Single(field => field.Signature == "EDID").Data.Span);
+        var fields = _records.GetEffective(form).ReadSubrecords().ToArray();
+        var name = fields.SingleOrDefault(field => field.Signature == "FULL").Data;
+        if (name.IsEmpty) name = fields.Single(field => field.Signature == "EDID").Data;
+        return FalloutDialogueTopic.Text(name.Span);
     }
-
-    private void CraftSelected()
+    private void Select(FalloutRecipe recipe)
     {
-        if (_selected is not { } recipe) return;
-        var availability = Availability(recipe);
-        if (!availability.CanCraft) { _message.Text = availability.Status; Refresh(); return; }
-        try
-        {
-            _craft(recipe);
-            Refresh();
-            _message.Text = $"Crafted {recipe.Name}.";
-        }
-        catch (Exception error)
-        {
-            Refresh();
-            _message.Text = "Craft failed: " + error.Message;
-            GD.PushError($"OPENNV_RECIPE_CRAFT_UNBOUND recipe={recipe.Record.FormKey} {error.Message}");
-        }
+        if (_closed || _quantity is not null) return;
+        if (_selected?.Record.FormKey == recipe.Record.FormKey) return;
+        _selected = recipe; ActionError = null; BindDetails(); LayoutLists(); LayoutActions(); QueueRedraw();
     }
-
-    private void Close()
+    private void Filter(int direction)
     {
-        if (_closed) return;
-        _closed = true;
-        _close();
+        if (_quantity is not null) return;
+        _filter = (_filter + 1 + direction + _filters.Count + 1) % (_filters.Count + 1) - 1;
+        _selected = null; ActionError = null; ResetList(_recipeList); Refresh();
     }
-
+    private void Accept()
+    {
+        if (_closed || Error is not null || _quantity is not null || _selected is not { } recipe) return;
+        var admission = Available(recipe);
+        if (admission.Maximum <= 0) { ActionError = admission.Failure; return; }
+        var revision = _inventory.Revision;
+        _quantity = new(_records, admission.Maximum, amount =>
+        {
+            var dialog = _quantity; _quantity = null;
+            dialog?.QueueFree();
+            if (amount is null or 0 || _closed) return;
+            try
+            {
+                var current = Available(recipe);
+                if (!current.Visible || amount > current.Maximum) throw new InvalidOperationException("Crafting admission changed before quantity confirmation.");
+                _craft(recipe, amount.Value, revision); ActionError = null;
+            }
+            catch (Exception error) { ActionError = error.Message; GD.PushError("OPENNV_RECIPE_CRAFT_UNBOUND " + error.Message); }
+            Refresh();
+        }, minimum: 0);
+        AddChild(_quantity);
+    }
+    private void Close() { if (_closed) return; _closed = true; _close(); }
+    public override void _EnterTree() => _viewportLayout = new(this, Layout);
+    public override void _ExitTree() => _viewportLayout?.Dispose();
     public override void _Ready()
     {
-        if (_recipeButtons.Count != 0) Callable.From(_recipeButtons[0].GrabFocus).CallDeferred();
+        Try(Layout);
+        if (_lists.FirstOrDefault()?.Rows.FirstOrDefault() is { } row)
+            Callable.From(() => { if (IsInstanceValid(row.Control) && row.Control.IsInsideTree()) row.Control.GrabFocus(); }).CallDeferred();
     }
-
-    public override void _UnhandledInput(InputEvent inputEvent)
+    private void Layout()
     {
-        if (inputEvent is InputEventKey { Pressed: true, Echo: false, Keycode: Key.Escape })
+        if (!IsInsideTree()) return;
+        var pixels = GetViewportRect().Size; var scale = pixels.Y / 960;
+        Scale = Vector2.One * scale; Size = _tiles.Screen = pixels / scale; _tiles.ResolutionConverter = 1 / scale;
+        LayoutLists();
+        LayoutActions();
+        _tiles.ValidateDrawing(); QueueRedraw();
+    }
+    private void LayoutActions()
+    {
+        foreach (var (tile, control) in _actions)
         {
-            Close(); GetViewport().SetInputAsHandled();
+            control.Position = _tiles.Position(tile); control.Size = new(_tiles.Number(tile, "width"), _tiles.Number(tile, "height"));
+            control.Disabled = _tiles.Number(tile, "target") == 0;
+        }
+    }
+    public override void _Process(double delta)
+    {
+        if (_closed || Error is not null || _quantity is not null) return;
+        if (_pendingFocus is { } pending && !GuiCaptureHeld)
+        {
+            _pendingFocus = null;
+            if (pending.View.Rows.Contains(pending.Row)) Try(() => Focus(pending.View, pending.Row, pending.EnsureVisible));
+        }
+        if (_revision != _inventory.Revision && !GuiCaptureHeld) Try(Refresh);
+    }
+    private void Try(Action action)
+    {
+        if (_closed || Error is not null) return;
+        try { action(); }
+        catch (Exception error) { Error = error.Message; GD.PushError("OPENNV_RECIPE_UI_FAIL " + error.Message); }
+    }
+    public override void _Draw() => Try(() => _tiles.Draw(this));
+    public override void _Input(InputEvent input)
+    {
+        if (_closed || _quantity is not null) return;
+        if (input is InputEventKey { Pressed: true, Echo: false, Keycode: Key.Escape })
+        { Close(); GetViewport().SetInputAsHandled(); return; }
+        if (input is InputEventKey { Pressed: true, Echo: false } key)
+        {
+            var handled = true;
+            Try(() =>
+            {
+                if (_shortcuts.TryDispatch(key.Keycode, key.Pressed, key.Echo)) return;
+                switch (key.Keycode)
+                {
+                    case Key.Escape: Close(); break;
+                    case Key.Up: MoveSelection(-1); break;
+                    case Key.Down: MoveSelection(1); break;
+                    case Key.Left: Filter(-1); break;
+                    case Key.Right: Filter(1); break;
+                    case Key.Enter or Key.KpEnter: Accept(); break;
+                    default: handled = false; break;
+                }
+            });
+            if (handled) GetViewport().SetInputAsHandled();
+        }
+        if (input is InputEventMouseButton { Pressed: true } mouse && mouse.ButtonIndex is MouseButton.WheelUp or MouseButton.WheelDown)
+        {
+            Try(() => ScrollAt(GetLocalMousePosition(), mouse.ButtonIndex == MouseButton.WheelUp ? -1 : 1));
+            GetViewport().SetInputAsHandled();
         }
     }
 }

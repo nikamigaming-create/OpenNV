@@ -18,8 +18,8 @@ internal sealed record FalloutSandboxPackage(FalloutFormKey Form, uint Flags, in
     {
         var source = FalloutScriptPackage.Read(record);
         var activities = FalloutSandboxActivities.Read(record);
-        if (source.LocationType is not (0 or 2 or 3))
-            throw new NotSupportedException("Sandbox needs its non-reference/non-current/non-editor location owner.");
+        if (source.LocationType is not (0 or 2 or 3 or 6))
+            throw new NotSupportedException("Sandbox needs its reference, current, editor or linked-reference location owner.");
         var data = FalloutPackageData.Read(record);
         const uint supported = 0x200 | 0x1000 | 0x2000 | 0x400000 | 0x800000 | FalloutScriptPackage.HeadTrackingOffFlag |
             FalloutScriptPackage.WeaponsUnequippedFlag;
@@ -36,6 +36,12 @@ internal sealed record FalloutSandboxPackage(FalloutFormKey Form, uint Flags, in
 
     internal FalloutTravelProgress Location(FalloutPluginStack records, FalloutReferenceWorld world, FalloutFormKey actor)
     {
+        if (LocationType == 6)
+        {
+            var linked = world.GetLinkedRef(actor) ??
+                throw new NotSupportedException("Linked-reference Sandbox has no current source link owner.");
+            return new FalloutTravelPackage(Form, Flags, 0, linked, Radius).Start(records, world, actor);
+        }
         if (LocationType != 2) return new FalloutTravelPackage(Form, Flags, LocationType, Reference, Radius).Start(records, world, actor);
         var start = world.ActorPackageStartLocation(actor) ??
             throw new NotSupportedException("Current-location Sandbox has no retained actor package-start location.");

@@ -11,10 +11,16 @@ internal partial class RuntimeNativeNpc : INativeActorPortal
 {
     CharacterBody3D INativeActorPortal.PortalBody => this;
     RuntimeNativeActorCombat INativeActorPortal.PortalCombat => Combat!;
-    bool INativeActorPortal.PortalTransferred => MarkerPortalTransferred;
-    bool INativeActorPortal.WantsPortal(FalloutFormKey door) => WantsTravelPortal(door);
-    void INativeActorPortal.CommitPortal(FalloutFormKey door) => CommitTravelPortal(door);
-    void INativeActorPortal.FinishPortalAttempt(FalloutFormKey door, string? error) => FinishTravelPortalAttempt(door, error);
+    bool INativeActorPortal.PortalTransferred => MarkerPortalTransferred || _followPortal?.Transferred == true;
+    bool INativeActorPortal.WantsPortal(FalloutFormKey door) => _followPackage is not null ? _followPortal?.Wants(door) == true : WantsTravelPortal(door);
+    void INativeActorPortal.CommitPortal(FalloutFormKey door)
+    {
+        if (_followPackage is not null) FollowPortal.Commit(door); else CommitTravelPortal(door);
+    }
+    void INativeActorPortal.FinishPortalAttempt(FalloutFormKey door, string? error)
+    {
+        if (_followPackage is not null) _followPortal?.Finish(door, error); else FinishTravelPortalAttempt(door, error);
+    }
     void INativeActorPortal.RetirePortalBindings() => RetireSourceBindings();
     private bool _markerPortalRequested;
     private string? _markerPortalRetirementWait;

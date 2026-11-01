@@ -59,7 +59,8 @@ internal sealed record FalloutPlacedReference(
     FalloutTeleportDestination? Teleport,
     FalloutFormKey? EnableParent,
     bool EnableParentOpposite,
-    FalloutFormKey? Emittance = null);
+    FalloutFormKey? Emittance = null,
+    FalloutSpecialRendering? SpecialRendering = null);
 
 internal sealed record FalloutTeleportDestination(
     FalloutFormKey Door,
@@ -206,7 +207,8 @@ internal static class FalloutCellSceneReader
                     BinaryPrimitives.ReadUInt32LittleEndian(enableBytes)),
                 (enableFlags & 1u) != 0,
                 emittanceBytes is null ? null : record.Plugin.AdjustOptionalFormId(
-                    BinaryPrimitives.ReadUInt32LittleEndian(emittanceBytes))));
+                    BinaryPrimitives.ReadUInt32LittleEndian(emittanceBytes)),
+                FalloutSpecialRendering.Read(record)));
         }
 
         var bases = new Dictionary<FalloutFormKey, FalloutBaseObjectDefinition>();

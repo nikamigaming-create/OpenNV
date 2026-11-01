@@ -135,6 +135,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         if (_tagSkillEntry is not null) yield return 1048;
         if (_traitEntry is not null) yield return 1084;
         if (_recipeMenu is not null) yield return 1077;
+        if (_recipeMenu?.QuantityOpen == true) yield return 1016;
         if (_barterMenu is not null) yield return 1053;
         if (_caravanMenu is not null) yield return _caravanMenu.MenuId;
         if (_player.VatsMenuActive) yield return NativeVatsMenu.MenuId;

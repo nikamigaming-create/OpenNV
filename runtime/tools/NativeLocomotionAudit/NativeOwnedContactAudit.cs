@@ -81,6 +81,7 @@ internal static class NativeOwnedContactAudit
             foreach (var landCell in grid.Cells)
             {
                 var source = FalloutLandscapeTransportResolver.ResolveCell(records, landCell, persistent);
+                if (source is null) continue;
                 var prepared = RuntimeNativeLandscapeTransportBuilder.Prepare(source, units);
                 var terrain = new StaticBody3D { Name = "LAND_" + source.Landscape };
                 terrain.AddChild(new CollisionShape3D { Shape = new ConcavePolygonShape3D { Data = prepared.Faces } });

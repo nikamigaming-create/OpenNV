@@ -2183,7 +2183,8 @@ try
         syntheticDoor.SourceDoor.Teleport!.Position.SequenceEqual([100.0f, 200.0f, 300.0f]) &&
         syntheticDoor.DestinationDoor.Teleport!.Door == syntheticDoor.SourceDoor.FormKey,
         "Native XTEL/CELL/WRLD reciprocal door transition differs.");
-    var syntheticLandscape = FalloutLandscapeTransportResolver.Resolve(cellStack, syntheticDoor);
+    var syntheticLandscape = FalloutLandscapeTransportResolver.Resolve(cellStack, syntheticDoor) ??
+        throw new InvalidDataException("Synthetic LAND unexpectedly has no geometry.");
     LandscapeMaterialProbe.Run();
     DefaultLandscapePhysicsContracts.Run();
     Require(
@@ -2207,13 +2208,40 @@ try
                         Position = [5000.0f, 200.0f, 300.0f],
                     },
                 },
-            }, defaultLandscapeTexture);
+            }, defaultLandscapeTexture) ?? throw new InvalidDataException("Painted synthetic LAND has no geometry.");
     Require(partiallyPainted.BaseLayers.Count == 4 &&
         partiallyPainted.BaseLayers.Single(layer => layer.Quadrant == 3) is { UsesQuadrantDefault: true, Texture.ObjectId: 0 } &&
         partiallyPainted.BaseLayers.Count(layer => layer.Texture.ObjectId == 0) == 1 &&
         partiallyPainted.Textures.Values.Contains(defaultLandscapeTexture) &&
         partiallyPainted.Heights.SequenceEqual(syntheticLandscape.Heights),
         "An unpainted LAND quadrant lost its installation texture default or source geometry.");
+    // A winning texture-only LAND is a source-authored absence of geometry.
+    void CheckGeometryFreeLand(string file, byte[] parentFlags, byte[] landData, bool geometry = false,
+        byte[]? contradictoryHeight = null, string? failure = null)
+    {
+        var payload = Combine(Subrecord("DATA", landData), Subrecord("BTXT", LayerHeader(0x160, 0, 0xffff)),
+            Subrecord("VCLR", new byte[33 * 33 * 3]),
+            Subrecord("ATXT", LayerHeader(0x160, 0, 0)), Subrecord("VTXT", landOpacity),
+            contradictoryHeight is null ? [] : Subrecord("VHGT", contradictoryHeight));
+        File.WriteAllBytes(Path.Combine(fixtureRoot, file), Combine(
+            Record("TES4", 0, 0, Combine(Subrecord("MAST", ZString("Cell.esm")), Subrecord("DATA", new byte[8]))),
+            Record("WRLD", 0x01000900, 0, Subrecord("EDID", ZString("ParentWorld"))),
+            Record("WRLD", 0x150, 0, Combine(Subrecord("EDID", ZString("SyntheticWorld")),
+                Subrecord("WNAM", UInt32(0x01000900)), Subrecord("PNAM", parentFlags))),
+            GroupFormId(0x150, 1, GroupFormId(0x101, 6, Record("LAND", 0x170, 0, payload)))));
+        using var records = FalloutPluginStack.Load(fixtureRoot, ["Cell.esm", "SkillLabel.esp", file]);
+        var cell = FalloutCellSceneReader.ReadDefinition(records, new("Cell.esm", 0x101));
+        if (failure is not null)
+            ExpectFailure(() => FalloutLandscapeTransportResolver.ResolveCell(records, cell, new("Cell.esm", 0x100)), failure);
+        else Require((FalloutLandscapeTransportResolver.ResolveCell(records, cell, new("Cell.esm", 0x100)) is not null) == geometry,
+            "Texture-only LAND invented terrain geometry or ignored parent land authority.");
+    }
+    CheckGeometryFreeLand("EmptyLand.esp", [4, 0], UInt32(0x1c));
+    CheckGeometryFreeLand("InheritedLand.esp", [1, 0], UInt32(0x1c), failure: "inheritance");
+    CheckGeometryFreeLand("BadParentLand.esp", [4], UInt32(0x1c), failure: "malformed");
+    CheckGeometryFreeLand("BadLandData.esp", [4, 0], [0x1c], failure: "uint32");
+    CheckGeometryFreeLand("MissingVertexLand.esp", [4, 0], UInt32(1), failure: "VHGT");
+    CheckGeometryFreeLand("ContradictoryLand.esp", [4, 0], UInt32(0x1c), contradictoryHeight: [], failure: "conflicts");
     ExpectFailure(
         () => FalloutDoorTransitionResolver.Resolve(
             cellStack,
@@ -2747,7 +2775,12 @@ if (args.Length > 0)
         $"land={string.Join(',', activeLand.Select(value => value.FormKey))} " +
         $"subrecords={string.Join(',', activeLand.SelectMany(value => value.ReadSubrecords())
             .GroupBy(value => value.Signature).Select(value => $"{value.Key}:{value.Count()}"))}");
-    var ownedLandscape = FalloutLandscapeTransportResolver.Resolve(owned, ownedDoorTransition);
+    var geometryFreeOwnedCell = FalloutCellSceneReader.ReadDefinition(owned, new("FalloutNV.esm", 0x12da3a));
+    Require(FalloutLandscapeTransportResolver.ResolveCell(owned, geometryFreeOwnedCell,
+        new FalloutExteriorGrid(owned).PersistentCell(geometryFreeOwnedCell.Worldspace!.Value)) is null,
+        "Owned texture-only LAND12e133 invented terrain or selected its map-only parent landscape.");
+    var ownedLandscape = FalloutLandscapeTransportResolver.Resolve(owned, ownedDoorTransition) ??
+        throw new InvalidDataException("Owned selected LAND unexpectedly has no geometry.");
     Require(
         ownedLandscape.ActiveCoordinates == (-18, 0) &&
         ownedLandscape.ActiveCell == new FalloutFormKey("FalloutNV.esm", 0x0daebb) &&

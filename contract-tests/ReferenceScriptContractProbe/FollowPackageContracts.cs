@@ -1,6 +1,8 @@
 using System.Buffers.Binary;
 using System.Text;
 using System.Text.Json;
+using System.Security.Cryptography;
+using OpenNV.Runtime.World.Cells;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.World.Actors;
@@ -19,9 +21,16 @@ internal static class FollowPackageContracts
                 Package(6, 128, procedure: 7, flags: 0x04501000), Package(7, 128, procedure: 7, flags: 0x04501001),
                 Package(8, 128, location: true, procedure: 7), Package(9, 0, procedure: 7),
                 Package(10, 128, targetType: 1, procedure: 7), Package(11, 128, procedure: 7, specificFlags: 1),
-                Package(12, 128, procedure: 7, flags: 0x3000)));
+                Package(15, 128, targetType: 3, flags: 0x04501200),
+                Package(12, 128, procedure: 7, flags: 0x3000), Package(13, 128, flags: 1), Package(14, 512, flags: 0x04400000)));
             using var records = FalloutPluginStack.Load(directory, ["Follow.esm"]);
             FalloutPluginRecord Source(uint id) => records.GetEffective(new("Follow.esm", id));
+            var linkedFollow = FalloutFollowContinuation.ReadResident(Source(15));
+            if (linkedFollow.TargetKind != 3 || linkedFollow.Distance != 128 || !linkedFollow.ContinueIfPlayerNear ||
+                linkedFollow.ResolveTarget(() => new FalloutFormKey("Follow.esm", 0x14)).Target != new FalloutFormKey("Follow.esm", 0x14) ||
+                !linkedFollow.RetainsSelection(true, false) || linkedFollow.RetainsSelection(false, false) || linkedFollow.RetainsSelection(true, true))
+                throw new InvalidOperationException("Linked Follow lost its source target or qualified retention flag.");
+            Reject(() => linkedFollow.ResolveTarget(() => null));
             var shortFollow = FalloutFollowPackage.Read(Source(1));
             if (shortFollow.Target != new FalloutFormKey("Follow.esm", 0x14) || shortFollow.Distance != 330 ||
                 FalloutFollowPackage.Read(Source(2)).Distance != 500 || FalloutScriptPackage.Read(Source(1)).LocationType is not null)
@@ -39,6 +48,16 @@ internal static class FollowPackageContracts
             Reject(() => FalloutFollowPackage.ReadAccompany(Source(1)));
             Reject(() => FalloutFollowPackage.Read(Source(6)));
             foreach (var id in new uint[] { 7, 8, 9, 10, 11 }) Reject(() => FalloutFollowPackage.ReadAccompany(Source(id)));
+            if (FalloutFollowContinuation.ReadResident(Source(1)).Form != shortFollow.Form ||
+                !FalloutFollowContinuation.ReadResident(Source(6)).Accompany)
+                throw new InvalidOperationException("Resident actor follower lost source type or target binding.");
+            Reject(() => FalloutFollowContinuation.ReadResident(Source(13)));
+            var defensiveFollow = FalloutFollowContinuation.ReadResident(Source(14));
+            if (defensiveFollow.Accompany || !defensiveFollow.RequiresDefensiveCombatOwner ||
+                defensiveFollow.Distance != 512 || accompany.RequiresDefensiveCombatOwner || shortFollow.RequiresDefensiveCombatOwner)
+                throw new InvalidOperationException("Follow defensive source admission conflated movement with combat policy.");
+            Reject(() => defensiveFollow.AllowsUnprovokedCombat(null));
+            Reject(() => defensiveFollow.AllowsUnprovokedCombat(defensiveFollow.Target));
             var leader = Godot.Vector3.Zero; var goal = new Godot.Vector3(100, 0, 0);
             var lateral = RuntimeNativeCreature.AccompanyApproach(new(100, 0, 50), leader, goal, 2);
             var behind = RuntimeNativeCreature.AccompanyApproach(new(-10, 0, 0), leader, goal, 2);
@@ -47,6 +66,22 @@ internal static class FollowPackageContracts
                 throw new InvalidOperationException("Accompany destination knowledge lost the actual leader distance.");
             var motion = new FalloutActorPackageMotion(shortFollow.Form, new string('a', 64), "meshes/actor/mtforward.kf",
                 new string('b', 64), 3.25, false, [2, 3, 4], [0, 0, 0, 1]);
+            var completedTarget = motion with { Travel = new(new("Follow.esm", 0x50), [7, 8, 9], true) };
+            var completedAssignment = new FalloutActorPackageAssignment(motion.Package, motion.PackageSha256, true);
+            var retainedPosition = FalloutFollowContinuation.CompletedTravelTarget(completedAssignment, completedTarget)!;
+            if (!retainedPosition.SequenceEqual(motion.Position))
+                throw new InvalidOperationException("Retired completed target lost its actual motion position.");
+            retainedPosition[0] = 99;
+            if (completedTarget.Position[0] != 2 ||
+                FalloutFollowContinuation.CompletedTravelTarget(completedAssignment with { Done = false }, completedTarget) is not null ||
+                FalloutFollowContinuation.CompletedTravelTarget(completedAssignment, motion) is not null ||
+                FalloutFollowContinuation.CompletedTravelTarget(completedAssignment, completedTarget with
+                { Travel = completedTarget.Travel! with { Complete = false } }) is not null)
+                throw new InvalidOperationException("Retained target aliased motion or invented a stopped process.");
+            Reject(() => FalloutFollowContinuation.CompletedTravelTarget(completedAssignment with { Sha256 = new string('c', 64) }, completedTarget));
+            var coldTarget = JsonSerializer.Deserialize<FalloutActorPackageMotion>(JsonSerializer.Serialize(completedTarget))!;
+            if (!FalloutFollowContinuation.CompletedTravelTarget(completedAssignment, coldTarget)!.SequenceEqual(motion.Position))
+                throw new InvalidOperationException("Cold completed target lost actual retained position.");
             var restored = JsonSerializer.Deserialize<FalloutActorPackageMotion>(JsonSerializer.Serialize(motion))!;
             restored.Validate();
             if (restored.Seconds != 3.25 || !restored.Position.SequenceEqual(motion.Position))
@@ -61,6 +96,36 @@ internal static class FollowPackageContracts
             if (coldAccompany.Package != accompany.Form || coldAccompany.Seconds != accompanyMotion.Seconds ||
                 !coldAccompany.Position.SequenceEqual(accompanyMotion.Position))
                 throw new InvalidOperationException("Accompany cold motion lost its source identity, clock or pose.");
+            foreach (var source in new[] { Source(1), Source(6), Source(14) })
+            {
+                var accepted = motion with
+                {
+                    Package = source.FormKey,
+                    PackageSha256 = Convert.ToHexString(SHA256.HashData(source.ReadData()))
+                };
+                FalloutFollowContinuation.ValidateMotion(source, accepted);
+                var eventsSeen = new List<string>();
+                var live = new FalloutPackageEvents((_, kind) => eventsSeen.Add(kind));
+                live.Change(FalloutScriptPackage.Read(source));
+                var assignment = FalloutActorPackageAssignment.Capture(records, live)!;
+                if (!eventsSeen.SequenceEqual(["POBA"]) || assignment.Done)
+                    throw new InvalidOperationException("Follower acceptance did not start its source lifecycle once.");
+                var coldEvents = new FalloutPackageEvents((_, kind) => eventsSeen.Add(kind));
+                FalloutFollowContinuation.BindAccepted(records, source,
+                    JsonSerializer.Deserialize<FalloutActorPackageAssignment>(JsonSerializer.Serialize(assignment))!,
+                    JsonSerializer.Deserialize<FalloutActorPackageMotion>(JsonSerializer.Serialize(accepted))!, coldEvents);
+                coldEvents.Change(FalloutScriptPackage.Read(source));
+                if (!eventsSeen.SequenceEqual(["POBA"]) || coldEvents.Done || coldEvents.Active?.Form != source.FormKey)
+                    throw new InvalidOperationException("Cold follower binding replayed start or invented completion while waiting.");
+                coldEvents.Change(null);
+                if (!eventsSeen.SequenceEqual(["POBA", "POCA"]))
+                    throw new InvalidOperationException("Follower replacement did not retire its accepted source lifecycle.");
+                Reject(() => FalloutFollowContinuation.ValidateMotion(source, accepted with { PackageSha256 = new string('0', 64) }));
+                Reject(() => FalloutFollowContinuation.ValidateMotion(source, accepted with { DialogueCompleted = true }));
+                Reject(() => FalloutFollowContinuation.BindAccepted(records, source, assignment with { Done = true }, accepted,
+                    new FalloutPackageEvents((_, _) => throw new InvalidOperationException("Rejected follower replayed an event."))));
+            }
+            Console.WriteLine("OPENNV_RESIDENT_FOLLOW_CONTINUATION_CONTRACT_PASS type1And7=true sourceHash=true retainedPose=true freshStartOnce=true coldNoReplay=true waitingNotComplete=true replacementChange=true wrongProcedureRefused=true defensiveMovementAdmitted=true defensiveCombatExplicitlyRefused=true");
             Console.WriteLine("OPENNV_FOLLOW_PACKAGE_CONTRACT_PASS optionalStart=true sourceTarget=true distances=true coldClock=true accompany=true defensiveTarget=true malformedRejected=true");
         }
         finally { Directory.Delete(directory, true); }

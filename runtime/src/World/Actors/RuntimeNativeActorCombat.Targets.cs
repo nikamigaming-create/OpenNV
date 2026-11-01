@@ -125,7 +125,7 @@ internal sealed partial class RuntimeNativeActorCombat
     {
         // Defensive package target protection comes from an actual hit's
         // assistance notification, not another actor merely choosing a target.
-        if (!_state.PlayerTeammate || !PackageAllowsUnprovokedCombat()) return false;
+        if (!_state.PlayerTeammate || !HasUnboundFollowCombat && !PackageAllowsUnprovokedCombat()) return false;
         var playerKey = _records.RuntimeFormKey(0x14);
         var target = CombatActors.Where(actor => actor != this && !actor.Dead && actor.EffectiveEnabled && !actor._state.PlayerTeammate &&
                 (actor._state.Engagement?.Target == playerKey ||
@@ -135,6 +135,7 @@ internal sealed partial class RuntimeNativeActorCombat
         var threat = CurrentThreat();
         if (_actor.GlobalPosition.DistanceTo(target._actor.GlobalPosition) > ThreatRadius(threat) ||
             !CanSeePoint(target.BodyTargetPoint(), target)) return false;
+        if (!PackageAllowsUnprovokedCombat()) return false;
         _state.Engagement = new(target._state.Reference);
         _assistsReceived++;
         return true;

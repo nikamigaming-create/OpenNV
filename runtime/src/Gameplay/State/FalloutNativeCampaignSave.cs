@@ -66,7 +66,7 @@ internal sealed record FalloutNativeCampaignState(
     FalloutActorProjectileLaunch? PlayerProjectileLaunch = null,
     FalloutFormListsSnapshot? FormLists = null, FalloutActorBaseFlagsSnapshot? ActorBaseFlags = null,
     FalloutHitKnockback? PlayerHitKnockback = null, FalloutLeveledItemsSnapshot? LeveledItems = null,
-    FalloutPipBoyLightSnapshot? PipBoyLight = null);
+    FalloutPipBoyLightSnapshot? PipBoyLight = null, FalloutPlayerRegionMembership? PlayerRegions = null);
 
 internal sealed record FalloutNativeCampaignRestore(
     FalloutNativeCampaignState State,
@@ -381,6 +381,11 @@ internal static class FalloutNativeCampaignSave
         if (state.SkyLighting is not null) FalloutSkyLightingState.ValidateSnapshot(stack, state.SkyLighting);
         if (state.PipBoyLight is { } pipBoyLight && pipBoyLight.SourceHash != FalloutPipBoyLight.Read(stack).SourceHash)
             throw new InvalidDataException("Saved Pip-Boy light source changed.");
+        if (state.PlayerRegions is { } playerRegions)
+        {
+            if (state.References is null) throw new InvalidDataException("Saved player region cache has no reference world.");
+            _ = FalloutPlayerRegionMembership.Restore(stack, playerRegions, state.ActiveCell);
+        }
         if (state.Music is not null) _ = FalloutMusicType.ValidateSnapshot(stack, state.Music);
         if (state.References is not null)
         {
@@ -555,6 +560,14 @@ internal static class FalloutNativeCampaignSave
         }
     }
 
+    private static void ValidatePlayerRegionCache(FalloutNativeCampaignState state)
+    {
+        if (state.PlayerRegions is { } cache && (state.References is null || cache.Cell != state.ActiveCell ||
+            cache.CellRegions is null || cache.Current is null ||
+            cache.EntryPosition is { } position && (position.Count != 3 || position.Any(value => !float.IsFinite(value)))))
+            throw new InvalidDataException("Saved player region cache has invalid CELL or entry inputs.");
+    }
+
     private static void ValidatePlayerCaravanSchema(FalloutNativeCampaignState state)
     {
         if (state.Schema != ExpectedSchema && state.PlayerCaravanCards is not null)
@@ -581,6 +594,7 @@ internal static class FalloutNativeCampaignSave
             throw new InvalidDataException("Earlier campaign schemas cannot own executable HUD notices.");
         if (state.Schema == BeforeExecutableNoticeSchema) state = state with { Schema = ExpectedSchema };
         ValidatePlayerCaravanSchema(state);
+        ValidatePlayerRegionCache(state);
         state.PlayerProjectileLaunch?.Validate();
         if (state.Schema == BeforeCaravanCardsSchema) state = state with { Schema = ExpectedSchema };
         if (state.Schema != ExpectedSchema && state.References?.Any(reference => reference.ProjectileLaunch is not null ||
@@ -625,6 +639,7 @@ internal static class FalloutNativeCampaignSave
     {
         ValidatePlayerNotesSchema(state);
         ValidatePlayerCaravanSchema(state);
+        ValidatePlayerRegionCache(state);
         if (state.DroppedItems is { } dropped)
         {
             foreach (var item in dropped) item.ValidateState();

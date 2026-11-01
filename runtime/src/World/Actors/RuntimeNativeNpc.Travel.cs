@@ -64,8 +64,11 @@ internal partial class RuntimeNativeNpc
         unbound = new[] { "dynamic-obstacle-avoidance", "turn-blending", "retail-path-costs" },
     };
 
-    internal void RequireTravelCombatContinuation() => _nativeMarkerTravel?.RequireCombatContinuation(
-        _aiReferenceState?.Engagement is not null, _nativeMarkerTravelProgress?.Complete == true);
+    internal void RequireTravelCombatContinuation()
+    {
+        _nativeMarkerTravel?.RequireCombatContinuation(
+            _aiReferenceState?.Engagement is not null, _nativeMarkerTravelProgress?.Complete == true);
+    }
 
     private void StartTravel(FalloutPluginRecord package, FalloutPlacedReference target, Transform3D? furnitureApproach = null,
         int destinationRadiusGameUnits = 0)

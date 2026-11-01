@@ -13,9 +13,10 @@ internal static partial class RuntimeNativeNifMeshBuilder
         {
             var geometry = source.Geometry;
             if (geometry.SkinInstance != -1 || geometry.CollisionObject != -1 || geometry.MaterialNames.Length != 0 ||
-                geometry.Dirty || geometry.ExtraData.Any(index => index != -1))
+                geometry.Dirty)
                 throw new NotSupportedException($"Particle geometry {geometry.Block.Index} has unsupported attachments.");
             var transform = ConvertTransform(geometry.Transform);
+            _ = ValidateExtraData(geometry.Block, geometry.ExtraData, collisionContract: false);
             var runtime = new RuntimeNifParticleSystem();
             var nodeAdded = false; var particleAdded = false;
             try

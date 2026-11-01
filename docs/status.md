@@ -1,6 +1,6 @@
 # Product status
 
-Updated 2026-10-31. User priority: **retail behavior and presentation through
+Updated 2026-11-01. User priority: **retail behavior and presentation through
 Goodsprings to the Strip, sustained native 3840x2160 at 60 FPS indoors and
 outdoors, and physical XR acceptance with a separate 144 Hz target**.
 FO1 remains an incomplete classic preview with selected movement, inventory,
@@ -15,7 +15,14 @@ reproduced severe slowdown, but its checkpoint is unmatched and recording
 amplifies the cost. Scene parity and faster-than-retail performance remain open.
 See current-work.md for the measured limits and active repair batch.
 
-The current unpublished gameplay batch verifies ordinary weapon changes, VATS
+The current regional batch additionally verifies source crafting quantity UI,
+Follow-dependent F5/cold persistence, corrected courtyard cinematic mapping,
+and an ordinary Freeside entry plus35.51metres across its next CELL boundary.
+Generic NPC procedures still block regional saves. Modeled fires/smoke,
+SpeedTree shrubs and other scene lanes remain incomplete. Vaults and all NPC/quest
+branches remain in scope; static inventories and selected visits are not completion.
+
+Merged PR341 (`79ba1285`) verifies ordinary weapon changes, VATS
 damage and ammo breakdown with cold persistence. Repair-kit cold reload retains
 three kits, the same rifle at 37.3% condition and one completed script receipt.
 The ordinary route reached Jean Sky Diving; F5 and cold reload pass after the
@@ -90,7 +97,7 @@ and post-combat quicksave/move/quickload restored exact position and inventory,
 with recovery to 57+ FPS in 11.625 seconds. One reloading recipe consumed its
 input and produced the authored materials. These are bounded gameplay cases.
 
-Bounded native-4K capture-off observations reached approximately 59â€“60 draws/s
+Bounded native-4K capture-off observations reached approximately 59Ã¢â‚¬â€œ60 draws/s
 on outdoor movement, an interior sequence and the stationary well scene. These
 are not long-run combat or whole-game acceptance. Restored base health now
 matches the qualified 220-health source inputs. Projectile rigid-body impulses,

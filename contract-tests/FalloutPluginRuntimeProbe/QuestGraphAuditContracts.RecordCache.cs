@@ -1,5 +1,6 @@
 using System.IO.Compression;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
 using OpenNV.Runtime.Content;
 
 internal static partial class QuestGraphAuditContracts
@@ -32,6 +33,12 @@ internal static partial class QuestGraphAuditContracts
                     "A returned byte array mutated another read or the canonical cache.");
                 var observed = packed.ReadDataForObservation(); observed[0] = 0;
                 Require(packed.ReadDataForObservation().SequenceEqual(payload), "Observation bytes escaped the cache's ownership.");
+                var expectedHash = Convert.ToHexString(SHA256.HashData(payload));
+                var firstHash = packed.ReadDataHash();
+                var hashes = new string[32];
+                Parallel.For(0, hashes.Length, index => hashes[index] = packed.ReadDataHash());
+                Require(firstHash == expectedHash && hashes.All(hash => ReferenceEquals(hash, firstHash)),
+                    "Concurrent source digest requests did not reuse their bounded canonical record entry.");
                 var calls = 0;
                 FalloutPluginRecord.ReadObserver = (record, bytes) =>
                 {
@@ -42,7 +49,14 @@ internal static partial class QuestGraphAuditContracts
                 };
                 Require(packed.ReadData()[0] == 0 && calls == 1 && packed.ReadDataForObservation().SequenceEqual(payload),
                     "Cached reads changed observer dispatch or let its mutation corrupt a later read.");
+                var mutatedPayload = payload.ToArray(); mutatedPayload[0] = 0;
+                Require(packed.ReadDataHash() == Convert.ToHexString(SHA256.HashData(mutatedPayload)) && calls == 2,
+                    "Source digest bypassed observer delivery or ignored its private mutation.");
+                FalloutPluginRecord.ReadObserver = (_, _) => throw new InvalidOperationException("digest-observer-refusal");
+                try { _ = packed.ReadDataHash(); throw new InvalidDataException("Source digest suppressed observer refusal."); }
+                catch (InvalidOperationException error) when (error.Message == "digest-observer-refusal") { }
                 FalloutPluginRecord.ReadObserver = null;
+                Require(ReferenceEquals(packed.ReadDataHash(), firstHash), "Observed digest contaminated the canonical hash.");
                 Require(packed.ReadSubrecords().Single().Data.Span.SequenceEqual(new byte[] { 1, 2, 3, 4 }) &&
                     plain.ReadData().SequenceEqual(payload), "Cached subrecords or uncompressed records changed.");
                 for (var attempt = 0; attempt < 2; attempt++)
@@ -55,6 +69,8 @@ internal static partial class QuestGraphAuditContracts
                 plugin.Dispose();
                 Require(plugin.RecordCacheState is { Entries: 0, Bytes: 0 }, "Disposal retained decoded payloads.");
                 try { packed.ReadData(); throw new InvalidDataException("A cached record remained readable after disposal."); }
+                catch (ObjectDisposedException) { }
+                try { packed.ReadDataHash(); throw new InvalidDataException("Source digest bypassed disposal."); }
                 catch (ObjectDisposedException) { }
                 try { packed.ReadDataForObservation(); throw new InvalidDataException("Observation bypassed source disposal."); }
                 catch (ObjectDisposedException) { }
@@ -69,11 +85,14 @@ internal static partial class QuestGraphAuditContracts
             }
             using (var plugin = FalloutPlugin.Open(path))
             {
+                var evictedHash = plugin.Records[1].ReadDataHash();
                 foreach (var record in plugin.Records) _ = record.ReadData();
                 Require(plugin.RecordCacheState.Entries == FalloutPlugin.RecordCacheCapacity,
                     "Empty decoded records exceeded the entry bound.");
                 var before = plugin.RecordCacheState.Decodes;
-                _ = plugin.Records[1].ReadData();
+                var reloadedHash = plugin.Records[1].ReadDataHash();
+                Require(reloadedHash == evictedHash && !ReferenceEquals(reloadedHash, evictedHash),
+                    "Source digest survived its decoded-record LRU eviction.");
                 Require(plugin.RecordCacheState.Decodes == before + 1, "The least recently used record was not evicted.");
             }
 

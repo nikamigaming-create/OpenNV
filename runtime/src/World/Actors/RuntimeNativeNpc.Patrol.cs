@@ -39,6 +39,7 @@ internal partial class RuntimeNativeNpc
         if (_findFurniture is not null) AdvanceFindFurniture(delta);
         if (_furnitureApproaching) { AdvanceFurnitureApproach(delta); return; }
         if (_guardPackage is not null) { AdvanceGuard(delta); return; }
+        if (_followPackage is not null) { AdvanceFollow(delta); return; }
         if (_dialogueNativeMovement) { AdvanceDialogueTarget(delta); return; }
         if (_nativeMarkerTravel is not null || _pendingCurrentLocationTravel is not null) { AdvanceMarkerTravel(delta); return; }
         if (_editorTravel is not null) { AdvanceEditorTravel(delta); return; }

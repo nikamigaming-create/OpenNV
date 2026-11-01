@@ -35,6 +35,25 @@ public partial class RuntimeCoordinator
             throw new InvalidOperationException("Actor retirement could not retain every outgoing continuation.", failure);
     }
 
+    // Whole detached CELL staging never receives ExitTree. Retain every actor
+    // while its native descendants still exist, then free even if one retention
+    // fails. The caller must report the returned failure after restoring the
+    // outgoing scene; disposal must not prevent rollback itself.
+    internal static Exception? DiscardNativeStagedSubtree(Node? root)
+    {
+        if (root is null || !GodotObject.IsInstanceValid(root)) return null;
+        Exception? failure = null;
+        try { RetireNativeActorBindings(root); }
+        catch (Exception error) { failure = error; }
+        try { root.Free(); }
+        catch (Exception error)
+        {
+            failure = failure is null ? error :
+                new AggregateException("Staged CELL retirement and native disposal both failed.", failure, error);
+        }
+        return failure;
+    }
+
     internal static void DiscardNativeActor(Node3D actor, Node3D? previousActor)
     {
         if (ReferenceEquals(actor, previousActor))

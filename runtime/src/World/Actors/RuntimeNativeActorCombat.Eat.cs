@@ -152,7 +152,7 @@ internal sealed partial class RuntimeNativeActorCombat
             }
             else
             {
-                var idleHash = Convert.ToHexString(SHA256.HashData(idle.ReadData()));
+                var idleHash = idle.ReadDataHash();
                 bool OwnsSelection() => _state.PackageMotion?.Package == package.FormKey &&
                     (activity is not null ? ReferenceEquals(_state.PackageMotion.Sandbox, activity) :
                         _actor is RuntimeNativeNpc owner && source is not null && owner.OwnsEatIntent(source, standalone!)) &&
@@ -273,7 +273,7 @@ internal sealed partial class RuntimeNativeActorCombat
         IReadOnlyList<FalloutActorIdleObjectBinding>? saved = null, bool restoring = false)
     {
         var record = _records.GetEffective(idle);
-        if (!Convert.ToHexString(SHA256.HashData(record.ReadData())).Equals(hash, StringComparison.OrdinalIgnoreCase))
+        if (!record.ReadDataHash().Equals(hash, StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException("Eat IDLE source changed.");
         var source = FalloutActorIdleSource.Resolve(_records, record);
         if (restoring) FalloutActorIdleObjectBinding.ValidateSources(_records, source, saved);
@@ -292,7 +292,7 @@ internal sealed partial class RuntimeNativeActorCombat
         FalloutActorEatPackageProgress? standalone, FalloutActorEatProgress meal, NativeActorCombatAnimation clip, double seconds, bool includeStart)
     {
         var position = _actor.GlobalPosition; var rotation = _actor.GlobalBasis.Orthonormalized().GetRotationQuaternion();
-        var hash = Convert.ToHexString(SHA256.HashData(package.ReadData()));
+        var hash = package.ReadDataHash();
         _state.PackageMotion = new(package.FormKey, hash, clip.Path, clip.Hash, seconds, includeStart,
             [position.X, position.Y, position.Z], [rotation.X, rotation.Y, rotation.Z, rotation.W], Sandbox: activity, Eat: meal, EatPackage: standalone);
         _packageDestinationActive = false; PackageMoving = false; PackageOwnsPose = true;
