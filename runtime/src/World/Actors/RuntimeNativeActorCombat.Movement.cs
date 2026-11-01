@@ -14,6 +14,7 @@ internal sealed partial class RuntimeNativeActorCombat
     private CollisionShape3D? _movementEnvelope;
     private readonly List<CollisionShape3D> _movementEnvelopeParts = [];
     private NativeActorMovementEnvelope? _sourceMovementEnvelope;
+    private NativeHumanoidMovementEnvelope? _humanoidMovementEnvelope;
     private float _movementSkeletonScale, _movementActorScale;
     private Vector3 _movementWorldScale;
     private float _radius, _motionScale, _turnSpeed;
@@ -28,7 +29,7 @@ internal sealed partial class RuntimeNativeActorCombat
     private object MotionObservation => new
     {
         radius = _radius,
-        sourceEnvelope = _sourceMovementEnvelope,
+        sourceEnvelope = _humanoidMovementEnvelope?.Observation ?? (object?)_sourceMovementEnvelope,
         routeDoor = DoorNavigationObservation,
         waypoints = _pursuitPath.Length,
         cursor = _pursuitCursor,
@@ -85,7 +86,7 @@ internal sealed partial class RuntimeNativeActorCombat
         limbMovementError = _crippledLegMovementError,
         hitKnockback = _state.HitKnockback,
         hitKnockbackError = _hitKnockbackError,
-        source = "source-BBX-horizontal-controller,KF-accumulation,NAVM,BPTD-limb-thresholds;vertical-custom-envelope-and-floor-tilt-parity-unqualified"
+        source = "source-standard-humanoid-convex-or-BBX-horizontal-controller,KF-accumulation,NAVM,BPTD-limb-thresholds;creature-vertical-custom-envelope-and-floor-tilt-parity-unqualified"
     };
 
     private void PrepareMovement()
@@ -101,8 +102,11 @@ internal sealed partial class RuntimeNativeActorCombat
         var scale = _skeleton.UnitsToMetres * _skeleton.Node.Scale.X;
         var radius = Math.Max(bound.Dimensions.X, bound.Dimensions.Y) * scale;
         var height = bound.Dimensions.Z * scale * 2;
-        _sourceMovementEnvelope = NativeActorMovementEnvelope.Horizontal(bound.Center, bound.Dimensions,
-            _skeleton.Node.Scale.X * _actor.Scale.X, _skeleton.UnitsToMetres);
+        _humanoidMovementEnvelope = _actor is RuntimeNativeNpc ? new(_skeleton.UnitsToMetres) : null;
+        _sourceMovementEnvelope = _humanoidMovementEnvelope is null
+            ? NativeActorMovementEnvelope.Horizontal(bound.Center, bound.Dimensions,
+                _skeleton.Node.Scale.X * _actor.Scale.X, _skeleton.UnitsToMetres) : null;
+        if (_humanoidMovementEnvelope is { } humanoid) radius = humanoid.Radius / _actor.Scale.X;
         if (_sourceMovementEnvelope is { } horizontal) radius = horizontal.Radius / _actor.Scale.X;
         if (!float.IsFinite(radius) || !float.IsFinite(height) || radius <= 0 || height <= 0)
             throw new InvalidDataException("Source BBX movement dimensions are invalid.");
@@ -129,7 +133,11 @@ internal sealed partial class RuntimeNativeActorCombat
         }
         foreach (var part in _movementEnvelopeParts) part.Free();
         _movementEnvelopeParts.Clear();
-        if (_sourceMovementEnvelope is { } sourceEnvelope)
+        if (_humanoidMovementEnvelope is { } humanoidEnvelope)
+        {
+            humanoidEnvelope.Publish(_movementEnvelope, _actor.Scale.X);
+        }
+        else if (_sourceMovementEnvelope is { } sourceEnvelope)
         {
             sourceEnvelope.Capsules[0].Publish(_movementEnvelope, _actor.Scale.X);
             foreach (var capsule in sourceEnvelope.Capsules.Skip(1))
@@ -149,7 +157,7 @@ internal sealed partial class RuntimeNativeActorCombat
                 : new CylinderShape3D { Radius = radius, Height = height };
         }
         NativeCharacterStep.SetRootContactOffset(mover, _sourceMovementEnvelope?.RootContactOffset ?? 0);
-        NativeCapsuleNavigation.SetDirectionalEnvelope(mover, _sourceMovementEnvelope is not null);
+        NativeCapsuleNavigation.SetDirectionalEnvelope(mover, _sourceMovementEnvelope is not null || _humanoidMovementEnvelope is not null);
         _movementSkeletonScale = _skeleton.Node.Scale.X;
         _movementActorScale = _actor.Scale.X;
         _movementWorldScale = _actor.IsInsideTree() ? _actor.GlobalBasis.Scale : _actor.Basis.Scale;

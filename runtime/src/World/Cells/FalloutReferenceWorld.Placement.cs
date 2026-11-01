@@ -104,6 +104,33 @@ internal sealed partial class FalloutReferenceWorld
         instance.PlacementRevision = ++PlacementRevision;
     }
 
+    internal void SetPositionAxis(FalloutFormKey reference, int axis, float value)
+    {
+        if (reference == records.RuntimeFormKey(0x14))
+            throw new NotSupportedException("Player SetPos requires its queued player-axis transform owner.");
+        if (axis is < 0 or > 2 || !float.IsFinite(value)) throw new InvalidDataException("Reference position axis/value is invalid.");
+        var state = Get(reference);
+        if (records.GetEffective(state.Base).Signature is "STAT" or "SCOL" or "TREE" or "FLOR" or "FURN")
+            throw new NotSupportedException("SetPos for a placed static-form category requires its native form-type admission contract.");
+        var placement = Placement(reference);
+        if (state.QuerySpatialPlacement is { } live)
+        {
+            var observed = live(); observed.Validate();
+            if (observed.Cell != placement.Cell) throw new InvalidDataException("SetPos live reference has a different authoritative cell.");
+            placement = observed.Copy();
+        }
+        else if (state.PackageMotion is not null || state.Engagement is not null || state.SandboxAdmissionFailure is not null)
+            throw new NotSupportedException("Cached actor SetPos requires its current source-space position owner.");
+        var cell = FalloutCellSceneReader.ReadDefinition(records, placement.Cell);
+        if (axis < 2 && (cell.Flags & 1) == 0 && cell.Worldspace is not null &&
+            MathF.Floor(placement.Position[axis] / 4096) != MathF.Floor(value / 4096))
+            throw new NotSupportedException("SetPos across an exterior grid boundary requires its CELL transfer owner.");
+        placement.Position[axis] = value;
+        // SetPos is an exact source-space edit. It does not perform MoveTo's
+        // authored navigation projection or substitute an editor position.
+        SetPlacement(reference, placement);
+    }
+
     internal IReadOnlyList<FalloutReferenceInstance> MovedSince(long revision) =>
         _instances.Values.Where(instance => instance.PlacementRevision > revision).ToArray();
 

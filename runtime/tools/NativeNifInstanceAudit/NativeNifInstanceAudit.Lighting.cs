@@ -1,5 +1,6 @@
 using Godot;
 using OpenNV.Runtime.Content;
+using OpenNV.Runtime.Formats.Gamebryo;
 
 public partial class NativeNifInstanceAudit
 {
@@ -32,7 +33,42 @@ public partial class NativeNifInstanceAudit
             finally { light.Free(); }
         }
         ExerciseLightFlicker(source, reference);
+        ExercisePointLightOverflow();
         GD.Print("OPENNV_PLACED_LIGHT_BINDING_PASS signedAdjustment=true sourceReach=true units=true pixels=unverified");
+    }
+
+    private static void ExercisePointLightOverflow()
+    {
+        using var shader = new Shader
+        {
+            Code = "shader_type spatial; render_mode unshaded;\n" + NativeNifPointLighting.ShaderSource +
+                "\nvoid fragment() { ALBEDO = owned_point_irradiance(VERTEX, NORMAL, VIEW, false); }"
+        };
+        using var material = new ShaderMaterial { Shader = shader };
+        var lights = Enumerable.Range(0, 9).Select(index =>
+            new NativeNifPointLight(new(index, 2, 3), new(.25f, .5f, .75f), index + 1)).ToArray();
+        NativeNifPointLighting.Bind(material, lights, .02f, storeEncoded: true,
+            directional: [new(Vector3.Up, Vector3.One)], isolatedWorld: true);
+        var overflow = material.GetShaderParameter("owned_point_overflow").AsGodotObject() as ImageTexture
+            ?? throw new InvalidOperationException("Ninth source point light lost its overflow texture.");
+        using (var pixels = overflow.GetImage())
+        {
+            if (material.GetShaderParameter("owned_point_count").AsInt32() != lights.Length ||
+                pixels.GetWidth() != 2 || pixels.GetHeight() != 1 ||
+                pixels.GetPixel(0, 0) != new Color(8, 2, 3, 9) ||
+                pixels.GetPixel(1, 0) != new Color(.25f, .5f, .75f, 0) ||
+                material.GetShaderParameter("owned_directional_count").AsInt32() != 1 ||
+                !material.GetShaderParameter("owned_isolated_world").AsBool())
+                throw new InvalidOperationException("Point-light overflow payload or isolated-view ownership changed.");
+        }
+        NativeNifPointLighting.Bind(material, lights.Take(1).ToArray(), 1);
+        if (material.GetShaderParameter("owned_point_count").AsInt32() != 1 ||
+            material.GetShaderParameter("owned_directional_count").AsInt32() != 0 ||
+            material.GetShaderParameter("owned_isolated_world").AsBool() ||
+            material.GetShaderParameter("owned_point_overflow").AsGodotObject() is not null ||
+            material.GetShaderParameter("owned_directional_data").AsGodotObject() is not null)
+            throw new InvalidOperationException("Rebinding fewer source lights retained stale overflow or view state.");
+        GD.Print("OPENNV_POINT_LIGHT_OVERFLOW_PASS sourceCount=9 overflowPayload=true rebind=true pixels=unverified");
     }
 
     private static void ExerciseLightFlicker(FalloutBaseObjectDefinition source, FalloutPlacedReference reference)

@@ -2,6 +2,7 @@ using Godot;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Formats.Gamebryo;
 using OpenNV.Runtime.World.Actors;
+using OpenNV.Runtime.Presentation.Rendering;
 
 namespace OpenNV.Runtime.Presentation.Ui;
 
@@ -15,14 +16,29 @@ internal sealed partial class NativeOwnedRenderedDevice : Control
     private readonly RuntimeNativePlayerActor? _player;
     private readonly TextureRect _image;
     private readonly bool _pipBoy;
+    private readonly Node3D? _pipBoyLightAnchor;
+    private readonly Vector3 _pipBoyLightColor;
+    private readonly float _pipBoyLightRadius;
+    private readonly NativeIsolatedViewLighting? _worldLighting;
     internal string ScreenName => _pipBoy ? "pipboyscreen:0" : "Screen:0";
     internal SubViewport View { get; }
     internal Camera3D Camera { get; }
     internal Node3D Model => _model;
     internal FalloutNifFile Source => _source;
     internal string SourceModel { get; }
+    internal object? ScreenLightState => _pipBoyLightAnchor is null ? null : new
+    {
+        anchor = _pipBoyLightAnchor.GetMeta("opennv_nif_source_name", "").AsString(),
+        radiusGameUnits = _pipBoyLightRadius,
+        diffuse = new[] { _pipBoyLightColor.X, _pipBoyLightColor.Y, _pipBoyLightColor.Z },
+        position = new[] { _pipBoyLightAnchor.GlobalPosition.X, _pipBoyLightAnchor.GlobalPosition.Y, _pipBoyLightAnchor.GlobalPosition.Z },
+        owner = "rendered-menu;independent-world-flashlight",
+        worldLighting = _worldLighting?.State,
+        unbound = "CRT-pulse-and-scene-light-selection"
+    };
 
-    internal NativeOwnedRenderedDevice(string modelPath, FalloutInstallationSettings settings, bool pipBoy = false, RuntimeNativePlayerActor? player = null)
+    internal NativeOwnedRenderedDevice(string modelPath, FalloutInstallationSettings settings, bool pipBoy = false,
+        RuntimeNativePlayerActor? player = null, Camera3D? worldCamera = null, float worldUnits = 1)
     {
         Name = "OwnedRenderedDevice";
         SourceModel = modelPath;
@@ -48,11 +64,29 @@ internal sealed partial class NativeOwnedRenderedDevice : Control
         _pickModel = player is null ? _model : player.Actor.Parts.Single(part => part.Root.FindChildren("*", "", true, false)
             .OfType<MeshInstance3D>().Any(mesh => mesh.GetMeta("opennv_nif_source_name", "").AsString() == ScreenName)).Root;
         Surface = new(modelPath, _pickModel, ScreenName);
+        if (pipBoy && player is not null)
+        {
+            var nodes = _pickModel.FindChildren("*", "", true, false).OfType<Node3D>().ToArray();
+            _pipBoyLightAnchor = nodes.SingleOrDefault(node => node.GetMeta("opennv_nif_source_name", "").AsString() == "Omni01") ??
+                nodes.Single(node => node.GetMeta("opennv_nif_source_name", "").AsString() == "Omni01:0");
+            var color = FalloutUiSystemColors.Read(settings, "entity_pipboy");
+            _pipBoyLightColor = new(color.X, color.Y, color.Z);
+            _pipBoyLightRadius = settings.Number("InterfaceFX", "fScreenLightRadius");
+            if (!float.IsFinite(_pipBoyLightRadius) || _pipBoyLightRadius <= 0)
+                throw new InvalidDataException("Owned Pip-Boy screen light radius is invalid.");
+        }
         Camera = new Camera3D { Name = "DeviceCamera", Current = true };
         // Native NiCamera columns denote direction, up, right. The identity
         // rendered-menu camera therefore looks along native +X with +Y up.
         Camera.Basis = new Basis(Vector3.Up, Vector3.Forward, Vector3.Left);
         View.AddChild(Camera);
+        if (pipBoy && player is not null && worldCamera is not null)
+        {
+            _worldLighting = new();
+            _worldLighting.Configure(worldCamera, Camera, () => _model, worldUnits, player.Skeleton.UnitsToMetres,
+                () => [PipBoyScreenLight()]);
+            View.AddChild(_worldLighting);
+        }
         _image = new TextureRect
         {
             Name = "DevicePixels",
@@ -105,7 +139,7 @@ internal sealed partial class NativeOwnedRenderedDevice : Control
             Camera.Fov = projection.VerticalFovDegrees; Camera.Near = projection.NearGameUnits * _player.Skeleton.UnitsToMetres;
             Camera.Far = 1000 * _player.Skeleton.UnitsToMetres;
             Camera.Transform = _player.SourceCamera;
-            BindAuthoredLights(_source, _pickModel, Camera);
+            BindPipBoyScreenLight();
             SetMeta("opennv_device_projection", "owned-first-person-skeleton-camera-and-pipboy-FOV; matched-retail-unverified");
             return;
         }
@@ -140,6 +174,21 @@ internal sealed partial class NativeOwnedRenderedDevice : Control
     {
         _player?.PosePipBoy(seconds, raised, buttonSeconds); LayoutPipBoy();
     }
+
+    private void BindPipBoyScreenLight()
+    {
+        // The rendered-menu manager creates this light at the source Omni01
+        // anchor. It is not a NiPointLight authored into the Pip-Boy NIF, and
+        // it is independent of the player's held world-flashlight toggle.
+        if (_worldLighting is null) BindMenuMaterials(_model, [PipBoyScreenLight()], 1);
+        SetMeta("opennv_device_screen_light", "owned-Omni01;InterfaceFX/fScreenLightRadius;entity_pipboy");
+        SetMeta("opennv_device_screen_light_radius", _pipBoyLightRadius);
+        SetMeta("opennv_device_screen_light_color", _pipBoyLightColor);
+    }
+
+    private NativeNifPointLight PipBoyScreenLight() => new(
+        Camera.GetCameraTransform().Orthonormalized().AffineInverse() * _pipBoyLightAnchor!.GlobalPosition,
+        _pipBoyLightColor, _pipBoyLightRadius);
 
     internal void SelectSection(int section)
     {

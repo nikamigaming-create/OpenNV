@@ -62,10 +62,10 @@ internal partial class RuntimeNativeNpc
     // travel procedure ends on arrival; furniture exit has its own transition.
     private int CurrentAiProcedure => Combat?.ScriptCombatProcedure ?? Combat?.ScriptEatProcedure ?? (_requestedSelection is not null || _aiError is not null
         ? throw new NotSupportedException("Current AI procedure has no admitted native continuation.")
+        : _sandboxPackage is not null ? CurrentSandboxAiProcedure
         : _sitting == 2
         ? throw new NotSupportedException("Furniture entry needs its native script-visible procedure code.")
         : _guardPackage is not null ? throw new NotSupportedException("Guard script-visible procedure code has no source declaration.")
-        : _sandboxPackage is not null ? CurrentSandboxAiProcedure
         : _pendingCurrentLocationSleep is not null ? throw new NotSupportedException("Sleep awaits its native package-start location.")
         : _sleepPackage is not null ? _sitting == 1 && _seat?.Sleeping == true ? 8 :
             _nativeMarkerTravel is not null ? 0 : throw new NotSupportedException("Sleep transition has no admitted native procedure phase.")
@@ -77,10 +77,25 @@ internal partial class RuntimeNativeNpc
             _ => 12,
         } : _aiPackage is null ? 0 : _sitting == 4 ? 21 : _travelActive || _editorTravelProgress is { Complete: false } ? 0 : 17);
 
-    private int CurrentSandboxAiProcedure => _furnitureSandboxActivity && _seat is { } seat
-        ? SandboxFurnitureProcedure(_sitting, seat.Sleeping, activityReselectionExit: _sitting == 4 && !_sandboxFurniturePackageExit)
-        : AdmittedSandboxMarkerProcedure is { } markerProcedure ? markerProcedure
-        : throw new NotSupportedException("Sandbox script-visible procedure code has no admitted native phase.");
+    private int CurrentSandboxAiProcedure
+    {
+        get
+        {
+            var activity = Combat?.CurrentSandboxActivity;
+            if (activity?.NativePhase is 0 or 1) return FalloutSandboxProcedure.Read(activity.NativePhase.Value, activity.Activity);
+            if (_furnitureSandboxActivity && _seat is { } seat && _sitting == 1)
+                return FalloutSandboxProcedure.Read(3, seat.Sleeping ? FalloutSandboxActivity.Sleep : FalloutSandboxActivity.Furniture);
+            if (activity?.NativePhase is { } phase) return FalloutSandboxProcedure.Read(phase, activity.Activity);
+            if (AdmittedSandboxMarkerProcedure is { } markerProcedure) return markerProcedure;
+            // An accepted legacy Wander handler proves the unconditional
+            // phase-three transition, independently of its arrival status.
+            if (activity?.Activity == FalloutSandboxActivity.Wander && Combat?.PackageMotion?.Wander is not null)
+                return FalloutSandboxProcedure.Read(3, activity.Activity);
+            if (activity is null && (_pendingSandboxAwaitingFirstMotion || _pendingCurrentLocationSandbox is not null))
+                return FalloutSandboxProcedure.Read(0, null);
+            throw new NotSupportedException("Sandbox script-visible procedure code has no retained native phase.");
+        }
+    }
 
     private int? AdmittedSandboxMarkerProcedure => _sandboxMarker is not null &&
         _sandboxMarkerNativePhase is 2 or 3 && _sandboxMarkerPhase is FalloutSandboxMarkerPhase.Readiness or
@@ -662,8 +677,16 @@ internal partial class RuntimeNativeNpc
 
     private float EvaluateOwnAiCondition(FalloutConditionQuery condition) => condition.Kind switch
     {
+        Function.GetArmorRating => (Combat ?? throw new NotSupportedException("Armor rating has no live equipment owner.")).ScriptArmorRating,
+        Function.IsSwimming => Activity.Swimming ? 1 : 0,
+        Function.GetForceHitReaction => Activity.ForceHitReaction ? 1 : 0,
+        Function.GetDialogueEmotion => _conversationTarget is null && !_responseIdleActive &&
+            !(_aiWorld ?? throw new NotSupportedException("Dialogue emotion has no speech process owner.")).IsTalking(
+                Appearance.Reference ?? throw new NotSupportedException("Dialogue emotion has no placed actor."))
+            ? -1 : throw new NotSupportedException("Active dialogue emotion requires its response-validity process owner."),
         Function.IsMoving => _travelActive || Combat?.PackageMoving == true ? 1 : 0,
         Function.GetAttacked => Activity.Attacked ? 1 : 0,
+        Function.GetPlantedExplosive => Activity.PlantedExplosive ? 1 : 0,
         Function.GetHitLocation => (Combat ?? throw new NotSupportedException("Hit-location query has no actor process owner.")).CurrentHitLocation,
         Function.GetAlerted => Activity.Alerted ? 1 : 0,
         Function.IsWeaponOut => WeaponDrawn ? 1 : 0,
@@ -679,7 +702,6 @@ internal partial class RuntimeNativeNpc
         Function.IsSneaking => Activity.Sneaking ? 1 : 0,
         Function.IsRunning => Activity.Running ? 1 : 0,
         Function.IsPC1stPerson => 0, // An NPC is never the player first-person camera owner.
-        Function.GetIsUsedItemType => 0, // No acquired item is bound outside the explicit Eat adapter.
         _ => throw new NotSupportedException($"AI condition {condition.Owner.FormKey}/{condition.Function} has no native owner."),
     };
 }

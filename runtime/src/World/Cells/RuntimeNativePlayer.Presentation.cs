@@ -2,6 +2,7 @@ using Godot;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.World.Actors;
+using OpenNV.Runtime.Presentation.Rendering;
 
 namespace OpenNV.Runtime.World.Cells;
 
@@ -18,6 +19,7 @@ internal partial class RuntimeNativePlayer
     private RuntimeNativePlayerActor? _firstPerson, _thirdPerson;
     private SubViewport? _firstPersonView;
     private Camera3D? _firstPersonCamera;
+    private NativeIsolatedViewLighting? _firstPersonLighting;
     private TextureRect? _firstPersonPixels;
     private uint[]? _presentationEquipment;
     private long _presentationInventoryRevision = -1;
@@ -35,6 +37,7 @@ internal partial class RuntimeNativePlayer
         zoomMeters = _thirdPersonDistance,
         appearanceRevision = _presentationAppearanceRevision,
         sourceScale = _sourceScale,
+        pipBoyLight = PipBoyLightObservation,
         toddler = _playerPolicy?.Invoke().PlayerToddler ?? false,
         aiming = WeaponAiming,
         sight = _weaponSight is null ? null : new
@@ -48,6 +51,7 @@ internal partial class RuntimeNativePlayer
             retailTransition = "unverified"
         },
         first = _firstPerson?.State,
+        firstPersonLighting = _firstPersonLighting?.State,
         third = _thirdPerson?.State,
         error = _presentationError,
         weaponHandling = WeaponHandlingState,
@@ -64,6 +68,7 @@ internal partial class RuntimeNativePlayer
         _appearanceRevision = appearanceRevision;
         _presentationFormLists = formLists;
         _playerPolicy = playerPolicy;
+        ConfigurePipBoyLight(records);
         if (playerPolicy is not null) ApplySourceScale(playerPolicy().PlayerScale);
         _weaponHandling = new(inventory);
         if (handling is not null) _weaponHandling.Restore(handling, key => FalloutWeaponPresentation.Read(records, key, formLists: formLists),
@@ -127,6 +132,12 @@ internal partial class RuntimeNativePlayer
     public override void _Process(double delta)
     {
         using var frameWork = OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Measure(OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Owner.PlayerPresentation);
+        try { AdvancePlayerPresentation(delta); }
+        finally { PublishPipBoyLightSafely(); }
+    }
+
+    private void AdvancePlayerPresentation(double delta)
+    {
         if (!GetTree().Paused) AdvancePendingProjectileImpacts((float)delta);
         if (_presentationRecords is null) return;
         var active = !_modalInput && _sourceCamera is null && _furniturePhase == 0 && _movementEnabled;
@@ -258,6 +269,10 @@ internal partial class RuntimeNativePlayer
                 };
                 _firstPersonCamera.CullMask = FalloutNpcAppearanceSelfView.CameraMask(_firstPersonCamera.CullMask, true);
                 _firstPersonView.AddChild(_firstPersonCamera);
+                _firstPersonLighting = new();
+                _firstPersonLighting.Configure(_camera, _firstPersonCamera,
+                    () => _firstPersonPixels?.Visible == true ? _firstPerson : null, UnitsToMeters, UnitsToMeters);
+                _firstPersonView.AddChild(_firstPersonLighting);
                 var layer = new CanvasLayer { Name = "FirstPersonLayer", Layer = 1 }; AddChild(layer);
                 _firstPersonPixels = new TextureRect
                 {

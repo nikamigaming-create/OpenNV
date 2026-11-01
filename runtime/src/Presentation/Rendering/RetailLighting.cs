@@ -56,20 +56,23 @@ internal static class RetailLighting
         return new Basis(right, up, lightAxis);
     }
 
-    internal static void AppendDiffuseLightFunction(StringBuilder source)
+    internal static void AppendDiffuseLightFunction(StringBuilder source, bool isolatedInputs = false)
     {
         source.AppendLine("void light() {");
-        source.AppendLine("    float retail_attenuation = ATTENUATION;");
-        source.AppendLine("    if (!LIGHT_IS_DIRECTIONAL) {");
+        if (isolatedInputs) source.AppendLine("    if (!owned_isolated_world) {");
+        var indent = isolatedInputs ? "    " : "";
+        source.AppendLine(indent + "    float retail_attenuation = ATTENUATION;");
+        source.AppendLine(indent + "    if (!LIGHT_IS_DIRECTIONAL) {");
         source.AppendLine(
-            "        float godot_edge_root = sqrt(clamp(ATTENUATION, 0.0, 1.0));");
+            indent + "        float godot_edge_root = sqrt(clamp(ATTENUATION, 0.0, 1.0));");
         source.AppendLine(
-            "        float normalized_distance_squared = sqrt(clamp(1.0 - godot_edge_root, 0.0, 1.0));");
+            indent + "        float normalized_distance_squared = sqrt(clamp(1.0 - godot_edge_root, 0.0, 1.0));");
         source.AppendLine(
-            "        retail_attenuation = 1.0 - normalized_distance_squared;");
-        source.AppendLine("    }");
+            indent + "        retail_attenuation = 1.0 - normalized_distance_squared;");
+        source.AppendLine(indent + "    }");
         source.AppendLine(
-            "    DIFFUSE_LIGHT += LIGHT_COLOR * max(dot(NORMAL, LIGHT), 0.0) * retail_attenuation / PI;");
+            indent + "    DIFFUSE_LIGHT += LIGHT_COLOR * max(dot(NORMAL, LIGHT), 0.0) * retail_attenuation / PI;");
+        if (isolatedInputs) source.AppendLine("    }");
         source.AppendLine("}");
     }
 }

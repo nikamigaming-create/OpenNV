@@ -35,6 +35,11 @@ internal static partial class CampaignGoalContracts
                 var constructionReads = reads;
                 Require(constructionReads > 0, "Portal construction did not bind source XTEL.");
                 RequireRoute(graph.Find(Key(0x300), Key(0x302), _ => true), 0x210, 0x221);
+                var ambiguous = Expect<NotSupportedException>(() => graph.FindUniqueFirstDoor(Key(0x300), Key(0x302), _ => true));
+                Require(ambiguous.Message.Contains("multiple first exits", StringComparison.Ordinal),
+                    "Quest compass selected an arbitrary first exit from source record order.");
+                Require(graph.FindUniqueFirstDoor(Key(0x300), Key(0x302), reference => reference != Key(0x210)) == Key(0x211),
+                    "Quest compass lost the unique admitted first physical door.");
                 RequireRoute(graph.Find(Key(0x300), Key(0x302), reference => reference != Key(0x210)), 0x211, 0x241);
                 RequireRoute(graph.Find(Key(0x300), Key(0x302), reference => reference != Key(0x220)), 0x211, 0x241);
                 RequireRoute(graph.Find(Key(0x300), Key(0x302), _ => true), 0x210, 0x221);

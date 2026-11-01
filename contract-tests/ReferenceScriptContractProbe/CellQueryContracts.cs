@@ -99,6 +99,21 @@ internal static class CellQueryContracts
                 "Missing player owner returned false or consumed the failed write/suffix.");
             Require(missing.Dispatch(caller, "GameMode").Error is not null && world.Get(caller).Read(1) == 1,
                 "Latched cell fault replayed its consumed prefix.");
+            var sourceBytes = records.GetEffective(other).ReadData();
+            var sourcePlacement = world.Placement(other);
+            world.Get(other).QuerySpatialPlacement = () => sourcePlacement with { Position = [11, 22, 33] };
+            scripts.ExecuteProgram(records.GetEffective(caller), script,
+                FalloutGameModeProgram.Read("begin GameMode\nOther.SetPos Z 123\nend"), 0);
+            world.Get(other).QuerySpatialPlacement = null;
+            Require(world.Placement(other).Position.SequenceEqual(new float[] { 11, 22, 123 }) &&
+                world.Placement(other).Cell == sourcePlacement.Cell && sourceBytes.SequenceEqual(records.GetEffective(other).ReadData()),
+                "SetPos borrowed editor axes, moved cells, projected its exact value or mutated source bytes.");
+            using var coldPosition = new FalloutReferenceWorld(records);
+            coldPosition.Restore(JsonSerializer.Deserialize<FalloutReferenceSnapshot[]>(JsonSerializer.Serialize(world.Capture()))!);
+            Require(coldPosition.Placement(other).Position.SequenceEqual(new float[] { 11, 22, 123 }),
+                "Cold restoration lost exact script-axis placement.");
+            Reject(() => world.SetPositionAxis(player, 2, 5));
+            Reject(() => world.SetPositionAxis(other, 3, 5));
             Console.WriteLine("OPENNV_CELL_QUERY_PASS typedArguments=true implicitAndPostfix=true winningPrefix=true " +
                 "playerAndNpcIndependent=true sharedAndFallback=true liveCell=true namedExterior=true " +
                 "exteriorArgumentFalse=true unloadedAndCold=true missingOwnerRefused=true consumedPrefixRetained=true");

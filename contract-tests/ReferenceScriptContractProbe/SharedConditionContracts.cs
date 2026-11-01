@@ -33,11 +33,11 @@ internal static partial class SharedConditionContracts
                 Record("NPC_", 7, Field("ACBS", playerStats), Field("AIDT", ai),
                     Field("DATA", Join(U32(100), [5, 5, 5, 5, 5, 5, 5]))),
                 Record("NPC_", 0x20, Field("EDID", Text("SharedActorBase")), Field("ACBS", female),
-                    Field("AIDT", ai), Field("RNAM", U32(0x30)), Field("VTCK", U32(0x31)), Field("SNAM", Join(U32(0x32), [2, 0, 0, 0]))),
+                    Field("AIDT", ai), Field("RNAM", U32(0x30)), Field("CNAM", U32(0x33)), Field("VTCK", U32(0x31)), Field("SNAM", Join(U32(0x32), [2, 0, 0, 0]))),
                 Record("CREA", 0x21, Field("ACBS", new byte[24]), Field("AIDT", ai), Field("VTCK", U32(0x31))),
                 Record("NPC_", 0x23, Field("ACBS", inheritedAi), Field("TPLT", U32(0x20))),
                 Record("ACTI", 0x22), Record("RACE", 0x30),
-                Record("VTYP", 0x31, Field("EDID", Text("TestVoice"))), Record("FACT", 0x32),
+                Record("VTYP", 0x31, Field("EDID", Text("TestVoice"))), Record("FACT", 0x32, Field("DATA", [0x10])), Record("CLAS", 0x33),
                 Record("GLOB", 0x40, Field("EDID", Text("Threshold")), Field("FNAM", [(byte)'f']), Field("FLTV", BitConverter.GetBytes(1f))),
                 Record("QUST", 0x50, Field("DATA", [1, 0])), Record("IDLE", 0x70),
                 Record("WEAP", 0x71, Field("EDID", Text("SourceItem"))),
@@ -178,6 +178,90 @@ internal static partial class SharedConditionContracts
             Reject(() => runtime.Evaluate(Query(Function.IsTalking, 1), scope));
             world.UnbindTalking(talkingQuery);
             Reject(() => runtime.Evaluate(Query(Function.IsTalking), scope));
+            {
+                var process = new FalloutActorActivityState();
+                var instance = world.Get(Key(0x200));
+                var previousQuery = instance.QueryNativeCondition;
+                Reject(() => runtime.Evaluate(Query(Function.GetPlantedExplosive), scope));
+                instance.QueryNativeCondition = query => query.Kind == Function.GetPlantedExplosive
+                    ? process.PlantedExplosive ? 1 : 0 : throw new NotSupportedException("Unowned process query.");
+                try
+                {
+                    var plantedScript = runtime.ScriptFunction("getplantedexplosive", owner, () => Key(0x200),
+                        _ => throw new InvalidDataException("Planted explosive query has no form operand."),
+                        _ => throw new InvalidDataException("Planted explosive query has no variable operand."))!;
+                    var fresh = process.Capture();
+                    Require(plantedScript.Invoke([]) == 0, "Fresh actor process invented a planted-projectile notification.");
+                    process.NotifyPlantedExplosive();
+                    Require(runtime.Evaluate(Query(Function.GetPlantedExplosive), scope) == 1 && plantedScript.Invoke([]) == 1,
+                        "Planted notification differed between CTDA and script process queries.");
+                    Reject(() => runtime.Evaluate(Query(Function.GetPlantedExplosive), scope with { Caller = Key(0x201) }));
+                    Reject(() => runtime.Evaluate(Query(Function.GetPlantedExplosive, 1), scope));
+                    Reject(() => process.Capture());
+                    Reject(() => process.Restore(fresh));
+                    process.RetirePlantedExplosive();
+                    Require(plantedScript.Invoke([]) == 0, "Projectile retirement retained stale panic state.");
+                    process.Restore(process.Capture());
+                }
+                finally { instance.QueryNativeCondition = previousQuery; }
+                Reject(() => runtime.Evaluate(Query(Function.GetPlantedExplosive), scope));
+            }
+            var vatsActive = false;
+            Require(runtime.Evaluate(Query(Function.GetIsClass, 0x01000033), scope) == 1 &&
+                runtime.Evaluate(Query(Function.GetPCEnemyofFaction, 0x01000032), scope) == 1,
+                "Class/faction predicate lost source traits or the player-enemy faction flag.");
+            var initializedActivity = new FalloutActorActivityState();
+            Require(!initializedActivity.Swimming && !initializedActivity.ForceHitReaction,
+                "New actor process invented swimming or a forced-hit request.");
+            initializedActivity.SetSwimming(true);
+            Reject(() => initializedActivity.Capture());
+            initializedActivity.SetSwimming(false);
+            initializedActivity.SetForceHitReaction(true);
+            Reject(() => initializedActivity.Capture());
+            initializedActivity.SetForceHitReaction(false);
+            _ = initializedActivity.Capture();
+            Require(runtime.Evaluate(Query(Function.GetUsedItemActivate), scope) == 0 &&
+                runtime.Evaluate(Query(Function.GetUsedItemLevel), scope) == -1 &&
+                runtime.Evaluate(Query(Function.GetIsUsedItem, 0x01000071), scope) == 0 &&
+                runtime.Evaluate(Query(Function.IsWaterObject), scope) == 0 &&
+                runtime.Evaluate(Query(Function.GetDisposition), scope) == 0,
+                "Absent IDLE used-item context or null disposition target invented process values.");
+            using (world.EnterUsedItem(Key(0x71)))
+            {
+                Require(runtime.Evaluate(Query(Function.GetIsUsedItem, 0x01000071), scope) == 1 &&
+                    runtime.Evaluate(Query(Function.GetIsUsedItem, 0x01000072), scope) == 1 &&
+                    runtime.Evaluate(Query(Function.GetIsUsedItemType, 40), scope) == 1,
+                    "Used-item context lost exact base/list/type identity.");
+                Reject(() => runtime.Evaluate(Query(Function.GetUsedItemLevel), scope));
+                Reject(() => runtime.Evaluate(Query(Function.GetUsedItemActivate), scope));
+                using (world.EnterUsedItem(Key(0x74), level: 2, activate: true))
+                    Require(runtime.Evaluate(Query(Function.GetUsedItemActivate), scope) == 1 &&
+                        runtime.Evaluate(Query(Function.GetUsedItemLevel), scope) == 2 &&
+                        runtime.Evaluate(Query(Function.GetIsUsedItemType, 41), scope) == 1,
+                        "Nested used-item context lost qualified selection arguments.");
+                Require(runtime.Evaluate(Query(Function.GetIsUsedItem, 0x01000071), scope) == 1,
+                    "Nested selection retired its caller's used item.");
+            }
+            Require(runtime.Evaluate(Query(Function.GetUsedItemLevel), scope) == -1,
+                "IDLE selection leaked a used-item context after retirement.");
+            var vatsCondition = new FalloutCondition(owner, 0, 0, (ushort)Function.GetVATSValue, 6, 15, 0, 0);
+            var vatsScript = runtime.ScriptFunction("getvatsvalue", owner, () => Key(0x200),
+                _ => throw new InvalidDataException("VATS selector has no form binding."),
+                _ => throw new InvalidDataException("VATS selector has no variable binding."))!;
+            world.VatsConditions.BindContext(() => vatsActive);
+            Require(runtime.Evaluate(Query(Function.GetVATSMode), scope) == 0 &&
+                runtime.Evaluate(Query(Function.GetVatsTargetHeight), scope) == 0,
+                "Inactive VATS invented a camera mode or attack target height.");
+            Require(runtime.Evaluate(vatsCondition, scope) == 0 && vatsScript.Invoke([new(6), new(15)]) == 0 &&
+                vatsScript.Invoke([new(6)]) == 0 &&
+                runtime.Evaluate(new FalloutCondition(owner, 0, 0, (ushort)Function.GetVATSValue, uint.MaxValue, uint.MaxValue, 0, 0), scope) == 0,
+                "Inactive VATS queried actor state or interpreted a selector without an action context.");
+            vatsActive = true;
+            Reject(() => runtime.Evaluate(vatsCondition, scope));
+            Reject(() => vatsScript.Invoke([new(6), new(15)]));
+            vatsActive = false;
+            Require(runtime.Evaluate(vatsCondition, scope) == 0,
+                "VATS retirement retained a stale action context.");
             Require(runtime.Evaluate(Query(Function.GetIsVoiceType, 0x01000031), scope) == 1 &&
                 runtime.Evaluate(Query(Function.GetIsVoiceType, 0x01000031, 1), scope) == 1 &&
                 runtime.Evaluate(Query(Function.GetIsID, 0x01000021, 1), scope) == 1 &&

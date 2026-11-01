@@ -14,6 +14,14 @@ internal sealed partial class RuntimeNativeActorCombat
     internal uint WeaponAnimationType => _enemyWeapon?.WeaponAnimationType ?? _packageWeaponType;
     internal uint ScriptWeaponAnimationType => _enemyWeapon is not null || _packageWeapon is not null
         ? FalloutWeaponPresentation.ScriptAnimationType(WeaponAnimationType) : 0;
+    internal float ScriptArmorRating
+    {
+        get
+        {
+            var context = _context ?? throw new NotSupportedException("Armor rating has no live equipment context.");
+            return _world.Defense(_state.Reference, context.Level(), context.Globals).Resistance;
+        }
+    }
     internal NativeActorWeaponAttachment? AnimationWeapon => OwnsPose ? _enemyObject : _packageWeaponsVisible ? _packageWeapon : null;
 
     internal bool PackageIsEquipped(FalloutFormKey item)

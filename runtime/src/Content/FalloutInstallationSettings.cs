@@ -8,6 +8,7 @@ internal sealed class FalloutInstallationSettings
     private readonly Dictionary<string, string> _values = new(StringComparer.OrdinalIgnoreCase);
     private Lazy<IReadOnlyDictionary<string, float>> _floatDefaults = null!;
     private Lazy<IReadOnlyDictionary<string, bool>> _booleanDefaults = null!;
+    private Lazy<IReadOnlyDictionary<string, string>> _stringDefaults = null!;
     private Lazy<FalloutRendererConfiguration> _renderer = null!;
     private readonly List<FalloutIniLayer> _iniLayers = [];
     private Lazy<FalloutNumericIniSettings> _numericIni = null!;
@@ -21,6 +22,7 @@ internal sealed class FalloutInstallationSettings
     {
         var settings = new FalloutInstallationSettings();
         settings._controlDefaults = new(() => FalloutExecutableStringTable.ReadControlDefaults(source.FalloutExecutablePath));
+        settings._stringDefaults = new(() => FalloutExecutableStringTable.ReadIniStringDefaults(source.FalloutExecutablePath));
         settings._floatDefaults = new(() => FalloutExecutableStringTable.ReadFloatDefaults(
             Path.Combine(Path.GetDirectoryName(source.ContentRoot)!,
                 source.Game == RuntimeLiveContentSource.FalloutNewVegasGame ? "FalloutNV.exe" : "Fallout3.exe")));
@@ -55,6 +57,7 @@ internal sealed class FalloutInstallationSettings
         foreach (var path in paths) settings.Add(path, true);
         settings._floatDefaults = new(() => new Dictionary<string, float>());
         settings._booleanDefaults = new(() => new Dictionary<string, bool>());
+        settings._stringDefaults = new(() => new Dictionary<string, string>());
         settings._numericIni = new(() => throw new NotSupportedException("INI declarations have no bound executable owner."));
         settings.Apply(profile ?? []);
         return settings;
@@ -85,6 +88,9 @@ internal sealed class FalloutInstallationSettings
 
     internal string Require(string section, string key) => _values.TryGetValue(section + "/" + key, out var value)
         ? value : throw new InvalidDataException($"Owned installation setting is missing: [{section}] {key}.");
+    internal string String(string section, string key) => _values.TryGetValue(section + "/" + key, out var value) ? value :
+        _stringDefaults.Value.TryGetValue(key + ":" + section, out var fallback) ? fallback :
+        throw new NotSupportedException($"Owned string setting has no admitted default: [{section}] {key}.");
     internal float Number(string section, string key)
     {
         if (_values.TryGetValue(section + "/" + key, out var value)) return float.Parse(value, CultureInfo.InvariantCulture);

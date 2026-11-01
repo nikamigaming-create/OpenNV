@@ -52,6 +52,9 @@ public partial class NativeHudMessageAudit
             var elapsed = _queue.Elapsed;
             var advanced = _hud.AdvancedSeconds;
             for (var frame = 0; frame < 4; frame++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            Require(plain.Icon is null && JsonSerializer.SerializeToElement(_hud.State).GetProperty("icon").GetString() ==
+                "Interface/Icons/Message Icons/glow_message_vaultboy_very_happy.dds",
+                "A source message without MICN suppressed the native default mood icon.");
             Require(_queue.Current?.Ordinal == ordinal && Math.Abs((_queue.Elapsed - elapsed) - (_hud.AdvancedSeconds - advanced)) < 1e-8,
                 "The retained notice advanced through more than its single gameplay presenter.");
             var settings = FalloutInstallationSettings.Read(_source);

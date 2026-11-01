@@ -132,6 +132,6 @@ public partial class RuntimeCoordinator
     {
         if (_nativeGameTime is not { } time) return "";
         var date = time.ScheduleTime();
-        return $"{date.Month + 1:00}.{date.Date:00}.{time.Year % 100:00}, {(int)date.Hour:00}:{(int)((date.Hour % 1) * 60):00}";
+        return $"{date.Month + 1:00}.{date.Date:00}.{time.Year % 100:00}, {(int)date.Hour}:{(int)((date.Hour % 1) * 60):00}";
     }
 }

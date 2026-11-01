@@ -98,6 +98,40 @@ internal static partial class IngestibleContracts
         Check(inventory.TraversalItems is not null, "An in-place count update lost valid traversal.");
         inventory.Add(records, Key(1), 1, 1, true);
         Check(inventory.TraversalItems is null, "An unqualified new insertion retained a fabricated native position.");
+        using (var mutable = new FalloutReferenceWorld(records))
+        {
+            var add = FalloutScriptLeveledItems.Function("additemtoleveledlist", records, () => mutable.LeveledItems)!;
+            add.InvokeValue([new(FalloutScriptValue.Form(records.RuntimeFormId(Key(0x162)))), new(FalloutScriptValue.Form(records.RuntimeFormId(Key(8)))),
+                new(1), new(3), new(25)]);
+            mutable.LeveledItems.Add(Key(0x162), Key(6), 5, 2, 75);
+            var low = FalloutLeveledItems.Resolve(records, Key(0x162), 1, 1, bound => bound - 1, changes: mutable.LeveledItems);
+            var high = FalloutLeveledItems.Resolve(records, Key(0x162), 1, 5, _ => 0, changes: mutable.LeveledItems);
+            Check(low.Single().Form == Key(8) && low.Single().Variant is { Count: 3, Condition: .25f } &&
+                high.Single().Form == Key(6) && high.Single().Variant is { Count: 2, Condition: .75f },
+                "Scripted leveled entries lost level admission, equal-level insertion, count or FNV health conversion.");
+            mutable.LeveledItems.Add(Key(0x160), Key(8), 1, 3, 25);
+            mutable.LeveledItems.Add(Key(0x160), Key(8), 1, 3, 25);
+            var actual = mutable.Inventory(actor, 1).Contents;
+            Check(actual.Item(Key(8))?.Count == 14 && actual.Item(Key(8))?.Variants?.Any(variant => variant.Condition == .25f) == true,
+                "Source inventory ignored duplicate scripted entries in nested use-all lists.");
+            var saved = JsonSerializer.Deserialize<FalloutLeveledItemsSnapshot>(JsonSerializer.Serialize(mutable.LeveledItems.Capture()))!;
+            using var cold = new FalloutReferenceWorld(records);
+            cold.LeveledItems.Restore(saved);
+            cold.Restore(mutable.Capture());
+            var restored = cold.Inventory(actor, 1).Contents;
+            restored.Add(records, Key(0x162), 1, 5, true);
+            Check(restored.Item(Key(6))!.Count == actual.Item(Key(6))!.Count + 2 &&
+                cold.LeveledItems.Additions(Key(0x160)).Count == 2,
+                "Cold inventory selection lost its world mutation owner or collapsed duplicate entries.");
+            var beforeChanges = JsonSerializer.Serialize(cold.LeveledItems.Capture());
+            Reject(() => cold.LeveledItems.Restore(saved with { Lists = saved.Lists.Select((list, index) =>
+                index == 0 ? list with { Sha256 = new string('0', 64) } : list).ToArray() }));
+            Check(beforeChanges == JsonSerializer.Serialize(cold.LeveledItems.Capture()), "Rejected leveled state restore partially published entries.");
+            Reject(() => mutable.LeveledItems.Add(Key(0x162), Key(8), 1, 1, 101));
+            Reject(() => mutable.LeveledItems.Add(Key(8), Key(6), 1, 1, 100));
+            Check(FalloutLeveledItems.Resolve(records, Key(0x162), 1, 1, _ => 0).Single().Form == Key(6),
+                "Scripted mutation leaked into immutable source or another world.");
+        }
         Console.WriteLine("OPENNV_INVENTORY_TRAVERSAL_PASS nativeCnto=true nestedLvli=true countsAndDrawsPreserved=true repeatedConsumption=true rollback=true cold=true legacyExplicit=true newInsertionInvalidates=true");
     }
 }

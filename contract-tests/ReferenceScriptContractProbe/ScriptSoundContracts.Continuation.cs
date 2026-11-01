@@ -70,5 +70,54 @@ internal static partial class ScriptSoundContracts
             { PendingCommand = value.PendingCommand! with { SourceSha256 = new string('f', 64) } }).ToArray() };
         Reject(() => new FalloutQuestScripts(records, new(records), new HashSet<FalloutFormKey>(), new FalloutPlayerInventory(), defaultProcessingDelay: 0).Restore(changed));
         Console.WriteLine("OPENNV_QUEST_SOUND_CONTINUATION_CONTRACT_PASS legacyUniqueSite=true capturedSite=true hashValidation=true boundAdmission=true prefixRetained=true branchRetained=true suffixOnce=true clockOnce=true historicalFaultPersisted=true coldNoReplay=true");
+        LeveledItemContinuations(directory);
+    }
+
+    private static void LeveledItemContinuations(string directory)
+    {
+        const string source = "short prefix\nshort suffix\nshort gate\nshort done\nbegin GameMode\n" +
+            "if done == 0\nset prefix to prefix + 1\nif gate == 1\nAddItemToLeveledList Bucket Reward 1 2 50\n" +
+            "set suffix to suffix + 1\nelse\nset suffix to 99\nendif\nset done to 1\nendif\nend";
+        const string error = "Reached native script command AddItemToLeveledList (5 arguments) has no owner.";
+        var header = new byte[20]; BinaryPrimitives.WriteUInt32LittleEndian(header.AsSpan(12), 4); header[16] = 1;
+        File.WriteAllBytes(Path.Combine(directory, "LeveledContinuation.esm"), Join(Record("TES4", 0),
+            Record("LVLI", 0x100, Field("EDID", Text("Bucket")), Field("LVLD", [0]), Field("LVLF", [0])),
+            Record("MISC", 0x200, Field("EDID", Text("Reward"))),
+            Record("SCPT", 0x601, Field("SCHR", header), Local(1, "prefix"), Local(2, "suffix"), Local(3, "gate"), Local(4, "done"),
+                Field("SCRO", BitConverter.GetBytes(0x100u)), Field("SCRO", BitConverter.GetBytes(0x200u)), Field("SCTX", Text(source))),
+            Record("QUST", 0x600, Field("EDID", Text("LeveledQuest")), Field("DATA", [1, 0]), Field("SCRI", BitConverter.GetBytes(0x601u)))));
+        using var records = FalloutPluginStack.Load(directory, ["LeveledContinuation.esm"]);
+        var quest = new FalloutFormKey("LeveledContinuation.esm", 0x600);
+        var quests = new FalloutQuestState(records); quests.SetVariable(quest, 3, 1);
+        var original = new FalloutQuestScripts(records, quests, new HashSet<FalloutFormKey>(), new FalloutPlayerInventory(), defaultProcessingDelay: 0);
+        original.Host = new((_, _) => throw new InvalidDataException("Unexpected stage."), _ => throw new InvalidDataException("Unexpected actor read."),
+            ExecuteProgram: (owner, script, program, _) =>
+            {
+                var bindings = new FalloutScriptBindings(records, owner, script, script.ReadSubrecords());
+                program.Execute(name => quests.Variable(quest, bindings.Variable(name).Index),
+                    (name, value) => quests.SetVariable(quest, bindings.Variable(name).Index, value), (_, _) => throw new NotSupportedException(error));
+            });
+        original.Advance(0);
+        var captured = JsonSerializer.Deserialize<FalloutQuestScriptsSnapshot>(JsonSerializer.Serialize(original.Capture()))!;
+        Require(captured.Instances.Single().PendingCommand is { Statement: >= 0, GameMode: true } && quests.Variable(quest, 1) == 1,
+            "Stopped leveled mutation lost its exact source cursor or consumed prefix.");
+        using var world = new FalloutReferenceWorld(records);
+        var resumedQuests = new FalloutQuestState(records); resumedQuests.Restore(quests.Capture()); resumedQuests.SetVariable(quest, 3, 0);
+        var resumed = new FalloutQuestScripts(records, resumedQuests, new HashSet<FalloutFormKey>(), new FalloutPlayerInventory(), defaultProcessingDelay: 0, references: world);
+        resumed.Restore(captured); resumed.Advance(0);
+        var result = resumed.Capture().Instances.Single();
+        var entries = world.LeveledItems.Additions(new("LeveledContinuation.esm", 0x100));
+        Require(result.Error is null && result.Continuations is [{ Disposition: "tail-completed-prefix-retained" }] &&
+            resumedQuests.Variable(quest, 1) == 1 && resumedQuests.Variable(quest, 2) == 1 && resumedQuests.Variable(quest, 4) == 1 &&
+            entries is [{ Count: 2, Level: 1, Condition: .5f }],
+            "Leveled continuation repeated prefix, reevaluated a consumed guard or failed to publish its mutation.");
+        using var coldWorld = new FalloutReferenceWorld(records);
+        coldWorld.LeveledItems.Restore(JsonSerializer.Deserialize<FalloutLeveledItemsSnapshot>(JsonSerializer.Serialize(world.LeveledItems.Capture()))!);
+        var coldQuests = new FalloutQuestState(records); coldQuests.Restore(resumedQuests.Capture());
+        var cold = new FalloutQuestScripts(records, coldQuests, new HashSet<FalloutFormKey>(), new FalloutPlayerInventory(), defaultProcessingDelay: 0, references: coldWorld);
+        cold.Restore(JsonSerializer.Deserialize<FalloutQuestScriptsSnapshot>(JsonSerializer.Serialize(resumed.Capture()))!); cold.Advance(0);
+        Require(coldWorld.LeveledItems.Additions(new("LeveledContinuation.esm", 0x100)).Count == 1 && coldQuests.Variable(quest, 1) == 1,
+            "Cold continuation replayed the completed mutation.");
+        Console.WriteLine("OPENNV_LEVELED_CONTINUATION_PASS exactCursor=true prefixRetained=true consumedGuard=true mutationOnce=true coldNoReplay=true");
     }
 }

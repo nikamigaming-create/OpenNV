@@ -14,6 +14,8 @@ internal sealed partial class FalloutPlayerInventory
     private FalloutSoundRandomState _random = new(BitConverter.ToUInt64(System.Security.Cryptography.RandomNumberGenerator.GetBytes(sizeof(ulong))));
     internal FalloutHudNotifications Notifications { get; } = new();
     internal long Revision { get; private set; }
+    private IFalloutLeveledItemChanges? _leveledItems;
+    internal void BindLeveledItems(IFalloutLeveledItemChanges owner) => _leveledItems = owner;
     internal IReadOnlyList<FalloutCampaignItem> Items => _items.Values.OrderBy(item => item.RuntimeFormId).ToArray();
     internal IReadOnlyList<uint> Equipped => _equipped.Order().ToArray();
     internal FalloutCampaignItem? Item(FalloutFormKey form) => _items.GetValueOrDefault(form);
@@ -154,12 +156,12 @@ internal sealed partial class FalloutPlayerInventory
     }
     internal IReadOnlyList<FalloutItemAddition> Add(FalloutPluginStack records, FalloutFormKey form, int count, int level, bool silent,
         FalloutGlobalState? globals = null, FalloutItemVariant? extra = null, Action<FalloutFormKey>? validateAddition = null,
-        bool nativeContainerOrder = false)
+        bool nativeContainerOrder = false, IFalloutLeveledItemChanges? leveledItems = null)
     {
         RequireNoChangeInProgress();
         var random = new FalloutSoundRandomState(_random.State);
         var additions = FalloutLeveledItems.Resolve(records, form, count, level, random.NextBounded, globals is null ? null : globals.Get, extra,
-            nativeContainerOrder);
+            nativeContainerOrder, leveledItems ?? _leveledItems);
         // Leveled sources can resolve to a different set of forms. Check the
         // selected winners before publishing inventory or the random state.
         if (validateAddition is not null)

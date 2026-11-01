@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using OpenNV.Runtime.Gameplay.State;
 
 namespace OpenNV.Runtime.Content;
 
@@ -23,7 +24,7 @@ internal static class FalloutLeveledItems
 
     internal static IReadOnlyList<FalloutItemAddition> Resolve(FalloutPluginStack records, FalloutFormKey form, int count,
         int level, Func<uint, uint> random, Func<FalloutFormKey, float>? global = null, FalloutItemVariant? extra = null,
-        bool nativeContainerOrder = false)
+        bool nativeContainerOrder = false, IFalloutLeveledItemChanges? changes = null)
     {
         if (count <= 0 || level < 1) throw new ArgumentOutOfRangeException(nameof(count));
         var result = new List<FalloutItemAddition>();
@@ -114,6 +115,13 @@ internal static class FalloutLeveledItems
                             ownerType == "FACT" ? unchecked((int)argument) : null)
                         };
                     }
+                }
+                foreach (var added in changes?.Additions(key) ?? [])
+                {
+                    var entry = new Entry(added.Level, added.Form, added.Count, new(1, added.Condition), true);
+                    var before = entries.FindIndex(candidate => candidate.Level > added.Level);
+                    if (before < 0) entries.Add(entry);
+                    else entries.Insert(before, entry);
                 }
                 var eligible = entries.Where(entry => entry.Level <= level).ToArray();
                 if (eligible.Length == 0) return;

@@ -29,4 +29,6 @@ internal partial class RuntimeNativeNpc
         => NativeActorPosedBounds.Current(Parts, Skeleton, content, _boundSources);
     internal FalloutNifSphereBound? CurrentBoneWorldBound(RuntimeLiveContentSource content, int bone)
         => NativeActorPosedBounds.CurrentBone(Parts, Skeleton, content, _boundSources, bone);
+    internal FalloutNifSphereBound? CurrentMeshWorldBound(RuntimeLiveContentSource content, MeshInstance3D mesh)
+        => NativeActorPosedBounds.CurrentMesh(Parts, Skeleton, content, _boundSources, mesh);
 }

@@ -15,6 +15,15 @@ reproduced severe slowdown, but its checkpoint is unmatched and recording
 amplifies the cost. Scene parity and faster-than-retail performance remain open.
 See current-work.md for the measured limits and active repair batch.
 
+The current local batch completes the ordinary Doc-house exit after shared idle
+condition and Sandbox-phase repairs. An enabled Pip-Boy flashlight survives a
+committed save and cold restore; a later outdoor save retains the disabled light
+and loads successfully. The Stats aid shortcut visibly consumes a Stimpak,
+restores health and dims when no longer useful. Source compass offsets, CRT
+composition and world-map extent/icon bindings are implemented; exact pixels and
+the native local-map pass remain open. These selected results are not whole-game
+or sustained-performance acceptance.
+
 The local batch now completes Cheyenne's resident Accompany door transfer and
 persists her enabled exterior placement with the source door receipt. Both games
 have also walked from the saloon to Doc Mitchell's exterior door. Static managed

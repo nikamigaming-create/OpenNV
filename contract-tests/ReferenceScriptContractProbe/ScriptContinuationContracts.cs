@@ -1,4 +1,5 @@
 using OpenNV.Runtime.Content;
+using OpenNV.Runtime.Gameplay.State;
 
 internal static class ScriptContinuationContracts
 {
@@ -48,6 +49,18 @@ internal static class ScriptContinuationContracts
         alternateTail.Execute(name => values[name], (name, value) => values[name] = value, (_, _) => ++sounds, Functions);
         Require(values["suffix"] == 2 && values["wrong"] == 0 && sounds == 2,
             "Else/elseif nesting lost the entered branch or repeated its guard.");
+        var light = new FalloutPipBoyLightState();
+        light.Press(); light.Advance(.79f, .8f);
+        Require(light.Release() && !light.Enabled, "A short Pip-Boy press toggled the world light or lost its menu tap.");
+        light.Press(); light.Advance(.8f, .8f); light.Advance(1, .8f);
+        Require(light.Enabled && !light.Release(), "A held Pip-Boy press toggled repeatedly or also opened the menu.");
+        var savedLight = light.Capture("source");
+        var coldLight = new FalloutPipBoyLightState(); coldLight.Restore(savedLight, "source");
+        Require(coldLight.Enabled && !coldLight.Pressed, "Cold light restore lost on-state or replayed held input.");
+        coldLight.Press(); coldLight.Advance(.8f, .8f); coldLight.Release();
+        Require(!coldLight.Enabled, "A restored active light could not be turned off.");
+        coldLight.Press(); coldLight.Cancel();
+        Require(!coldLight.Release(), "Cancelled input became a Pip-Boy menu tap.");
         Console.WriteLine("OPENNV_SCRIPT_CONTINUATION_CONTRACT_PASS consumedPrefix=true consumedGuards=true selectedBranches=true fixedOperands=true capturedCursor=true ambiguousLegacyAndLoopsRejected=true");
     }
 

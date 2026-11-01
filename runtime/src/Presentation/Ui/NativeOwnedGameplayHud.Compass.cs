@@ -7,7 +7,7 @@ namespace OpenNV.Runtime.Presentation.Ui;
 internal partial class NativeOwnedGameplayHud
 {
     private readonly Func<float, FalloutCompassFrame>? _compassSnapshot;
-    private XElement? _compassWindow, _compassGroup, _compassLandmarkTemplate, _compassQuestTemplate;
+    private XElement? _compassWindow, _compassGroup, _compassNpcGroup, _compassLandmarkTemplate, _compassQuestTemplate, _compassNpcTemplate;
     private readonly Dictionary<(string Kind, string Reference), XElement> _compassIcons = [];
     private FalloutCompassFrame? _lastCompass;
     private string? _compassError;
@@ -20,7 +20,15 @@ internal partial class NativeOwnedGameplayHud
         _compassGroup = Template("template_compass_icon_group");
         _compassLandmarkTemplate = Template("template_compass_icon_marker");
         _compassQuestTemplate = Template("template_compass_icon_quest");
+        _compassNpcGroup = Template("template_compass_icon_group");
+        _compassNpcTemplate = Template("compass_npc_icon");
         parent.Add(_compassWindow); _compassWindow.Add(_compassGroup);
+        _compassWindow.Add(_compassNpcGroup);
+        // Native creates all groups from the common source template, then
+        // positions NPC ticks separately from landmarks and objectives.
+        _tiles.Bind(_compassGroup, "y", 30);
+        _tiles.Bind(_compassNpcGroup, "y", 10);
+        _tiles.Bind(_compassNpcGroup, "depth", 2);
         _tiles.Bind(_compassWindow, "visible", 0);
     }
 
@@ -43,11 +51,20 @@ internal partial class NativeOwnedGameplayHud
                 active.Add(key);
                 if (!_compassIcons.TryGetValue(key, out var tile))
                 {
-                    tile = new XElement(marker.Kind == "quest" ? _compassQuestTemplate! : _compassLandmarkTemplate!);
-                    _compassIcons.Add(key, tile); _compassGroup!.Add(tile);
+                    tile = new XElement(marker.Kind switch
+                    {
+                        "quest" => _compassQuestTemplate!,
+                        "landmark" => _compassLandmarkTemplate!,
+                        "actor" => _compassNpcTemplate!,
+                        _ => throw new NotSupportedException($"Owned compass marker kind {marker.Kind} is unbound."),
+                    });
+                    _compassIcons.Add(key, tile);
+                    (marker.Kind == "actor" ? _compassNpcGroup! : _compassGroup!).Add(tile);
                     validate = true;
                 }
                 _tiles.Bind(tile, "_Heading", marker.Heading); _tiles.Bind(tile, "_Distance", marker.Distance);
+                if (marker.Kind == "actor")
+                    tile.SetElementValue("systemcolor", marker.Hostile ? "entity_hudalt" : "entity_hudmain");
                 if (marker.Kind == "landmark")
                 {
                     var filename = marker.Discovered ? "Interface/HUD/glow_hud_compass_landmark_discovered.dds" :

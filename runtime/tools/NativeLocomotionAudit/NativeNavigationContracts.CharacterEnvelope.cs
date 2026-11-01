@@ -44,10 +44,38 @@ internal static partial class NativeNavigationContracts
             throw new InvalidOperationException("Horizontal compound source bounds lost upper/lower capsule composition or fixed-unit offsets.");
         if (NativeActorMovementEnvelope.Horizontal(new(0, 0, 60), new(20, 20, 60), 1, units) is not null)
             throw new InvalidOperationException("Horizontal source controller replaced an unqualified vertical/custom controller.");
+        var humanoid = new NativeHumanoidMovementEnvelope(units);
+        if (humanoid.CorePoints.Length != 18 || humanoid.CorePlanes.Length != 24 ||
+            Math.Abs(humanoid.Radius - .289321875f) > .000001f ||
+            Math.Abs(humanoid.Height - 1.8288f) > .000001f ||
+            Math.Abs(humanoid.CorePoints[0].Y - humanoid.Margin) > .000001f ||
+            Math.Abs(humanoid.CorePoints[1].Y - .4629125f) > .000001f ||
+            Math.Abs(humanoid.CorePoints[9].Y - 1.6941391f) > .000001f)
+            throw new InvalidOperationException("Standard humanoid hull lost its source dimensions, taper, center or floor support.");
+        var humanoidShape = new CollisionShape3D();
+        try
+        {
+            Vector3[]? worldPoints = null;
+            foreach (var referenceScale in new[] { .7f, 1.3f })
+            {
+                humanoid.Publish(humanoidShape, referenceScale);
+                var convex = (ConvexPolygonShape3D)humanoidShape.Shape!;
+                var points = convex.Points.Select(point => point * referenceScale).ToArray();
+                if (Math.Abs(convex.Margin * referenceScale - humanoid.Margin) > .000001f ||
+                    humanoidShape.Position != Vector3.Zero || worldPoints is not null &&
+                    points.Where((point, index) => point.DistanceTo(worldPoints[index]) > .000001f).Any())
+                    throw new InvalidOperationException("Visual actor scale changed the standard controller's world envelope.");
+                foreach (var plane in humanoid.CorePlanes)
+                    if (Math.Abs(points.Max(point => plane.Normal.Dot(point)) - plane.D - humanoid.Margin) > .00001f)
+                        throw new InvalidOperationException("Jolt hull rounding changed a source supporting plane.");
+                worldPoints = points;
+            }
+        }
+        finally { humanoidShape.Free(); }
         var basis = NativeCapsuleNavigation.PlanningBasis(Basis.Identity.Scaled(new(2, 2, 2)), Vector3.Zero, Vector3.Right);
         if ((basis * Vector3.Forward).Normalized().Dot(Vector3.Right) < .99999f ||
             basis.Scale.DistanceTo(new(2, 2, 2)) > .000001f)
             throw new InvalidOperationException("Directional source capsule planning lost intended heading or body scale.");
-        Console.WriteLine("OPENNV_CHARACTER_ENVELOPE_CONTRACT_PASS simple=true compound=true fullLength=true scale=true clearance=true planningHeading=true verticalCustomSeparate=true gameplay=unverified");
+        Console.WriteLine("OPENNV_CHARACTER_ENVELOPE_CONTRACT_PASS simple=true compound=true fullLength=true scale=true clearance=true planningHeading=true standardHumanoid=true creatureVerticalCustomSeparate=true gameplay=unverified");
     }
 }

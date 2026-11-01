@@ -32,9 +32,12 @@ internal partial class RuntimeNativeNpc
             _aiReferenceState!.ProcedureCaptureBlocker = FalloutActorSandboxMarkerContinuation.CaptureBlocker;
         }
         if (_sandboxMarker != target) throw new InvalidOperationException("Sandbox marker changed its accepted target.");
+        if (Combat!.CurrentSandboxActivity?.NativePhase == 1 && IdleRequestsReady && !_idleRetirementPending)
+            activity = Combat.ObserveSandboxPhase(2);
         if (_sandboxMarkerPhase is FalloutSandboxMarkerPhase.Dispatch or FalloutSandboxMarkerPhase.Playback)
             _sandboxMarkerNativePhase = ObserveSandboxMarkerNativePhase(_sandboxMarkerNativePhase, Combat!.PackageMoving || Combat.PackageRoutePending,
                 _sandboxIdleSelection.SelectedIdle is not null);
+        if (_sandboxMarkerNativePhase is { } observedPhase) activity = Combat.ObserveSandboxPhase(observedPhase);
         if (_sandboxMarkerPhase == FalloutSandboxMarkerPhase.Retiring)
         {
             if (!_idleRetirementPending && IdleRequestsReady) CompleteSandboxMarkerPackageExit();
@@ -129,6 +132,7 @@ internal partial class RuntimeNativeNpc
         if (_currentIdleRequest is null) { ClearSandboxMarker(); return true; }
         if (!_idleRetirementPending)
         {
+            Combat!.ObserveSandboxPhase(1);
             RequestIdleRetirement();
             _sandboxMarkerPhase = FalloutSandboxMarkerPhase.Retiring;
             _sandboxMarkerNativePhase = null;

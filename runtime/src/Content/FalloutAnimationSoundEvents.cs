@@ -99,7 +99,11 @@ internal sealed class FalloutAnimationSoundEvents(FalloutFormKey reference, Func
         if (!referenceEnabled())
             throw new NotSupportedException("Disabled source sound bone requires its independent emitter continuation.");
     }
-    internal FalloutAnimationSoundHistoryDiagnostic CaptureDiagnostic => new(reference, _generation, CanCapture, _opaqueError,
+    internal FalloutAnimationSoundHistoryDiagnostic CaptureDiagnostic => ObserveCaptureDiagnostic(CanCapture);
+
+    // Reuse this publication's observed readiness without probing a native
+    // emitter again. This diagnostic never grants persistent capture.
+    internal FalloutAnimationSoundHistoryDiagnostic ObserveCaptureDiagnostic(bool observedReady) => new(reference, _generation, observedReady, _opaqueError,
         _events.Where(entry => entry.End is not (FalloutAnimationSoundEnd.NativeFinished or FalloutAnimationSoundEnd.SourceStopped or FalloutAnimationSoundEnd.ChanceSkipped or FalloutAnimationSoundEnd.SourceUnloaded))
             .Select(entry => new FalloutAnimationSoundCaptureBlocker(entry.Generation, entry.Sound, entry.SoundSha256,
                 entry.TextKey, entry.Path, entry.MediaSha256, entry.End, entry.Error)).ToArray());

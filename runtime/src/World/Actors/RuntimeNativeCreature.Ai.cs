@@ -209,8 +209,19 @@ internal sealed partial class RuntimeNativeCreature
 
     private float EvaluateNativeCondition(FalloutConditionQuery condition) => condition.Kind switch
     {
+        Function.GetArmorRating => (Combat ?? throw new NotSupportedException("Armor rating has no live equipment owner.")).ScriptArmorRating,
+        Function.IsSwimming => Activity.Swimming ? 1 : 0,
+        Function.GetForceHitReaction => Activity.ForceHitReaction ? 1 : 0,
+        Function.GetDialogueEmotion => !_dialogueRequested &&
+            !(_aiWorld ?? throw new NotSupportedException("Dialogue emotion has no speech process owner.")).IsTalking(
+                _aiState?.Reference ?? throw new NotSupportedException("Dialogue emotion has no placed actor."))
+            ? -1 : throw new NotSupportedException("Active creature dialogue emotion requires its response-validity process owner."),
+        Function.GetCurrentAIProcedure => Combat?.ScriptCombatProcedure ?? Combat?.ScriptEatProcedure ??
+            (_sandboxPackage is not null ? Combat?.ScriptSandboxProcedure ?? throw new NotSupportedException("Creature Sandbox has no live phase owner.") :
+                _aiPackage is null ? 0 : throw new NotSupportedException("Creature current AI procedure requires its admitted package-phase owner.")),
         Function.IsMoving => Combat?.PackageMoving == true ? 1 : 0,
         Function.GetAttacked => Activity.Attacked ? 1 : 0,
+        Function.GetPlantedExplosive => Activity.PlantedExplosive ? 1 : 0,
         Function.GetHitLocation => (Combat ?? throw new NotSupportedException("Hit-location query has no actor process owner.")).CurrentHitLocation,
         Function.GetAlerted => Activity.Alerted ? 1 : 0,
         Function.IsWeaponOut => Activity.WeaponDrawn ? 1 : 0,

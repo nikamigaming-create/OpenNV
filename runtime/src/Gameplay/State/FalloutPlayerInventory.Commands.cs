@@ -78,6 +78,7 @@ internal sealed partial class FalloutPlayerInventory
         var snapshot = Capture();
         copy.Restore(snapshot.Inventory, snapshot.EquippedRuntimeFormIds.ToArray(), snapshot.InventoryRandomState);
         copy._traversal = _traversal;
+        copy._leveledItems = _leveledItems;
         return copy;
     }
 

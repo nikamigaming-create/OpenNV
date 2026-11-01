@@ -7,6 +7,9 @@ public partial class NativeNifInstanceAudit
 {
     private static void ExerciseRenderedMenuMaterialOutput()
     {
+        using var crtShader = new Shader { Code = NativePipBoyScreenEffect.ShaderSource };
+        if (!crtShader.GetShaderUniformList().Any(row => row.AsGodotDictionary()["name"].AsString() == "source_scanlines"))
+            throw new InvalidDataException("Pip-Boy interface shader has no compiled owned scanline input.");
         var menu = new Node3D();
         var world = new Node3D();
         string[] environmentNames = ["opennv_exterior_ambient", "opennv_exterior_fog_color", "opennv_exterior_fog_range"];

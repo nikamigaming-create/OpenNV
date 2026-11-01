@@ -11,7 +11,8 @@ internal partial class RuntimeNativeExteriorLod : Node3D
     private sealed record Tile(string? Path, FalloutNifFile? Source, long Bytes, Exception? Error);
     private sealed record Payload(FalloutLodBlock Block, Tile Terrain, Tile Objects);
     private sealed record Resident(Node3D Root, Node3D? Terrain, Node3D? Objects, ShaderMaterial[] Materials,
-        long Bytes, bool TerrainComplete, bool ObjectsComplete)
+        long Bytes, bool TerrainComplete, bool ObjectsComplete, bool OrdinaryWaterComplete, bool ReflectiveWaterComplete,
+        int MissingOrdinaryWaterGeometries, int MissingReflectiveWaterGeometries)
     {
         internal ulong LastUse;
     }
@@ -38,6 +39,7 @@ internal partial class RuntimeNativeExteriorLod : Node3D
     private long _residentBytes;
     private int _detailRadius;
     private bool _completeTerrainCover, _completeObjectCover;
+    private bool _completeOrdinaryWaterCover, _completeReflectiveWaterCover;
     private double _detailImageMilliseconds, _detailTextureMilliseconds, _detailBindingMilliseconds;
     private int _detailBoundMaterials;
     private bool _detailTextureReused;
@@ -51,6 +53,17 @@ internal partial class RuntimeNativeExteriorLod : Node3D
         failedBlocks = _failed.Count,
         completeTerrainCover = _completeTerrainCover,
         completeObjectCover = _completeObjectCover,
+        completeOrdinaryWaterSourceCover = _completeOrdinaryWaterCover,
+        completeReflectiveWaterSourceCover = _completeReflectiveWaterCover,
+        completeSourceDrawCover = _completeTerrainCover && _completeObjectCover &&
+            _completeOrdinaryWaterCover && _completeReflectiveWaterCover,
+        water = new
+        {
+            materialOwner = "unbound",
+            admission = "unqualified",
+            residentMissingOrdinaryGeometries = _cache.Values.Sum(value => value.MissingOrdinaryWaterGeometries),
+            residentMissingReflectiveGeometries = _cache.Values.Sum(value => value.MissingReflectiveWaterGeometries)
+        },
         detailGrid = new
         {
             imageMilliseconds = _detailImageMilliseconds,
@@ -298,6 +311,7 @@ internal partial class RuntimeNativeExteriorLod : Node3D
         var bytes = payload.Terrain.Bytes + payload.Objects.Bytes;
         var published = false;
         (Node3D? Root, bool Complete) terrain = (null, false), objects = (null, false);
+        RuntimeNativeNifMeshBuilder.TerrainStreamCoverage? terrainCoverage = null;
         try
         {
             foreach (var (tile, isTerrain) in new[] { (payload.Terrain, true), (payload.Objects, false) })
@@ -308,11 +322,14 @@ internal partial class RuntimeNativeExteriorLod : Node3D
                 RuntimeNativeNifMeshBuilder.LodAssembly? assembly = null;
                 try
                 {
+                    if (isTerrain) terrainCoverage = new(tile.Source);
                     Action<FalloutNifGeometry>? omitted = isTerrain ? geometry =>
                     {
-                        complete = false;
+                        var coverage = terrainCoverage ?? throw new InvalidOperationException("Terrain source coverage is absent.");
+                        var role = coverage.Omit(geometry.Block.Index);
+                        complete = coverage.TerrainComplete;
                         Report($"{tile.Path}#geometry{geometry.Block.Index}",
-                            new NotSupportedException("Property-free LOD geometry requires its world material owner; this draw remains missing."));
+                            new NotSupportedException($"Property-free LOD geometry role={role} requires its world material owner; this draw remains missing."));
                     }
                     : null;
                     assembly = new(tile.Source, _units, _source, omitted);
@@ -350,7 +367,10 @@ internal partial class RuntimeNativeExteriorLod : Node3D
             BindDetail(materials);
             AddChild(root);
             GetParent().GetChildren().OfType<RuntimeNativeExteriorEnvironment>().SingleOrDefault()?.Register(root);
-            _cache.Add(payload.Block, new(root, terrain.Root, objects.Root, materials, bytes, terrain.Complete, objects.Complete));
+            _cache.Add(payload.Block, new(root, terrain.Root, objects.Root, materials, bytes, terrain.Complete, objects.Complete,
+                terrain.Root is not null && terrainCoverage is { OrdinaryWaterComplete: true },
+                terrain.Root is not null && terrainCoverage is { ReflectiveWaterComplete: true },
+                terrainCoverage?.MissingOrdinaryWaterGeometries ?? 0, terrainCoverage?.MissingReflectiveWaterGeometries ?? 0));
             _residentBytes += bytes;
             published = true;
         }
@@ -386,6 +406,13 @@ internal partial class RuntimeNativeExteriorLod : Node3D
             .Select(pair => pair.Key).ToHashSet()).ToHashSet();
         _completeTerrainCover = _catalog.HasCompleteCover(_selected, completeTerrain);
         _completeObjectCover = _catalog.HasCompleteCover(_selected, completeObjects);
+        // Water belongs to the source streams actually selected for terrain.
+        // A cached coarse tile without water cannot certify a displayed finer
+        // stream whose own water draw is still unbound.
+        _completeOrdinaryWaterCover = _catalog.HasCompleteCover(_selected,
+            terrainCover.Where(block => _cache[block].OrdinaryWaterComplete).ToHashSet());
+        _completeReflectiveWaterCover = _catalog.HasCompleteCover(_selected,
+            terrainCover.Where(block => _cache[block].ReflectiveWaterComplete).ToHashSet());
         foreach (var (block, resident) in _cache)
         {
             if (resident.Terrain is { } terrain) terrain.Visible = terrainCover.Contains(block);

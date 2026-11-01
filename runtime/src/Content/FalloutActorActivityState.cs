@@ -23,14 +23,59 @@ internal sealed class FalloutActorActivityState
     internal bool Running { get; private set; }
     internal bool Sneaking { get; private set; }
     internal bool InCombat { get; private set; }
+    // Native process initialization is clear. This is the victim panic
+    // notification, not possession of a grenade or generic combat activity.
+    internal bool PlantedExplosive { get; private set; }
+    internal bool Swimming { get; private set; }
+    internal bool ForceHitReaction { get; private set; }
     private long _revision;
     internal long Revision => checked(_revision + (_alertRevision?.Invoke() ?? 0));
 
-    internal FalloutActorActivitySnapshot Capture() => new(Alerted, Attacked, WeaponDrawn, Running, Sneaking, InCombat, Revision);
+    internal FalloutActorActivitySnapshot Capture()
+    {
+        if (PlantedExplosive)
+            throw new NotSupportedException("Active planted-explosive notification requires its projectile continuation owner.");
+        if (Swimming || ForceHitReaction)
+            throw new NotSupportedException("Active swimming/forced-hit process requires its exact continuation owner.");
+        return new(Alerted, Attacked, WeaponDrawn, Running, Sneaking, InCombat, Revision);
+    }
+
+    // The planted-projectile action itself remains unimplemented. Its eventual
+    // notification/retirement must drive this same process lane; inventory
+    // contents, ordinary projectiles and idle selection cannot synthesize it.
+    internal void NotifyPlantedExplosive()
+    {
+        if (PlantedExplosive) return;
+        PlantedExplosive = true;
+        _revision++;
+    }
+
+    internal void SetSwimming(bool value)
+    {
+        if (Swimming == value) return;
+        Swimming = value; _revision++;
+    }
+
+    internal void SetForceHitReaction(bool value)
+    {
+        if (ForceHitReaction == value) return;
+        ForceHitReaction = value; _revision++;
+    }
+
+    internal void RetirePlantedExplosive()
+    {
+        if (!PlantedExplosive) return;
+        PlantedExplosive = false;
+        _revision++;
+    }
 
     internal void Restore(FalloutActorActivitySnapshot snapshot)
     {
+        if (Swimming || ForceHitReaction)
+            throw new NotSupportedException("Active swimming/forced-hit process must retire before activity restoration.");
         snapshot.Validate();
+        if (PlantedExplosive)
+            throw new NotSupportedException("An active planted projectile must retire before restoring actor activity.");
         if (_readAlerted is not null && Alerted != snapshot.Alerted)
             throw new InvalidDataException("Saved actor activity differs from its shared alert owner.");
         var revision = checked(snapshot.Revision - (_alertRevision?.Invoke() ?? 0));

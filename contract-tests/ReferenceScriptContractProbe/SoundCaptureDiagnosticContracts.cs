@@ -69,9 +69,53 @@ internal static class SoundCaptureDiagnosticContracts
         opaque.Fail(null, "Missing source owner.");
         Require(!opaque.CaptureDiagnostic.Ready && opaque.CaptureDiagnostic.Unsettled.Count == 0 &&
             opaque.CaptureDiagnostic.OpaqueError == "Missing source owner.", "Opaque source failure lost its independent cause.");
+        SinglePublication(records, caller);
         PlaybackDiagnostics(records, caller);
         Console.WriteLine("OPENNV_SOUND_CAPTURE_DIAGNOSTIC_PASS owner=true generation=true sourceHash=true activeRefused=true " +
-            "cancelledRefused=true opaque=true unloaded=true readOnly=true finished=true pcmRefusalObservable=true noSaveSchema=true parity=unverified");
+            "cancelledRefused=true opaque=true unloaded=true readOnly=true finished=true pcmRefusalObservable=true singlePublication=true exactOwnerOrder=true freshReadiness=true noSaveSchema=true parity=unverified");
+    }
+
+    private static void SinglePublication(FalloutPluginStack records, FalloutFormKey reference)
+    {
+        using var world = new FalloutReferenceWorld(records);
+        var source = FalloutSoundRecordReader.Read(records, new("Pose.esm", 0x6a));
+        var playback = new FalloutAnimationSoundPlaybackSnapshot(new(120, 32000, 1, 48000,
+            FalloutSoundLoop.Read(source), 33.25, 2, true, false), ".", true);
+        var ready = false; var calls = 0;
+        FalloutAnimationSoundPlaybackSnapshot Capture()
+        {
+            calls++;
+            return ready ? playback : throw new NotSupportedException("Actual PCM emitter is not bound.");
+        }
+        // Reverse source order proves publication retains runtime FormID order,
+        // rather than silently changing it to dictionary insertion order.
+        var states = new[] { world.Get(new("Pose.esm", 0x902)), world.Get(reference) };
+        foreach (var state in states)
+        {
+            var selected = FalloutAnimationSound.Select(source, [source.LogicalPath], state.SoundRandom, true);
+            var history = state.AnimationSoundEvents;
+            var generation = history.Begin(records, selected, "Sound:FixtureLoop", false, [source.LogicalPath]);
+            history.BindMedia(generation, new string('a', 64));
+            history.BindPlayback(generation, Capture);
+        }
+        var before = states.Select(state => JsonSerializer.Serialize(state.AnimationSoundEvents.Events)).ToArray();
+        var random = states.Select(state => state.SoundRandom.State).ToArray();
+        var expected = JsonSerializer.Serialize(world.PendingAnimationSoundCaptures);
+        calls = 0;
+        var first = world.ObserveCaptureReadiness(includeCorpseReadiness: false);
+        Require(calls == 2 && first.PendingAnimationSounds == 2 &&
+            JsonSerializer.Serialize(first.AnimationSoundOwners) == expected,
+            "Single publication repeated native audio readiness or changed exact ordered owner/generation/fault diagnostics.");
+        ready = true;
+        var second = world.ObserveCaptureReadiness(includeCorpseReadiness: false);
+        Require(calls == 4 && second.PendingAnimationSounds == 0 && first.PendingAnimationSounds == 2,
+            "Native audio readiness leaked across publications or mutated a previous observation.");
+        ready = false;
+        try { world.Capture(); throw new InvalidDataException("Live audio readiness observation authorized persistent capture."); }
+        catch (NotSupportedException) { }
+        Require(calls > 4 && states.Select((state, index) => state.SoundRandom.State == random[index] &&
+            JsonSerializer.Serialize(state.AnimationSoundEvents.Events) == before[index]).All(value => value),
+            "Observation changed source sound history/randomness or strict save skipped its live emitter check.");
     }
 
     private static void PlaybackDiagnostics(FalloutPluginStack records, FalloutFormKey reference)

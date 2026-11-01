@@ -5,6 +5,63 @@ namespace OpenNV.Runtime.Formats.Gamebryo;
 
 internal static partial class RuntimeNativeNifMeshBuilder
 {
+    internal enum TerrainStreamRole { Unknown, Terrain, OrdinaryWater, ReflectiveWater }
+
+    // The terrain stream has separate terrain/water owners. This binding is
+    // qualified for its single multibound container, not arbitrary property-free
+    // meshes, geometry block numbers, names or flattened descendant order.
+    internal static IReadOnlyDictionary<int, TerrainStreamRole> TerrainStreamRoles(FalloutNifFile source)
+    {
+        if (source.Roots.Count != 1 || source.Blocks[source.Roots[0]].TypeName != "BSMultiBoundNode") return new Dictionary<int, TerrainStreamRole>();
+        IReadOnlyList<int> children = source.ReadNode(source.Roots[0]).Children;
+        if (children.Count is < 1 or > 3 || children[0] < 0 ||
+            children.Where(child => child >= 0).Distinct().Count() != children.Count(child => child >= 0) ||
+            children.Any(child => child >= 0 && source.Blocks[child].TypeName is not ("NiTriShape" or "NiTriStrips" or "BSSegmentedTriShape")))
+            return new Dictionary<int, TerrainStreamRole>();
+        var result = new Dictionary<int, TerrainStreamRole>();
+        for (var slot = 0; slot < children.Count; ++slot)
+            if (children[slot] >= 0)
+                result.Add(children[slot], slot switch
+                {
+                    0 => TerrainStreamRole.Terrain,
+                    1 => TerrainStreamRole.OrdinaryWater,
+                    2 => TerrainStreamRole.ReflectiveWater,
+                    _ => throw new InvalidOperationException("Unqualified terrain stream child slot.")
+                });
+        return result;
+    }
+
+    internal sealed class TerrainStreamCoverage(FalloutNifFile source)
+    {
+        private readonly IReadOnlyDictionary<int, TerrainStreamRole> _roles = TerrainStreamRoles(source);
+        private readonly HashSet<int> _omitted = [];
+        internal bool TerrainComplete { get; private set; } = true;
+        internal bool OrdinaryWaterComplete { get; private set; } = true;
+        internal bool ReflectiveWaterComplete { get; private set; } = true;
+        internal int MissingOrdinaryWaterGeometries { get; private set; }
+        internal int MissingReflectiveWaterGeometries { get; private set; }
+
+        internal TerrainStreamRole Omit(int block)
+        {
+            var role = _roles.GetValueOrDefault(block);
+            if (!_omitted.Add(block)) return role;
+            switch (role)
+            {
+                case TerrainStreamRole.OrdinaryWater:
+                    OrdinaryWaterComplete = false; ++MissingOrdinaryWaterGeometries;
+                    break;
+                case TerrainStreamRole.ReflectiveWater:
+                    ReflectiveWaterComplete = false; ++MissingReflectiveWaterGeometries;
+                    break;
+                default:
+                    TerrainComplete = false;
+                    if (role == TerrainStreamRole.Unknown) OrdinaryWaterComplete = ReflectiveWaterComplete = false;
+                    break;
+            }
+            return role;
+        }
+    }
+
     // Keep the ordinary material/geometry builder, but publish at most one
     // source node per step. A detached tile owns all partial native resources;
     // it cannot replace the previous complete cover until Take succeeds.

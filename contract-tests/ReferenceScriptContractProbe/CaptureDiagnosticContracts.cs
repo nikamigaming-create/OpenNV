@@ -45,7 +45,48 @@ internal static class CaptureDiagnosticContracts
         using var cold = new FalloutReferenceWorld(records); cold.Restore(snapshot);
         Require(cold.Get(reference).SelectionCaptureDiagnostic is null && cold.PendingProcedureCaptureCount == 0,
             "A diagnostic became saved continuation authority or created a cold capture blocker.");
-        Console.WriteLine("OPENNV_CAPTURE_DIAGNOSTIC_CONTRACT_PASS retained=true nativeLifetime=true soundCounts=true hitFaultSeparate=true observerReplacement=true noAdmission=true noSaveSchema=true parity=unverified");
+        SinglePublication(records, reference, cell, retired);
+        Console.WriteLine("OPENNV_CAPTURE_DIAGNOSTIC_CONTRACT_PASS retained=true nativeLifetime=true soundCounts=true hitFaultSeparate=true observerReplacement=true singlePublication=true freshReadiness=true noAdmission=true noSaveSchema=true parity=unverified");
+    }
+
+    private static void SinglePublication(FalloutPluginStack records, FalloutFormKey reference, FalloutFormKey cell,
+        FalloutActorSelectionCaptureDiagnostic retired)
+    {
+        using var world = new FalloutReferenceWorld(records);
+        world.LoadCell(FalloutCellSceneReader.Read(records, cell));
+        var state = world.Get(reference);
+        state.ProcedureCaptureBlocker = "Actual independent procedure remains unbound.";
+        state.RetiredSelectionCaptureDiagnostic = retired;
+        var idleCalls = 0; var bindingCalls = 0;
+        var idleReady = false; var bindingReady = false;
+        state.CanCaptureIdleRequests = () => { idleCalls++; return idleReady; };
+        state.CanCapturePackageBindingFailure = () => { bindingCalls++; return bindingReady; };
+        var random = state.SoundRandom.State;
+        var instances = world.InstanceCount;
+        var first = world.ObserveCaptureReadiness(includeCorpseReadiness: false);
+        Require(idleCalls == 1 && bindingCalls == 1 && first.PendingProcedures == 1 && first.ProcedureOwners.Count == 1 &&
+            first.StoppedPackageBindings == 0 && first.PendingCorpseCaptures is null && first.PendingAnimationSounds == 0,
+            "Live publication repeated readiness callbacks or lost its exact count/owner/summary scope.");
+        using (var json = JsonDocument.Parse(JsonSerializer.Serialize(first.ProcedureOwners)))
+            Require(json.RootElement[0].GetProperty("blocker").GetString() == "Idle request/sequence continuation." &&
+                json.RootElement[0].GetProperty("selectionCapture").GetProperty("NativeOwner").GetUInt64() == retired.NativeOwner,
+                "Single-publication classification lost its observed idle blocker or retained native diagnostic.");
+        idleReady = true;
+        var second = world.ObserveCaptureReadiness(includeCorpseReadiness: true);
+        Require(idleCalls == 2 && bindingCalls == 2 && second.PendingProcedures == 1 && second.PendingCorpseCaptures == 0,
+            "A later publication reused old readiness or evaluated the binding classification twice.");
+        using (var json = JsonDocument.Parse(JsonSerializer.Serialize(second.ProcedureOwners)))
+            Require(json.RootElement[0].GetProperty("blocker").GetString() == state.ProcedureCaptureBlocker,
+                "A publication retained an earlier idle refusal after that owner became ready.");
+        bindingReady = true;
+        var third = world.ObserveCaptureReadiness(includeCorpseReadiness: false);
+        Require(idleCalls == 3 && bindingCalls == 3 && third.PendingProcedures == 0 && third.StoppedPackageBindings == 1 &&
+            first.PendingProcedures == 1 && second.PendingProcedures == 1,
+            "Readiness observation was mutable or reused a different publication's admission result.");
+        bindingReady = false;
+        Reject(world.Capture);
+        Require(idleCalls > 3 && bindingCalls > 3 && state.SoundRandom.State == random && world.InstanceCount == instances,
+            "Live readiness became save authority or changed source randomness/instance ownership.");
     }
 
     private static void Reject(Func<IReadOnlyList<FalloutReferenceSnapshot>> capture)

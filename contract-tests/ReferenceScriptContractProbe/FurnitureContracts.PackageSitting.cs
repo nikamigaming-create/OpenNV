@@ -9,6 +9,32 @@ internal static partial class FurnitureContracts
 {
     private static void PackageSittingContracts()
     {
+        foreach (var activity in Enum.GetValues<FalloutSandboxActivity>())
+        {
+            Require(FalloutSandboxProcedure.Read(0, activity) == 45 && FalloutSandboxProcedure.Read(1, activity) == 21 &&
+                FalloutSandboxProcedure.Read(2, activity) == 0,
+                "Sandbox selection/readiness phases were inferred from their activity or movement.");
+            var expected = activity switch
+            {
+                FalloutSandboxActivity.Furniture => 48, FalloutSandboxActivity.Sleep => 8,
+                FalloutSandboxActivity.Eat => 10, FalloutSandboxActivity.Wander => 7,
+                FalloutSandboxActivity.IdleMarker => 46, FalloutSandboxActivity.Dialogue => 4,
+                _ => throw new InvalidDataException("Unexpected source activity.")
+            };
+            Require(FalloutSandboxProcedure.Read(3, activity) == expected, "Sandbox activity phase lost its public procedure.");
+            var target = activity is FalloutSandboxActivity.Furniture or FalloutSandboxActivity.Sleep or
+                FalloutSandboxActivity.IdleMarker or FalloutSandboxActivity.Dialogue ? new FalloutFormKey("Fixture.esm", 1) : (FalloutFormKey?)null;
+            var progress = new OpenNV.Runtime.Gameplay.State.FalloutSandboxActivityProgress(activity, 1, 1,
+                new FalloutSandboxPreferences().Capture(), target, NativePhase: 3);
+            progress.Validate();
+            var cold = JsonSerializer.Deserialize<OpenNV.Runtime.Gameplay.State.FalloutSandboxActivityProgress>(JsonSerializer.Serialize(progress))!;
+            cold.Validate();
+            Require(cold.NativePhase == 3 && FalloutSandboxProcedure.Read(cold.NativePhase.Value, cold.Activity) == expected,
+                "Cold Sandbox restoration lost its independently retained phase.");
+        }
+        Reject(() => FalloutSandboxProcedure.Read(3, null));
+        Reject(() => FalloutSandboxProcedure.Read(-1, FalloutSandboxActivity.Wander));
+        Reject(() => FalloutSandboxProcedure.Read(4, FalloutSandboxActivity.Wander));
         Require(RuntimeNativeNpc.SandboxFurnitureProcedure(1, sleeping: false, activityReselectionExit: false) == 48 &&
             RuntimeNativeNpc.SandboxFurnitureProcedure(1, sleeping: true, activityReselectionExit: false) == 8,
             "Occupied Sandbox furniture confused its activity procedure with the package or sitting code.");

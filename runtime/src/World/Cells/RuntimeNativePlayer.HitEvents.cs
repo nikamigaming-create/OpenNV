@@ -1,5 +1,6 @@
 using Godot;
 using OpenNV.Runtime.Content;
+using OpenNV.Runtime.Gameplay.State;
 
 namespace OpenNV.Runtime.World.Cells;
 
@@ -13,6 +14,8 @@ internal partial class RuntimeNativePlayer
     {
         _hitReferences = references;
         _hitReference = collisionReference;
+        references.VatsConditions.BindContext(() => _vats?.CurrentPhase is
+            FalloutVatsSession.Phase.Selecting or FalloutVatsSession.Phase.Executing or FalloutVatsSession.Phase.Faulted);
     }
 
     private FalloutFormKey? HitReference(Node? collider) => collider is null ? null :

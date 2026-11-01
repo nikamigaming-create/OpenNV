@@ -675,6 +675,13 @@ internal sealed partial class FalloutQuestScripts
             if (parts.Length == 1 && FalloutScriptFormLists.Function(operation, _records, () =>
                 (References ?? throw new NotSupportedException("Form-list commands have no shared world owner.")).FormLists) is { } formListFunction)
                 return formListFunction;
+            if (parts.Length == 1 && FalloutScriptLeveledItems.Function(operation, _records, () =>
+                (References ?? throw new NotSupportedException("Leveled-list commands have no shared world owner.")).LeveledItems) is { } leveledFunction)
+                return leveledFunction;
+            if (parts.Length <= 2 && FalloutScriptPosition.Function(operation,
+                () => References ?? throw new NotSupportedException("Position commands have no shared world owner."),
+                () => caller?.FormKey(_records) ?? (parts.Length == 2 ? QueryReference(parts[0]) : instance.Quest.FormKey)) is { } positionFunction)
+                return positionFunction;
             if (parts.Length <= 2 && FalloutScriptActorFlags.Function(operation, parts.Length == 2 || caller is not null, _records,
                 () => References ?? throw new NotSupportedException("Actor flags have no shared world owner."),
                 () => caller?.FormKey(_records) ?? (parts.Length == 2 ? QueryReference(parts[0]) : instance.Quest.FormKey)) is { } actorFlags)
@@ -898,6 +905,8 @@ internal sealed partial class FalloutQuestScripts
             var operation = parts[^1].ToLowerInvariant();
             if (parts.Length <= 2 && FalloutActorValueCommands.Operation(operation) is not null ||
                 parts.Length == 1 && FalloutScriptFormLists.Supports(operation) ||
+                parts.Length == 1 && FalloutScriptLeveledItems.Supports(operation) ||
+                parts.Length <= 2 && FalloutScriptPosition.Supports(operation) ||
                 parts.Length <= 2 && FalloutScriptActorFlags.Supports(operation, parts.Length == 2))
             {
                 _ = FalloutNvseNumericExpression.EvaluateValue([command, .. rawArguments], values, Function);

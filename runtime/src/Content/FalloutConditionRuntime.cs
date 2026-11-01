@@ -31,6 +31,7 @@ internal sealed partial class FalloutConditionRuntime(FalloutPluginStack records
     internal Func<FalloutFormKey, FalloutFormKey?>? CurrentPackage { get; init; }
     internal Func<FalloutFormKey, FalloutCondition, FalloutFormKey?>? Cell { get; init; }
     internal Func<FalloutFormKey, FalloutFormKey, float>? Distance { get; init; }
+    internal Func<FalloutFormKey, FalloutFormKey, float>? HeadingAngle { get; init; }
     internal Func<FalloutFormKey, FalloutFormKey, bool>? SameCell { get; init; }
     internal Func<FalloutFormKey, FalloutFormKey, bool>? InCell { get; init; }
     internal Func<FalloutFormKey, bool>? Interior { get; init; }
@@ -67,6 +68,22 @@ internal sealed partial class FalloutConditionRuntime(FalloutPluginStack records
         {
             case Function.GetCurrentTime: NoArguments(condition); return Hour is { } hour ? hour() : GlobalValue(condition);
             case Function.MenuMode: return Required(world, "active menu identity").QueryMenuMode(condition);
+            case Function.GetVATSValue:
+                return Required(world, "VATS action context").VatsConditions.Query(condition.Argument1, condition.Argument2);
+            case Function.GetVATSMode:
+                NoArguments(condition); return Required(world, "VATS action context").VatsConditions.Mode();
+            case Function.GetVatsTargetHeight:
+                NoArguments(condition); return Required(world, "VATS action context").VatsConditions.TargetHeight();
+            case Function.GetUsedItemLevel or Function.GetUsedItemActivate or Function.IsWaterObject:
+                NoArguments(condition); return Required(world, "used-item IDLE selection").QueryUsedItem(condition);
+            case Function.GetIsUsedItem or Function.GetIsUsedItemType:
+                SecondUnused(condition); return Required(world, "used-item IDLE selection").QueryUsedItem(condition);
+            case Function.GetPCEnemyofFaction:
+                SecondUnused(condition);
+                var faction = records.GetEffective(Form(condition, "FACT"));
+                var factionFlags = faction.ReadSubrecords().Single(field => field.Signature == "DATA").Data.Span;
+                if (factionFlags.Length is not (1 or 4)) throw new InvalidDataException("Faction flags require one or four source bytes.");
+                return (factionFlags[0] & 0x10) != 0 ? 1 : 0;
             case Function.GetGlobalValue: return Globals is { } globals ? globals.Get(Form(condition, "GLOB")) : GlobalValue(condition);
             case Function.GetScriptVariable:
                 return world is not null ? (float)world.ReadVariable(quests, condition.FormArgument1, condition.Argument2) :
@@ -93,7 +110,8 @@ internal sealed partial class FalloutConditionRuntime(FalloutPluginStack records
                     regionPlayer, UnitsToMetres()) ? 1 : 0;
         }
         var subject = scope.Resolve(condition.Declaration);
-        if (condition.Kind != Function.GetIsReference && (condition.RunOn != 0 || Identity?.Invoke(subject) is null)) RequireReference(subject);
+        if (condition.Kind is not (Function.GetIsReference or Function.GetHeadingAngle) &&
+            (condition.RunOn != 0 || Identity?.Invoke(subject) is null)) RequireReference(subject);
         return EvaluateSubject(condition, subject, scope);
     }
 
@@ -101,6 +119,38 @@ internal sealed partial class FalloutConditionRuntime(FalloutPluginStack records
     {
         switch (condition.Kind)
         {
+            case Function.GetIsClass:
+                SecondUnused(condition); Form(condition, "CLAS");
+                var traits = Traits(subject);
+                if (traits.Signature != "NPC_") return 0;
+                var classes = traits.ReadSubrecords().Where(field => field.Signature == "CNAM").ToArray();
+                if (classes.Length == 0) return 0;
+                if (classes.Length != 1 || classes[0].Data.Length != 4) throw new InvalidDataException("Actor class has an invalid CNAM.");
+                var actorClass = traits.Plugin.AdjustOptionalFormId(System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(classes[0].Data.Span));
+                return actorClass is { } classKey && classKey == condition.FormArgument1 ? 1 : 0;
+            case Function.GetHeadingAngle:
+                SecondUnused(condition); RequireReference(condition.FormArgument1);
+                // The script host can supply live player placement/facing even
+                // when the generic condition runtime has no player spatial hook.
+                // Preserve its actual caller, including a quest's nonactor/null
+                // invocation, for which the native heading owner returns zero.
+                return HeadingAngle is { } heading ? heading(subject, condition.FormArgument1) :
+                    Required(world, "heading placement").HeadingAngle(subject, condition.FormArgument1, PlayerPlacement?.Invoke(), UnitsToMetres());
+            case Function.GetArmorRating or Function.IsSwimming or Function.GetForceHitReaction or Function.GetDialogueEmotion:
+                NoArguments(condition); return NativeValue(subject, condition);
+            case Function.GetDisposition:
+                SecondUnused(condition);
+                // Native requires both actor references; a null target leaves
+                // its initialized zero, before any disposition calculation.
+                return condition.IsNullFormArgument1(records) ? 0 : NativeValue(subject, condition);
+            case Function.IsTrespassing:
+                NoArguments(condition);
+                return Required(world, "cell ownership").HasUnownedCell(subject, PlayerPlacement?.Invoke(), UnitsToMetres())
+                    ? 0 : NativeValue(subject, condition);
+            case Function.IsFacingUp or Function.IsLeftUp:
+                NoArguments(condition); return NativeValue(subject, condition);
+            case Function.IsWeaponInList:
+                SecondUnused(condition); Form(condition, "FLST"); return NativeValue(subject, condition);
             case Function.GetDistance:
                 SecondUnused(condition); RequireReference(condition.FormArgument1);
                 var separation = Distance is { } distance ? distance(subject, condition.FormArgument1) :
@@ -209,7 +259,8 @@ internal sealed partial class FalloutConditionRuntime(FalloutPluginStack records
                 if (OpenState is { } open && (world is null || world.IsResident(subject))) return PhysicalPhase(open(subject));
                 return subject != records.RuntimeFormKey(0x14) && world?.Get(subject).DoorMotion is { } motion ?
                     PhysicalPhase(motion.OpenState) : NativeValue(subject, condition);
-            case Function.GetHitLocation: NoArguments(condition); return NativeValue(subject, condition);
+            case Function.GetHitLocation or Function.GetPlantedExplosive:
+                NoArguments(condition); return NativeValue(subject, condition);
             case Function.IsGreetingPlayer:
                 NoArguments(condition); return Required(world, "actor speech process").IsGreetingPlayer(subject) ? 1 : 0;
             case Function.IsTalking:
