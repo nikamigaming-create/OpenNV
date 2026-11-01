@@ -29,6 +29,8 @@ internal sealed partial class RuntimeNativePlayerActor : Node3D
     internal RuntimeNativeNpc Actor { get; }
     internal FalloutWeaponPresentation? Weapon { get; }
     internal RuntimeNativeNifSkeleton Skeleton => Actor.Skeleton;
+    internal FalloutNifSphereBound? CurrentLightingBound(MeshInstance3D mesh)
+        => Actor.CurrentMeshWorldBound(_content, mesh);
     internal string? Error { get; private set; }
     internal bool Toddler { get; private set; }
     internal void SetToddler(bool enabled)
@@ -77,12 +79,13 @@ internal sealed partial class RuntimeNativePlayerActor : Node3D
     };
     internal Transform3D SourceCamera => Skeleton.Node.Transform * Skeleton.Node.GetBoneGlobalPose(Skeleton.BoneIndex("Camera1st"));
     internal double PipBoyDuration => PipBoyClip.TextKeys.Single(key => key.Value.Equals("Hit", StringComparison.OrdinalIgnoreCase)).Time - PipBoyClip.Sequence.StartTime;
+    internal double PipBoyActionDuration => PipBoyClip.Sequence.StopTime - PipBoyClip.Sequence.StartTime;
     private RuntimeNativeNifAnimation PipBoyClip => Clip($"locomotion/{(Actor.Appearance.Female ? "female/pipboyfemale" : "male/pipboy")}");
     internal void PosePipBoy(double seconds, float raised = 1, double? buttonSeconds = null)
     {
         if (!_first) throw new InvalidOperationException("Pip-Boy hand pose needs the first-person source skeleton.");
         var clip = PipBoyClip;
-        var time = clip.Sequence.StartTime + (float)Math.Clamp(buttonSeconds ?? PipBoyDuration, 0, PipBoyDuration);
+        var time = clip.Sequence.StartTime + (float)Math.Clamp(buttonSeconds ?? PipBoyDuration, 0, PipBoyActionDuration);
         _pipBoyIdle ??= ClipPath(FalloutActorIdleSource.Resolve(_records, Actor.Appearance.Female ? "PipboyWaverFemale" : "PipboyWaver").AnimationPath);
         Skeleton.ResetSourceBonePoses();
         Skeleton.Node.SetBonePose(Skeleton.BoneIndex(_idle!.Sequence.TargetName), Transform3D.Identity);
@@ -123,7 +126,8 @@ internal sealed partial class RuntimeNativePlayerActor : Node3D
                     else if (firstPerson && !name.Equals("Arms", StringComparison.OrdinalIgnoreCase) &&
                         (part.Role == "body" || part.Role == "armor" && (part.BipedSlots & 4) != 0))
                         mesh.Visible = false;
-                    if (name is "PipboyLightEffect:0") mesh.Visible = false;
+                    if (name is "PipboyLightEffect:0")
+                    { mesh.Visible = false; _pipBoyLightEffects.Add(mesh); }
                 }
             }
             if (weapon is { } form)

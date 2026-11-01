@@ -44,8 +44,14 @@ public partial class NativePipBoyAudit
         var localMap = menu.GetChildren().OfType<NativeOwnedLocalMap>().Single();
         var camera = localMap.GetChildren().OfType<SubViewport>().Single().GetCamera3D();
         var span = camera.Size;
+        menu.GetChildren().OfType<NativeBitmapMenuButton>().Single(button => button.Text == "Zoom out").EmitSignal(BaseButton.SignalName.Pressed);
+        var zoomedOut = camera.Size;
+        if (zoomedOut <= span) throw new InvalidDataException("Local-map zoom out did not increase the resident-world camera span.");
         menu.GetChildren().OfType<NativeBitmapMenuButton>().Single(button => button.Text == "Zoom in").EmitSignal(BaseButton.SignalName.Pressed);
-        if (camera.Size >= span) throw new InvalidDataException("Local-map zoom did not change the resident-world camera.");
+        if (camera.Size >= zoomedOut || !Mathf.IsEqualApprox(camera.Size, span))
+            throw new InvalidDataException("Local-map zoom in did not restore the source maximum-zoom camera span.");
+        menu.GetChildren().OfType<NativeBitmapMenuButton>().Single(button => button.Text == "Zoom in").EmitSignal(BaseButton.SignalName.Pressed);
+        if (!Mathf.IsEqualApprox(camera.Size, span)) throw new InvalidDataException("Local-map zoom exceeded the source maximum.");
 
         // This fixture has no station owner. Scrolling a failed page must not
         // throw through the device input route, and page keys remain usable.

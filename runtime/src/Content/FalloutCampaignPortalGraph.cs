@@ -13,6 +13,10 @@ internal sealed record FalloutCampaignPortalIssue(
 
 internal enum FalloutCampaignPortalStepKind { ExteriorTravel, ActivateDoor }
 
+// Distinguish a fully understood disconnected route from an unknown source
+// edge or eligibility owner. Only the former proves that no alternative exists.
+internal sealed class FalloutCampaignPortalUnavailableException(string message) : NotSupportedException(message);
+
 // An exterior step is an itinerary request in a shared authored coordinate
 // space. Native NAVM/capsule movement must still prove traversal and arrival.
 // A null Reference on the last travel step means the caller's original target;
@@ -43,6 +47,8 @@ internal sealed class FalloutCampaignPortalGraph
     private readonly IReadOnlyDictionary<FalloutFormKey, FalloutFormKey> _sourceScopes;
     private readonly IReadOnlyDictionary<FalloutFormKey, FalloutFormKey?> _worldspaces;
     private readonly IReadOnlyDictionary<FalloutFormKey, Failure> _cellFailures;
+    private readonly IReadOnlyDictionary<Region, IReadOnlyList<Link>> _defaultLinks;
+    private readonly IReadOnlyDictionary<Region, IReadOnlyList<Failure>> _defaultIssues;
     internal IReadOnlyList<FalloutCampaignPortalIssue> Issues { get; }
 
     internal FalloutCampaignPortalGraph(FalloutPluginStack records)
@@ -112,6 +118,15 @@ internal sealed class FalloutCampaignPortalGraph
             .ToDictionary(group => group.Key, group => (IReadOnlyList<Failure>)group.ToList().AsReadOnly(),
                 FalloutFormKeyComparer.Instance);
 
+        Region SourceRegion(FalloutFormKey cell) => new(_sourceScopes[cell], _sourceScopes[cell]);
+        _defaultLinks = _links.Values.SelectMany(value => value)
+            .GroupBy(link => SourceRegion(link.Source.Cell), RegionComparer.Instance).ToDictionary(group => group.Key,
+                group => (IReadOnlyList<Link>)group.ToArray(), RegionComparer.Instance);
+        _defaultIssues = _issuesByCell.Values.SelectMany(value => value)
+            .Where(failure => _sourceScopes.ContainsKey(failure.Issue.Cell!.Value))
+            .GroupBy(failure => SourceRegion(failure.Issue.Cell!.Value), RegionComparer.Instance).ToDictionary(group => group.Key,
+                group => (IReadOnlyList<Failure>)group.ToArray(), RegionComparer.Instance);
+
         Door RequireDoor(FalloutFormKey key, FalloutPluginRecord origin)
         {
             if (doors.TryGetValue(key, out var cached)) return cached;
@@ -138,6 +153,20 @@ internal sealed class FalloutCampaignPortalGraph
         FalloutFormKey fromCell, FalloutFormKey targetCell, Func<FalloutFormKey, bool> canUse,
         Func<FalloutFormKey, FalloutFormKey>? region = null) =>
         FindLinks(fromCell, targetCell, canUse, region).Select(link => link.Source.Source.FormKey).ToList().AsReadOnly();
+
+    internal FalloutFormKey FindUniqueFirstDoor(FalloutFormKey fromCell, FalloutFormKey targetCell,
+        Func<FalloutFormKey, bool> canUse)
+    {
+        var route = Find(fromCell, targetCell, canUse);
+        if (route.Count == 0) throw new InvalidOperationException("Portal target already shares the source region.");
+        var first = route[0];
+        try
+        {
+            var alternative = Find(fromCell, targetCell, door => door != first && canUse(door));
+            throw new NotSupportedException($"Quest portal has multiple first exits ({first}, {alternative[0]}); native route cost selection is unbound.");
+        }
+        catch (FalloutCampaignPortalUnavailableException) { return first; }
+    }
 
     internal IReadOnlyList<FalloutCampaignPortalStep> FindItinerary(
         FalloutFormKey fromCell, FalloutFormKey targetCell, Func<FalloutFormKey, bool> canUse,
@@ -184,10 +213,10 @@ internal sealed class FalloutCampaignPortalGraph
             var source = _sourceScopes[cell];
             return new(source, region?.Invoke(cell) ?? source);
         }
-        var links = _links.Values.SelectMany(value => value)
+        var links = region is null ? _defaultLinks : _links.Values.SelectMany(value => value)
             .GroupBy(link => Scope(link.Source.Cell), RegionComparer.Instance).ToDictionary(group => group.Key,
                 group => (IReadOnlyList<Link>)group.ToArray(), RegionComparer.Instance);
-        var issues = _issuesByCell.Values.SelectMany(value => value)
+        var issues = region is null ? _defaultIssues : _issuesByCell.Values.SelectMany(value => value)
             .Where(failure => _sourceScopes.ContainsKey(failure.Issue.Cell!.Value))
             .GroupBy(failure => Scope(failure.Issue.Cell!.Value), RegionComparer.Instance).ToDictionary(group => group.Key,
                 group => (IReadOnlyList<Failure>)group.ToArray(), RegionComparer.Instance);
@@ -245,7 +274,8 @@ internal sealed class FalloutCampaignPortalGraph
                 throw new NotSupportedException(detail, sourceFailure.Cause);
             throw new InvalidDataException(detail, sourceFailure.Cause);
         }
-        throw new NotSupportedException(detail, eligibilityFailure);
+        if (eligibilityFailure is not null) throw new NotSupportedException(detail, eligibilityFailure);
+        throw new FalloutCampaignPortalUnavailableException(detail);
 
         bool Admitted(Door door, Link link)
         {

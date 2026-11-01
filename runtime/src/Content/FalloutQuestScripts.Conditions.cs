@@ -32,6 +32,8 @@ internal sealed partial class FalloutQuestScripts
             WeaponAnimationType = subject => host?.Inventory is { } types ? types.WeaponAnimationType(subject) :
                 subject == _records.RuntimeFormKey(0x14) && inventory is not null ? inventory.WeaponAnimationType(subject) : null,
             CurrentPackage = host?.CurrentPackage,
+            HeadingAngle = (caller, target) => (host?.HeadingAngle ??
+                throw new NotSupportedException("GetHeadingAngle has no spatial owner."))(caller, target),
             Sitting = host?.Sitting,
             InCell = host?.IsInCell,
             Vampire = ActorQueries.GetVampire,

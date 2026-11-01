@@ -93,7 +93,7 @@ public partial class RuntimeCoordinator
             var arms = new RuntimeNativePlayerActor(_nativePluginStack!, RuntimeLiveContentSource.Current!, appearance, null, true,
                 1, NativeAmbient(_nativeActiveCell!.Cell));
             _nativePipBoy = new(menu, FalloutInstallationSettings.Read(RuntimeLiveContentSource.Current!), arms, appearance.Female, NativeAmbient(_nativeActiveCell.Cell),
-                _configuration.Player.DesktopInput.PipBoy.Action, Close);
+                _configuration.Player.DesktopInput.PipBoy.Action, Close, worldCamera: player.Camera, worldUnits: player.UnitsToMeters);
             _nativePipBoyLayer = new CanvasLayer { Name = "NativePipBoyLayer", Layer = 100, ProcessMode = ProcessModeEnum.Always };
             AddChild(_nativePipBoyLayer); _nativePipBoyLayer.AddChild(_nativePipBoy);
             player.SetModalInput(true); Input.MouseMode = Input.MouseModeEnum.Visible; GetTree().Paused = true;
@@ -112,10 +112,10 @@ public partial class RuntimeCoordinator
         {
             FastTravel = RequestNativeFastTravel,
             DropItem = DropNativeInventoryItem,
-            LocalMap = color => new NativeOwnedLocalMap(player.GetWorld3D(), player.GlobalPosition,
-                _nativeActiveCell!.Cell.Worldspace is null, color, MathF.Atan2(-player.GlobalBasis.Z.Z, -player.GlobalBasis.Z.X)),
+            LocalMap = color => CreateNativeLocalMap(player, color),
             ActiveEffects = () => driver.IngestibleState,
             DateTimeText = NativePipBoyDateTime,
+            CurrentLocation = () => _nativeActiveCell!.Cell.Worldspace is null ? _nativeActiveCell.Cell.FormKey : source.World,
             PlayNote = driver.PlayPipBoyNote
         };
     }

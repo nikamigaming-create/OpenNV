@@ -65,7 +65,8 @@ internal sealed record FalloutNativeCampaignState(
     IReadOnlyList<FalloutDroppedReferenceSnapshot>? DroppedItems = null,
     FalloutActorProjectileLaunch? PlayerProjectileLaunch = null,
     FalloutFormListsSnapshot? FormLists = null, FalloutActorBaseFlagsSnapshot? ActorBaseFlags = null,
-    FalloutHitKnockback? PlayerHitKnockback = null);
+    FalloutHitKnockback? PlayerHitKnockback = null, FalloutLeveledItemsSnapshot? LeveledItems = null,
+    FalloutPipBoyLightSnapshot? PipBoyLight = null);
 
 internal sealed record FalloutNativeCampaignRestore(
     FalloutNativeCampaignState State,
@@ -378,6 +379,8 @@ internal static class FalloutNativeCampaignSave
         }
         if (state.Globals is not null) FalloutGlobalState.Read(stack).Restore(state.Globals);
         if (state.SkyLighting is not null) FalloutSkyLightingState.ValidateSnapshot(stack, state.SkyLighting);
+        if (state.PipBoyLight is { } pipBoyLight && pipBoyLight.SourceHash != FalloutPipBoyLight.Read(stack).SourceHash)
+            throw new InvalidDataException("Saved Pip-Boy light source changed.");
         if (state.Music is not null) _ = FalloutMusicType.ValidateSnapshot(stack, state.Music);
         if (state.References is not null)
         {
@@ -386,6 +389,7 @@ internal static class FalloutNativeCampaignSave
             progress?.Invoke(FalloutNativeCampaignReadPhase.NavigationReady);
             using var references = new FalloutReferenceWorld(stack, validatedValues);
             if (state.FormLists is { } formLists) references.FormLists.Restore(formLists);
+            if (state.LeveledItems is { } leveledItems) references.LeveledItems.Restore(leveledItems);
             if (state.ActorBaseFlags is { } baseFlags) references.ActorBaseFlags.Restore(baseFlags);
             references.TransientExplosions.Restore(state.TransientExplosions);
             references.RestoreEncounterZones(state.EncounterZones);

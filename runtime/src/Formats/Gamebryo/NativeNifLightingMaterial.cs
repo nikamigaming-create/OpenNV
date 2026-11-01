@@ -201,7 +201,7 @@ internal static class NativeNifLightingMaterial
                     {{(state.Blend == FalloutNifBlendMode.Opaque ? "" : state.Blend is FalloutNifBlendMode.AddOne or FalloutNifBlendMode.Replace ? "ALPHA = 1.0;" : "ALPHA *= base.a;")}}
                 }
                 """);
-            RetailLighting.AppendDiffuseLightFunction(code);
+            RetailLighting.AppendDiffuseLightFunction(code, isolatedInputs: true);
             // Specular remains a separate source lane. This is the NIF gloss core;
             // native variant/constant and per-light selection still require matching.
             code.Replace("    DIFFUSE_LIGHT +=", "    SPECULAR_LIGHT += source_specular * source_specular_mask * (LIGHT_COLOR / PI) * retail_attenuation * pow(max(dot(NORMAL, normalize(LIGHT + VIEW)), 0.0), source_glossiness);\n    DIFFUSE_LIGHT +=");

@@ -15,9 +15,10 @@ internal sealed partial class NativeOwnedPipBoy : Control
     private readonly NativeOwnedDeviceSurface _surface;
     private readonly MeshInstance3D _screen;
     private readonly bool _worldSpace;
-    private readonly Material? _originalScreenMaterial;
+    private readonly BorrowedDeviceMaterials? _borrowedMaterials;
     private readonly SubViewport _canvas;
     private readonly NativeOwnedPipBoyMenu _menu;
+    private readonly NativePipBoyScreenEffect _screenEffect;
     private readonly Action _close;
     private readonly string _toggleAction;
     private readonly List<(MeshInstance3D Mesh, NativeBitmapMenuButton Button)> _buttons = [];
@@ -26,7 +27,12 @@ internal sealed partial class NativeOwnedPipBoy : Control
     private static readonly string[] Glows = ["StatsGlow:0", "ItemsGlow:0", "DataGlow:0"];
     private Vector2? _lastPointer;
     private readonly RuntimeNativePlayerActor _player;
+    private readonly TabKnobMotion _tabKnob;
+    private readonly RadiationNeedleMotion _radiationNeedle;
     private double _openSeconds;
+    private double _closeSeconds;
+    private double _closeStartSeconds;
+    private float _closeStartRaised;
     private double _idleSeconds;
     private bool _closing;
     private bool _xrAwaitTriggerRelease;
@@ -42,7 +48,14 @@ internal sealed partial class NativeOwnedPipBoy : Control
         menu = _menu.State,
         openingSeconds = _openSeconds,
         durationSeconds = _player.PipBoyDuration,
+        actionDurationSeconds = _player.PipBoyActionDuration,
+        actionSeconds = _closing ? _closeSeconds : _openSeconds,
         closing = _closing,
+        tabKnob = _tabKnob.State,
+        radiationNeedle = _radiationNeedle.State,
+        menuIllumination = _borrowedMaterials?.State,
+        screenLight = _device?.ScreenLightState,
+        screenEffect = _screenEffect.State,
         pointerInput = new { retired = _sourcePointerRetired, failure = _sourcePointerFailure, flatCaptured = _flatPointerPressed, xrCaptured = _xrPressed },
         camera = _device?.Camera.Transform.ToString(),
         screen = _screen.GlobalTransform.ToString(),
@@ -73,7 +86,8 @@ internal sealed partial class NativeOwnedPipBoy : Control
     };
     private static float[] Vector(Vector3 value) => [value.X, value.Y, value.Z];
     internal NativeOwnedPipBoy(NativeOwnedPipBoyMenu menu, FalloutInstallationSettings settings, RuntimeNativePlayerActor player,
-        bool female, Color ambient, string toggleAction, Action close, bool worldSpace = false)
+        bool female, Color ambient, string toggleAction, Action close, bool worldSpace = false,
+        Camera3D? worldCamera = null, float worldUnits = 1)
     {
         Name = "OwnedPipBoy"; ProcessMode = ProcessModeEnum.Always;
         _menu = menu; _close = close; _toggleAction = toggleAction;
@@ -88,11 +102,18 @@ internal sealed partial class NativeOwnedPipBoy : Control
             else
             {
                 player.PosePipBoy(0, 0);
-                _device = new(female ? "meshes/pipboy3000/pipboyarmfemale.nif" : "meshes/pipboy3000/pipboyarm.nif", settings, pipBoy: true, player: player);
+                _device = new(female ? "meshes/pipboy3000/pipboyarmfemale.nif" : "meshes/pipboy3000/pipboyarm.nif", settings,
+                    pipBoy: true, player: player, worldCamera: worldCamera, worldUnits: worldUnits);
                 AddChild(_device); _surface = _device.Surface;
             }
             _screen = _surface.Geometry(_surface.ScreenName);
-            _originalScreenMaterial = _screen.MaterialOverride;
+            if (worldSpace)
+            {
+                _borrowedMaterials = new(_surface);
+                _borrowedMaterials.BorrowForMenu();
+            }
+            _tabKnob = new(_surface, settings);
+            _radiationNeedle = new(_surface, _menu.RadiationRads);
             // The source light-effect mesh belongs to the flashlight presentation,
             // not the open menu. Leaving it on paints an additive green sheet over
             // the CRT. Menu light and world flashlight are separate device states.
@@ -132,14 +153,8 @@ internal sealed partial class NativeOwnedPipBoy : Control
                 RenderTargetUpdateMode = SubViewport.UpdateMode.Always
             };
             AddChild(_canvas); _canvas.AddChild(menu);
-            _screen.MaterialOverride = new StandardMaterial3D
-            {
-                ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
-                CullMode = BaseMaterial3D.CullModeEnum.Back,
-                AlbedoTexture = _canvas.GetTexture(),
-                AlbedoColor = Colors.White,
-                AlbedoTextureForceSrgb = false,
-            };
+            _screenEffect = new(_canvas, settings);
+            _screen.MaterialOverride = _screenEffect.Material;
             var font = NativeBitmapFontAsset.Read(settings, 2);
             string[] labels = ["STAT", "ITEMS", "DATA"];
             for (var index = 0; index < labels.Length; index++)
@@ -156,7 +171,7 @@ internal sealed partial class NativeOwnedPipBoy : Control
             }
             menu.PageChanged += UpdateGlows;
             SetMeta("opennv_pipboy_source", "owned-NIF/XML/DDS;authoritative-inventory-quests-map-markers");
-            SetMeta("opennv_pipboy_unbound", "raise-lower-blend-policy,dial-button-animation,CRT-postprocess,physical-XR-attachment,matched-retail-projection");
+            SetMeta("opennv_pipboy_unbound", "raise-lower-blend-policy,scroll-knob-and-button-animation,radiation-needle-random-stream-correspondence,CRT-native-mask-color-targets-and-transition-event-phase,physical-XR-attachment,matched-retail-projection");
             if (worldSpace)
             {
                 _xrDevice = new(_surface);
@@ -169,6 +184,7 @@ internal sealed partial class NativeOwnedPipBoy : Control
                 };
                 _canvas.AddChild(_xrCursor);
             }
+            _borrowedMaterials?.CaptureMenuState();
             Resized += Layout;
         }
         catch
@@ -185,20 +201,32 @@ internal sealed partial class NativeOwnedPipBoy : Control
     }
     public override void _Process(double delta)
     {
+        _screenEffect.Advance(delta);
+        _tabKnob.Advance(delta, _menu.SelectedTab);
+        _radiationNeedle.Advance(delta, _menu.RadiationRads);
         if (_worldSpace)
         {
             _xrDevice?.Advance(delta, _xrFocused);
             if (_closing) { _closing = false; _close(); }
             return;
         }
-        _openSeconds = Math.Clamp(_openSeconds + (_closing ? -delta : delta), 0, _player.PipBoyDuration);
+        if (_closing) _closeSeconds = Math.Min(_closeSeconds + delta, _player.PipBoyActionDuration);
+        else _openSeconds = Math.Min(_openSeconds + delta, _player.PipBoyDuration);
         _idleSeconds += delta;
-        _device!.PosePipBoy(_idleSeconds, (float)(_openSeconds / _player.PipBoyDuration), _openSeconds); Layout();
+        // Native holds this sequence at Hit while the menu is active, then
+        // resumes forward through the authored release interval on close.
+        // Reversing the prefix omits the source hand's release entirely.
+        var raised = _closing
+            ? _player.PipBoyActionDuration <= _closeStartSeconds ? 0
+                : _closeStartRaised * (float)(1 - (_closeSeconds - _closeStartSeconds) / (_player.PipBoyActionDuration - _closeStartSeconds))
+            : (float)(_openSeconds / _player.PipBoyDuration);
+        _device!.PosePipBoy(_idleSeconds, raised, _closing ? _closeSeconds : _openSeconds); Layout();
         foreach (var (_, button) in _buttons) button.Disabled = _closing || _openSeconds < _player.PipBoyDuration;
-        if (_closing && _openSeconds == 0) { SetProcess(false); _close(); }
+        if (_closing && _closeSeconds == _player.PipBoyActionDuration) { SetProcess(false); _close(); }
     }
     private void UpdateGlows()
     {
+        if (_worldSpace && !_xrFocused) return;
         // The generated source tiles carry the current page; no second UI state.
         var state = _menu.GetMeta("opennv_page", 0).AsInt32();
         for (var index = 0; index < Glows.Length; index++) _surface.Geometry(Glows[index]).Visible = index == state;
@@ -252,6 +280,9 @@ internal sealed partial class NativeOwnedPipBoy : Control
     }
     internal void RequestClose()
     {
+        if (_closing) return;
+        _closeSeconds = _closeStartSeconds = _openSeconds;
+        _closeStartRaised = (float)(_openSeconds / _player.PipBoyDuration);
         _closing = true;
         CancelFlatPointer();
         ReleaseXrPointer();
@@ -263,10 +294,9 @@ internal sealed partial class NativeOwnedPipBoy : Control
     }
     private void RestoreScreenMaterial()
     {
-        if (_worldSpace && IsInstanceValid(_screen))
-        {
-            _screen.MaterialOverride = _originalScreenMaterial;
-        }
+        _tabKnob?.Restore();
+        _radiationNeedle?.Restore();
+        _borrowedMaterials?.Deactivate();
         _xrDevice?.Dispose(); _xrDevice = null;
     }
     internal void PoseXrDevice(Transform3D head) => _xrDevice?.Publish(head);
@@ -327,6 +357,8 @@ internal sealed partial class NativeOwnedPipBoy : Control
     {
         ReleaseXrPointer();
         _xrFocused = focused; _closing = false;
+        if (focused) { _screenEffect.Open(); _borrowedMaterials?.Activate(); UpdateGlows(); }
+        else _borrowedMaterials?.Deactivate();
         if (focused) _xrAwaitTriggerRelease = true;
     }
     private void ReleaseXrPointer()

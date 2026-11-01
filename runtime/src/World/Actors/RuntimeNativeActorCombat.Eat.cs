@@ -6,7 +6,6 @@ using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.World.Cells;
 using Function = OpenNV.Runtime.Content.Definitions.FalloutConditionFunction;
 using Procedure = OpenNV.Runtime.Content.Definitions.FalloutAiProcedure;
-using FormType = OpenNV.Runtime.Content.Definitions.FalloutFormType;
 
 namespace OpenNV.Runtime.World.Actors;
 
@@ -105,7 +104,7 @@ internal sealed partial class RuntimeNativeActorCombat
                 var destination = ProjectPackageDestination(authored);
                 var reach = PackageActivationRange;
                 AdvancePackageMotion(package, destination, reach, running, delta, requireArrivalHeight: true);
-                _state.PackageMotion = _state.PackageMotion! with { Sandbox = activity, EatPackage = standalone, Wander = null, Eat = meal };
+                _state.PackageMotion = _state.PackageMotion! with { Sandbox = CurrentSandboxActivity ?? activity, EatPackage = standalone, Wander = null, Eat = meal };
                 ObserveEatingMotion(package, activity);
                 if (_mover?.IsOnFloor() != true || _actor.GlobalPosition.DistanceTo(destination) > reach) return;
             }
@@ -115,24 +114,24 @@ internal sealed partial class RuntimeNativeActorCombat
                 _state.PackageMotion = _state.PackageMotion! with { Eat = meal };
             }
 
-            var idle = (_eatIdles ??= new(_records, _skeletonPath)).SelectProcedure((int)Procedure.Eat, condition =>
-                condition.Function switch
-                {
-                    // The admitted Eat procedure has published and owns this
-                    // actor's awake approach/idle pose. This does not provide
-                    // a general answer for an unbound Sleep continuation.
-                    (ushort)Function.GetSleeping when condition.RunOn == 0 && condition.Argument1 == 0 && condition.Argument2 == 0 &&
-                        _state.PackageMotion?.Package == package.FormKey => 0,
-                    (ushort)Function.GetCurrentAIProcedure when condition.RunOn == 0 && condition.Argument1 == 0 && condition.Argument2 == 0 => (int)Procedure.Eat,
-                    (ushort)Function.GetIsUsedItem when condition.RunOn == 0 && condition.Argument2 == 0 => meal.Item == condition.FormArgument1 ? 1 : 0,
-                    (ushort)Function.GetIsUsedItemType when condition.RunOn == 0 && condition.Argument2 == 0 => condition.Argument1 == (uint)FormType.Ingestible ? 1 : 0,
-                    _ => _actor switch
+            FalloutPluginRecord? idle;
+            using (_world.EnterUsedItem(meal.Item))
+                idle = (_eatIdles ??= new(_records, _skeletonPath)).SelectProcedure((int)Procedure.Eat, condition =>
+                    condition.Function switch
                     {
-                        RuntimeNativeNpc npc => npc.EvaluateAiCondition(condition),
-                        RuntimeNativeCreature creature => creature.PackageCondition(condition),
-                        _ => throw new NotSupportedException("Eat IDLE predicates have no actor owner.")
-                    }
-                });
+                        // The admitted Eat procedure has published and owns this
+                        // actor's awake approach/idle pose. This does not provide
+                        // a general answer for an unbound Sleep continuation.
+                        (ushort)Function.GetSleeping when condition.RunOn == 0 && condition.Argument1 == 0 && condition.Argument2 == 0 &&
+                            _state.PackageMotion?.Package == package.FormKey => 0,
+                        (ushort)Function.GetCurrentAIProcedure when condition.RunOn == 0 && condition.Argument1 == 0 && condition.Argument2 == 0 => (int)Procedure.Eat,
+                        _ => _actor switch
+                        {
+                            RuntimeNativeNpc npc => npc.EvaluateAiCondition(condition),
+                            RuntimeNativeCreature creature => creature.PackageCondition(condition),
+                            _ => throw new NotSupportedException("Eat IDLE predicates have no actor owner.")
+                        }
+                    });
             if (idle is null)
             {
                 var use = meal.Consumed ? null : _world.PrepareActorIngestible(_state.Reference, meal.Item, context.Level(), context.Globals,
@@ -144,7 +143,7 @@ internal sealed partial class RuntimeNativeActorCombat
                 if (!hadIdle)
                 {
                     meal = meal with { Consumed = true, NoIdle = true };
-                    _state.PackageMotion = _state.PackageMotion! with { Eat = meal, Sandbox = activity, EatPackage = standalone, Wander = null };
+                    _state.PackageMotion = _state.PackageMotion! with { Eat = meal, Sandbox = CurrentSandboxActivity ?? activity, EatPackage = standalone, Wander = null };
                 }
                 if (use?.Sound is { } noIdleSound) PackageSounds().DispatchSound(noIdleSound);
                 ObserveEatingMotion(package, activity);
@@ -230,6 +229,7 @@ internal sealed partial class RuntimeNativeActorCombat
     private void HoldEating(FalloutPluginRecord package, bool weaponDrawn, FalloutSandboxActivityProgress? activity,
         FalloutActorEatPackageProgress? standalone, double delta)
     {
+        if (activity is not null) activity = ObserveSandboxPhase(3);
         if (standalone is { Furniture: true } && _actor is RuntimeNativeNpc npc)
         {
             _state.PackageMotion = npc.CaptureEatFurnitureMotion(package, standalone);

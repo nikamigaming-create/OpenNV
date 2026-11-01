@@ -50,13 +50,13 @@ public partial class RuntimeCoordinator
                 if (!_nativeWalkableGrid.Contains((x, y))) return false;
         return true;
     }
-    private object NativeStreamingState => new
+    private object CaptureNativeStreamingState(Node[] cellNodes) => new
     {
         reading = _nativeGridRead is not null,
         uploadsRemaining = _nativeGridUploads?.Count ?? 0,
         residentCells = _nativeWalkableGrid.Count,
         warmReferences = _nativeReferencePresentation?.WarmNodeCount ?? 0,
-        terrainCacheCells = _nativeCurrentCellRoot?.GetChildren().OfType<RuntimeNativeLandscapeTransport>().Count() ?? 0,
+        terrainCacheCells = cellNodes.Count(node => node is RuntimeNativeLandscapeTransport),
         target = _nativeGridTarget is { } target ? new[] { target.X, target.Y } : null,
         preparedAhead = _nativeGridUploads?.Count == 0 && _nativeGridPending is not null,
         lastUploadMilliseconds = _nativeGridUploadTiming.LastBatchMilliseconds,

@@ -7,18 +7,85 @@ packaging and publication. The user-authorized agents own separate shared-system
 repairs. Use the scripted harness, no computer use or new test suites. Run the
 required existing gate and selected owned-data audit before publication.
 
-The final gate for the movement, idle, foliage, lighting and save batch has passed.
-The local build has completed ordinary creature travel through the saloon door.
-Publish through a checked PR, merge, verify main equality and start the next
-block on a fresh branch. Continue the actor/animation isolation rig and broader
-room/action sweep; a room inventory is not executed gameplay coverage.
+The active branch is `codex/scene-actors-hud-and-performance`, based on the
+checked PR338 merge. Root owns the live pair, integration and publication;
+Sol-medium workers own source CRT effects, HUD layout/performance and shared
+condition repairs. This batch passes the required full gate and selected owned
+pages and shader audits. Publish the checked merge, then repair shared environment
+default animation startup on a fresh branch.
+
+The current package displays actor compass ticks, source-connected quest-door
+markers and the CND boundary arrow. Both native render buffers and window clients
+are 3840x2160. The viewer previously scaled a shorter native client; that is
+corrected. Matching UI coordinates does not establish matched pixels, campaign
+state or world cameras. Native and candidate inventory/quest state differ.
+
+Pip-Boy local-map scale, door projection, source Data labels, measured tabs and
+wrapping arrow keys are implemented. The source yaw/art/north cursor correction
+is now packaged; its matched live comparison remains pending. Native
+floor-plan shading, vertical coverage, ceiling culling and exploration remain
+open. Stats aid counts/actions and Notes/Radio marker templates are packaged.
+An ordinary Stimpak shortcut healed 210 to 220 HP in live gameplay; unsupported
+ingestible effects still fail before consumption.
+
+Source hand closing now advances from held Hit to the authored end; tab-knob and
+radiation-needle motion are implemented. The packaged world flashlight toggles
+through held Tab and retires on a second hold. A live F5 check exposed condition
+408 in Doc's later idle tree. Its shared inactive-VATS owner is packaged; the
+next condition, 259, then stopped his procedure. The shared condition batch now
+passes an ordinary save and cold restore with the light enabled. A later Sandbox
+procedure query exposed an incomplete phase mapping; the full four-phase,
+six-activity mapping and retained phase state now complete the ordinary house
+exit, an outdoor save and cold restore. Do not clear
+a latched actor fault or bypass save admission. Both seated and outdoor saves
+cold-load correctly.
+
+The isolated first-person and Pip-Boy views now receive world lights through a
+shared camera/unit-correct bridge, including the authoritative flashlight and
+local muzzle lights. Source posed bounds and overflow-light payload checks pass.
+The live device remains visually divergent; its raw menu texture was missing
+native CRT glow/scanlines. Their source effect is implemented; the first live
+capture exposed an extra output transfer, now corrected in source. Room brightness also
+remains divergent with both world flashlights off; source chair light colors,
+ranges and energies match for the non-weather lights, so arbitrary brightness
+or gamma changes are unjustified. Physical XR light-button binding remains open.
+
+Source leveled-list mutations and SetPos now execute the selected owned startup
+scripts, including the Canyon Wreckage reveal. Its real game reveal waits for
+ordinary house exit and the source timer; do not force marker flags. Shared
+readiness observations and independent terrain/water coverage are included.
+Pip-Boy pages, mutable startup and selected LOD audits pass. The complete current
+source passes the required full gate. Live house exit, outdoor save/cold restore
+and paired town traversal/saloon entry are verified within the limits below.
+
+The next source-proven divergence is environment animation startup. All eight
+instantiated STAT managers in the current exterior have no selected sequence;
+retail advances their canonical Idle/SpecialIdle loops (windmills, Nevada flag,
+signs and lamplight). The flag's separately clamped direct morphs match native
+timing and must remain independent. A shared exact-case default selector must
+preserve explicit playback and the inactive lowercase chandelier group. No named
+prop branch or blanket restart of all loops is justified.
 
 ## Current live result
 
-- Retail and the new OpenNV package are running. Ordinary saloon entry succeeds.
-  A fresh F5 interior save commits, loads, and restores the exact saved position
-  with an unpaused player. Capture-off state reports 60 FPS; sustained 4K60 across
-  all routes, combat and streaming remains unverified.
+- Retail and OpenNV are inside Doc's house. Actor and quest compass icons and
+  the CND arrow are visible. The source NPC group correction is +5 UI units;
+  the landmark/quest group correction is +25. The whole compass strip is unchanged.
+- Held Tab toggles the world light without opening a menu. An enabled-light
+  save committed and cold-restored with the actual light enabled and no light
+  error. The subsequent repaired actor phase completes the door transition and
+  an outdoor save/cold restore with the light disabled. The Stats S shortcut
+  visibly consumes one Stimpak, heals 210 to 220 HP and dims its label. The paused
+  world-HUD vitals are a display cache, not authoritative menu-health evidence.
+- Both games completed the short outdoor road route in both directions. The
+  earlier stop was the private walker's expired 900ms input lease, not a proved
+  collision failure; the walker now renews held movement and calls a stationary
+  result no-progress. Capture-off room snapshots report 60 FPS; sustained 4K60
+  across routes, combat and streaming remains unverified.
+- Paired Local Map capture now shows aligned player heading and door projection,
+  but its generic world-luma renderer remains visibly wrong. World Map source
+  extent, zoom limits, undiscovered marker art and marker crop are corrected in
+  source; default view, pan, cursor and control-label parity remain open.
 - Grass has color and the selected follow-up frames no longer show the reported
   atlas-edge triangles. Full foliage/lighting parity remains open.
 - Ceiling bulbs retain their diffuse texture. Native observation showed inactive

@@ -413,6 +413,8 @@ internal sealed partial class FalloutReferenceInstance
     internal void BindReferenceEnableQuery(Func<bool> query) => _referenceEnabled = query;
     internal bool AnimationSoundsCaptureReady => _animationSoundEvents?.CanCapture != false;
     internal FalloutAnimationSoundHistoryDiagnostic? AnimationSoundCaptureDiagnostic => _animationSoundEvents?.CaptureDiagnostic;
+    internal FalloutAnimationSoundHistoryDiagnostic? ObserveAnimationSoundCaptureDiagnostic(bool observedReady) =>
+        _animationSoundEvents?.ObserveCaptureDiagnostic(observedReady);
     private FalloutHitReactionFaults? _hitReactionFaults;
     internal FalloutHitReactionFaults HitReactionFaults => _hitReactionFaults ??= new(Reference);
     internal string? CurrentHitReactionError => _hitReactionFaults?.CurrentError;
@@ -617,6 +619,8 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
     internal FalloutInputControls? Controls { get; } = controls;
     internal FalloutPlayerMoves PlayerMoves { get; } = new();
     internal FalloutPlayerNotes PlayerNotes { get; } = new(records);
+    internal FalloutLeveledItemState LeveledItems { get; } = new(records);
+    internal FalloutVatsConditionState VatsConditions { get; } = new();
     private FalloutFormListState? _formLists;
     internal FalloutFormListState FormLists
     {
@@ -803,9 +807,31 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
     }
 
     private bool PendingProcedureCapture(FalloutReferenceInstance instance) =>
-        !instance.IdleRequestsCaptureReady || !instance.CreatureScriptIdleCaptureReady || instance.ProcedureCaptureBlocker is not null && !instance.PackageBindingFailureCaptureReady && !instance.FurnitureCaptureReady && !instance.SandboxMarkerCaptureReady &&
-        !instance.SelectionFailureCaptureReady && !instance.DialogueCaptureReady && !instance.PendingPackageSelectionCaptureReady && !instance.SandboxAdmissionFailureCaptureReady && !instance.InterruptedSandboxAdmissionCaptureReady && !instance.SandboxMotionFailureCaptureReady && !instance.PendingSandboxStartCaptureReady &&
-        (IsResident(instance.Reference) || instance.DeferredPackageContinuation?.CanCapture(instance) != true);
+        PendingProcedureCapture(instance, out _, out _);
+
+    private bool PendingProcedureCapture(FalloutReferenceInstance instance, out bool idleReady, out bool? bindingReady)
+    {
+        bindingReady = null;
+        idleReady = instance.IdleRequestsCaptureReady;
+        if (!idleReady || !instance.CreatureScriptIdleCaptureReady) return true;
+        if (instance.ProcedureCaptureBlocker is null) return false;
+        bindingReady = instance.PackageBindingFailureCaptureReady;
+        return !bindingReady.Value && !instance.FurnitureCaptureReady && !instance.SandboxMarkerCaptureReady &&
+            !instance.SelectionFailureCaptureReady && !instance.DialogueCaptureReady && !instance.PendingPackageSelectionCaptureReady && !instance.SandboxAdmissionFailureCaptureReady && !instance.InterruptedSandboxAdmissionCaptureReady && !instance.SandboxMotionFailureCaptureReady && !instance.PendingSandboxStartCaptureReady &&
+            (IsResident(instance.Reference) || instance.DeferredPackageContinuation?.CanCapture(instance) != true);
+    }
+
+    private static object ProcedureCaptureOwner(FalloutReferenceInstance instance, bool idleReady) => new
+    {
+        reference = instance.Reference.ToString(),
+        assignment = instance.PackageAssignment?.Package.ToString(),
+        motion = instance.PackageMotion?.Package.ToString(),
+        blocker = !idleReady ? "Idle request/sequence continuation." : instance.ProcedureCaptureBlocker,
+        bindingCapture = instance.PackageBindingCaptureDiagnostic,
+        selectionCapture = instance.SelectionCaptureDiagnostic,
+        stoppedRetirement = instance.StoppedRetirement?.State,
+    };
+
     internal int PendingProcedureCaptureCount => _instances.Values.Count(PendingProcedureCapture);
     internal int StoppedPackageBindingCount => _instances.Values.Count(instance => instance.PackageBindingFailureCaptureReady);
     internal int PendingAnimationSoundCaptureCount => _instances.Values.Count(instance => !instance.AnimationSoundsCaptureReady);
@@ -818,16 +844,57 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
             history = instance.AnimationSoundCaptureDiagnostic
         }).ToArray();
     internal object PendingProcedureCaptures => _instances.Values.Where(PendingProcedureCapture)
-        .Select(instance => new
+        .Select(instance => ProcedureCaptureOwner(instance, instance.IdleRequestsCaptureReady)).ToArray();
+
+    internal sealed record CaptureReadinessObservation(IReadOnlyList<object> ProcedureOwners,
+        IReadOnlyList<object> AnimationSoundOwners, int StoppedPackageBindings,
+        int? PendingCorpseCaptures, IReadOnlyList<object> CorpseOwners)
+    {
+        internal int PendingProcedures => ProcedureOwners.Count;
+        internal int PendingAnimationSounds => AnimationSoundOwners.Count;
+    }
+
+    // One live publication classifies each reference once. Detailed owner
+    // diagnostics remain independent evidence. This value is not
+    // retained between publications and never authorizes a persistent save;
+    // Capture/CaptureSequence still run their independent strict checks.
+    internal CaptureReadinessObservation ObserveCaptureReadiness(bool includeCorpseReadiness)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        var procedures = new List<object>();
+        var sounds = new List<(uint RuntimeId, object Owner)>();
+        var corpses = new List<object>();
+        var stopped = 0;
+        int? pendingCorpses = includeCorpseReadiness ? 0 : null;
+        foreach (var instance in _instances.Values)
         {
-            reference = instance.Reference.ToString(),
-            assignment = instance.PackageAssignment?.Package.ToString(),
-            motion = instance.PackageMotion?.Package.ToString(),
-            blocker = !instance.IdleRequestsCaptureReady ? "Idle request/sequence continuation." : instance.ProcedureCaptureBlocker,
-            bindingCapture = instance.PackageBindingCaptureDiagnostic,
-            selectionCapture = instance.SelectionCaptureDiagnostic,
-            stoppedRetirement = instance.StoppedRetirement?.State,
-        }).ToArray();
+            if (PendingProcedureCapture(instance, out var idleReady, out var bindingReady))
+                procedures.Add(ProcedureCaptureOwner(instance, idleReady));
+            if (bindingReady ?? instance.PackageBindingFailureCaptureReady) stopped++;
+            var soundReady = instance.AnimationSoundsCaptureReady;
+            if (!soundReady)
+                sounds.Add((records.RuntimeFormId(instance.Reference), new
+                {
+                    reference = instance.Reference.ToString(),
+                    cell = instance.Cell.ToString(),
+                    resident = IsResident(instance.Reference),
+                    history = instance.ObserveAnimationSoundCaptureDiagnostic(soundReady)
+                }));
+            if (instance.Injury?.Dead != true) continue;
+            if (includeCorpseReadiness && !instance.CorpseEquipmentCaptureReady) pendingCorpses++;
+            if (instance.CorpseEquipmentCaptureBlocker is not { } blocker) continue;
+            corpses.Add(new
+            {
+                reference = instance.Reference.ToString(),
+                blocker,
+                nativeEquipmentOwner = instance.CaptureCorpseEquipment is not null || instance.CaptureCorpseEquipmentForFiniteWait is not null,
+                nativeBodyOwner = instance.CaptureRagdoll is not null,
+                retainedBody = instance.Ragdoll is not null
+            });
+        }
+        return new(procedures.ToArray(), sounds.OrderBy(sound => sound.RuntimeId).Select(sound => sound.Owner).ToArray(),
+            stopped, pendingCorpses, corpses.ToArray());
+    }
 
     private FalloutScriptManualSaveRequests? _scriptManualSaves;
     internal FalloutScriptManualSaveRequests ScriptManualSaves => _scriptManualSaves ??= new(records);
@@ -861,6 +928,7 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
         if (_instances.Count != 0 || PendingPackageEventCount != 0) throw new InvalidOperationException("Reference restoration requires a fresh world.");
         FalloutReferenceSnapshot.Validate(snapshots);
         using var validated = new FalloutReferenceWorld(records);
+        validated.LeveledItems.Restore(LeveledItems.Capture());
         if (_formLists is not null) validated.FormLists.Restore(_formLists.Capture());
         if (_actorBaseFlags is not null) validated.ActorBaseFlags.Restore(_actorBaseFlags.Capture());
         foreach (var snapshot in snapshots)

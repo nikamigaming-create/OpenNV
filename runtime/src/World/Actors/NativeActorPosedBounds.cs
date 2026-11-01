@@ -21,8 +21,13 @@ internal static class NativeActorPosedBounds
         RuntimeNativeNifSkeleton skeleton, RuntimeLiveContentSource content, IDictionary<string, FalloutNifFile> sources, int rootBone)
         => Sample(parts, skeleton, content, sources, rootBone);
 
+    internal static FalloutNifSphereBound? CurrentMesh(IReadOnlyList<RuntimeNativeNifScene> parts,
+        RuntimeNativeNifSkeleton skeleton, RuntimeLiveContentSource content, IDictionary<string, FalloutNifFile> sources,
+        MeshInstance3D mesh) => Sample(parts, skeleton, content, sources, null, mesh);
+
     private static FalloutNifSphereBound? Sample(IReadOnlyList<RuntimeNativeNifScene> parts,
-        RuntimeNativeNifSkeleton skeleton, RuntimeLiveContentSource content, IDictionary<string, FalloutNifFile> sources, int? rootBone)
+        RuntimeNativeNifSkeleton skeleton, RuntimeLiveContentSource content, IDictionary<string, FalloutNifFile> sources, int? rootBone,
+        MeshInstance3D? selectedMesh = null)
     {
         FalloutNifSphereBound? result = null;
         foreach (var part in parts)
@@ -31,6 +36,7 @@ internal static class NativeActorPosedBounds
                 scene.Root.FindChildren("*", "", true, false).OfType<MeshInstance3D>()
                     .Where(mesh => mesh.HasMeta("opennv_nif_geometry_block")).ToArray()));
             var path = prepared.Path;
+            if (selectedMesh is not null && !prepared.Meshes.Contains(selectedMesh)) continue;
             if (!sources.TryGetValue(path, out var source))
             {
                 if (!content.TryRead(path, null, out var bytes, out _)) throw new FileNotFoundException(path);
@@ -38,6 +44,7 @@ internal static class NativeActorPosedBounds
             }
             foreach (var mesh in prepared.Meshes)
             {
+                if (selectedMesh is not null && mesh != selectedMesh) continue;
                 if (!GodotObject.IsInstanceValid(mesh) || mesh.IsQueuedForDeletion())
                     throw new InvalidOperationException("Posed source bounds retain a retired part mesh.");
                 if (!mesh.Visible) continue;

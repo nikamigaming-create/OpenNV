@@ -310,7 +310,7 @@ internal sealed class NativeOwnedMenuTree
         {
             var art = Art(tile);
             var zoom = Number(tile, "zoom");
-            return zoom <= 0 ? 0 : (trait == "filewidth" ? art.Region.Size.X : art.Region.Size.Y) * zoom / 100;
+            return zoom <= 0 ? 0 : (trait == "filewidth" ? art.Texture.GetWidth() : art.Texture.GetHeight()) * zoom / 100;
         }
         if (tile.Name == "text" && trait is "width" or "height")
             return trait == "width" ? Lines(tile).Max(line => Font(tile).Font.Measure(line)) : Lines(tile).Length * Font(tile).Font.Height;
@@ -477,15 +477,25 @@ internal sealed class NativeOwnedMenuTree
                     var crop = new Vector2(Number(tile, "cropx"), Number(tile, "cropy"));
                     if ((tile.Element("tile") is not null && Number(tile, "tile") != 0 || _textureOffsets.ContainsKey(tile)) && zoom > 0)
                     {
-                        var repeat = art.Region.Size * zoom / 100;
+                        // Atlas bounds include a half-texel sampling guard;
+                        // they are not the native texture's pixel period.
+                        // Positive zoom advances UVs in physical texture pixels
+                        // from the atlas origin, then wraps the whole texture.
+                        var textureSize = art.Texture.GetSize();
+                        var repeat = textureSize * zoom / 100;
                         if (repeat.X <= 0 || repeat.Y <= 0) throw new InvalidDataException("Owned tiled image has no positive period.");
+                        // Crop is normalized before the atlas transform; its
+                        // displacement retains the authored atlas extent.
+                        crop *= art.Region.Size / textureSize;
+                        crop += art.Region.Position * zoom / 100;
                         if (_textureOffsets.TryGetValue(tile, out var textureOffset)) crop += textureOffset * repeat;
                         var window = new Rect2(position, size);
                         var bounds = clip?.Intersection(window) ?? window;
                         for (var y = -Mathf.PosMod(crop.Y, repeat.Y); y < size.Y; y += repeat.Y)
                             for (var x = -Mathf.PosMod(crop.X, repeat.X); x < size.X; x += repeat.X)
                             {
-                                NativeUiClip.Draw(canvas, art.Texture, new Rect2(position + new Vector2(x, y), repeat), art.Region, tint, bounds);
+                                NativeUiClip.Draw(canvas, art.Texture, new Rect2(position + new Vector2(x, y), repeat),
+                                    new Rect2(Vector2.Zero, textureSize), tint, bounds);
                             }
                     }
                     else if (NativeUiImage.Sample(new(position, size), art.Region, zoom, crop) is { } sample)

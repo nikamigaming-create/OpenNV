@@ -1,5 +1,6 @@
 using Godot;
 using OpenNV.Runtime;
+using OpenNV.Runtime.World.Actors;
 using OpenNV.Runtime.World.Cells;
 
 public partial class NativeLocomotionAudit : Node3D
@@ -120,6 +121,8 @@ public partial class NativeLocomotionAudit : Node3D
             await CheckSupportedStepHeadroom();
             await CheckRoundedLandingContact();
             await CheckUnsupportedLandingContact();
+            await Check(.2f, false, true, standardHumanoid: true);
+            await Check(.7f, false, false, standardHumanoid: true);
             await Check(.3f, false, true);
             await Check(2, false, false);
             await Check(.3f, true, false);
@@ -264,7 +267,7 @@ public partial class NativeLocomotionAudit : Node3D
     }
 
     private async Task Check(float height, bool ceiling, bool shouldClimb,
-        float radius = .32f, float bodyHeight = 1.8f, float stride = .06f)
+        float radius = .32f, float bodyHeight = 1.8f, float stride = .06f, bool standardHumanoid = false)
     {
         var scene = new Node3D(); AddChild(scene);
         void Box(Vector3 position, Vector3 size)
@@ -277,7 +280,14 @@ public partial class NativeLocomotionAudit : Node3D
         Box(new(0, height / 2, -5), new(4, height, 8));
         if (ceiling) Box(new(0, bodyHeight + .7f, -3), new(10, 1, 20));
         var body = new CharacterBody3D { FloorSnapLength = radius, FloorMaxAngle = FloorAngle, Position = new(0, .1f, 0) };
-        body.AddChild(new CollisionShape3D { Position = new(0, bodyHeight / 2, 0), Shape = new CapsuleShape3D { Height = bodyHeight, Radius = radius } });
+        if (standardHumanoid)
+        {
+            var envelope = new CollisionShape3D();
+            new NativeHumanoidMovementEnvelope(.0142875f).Publish(envelope, 1);
+            body.AddChild(envelope);
+        }
+        else
+            body.AddChild(new CollisionShape3D { Position = new(0, bodyHeight / 2, 0), Shape = new CapsuleShape3D { Height = bodyHeight, Radius = radius } });
         scene.AddChild(body);
         using var stepQueries = new NativeCharacterStep.QueryResources(body);
         try
@@ -297,7 +307,7 @@ public partial class NativeLocomotionAudit : Node3D
                 { ++steps; body.Velocity = Vector3.Down * .01f; }
                 body.MoveAndSlide();
             }
-            GD.Print($"OPENNV_NATIVE_LOCOMOTION_CASE height={height} ceiling={ceiling} radius={radius} bodyHeight={bodyHeight} stride={stride} steps={steps} position={body.Position}");
+            GD.Print($"OPENNV_NATIVE_LOCOMOTION_CASE height={height} ceiling={ceiling} radius={radius} bodyHeight={bodyHeight} stride={stride} standardHumanoid={standardHumanoid} steps={steps} position={body.Position}");
             if (shouldClimb ? steps == 0 || body.Position.Z > -3 || body.Position.Y < height - .02f : steps != 0 || body.Position.Z < -.9f)
                 throw new InvalidOperationException("Capsule step/obstruction traversal differs from the synthetic collision scene.");
         }

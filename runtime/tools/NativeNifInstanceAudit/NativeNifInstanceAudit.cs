@@ -43,6 +43,7 @@ public partial class NativeNifInstanceAudit : Node
             if (OS.GetCmdlineUserArgs() is ["--lighting-cache"])
             {
                 ExerciseRenderedMenuMaterialOutput();
+                ExercisePointLightOverflow();
                 ExerciseAuthoredDecalSurfaces(); ExerciseDormantEnvironmentMask();
                 ExerciseDormantBillboardEnvironmentFlag(); ExerciseLocalMapHideSecret();
                 ExerciseLightingShaderCache();
@@ -340,8 +341,17 @@ public partial class NativeNifInstanceAudit : Node
                     if (nif.ReadObject(shader.TextureSet) is FalloutNifShaderTextureSet textures)
                         GD.Print($"OPENNV_NIF_SOURCE_TEXTURES {string.Join('|', textures.Textures)}");
                 }
+                var terrainRoles = RuntimeNativeNifMeshBuilder.TerrainStreamRoles(nif);
+                var coverage = new RuntimeNativeNifMeshBuilder.TerrainStreamCoverage(nif);
+                var omittedGeometry = new HashSet<int>();
                 Action<FalloutNifGeometry>? unbound = OS.GetCmdlineUserArgs()[0] == "--build-lod"
-                    ? geometry => GD.Print($"OPENNV_NIF_LOD_UNBOUND_DRAW geometry={geometry.Block.Index} material=world-owner-required") : null;
+                    ? geometry =>
+                    {
+                        omittedGeometry.Add(geometry.Block.Index);
+                        var role = coverage.Omit(geometry.Block.Index);
+                        GD.Print($"OPENNV_NIF_LOD_UNBOUND_DRAW geometry={geometry.Block.Index} role={role} material=world-owner-required");
+                    }
+                : null;
                 var scene = RuntimeNativeNifMeshBuilder.Build(nif, 0.0142875f, unboundPropertyFreeLod: unbound);
                 AddChild(scene.Root);
                 if (unbound is not null)
@@ -370,6 +380,32 @@ public partial class NativeNifInstanceAudit : Node
                                     throw new InvalidOperationException("Incremental distant assembly changed source mesh arrays.");
                         }
                         GD.Print($"OPENNV_LOD_INCREMENTAL_PASS steps={steps} meshes={original.Length} arrays=exact transforms=exact");
+                        if (terrainRoles.Count != 0)
+                        {
+                            var children = nif.ReadNode(nif.Roots.Single()).Children;
+                            var expected = new[] { RuntimeNativeNifMeshBuilder.TerrainStreamRole.Terrain,
+                                RuntimeNativeNifMeshBuilder.TerrainStreamRole.OrdinaryWater,
+                                RuntimeNativeNifMeshBuilder.TerrainStreamRole.ReflectiveWater };
+                            for (var slot = 0; slot < children.Length; ++slot)
+                                if (children[slot] >= 0 && terrainRoles[children[slot]] != expected[slot])
+                                    throw new InvalidOperationException("Terrain stream role differs from its source container slot.");
+                        }
+                        var missingOrdinary = omittedGeometry.Count(block => terrainRoles.GetValueOrDefault(block) ==
+                            RuntimeNativeNifMeshBuilder.TerrainStreamRole.OrdinaryWater);
+                        var missingReflective = omittedGeometry.Count(block => terrainRoles.GetValueOrDefault(block) ==
+                            RuntimeNativeNifMeshBuilder.TerrainStreamRole.ReflectiveWater);
+                        if (coverage.MissingOrdinaryWaterGeometries != missingOrdinary ||
+                            coverage.MissingReflectiveWaterGeometries != missingReflective ||
+                            coverage.OrdinaryWaterComplete && missingOrdinary != 0 ||
+                            coverage.ReflectiveWaterComplete && missingReflective != 0 ||
+                            omittedGeometry.Any(block => terrainRoles.GetValueOrDefault(block) ==
+                                RuntimeNativeNifMeshBuilder.TerrainStreamRole.Unknown) &&
+                                (coverage.OrdinaryWaterComplete || coverage.ReflectiveWaterComplete) ||
+                            coverage.TerrainComplete != !omittedGeometry.Any(block => terrainRoles.GetValueOrDefault(block) is
+                                RuntimeNativeNifMeshBuilder.TerrainStreamRole.Unknown or RuntimeNativeNifMeshBuilder.TerrainStreamRole.Terrain))
+                            throw new InvalidOperationException("Missing water and unknown source draws were conflated with terrain coverage.");
+                        GD.Print($"OPENNV_LOD_SOURCE_COVERAGE_PASS terrain={coverage.TerrainComplete} " +
+                            $"missingOrdinaryWater={missingOrdinary} missingReflectiveWater={missingReflective} waterPixels=unbound");
                     }
                     finally { staged.Root.Free(); }
                 }

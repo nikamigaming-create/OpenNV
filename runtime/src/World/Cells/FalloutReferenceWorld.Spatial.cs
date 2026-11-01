@@ -76,6 +76,13 @@ internal sealed partial class FalloutReferenceWorld
         return (float)Math.Sqrt(dx * dx + dy * dy + dz * dz);
     }
 
+    internal bool HasUnownedCell(FalloutFormKey subject, FalloutReferencePlacement? player, float unitsToMetres)
+    {
+        var cell = SpatialPlacement(subject, player, unitsToMetres).Cell;
+        var ownership = LocalOwnership(AccessRecord(cell));
+        return ownership.Owner is null && EncounterOwner(CellEncounterZone(cell)) is null;
+    }
+
     internal FalloutReferencePlacement SpawnPlacement(FalloutFormKey reference,
         FalloutReferencePlacement player, float unitsToMetres) => SpatialPlacement(reference, player, unitsToMetres, requireFacing: true);
 

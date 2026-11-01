@@ -318,6 +318,7 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
         ObserveSaveInput(inputEvent, "unhandled");
         if (VatsInput(inputEvent)) { GetViewport().SetInputAsHandled(); return; }
         if (InventoryHotkeyInput(inputEvent)) { GetViewport().SetInputAsHandled(); return; }
+        if (PipBoyButtonInput(inputEvent)) { GetViewport().SetInputAsHandled(); return; }
         if (_xr is not null) return;
         var input = _configuration.Player.DesktopInput;
         if (_inputControls is not null && !_modalInput && _movementEnabled && _furniturePhase == 0 &&
@@ -340,10 +341,6 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
         {
             OpenPipBoyPage?.Invoke((OpenNV.Runtime.Gameplay.State.FalloutPipBoyPage)(pageKey.PhysicalKeycode - Key.F1));
             GetViewport().SetInputAsHandled(); return;
-        }
-        if (!_modalInput && _furniturePhase == 0 && GetMeta("opennv_source_pipboy_enabled", false).AsBool() && inputEvent.IsActionPressed(input.PipBoy.Action))
-        {
-            OpenPipBoy?.Invoke(); GetViewport().SetInputAsHandled(); return;
         }
         if (!_modalInput && _furniturePhase == 0 && inputEvent.IsActionPressed(input.Save.Action))
         {
@@ -420,6 +417,7 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
     {
         using var frameWork = OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Measure(OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Owner.PlayerPhysics);
         PublishXrPointer();
+        AdvancePipBoyButton(delta);
         AdvanceGrab();
         if (_xr is not null && GetTree().Paused) return;
         AdvanceExplosionExposure(delta);

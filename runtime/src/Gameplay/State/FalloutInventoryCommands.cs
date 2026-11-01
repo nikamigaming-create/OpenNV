@@ -65,7 +65,7 @@ internal sealed class FalloutInventoryCommands(FalloutPluginStack records, Fallo
                 if (command.Kind == FalloutInventoryCommandKind.Add)
                     inventory.Add(records, changedItem, command.Count, level(), command.Silent || !isPlayer, globals,
                         validateAddition: isPlayer ? selected => FalloutReferenceWorld.RequirePlayerItemAcquisition(
-                            records, records.GetEffective(selected), command.Target) : null);
+                            records, records.GetEffective(selected), command.Target) : null, leveledItems: world.LeveledItems);
                 else
                 {
                     // Retire an actual worn weapon before deleting its last item.

@@ -1,10 +1,11 @@
 using System.Buffers.Binary;
 using OpenNV.Runtime.Content;
+using OpenNV.Runtime.Content.Definitions;
 
 namespace OpenNV.Runtime.World.Cells;
 
 internal sealed record FalloutCompassMarker(FalloutFormKey Reference, string Kind, float Heading,
-    float Distance, bool Discovered);
+    float Distance, bool Discovered, bool Hostile = false);
 
 internal sealed record FalloutCompassFrame(float? HeadingRadians, float? StripOffset,
     IReadOnlyList<FalloutCompassMarker> Markers, IReadOnlyList<string> Unbound);
@@ -20,13 +21,14 @@ internal sealed partial class FalloutReferenceWorld
     // This is a projection of shared world/quest state. Drawing never discovers
     // locations, awards experience, changes objectives or admits actor targets.
     internal FalloutCompassFrame Compass(FalloutReferencePlacement player, float unitsToMetres,
-        float stripWidth, FalloutQuestState quests, Func<FalloutFormKey, FalloutCondition, float> evaluate)
+        float stripWidth, FalloutQuestState quests, Func<FalloutFormKey, FalloutCondition, float> evaluate,
+        Func<FalloutFormKey, bool?>? sight = null)
     {
         player.Validate();
         if (!float.IsFinite(stripWidth) || stripWidth <= 70)
             throw new InvalidDataException("Source compass strip has no positive heading band.");
         var cell = FalloutCellSceneReader.ReadDefinition(records, player.Cell);
-        var unbound = new List<string> { "npc-detection-hostility-ticks", "player-placed-marker", "distance-blink" };
+        var unbound = new List<string> { "player-placed-marker", "distance-blink" };
         var world = cell.Worldspace;
         var north = world is null ? CompassNorthRotation(player.Cell, unbound) : 0;
         if (north is null) return new(null, null, [], unbound);
@@ -35,6 +37,7 @@ internal sealed partial class FalloutReferenceWorld
         phase -= MathF.Floor(phase);
         var halfBand = (int)(stripWidth / 2) - 35;
         var markers = new List<FalloutCompassMarker>();
+        AddActorTicks();
         var maximumDistance = unchecked((int)records.NumericSettings.IntegerBits("iMapMarkerVisibleDistance"));
         if (maximumDistance < 0) throw new InvalidDataException("Source compass marker distance is negative.");
         foreach (var source in FalloutWorldMap.SourceMarkers(records))
@@ -81,12 +84,14 @@ internal sealed partial class FalloutReferenceWorld
                     {
                         if (!FalloutCondition.AllPass(target.Conditions, condition => evaluate(target.Reference, condition), evaluateRunOn: true)) continue;
                         var placement = SpatialPlacement(target.Reference, player, unitsToMetres);
-                        if (!SameSpace(placement))
+                        var portal = !SameSpace(placement);
+                        if (portal)
                         {
-                            unbound.Add($"quest-portal-target:{target.Reference}");
-                            continue;
+                            placement = CompassQuestPortal(target, player, placement.Cell, unitsToMetres);
+                            if (!SameSpace(placement)) throw new InvalidDataException("Quest portal is outside the player's source coordinate region.");
                         }
-                        Add(target.Reference, "quest", placement, DistanceTo(placement, true), false, true);
+                        Add(target.Reference, "quest", placement, portal ?
+                            DistanceTo(placement, horizontal: false, squared: true) : DistanceTo(placement, true), false, true);
                     }
                     catch (Exception error) when (error is InvalidDataException or NotSupportedException or InvalidOperationException)
                     { unbound.Add($"quest-target:{target.Reference}:{error.Message}"); }
@@ -99,12 +104,16 @@ internal sealed partial class FalloutReferenceWorld
 
         bool SameSpace(FalloutReferencePlacement placement) => placement.Cell == player.Cell ||
             world is not null && FalloutCellSceneReader.ReadDefinition(records, placement.Cell).Worldspace == world;
-        float DistanceTo(FalloutReferencePlacement placement, bool horizontal)
+        float DistanceTo(FalloutReferencePlacement placement, bool horizontal, bool squared = false)
         {
             var x = (double)placement.Position[0] - player.Position[0];
             var y = (double)placement.Position[1] - player.Position[1];
             var z = horizontal ? 0 : (double)placement.Position[2] - player.Position[2];
-            return (float)Math.Sqrt(x * x + y * y + z * z);
+            // Native quest teleport-link HUD distance is squared XYZ, summed in
+            // double precision and rounded once to Float32. Gameplay range
+            // gates and other marker lanes retain their existing linear units.
+            var distance = x * x + y * y + z * z;
+            return (float)(squared ? distance : Math.Sqrt(distance));
         }
         void Add(FalloutFormKey reference, string kind, FalloutReferencePlacement placement, float distance, bool discovered, bool clamp)
         {
@@ -112,6 +121,148 @@ internal sealed partial class FalloutReferenceWorld
             if (!clamp && MathF.Abs(angle) >= 70) return;
             angle = Math.Clamp(angle, -70, 70);
             markers.Add(new(reference, kind, (angle + 70) / 140 * (2 * halfBand), distance, discovered));
+        }
+
+        void AddActorTicks()
+        {
+            // Compass detection is independent of collision LOS. Native sound
+            // and visual contributions are nonnegative. Source perception,
+            // target skill and levels can establish a minimum remaining score
+            // without inventing light/noise samples.
+            // This proves only an admission boolean, never an exact score.
+            try
+            {
+                float Setting(string name) => FalloutGameSettingFloats.Read(records, name);
+                var playerReference = records.RuntimeFormKey(0x14);
+                var owner = records.GetEffective(records.RuntimeFormKey(0x1d));
+                if (QueryNativeCondition(playerReference,
+                    new FalloutCondition(owner, 0, 0, (ushort)FalloutConditionFunction.GetActorValue, (uint)FalloutActorValueId.Health, 0, 0, 0)) <= 0) return;
+                var perception = QueryNativeCondition(playerReference,
+                    new FalloutCondition(owner, 0, 0, (ushort)FalloutConditionFunction.GetActorValue, (uint)FalloutActorValueId.Perception, 0, 0, 0));
+                var playerLevelValue = QueryNativeCondition(playerReference,
+                    new FalloutCondition(owner, 0, 0, (ushort)FalloutConditionFunction.GetLevel, 0, 0, 0, 0));
+                if (!float.IsFinite(playerLevelValue) || playerLevelValue is < 1 or > ushort.MaxValue || playerLevelValue != MathF.Truncate(playerLevelValue))
+                    throw new NotSupportedException("Detection observer level has no source integer owner.");
+                var playerLevel = (int)playerLevelValue;
+                int Integer(string name) => unchecked((int)records.NumericSettings.IntegerBits(name));
+                var maximum = Setting("fSneakMaxDistance") * (world is null ? 1 : Setting("fSneakExteriorDistanceMult"));
+                var exponent = Setting("fSneakDistanceAttenuationExponent");
+                var improvedDistance = Math.Max(1, Setting("fImprovedDetectModifier"));
+                var skillMultiplier = Setting("fSneakSkillMult");
+                var perceptionMinimum = Setting("fSneakPerceptionSkillMin");
+                var perceptionMaximum = Setting("fSneakPerceptionSkillMax");
+                var inCombat = QueryNativeCondition(playerReference,
+                    new FalloutCondition(owner, 0, 0, (ushort)FalloutConditionFunction.IsInCombat, 0, 0, 0, 0));
+                var sitting = QueryNativeCondition(playerReference,
+                    new FalloutCondition(owner, 0, 0, (ushort)FalloutConditionFunction.GetSitting, 0, 0, 0, 0));
+                var activityMinimum = 1 + (inCombat != 0 ? Setting("fSneakAlertMod") + Math.Min(0, Setting("fSneakCombatMod")) : 0) +
+                    (sitting == 9 ? Setting("fSneakSleepBonus") : 0) +
+                    Math.Min(0, Math.Min(Setting("fSneakAmbushTargetMod"), Setting("fSneakAmbushNonTargetMod")));
+                var perceptionSkill = perceptionMinimum + (perceptionMaximum - perceptionMinimum) * MathF.Truncate(perception) / 10;
+                var baseline = Setting("fSneakBaseValue");
+                var threshold = Setting("fPlayerDetectActorValue");
+                var cap = unchecked((int)records.NumericSettings.IntegerBits("iHUDMaxCompassNPCTicks"));
+                if (!float.IsFinite(perception) || perception < 0 || !float.IsFinite(maximum) || maximum <= 0 ||
+                    !float.IsFinite(exponent) || exponent < 0 || !float.IsFinite(improvedDistance) || !float.IsFinite(skillMultiplier) || skillMultiplier < 0 ||
+                    !float.IsFinite(perceptionSkill) || perceptionSkill < 0 || !float.IsFinite(activityMinimum) || activityMinimum < 0 ||
+                    !float.IsFinite(baseline) || !float.IsFinite(threshold) || cap < 0)
+                    throw new NotSupportedException("Source detection signs do not admit the nonnegative contribution proof.");
+                var candidates = new List<(FalloutReferenceInstance Actor, FalloutReferencePlacement Placement, float Distance)>();
+                foreach (var actor in _instances.Values.ToArray())
+                {
+                    if (actor.Reference == playerReference || actor.QueryNativeCondition is null || actor.QuerySpatialPlacement is null ||
+                        records.GetEffective(actor.Base).Signature is not ("NPC_" or "CREA") || !IsEnabled(actor.Reference)) continue;
+                    var placement = SpatialPlacement(actor.Reference, player, unitsToMetres);
+                    if (!SameSpace(placement) || Health(actor.Reference).Current <= 0 || IsDead(actor.Reference)) continue;
+                    var distance = DistanceTo(placement, false);
+                    if (distance <= maximum) candidates.Add((actor, placement, distance));
+                }
+                // Native caps its retained target list before drawing. Its
+                // history/tie ordering cannot be reconstructed from a subset.
+                if (candidates.Count > cap) throw new NotSupportedException("Actor tick capacity requires retained detection-list ordering.");
+                foreach (var (actor, placement, distance) in candidates)
+                {
+                    try
+                    {
+                        var basis = records.GetEffective(actor.Base);
+                        var effects = FalloutActorTemplateOwner.Resolve(records, basis, 8, actor.Templates);
+                        foreach (var field in effects.ReadSubrecords().Where(field => field.Signature == "SPLO"))
+                        {
+                            if (field.Data.Length != 4) throw new InvalidDataException("Actor ability identity extent is invalid.");
+                            var spell = effects.Plugin.AdjustFormId(BinaryPrimitives.ReadUInt32LittleEndian(field.Data.Span));
+                            if (!_perkAbilities.TryGetConstantModifiers(spell, out var modifiers) || _perkAbilities.Scripts(spell).Count != 0 ||
+                                modifiers.Any(modifier => modifier.ActorValue is 42 or 48 or 49))
+                                throw new NotSupportedException("Actor visibility ability requires its active effect owner.");
+                        }
+                        if (AcquiredPerks(actor.Reference).Count != 0 ||
+                            actor.Ingestibles is { Effects.Count: > 0 } or { Failure: not null } || actor.Inventory is null ||
+                            actor.Inventory.Contents.Items.Any(item => records.GetEffective(item.FormKey).ReadSubrecords().Any(field => field.Signature == "EITM")) ||
+                            actor.ActorValues.Keys.Any(name => name.Equals("invisibility", StringComparison.OrdinalIgnoreCase) || name.Equals("chameleon", StringComparison.OrdinalIgnoreCase)))
+                            throw new NotSupportedException("Visibility effects require their active spell/equipment/perk owner.");
+                        var sneaking = QueryNativeCondition(actor.Reference,
+                            new FalloutCondition(basis, 0, 0, (ushort)FalloutConditionFunction.IsSneaking, 0, 0, 0, 0));
+                        if (sneaking != 0) throw new NotSupportedException("Stealth target requires complete detection inputs.");
+                        var moving = QueryNativeCondition(actor.Reference,
+                            new FalloutCondition(basis, 0, 0, (ushort)FalloutConditionFunction.IsMoving, 0, 0, 0, 0));
+                        var skillUpper = 0d;
+                        if (moving != 0)
+                        {
+                            var stats = FalloutActorTemplateOwner.Resolve(records, basis, 2, actor.Templates);
+                            var acbs = stats.ReadSubrecords().Single(field => field.Signature == "ACBS").Data.Span;
+                            var actorLevel = FalloutActorLevel.Resolve(acbs, actor.Templates?.Level);
+                            var skill = ActorValue(actor.Reference, "sneak");
+                            if (!float.IsFinite(skill) || skill < int.MinValue || skill >= int.MaxValue)
+                                throw new NotSupportedException("Detection target skill has no finite source integer value.");
+                            var armorMinimum = Math.Min(0, Math.Min(Integer("iHeavyArmorStealthPenalty"), Integer("iMediumArmorStealthPenalty")));
+                            double SourceInteger(double value) => value is < int.MinValue or > int.MaxValue
+                                ? throw new NotSupportedException("Detection target skill/level arithmetic exceeds its source integer range.") : value;
+                            var levelBonus = SourceInteger((actorLevel - (double)playerLevel) * Integer("iSneakLevelBonus"));
+                            var startPenalty = SourceInteger((double)actorLevel * Integer("iSneakStartBonusLevelPenatly"));
+                            var startBonus = SourceInteger(Integer("iSneakStartBonus") - startPenalty);
+                            skillUpper = SourceInteger(SourceInteger(SourceInteger(Math.Truncate(skill) + levelBonus) + Math.Max(0, startBonus)) - armorMinimum);
+                        }
+                        var attenuation = MathF.Pow(Math.Max(0, (maximum - distance * improvedDistance) / maximum), exponent);
+                        var minimumScore = baseline + skillMultiplier * (perceptionSkill * activityMinimum * attenuation - skillUpper);
+                        if (moving != 0 && Math.Floor(minimumScore) < threshold)
+                        {
+                            // Native movement sound includes a source boot base
+                            // even at zero equipment weight. Its action level
+                            // is selected from the owned silent/normal/loud
+                            // settings; all omitted terms must be nonnegative.
+                            var bootBase = Setting("fSneakBootWeightBase");
+                            var bootWeight = Setting("fSneakBootWeightMult");
+                            var sounds = Setting("fSneakSoundsMult");
+                            var running = Setting("fSneakRunningMult");
+                            var unseen = Setting("fSneakSoundLosMult");
+                            var action = Setting("fSneakActionMult");
+                            var actionLevels = new[] { Integer("iSoundLevelSilent"), Integer("iSoundLevelNormal"), Integer("iSoundLevelLoud") };
+                            if (bootBase < 0 || bootWeight < 0 || sounds < 0 || running < 0 || unseen < 0 || action < 0 ||
+                                actionLevels.Any(level => level < 0) || Math.Truncate(action) * actionLevels.Max() > int.MaxValue ||
+                                actor.Inventory.Contents.Items.Any(item => item.RecordType == "ARMO" && (item.Weight is null || item.Weight < 0)))
+                                throw new NotSupportedException("Movement sound does not admit a nonnegative source-weight/action proof.");
+                            var soundAttenuation = Math.Min(1, unseen);
+                            var cone = Setting("fDetectionViewCone");
+                            if (cone is < 0 or > 360) throw new NotSupportedException("Detection view cone is outside its source angular range.");
+                            var angle = MathF.Abs(FalloutHeadingAngle.Between(player.Position, placement.Position, heading));
+                            if (angle < cone / 2 && sight?.Invoke(actor.Reference) == true) soundAttenuation = 1;
+                            minimumScore += Math.Max(0, attenuation * soundAttenuation * sounds * bootBase * Math.Min(1, running));
+                        }
+                        var lowerBound = Math.Floor(minimumScore);
+                        if (!double.IsFinite(lowerBound) || lowerBound < threshold)
+                            throw new NotSupportedException("Detection admission requires light/noise/history inputs.");
+                        var hostile = actor.Engagement?.Target == playerReference ||
+                            ActorThreat(actor.Reference).Hostile(ActorRelation(actor.Reference, playerReference));
+                        var count = markers.Count;
+                        Add(actor.Reference, "actor", placement, distance, false, false);
+                        if (markers.Count != count) markers[^1] = markers[^1] with { Hostile = hostile };
+                    }
+                    catch (Exception error) when (error is InvalidDataException or NotSupportedException or InvalidOperationException)
+                    { unbound.Add($"actor-detection:{actor.Reference}:{error.Message}"); }
+                }
+                unbound.Add("actor-detection:nonnegative-admission-proof;exact-score-light-noise-history-and-enhanced-sensors-unbound");
+            }
+            catch (Exception error) when (error is InvalidDataException or NotSupportedException or InvalidOperationException)
+            { unbound.Add($"actor-detection:{error.Message}"); }
         }
     }
 

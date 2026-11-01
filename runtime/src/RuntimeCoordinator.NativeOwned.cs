@@ -96,7 +96,8 @@ public partial class RuntimeCoordinator
         var cellChildren = _nativeCurrentCellRoot?.GetChildren();
         using var cellChildrenOwner = cellChildren is null ? null : (Godot.Collections.Array)cellChildren;
         var cellNodes = cellChildren?.ToArray() ?? [];
-        var pendingCorpseCaptures = detailed ? _nativeReferences?.PendingCorpseEquipmentCaptureCount : null;
+        var captureReadiness = _nativeReferences?.ObserveCaptureReadiness(detailed);
+        var pendingCorpseCaptures = captureReadiness?.PendingCorpseCaptures;
         return new
         {
             paused = tree.Paused,
@@ -126,19 +127,19 @@ public partial class RuntimeCoordinator
                 _nativeReferences.ResidentCellCount,
                 _nativeReferences.ScriptDefinitionCount,
                 pendingPackageEvents = _nativeReferences.PendingPackageEventCount,
-                pendingProcedureCaptures = _nativeReferences.PendingProcedureCaptureCount,
-                pendingProcedureCaptureOwners = _nativeReferences.PendingProcedureCaptures,
+                pendingProcedureCaptures = captureReadiness!.PendingProcedures,
+                pendingProcedureCaptureOwners = captureReadiness!.ProcedureOwners,
                 pendingCorpseCaptures,
-                corpseCaptureBlockers = _nativeReferences.PendingCorpseEquipmentCaptures,
-                pendingAnimationSoundCaptures = _nativeReferences.PendingAnimationSoundCaptureCount,
-                pendingAnimationSoundCaptureOwners = _nativeReferences.PendingAnimationSoundCaptures,
+                corpseCaptureBlockers = captureReadiness!.CorpseOwners,
+                pendingAnimationSoundCaptures = captureReadiness!.PendingAnimationSounds,
+                pendingAnimationSoundCaptureOwners = captureReadiness!.AnimationSoundOwners,
                 detection = _nativeReferences.DetectionState,
                 stoppedScriptFrames = _nativeReferences.StoppedScriptFrames,
-                stoppedPackageBindings = _nativeReferences.StoppedPackageBindingCount,
+                stoppedPackageBindings = captureReadiness!.StoppedPackageBindings,
                 talkingActivatorBindings = _nativeReferences.TalkingActivatorBindings,
                 unloadedActorPackages = _nativeReferences.UnloadedPackages?.State,
                 state = detailed && !_nativeReferences.PlayerMoves.Pending && _nativeReferences.PendingPackageEventCount == 0 &&
-                    _nativeReferences.PendingProcedureCaptureCount == 0 && pendingCorpseCaptures == 0 && _nativeReferences.PendingAnimationSoundCaptureCount == 0
+                    captureReadiness!.PendingProcedures == 0 && pendingCorpseCaptures == 0 && captureReadiness!.PendingAnimationSounds == 0
                     ? _nativeReferences.Capture() : null,
                 actorOverrides = detailed && !_nativeReferences.PlayerMoves.Pending ? _nativeReferences.CaptureActorOverrides() : null
             },
@@ -151,7 +152,7 @@ public partial class RuntimeCoordinator
             cell = _nativeActiveCell?.Cell.FormKey.ToString(),
             exteriorLod = cellNodes.OfType<RuntimeNativeExteriorLod>().SingleOrDefault()?.State,
             exteriorGrass = !detailed ? null : cellNodes.OfType<RuntimeNativeGrassOwner>().SingleOrDefault()?.State,
-            exteriorStreaming = NativeStreamingState,
+            exteriorStreaming = CaptureNativeStreamingState(cellNodes),
             resourceCache = RuntimeLiveContentSource.Current?.CacheState,
             player = _nativePlayer is null ? null : new
             {
@@ -234,7 +235,7 @@ public partial class RuntimeCoordinator
             gameTimeUnbound = _nativeGameTimeUnbound,
             skyLighting = _nativeSkyLighting?.Unbound is null ? _nativeSkyLighting?.Capture() : null,
             skyLightingUnbound = _nativeSkyLighting?.Unbound,
-            wind = cellChildren?.OfType<RuntimeNativeWind>().SingleOrDefault()?.State,
+            wind = cellNodes.OfType<RuntimeNativeWind>().SingleOrDefault()?.State,
             playerInventory = _nativeInventory.Items,
             ingestibles = _nativeOpeningStageDriver?.IngestibleState,
             gameplayHud = _nativeGameplayHud?.State,
@@ -659,6 +660,7 @@ public partial class RuntimeCoordinator
             _nativeReferences = new(stack, auxiliary: _nativeScriptStorage?.Auxiliary,
                 ini: _nativeScriptStorage?.Ini, ui: _nativeUi, controls: _nativeScriptStorage?.Controls);
             if (restore.State.FormLists is { } formLists) _nativeReferences.FormLists.Restore(formLists);
+            if (restore.State.LeveledItems is { } leveledItems) _nativeReferences.LeveledItems.Restore(leveledItems);
             if (restore.State.ActorBaseFlags is { } baseFlags) _nativeReferences.ActorBaseFlags.Restore(baseFlags);
             _nativeReferences.RestoreEncounterZones(restore.State.EncounterZones);
             _nativeReferences.TransientExplosions.Restore(restore.State.TransientExplosions);
@@ -1470,6 +1472,7 @@ public partial class RuntimeCoordinator
             () => _nativeOpeningStageDriver!.PlayerAppearanceRevision,
             () => (_nativeQuestScripts ?? throw new InvalidOperationException("Player presentation has no shared script session.")).Scripts.Session,
             _nativeReferences!.FormLists);
+        _nativePlayer.RestorePipBoyLight(_nativeContinueOpening ? _nativeOpeningRestore?.State.PipBoyLight : null);
         _nativePlayer.ConfigureCombat(_nativePluginStack!, _nativeGlobals!,
             () => _nativeOpeningStageDriver!.PlayerLevel, value => _nativeOpeningStageDriver!.PlayerCombatValue(value),
             () => _nativeOpeningStageDriver!.PlayerPerkEntries,

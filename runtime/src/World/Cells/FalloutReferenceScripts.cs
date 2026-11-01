@@ -475,6 +475,11 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
             var operation = parts[^1].ToLowerInvariant();
             if (parts.Length == 1 && FalloutScriptFormLists.Function(operation, records, () => world.FormLists) is { } formListFunction)
                 return formListFunction;
+            if (parts.Length == 1 && FalloutScriptLeveledItems.Function(operation, records, () => world.LeveledItems) is { } leveledFunction)
+                return leveledFunction;
+            if (parts.Length <= 2 && FalloutScriptPosition.Function(operation, () => world,
+                () => caller?.FormKey(records) ?? (parts.Length == 2 ? Reference(parts[0]) : source)) is { } positionFunction)
+                return positionFunction;
             FalloutFormKey? suppliedTarget = null;
             if (caller is { } value)
             {
@@ -739,6 +744,8 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
             var operation = parts[^1].ToLowerInvariant();
             if (parts.Length <= 2 && FalloutActorValueCommands.Operation(operation) is not null ||
                 parts.Length == 1 && FalloutScriptFormLists.Supports(operation) ||
+                parts.Length == 1 && FalloutScriptLeveledItems.Supports(operation) ||
+                parts.Length <= 2 && FalloutScriptPosition.Supports(operation) ||
                 parts.Length <= 2 && FalloutScriptActorFlags.Supports(operation, parts.Length == 2))
             {
                 _ = FalloutNvseNumericExpression.EvaluateValue([command, .. arguments], values, Function, UserFunction);

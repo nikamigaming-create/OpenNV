@@ -44,6 +44,8 @@ internal sealed partial class FalloutConditionRuntime
             "getisreference" => Form(Function.GetIsReference),
             "getisrace" => Form(Function.GetIsRace),
             "getinfaction" => Form(Function.GetInFaction),
+            "getisclass" => Form(Function.GetIsClass),
+            "getpcenemyoffaction" => Form(Function.GetPCEnemyofFaction, false),
             "getfactionrank" => Form(Function.GetFactionRank),
             "getisvoicetype" => Form(Function.GetIsVoiceType),
             "isinlist" => Form(Function.IsInList),
@@ -52,6 +54,20 @@ internal sealed partial class FalloutConditionRuntime
             "getitemcount" => Form(Function.GetItemCount),
             "isequipped" or "getequipped" => Form(Function.GetEquipped),
             "getdistance" => Form(Function.GetDistance),
+            "getheadingangle" => Form(Function.GetHeadingAngle),
+            "getisuseditem" => Form(Function.GetIsUsedItem, false),
+            "getisuseditemtype" => new([FalloutScriptArgumentKind.Number], arguments =>
+                Call(Function.GetIsUsedItemType, number: Index(arguments[0].Number), scoped: false))
+            { ReadOnly = true },
+            "getuseditemlevel" => None(Function.GetUsedItemLevel, false),
+            "getuseditemactivate" => None(Function.GetUsedItemActivate, false),
+            "iswaterobject" => None(Function.IsWaterObject, false),
+            "getvatsmode" => None(Function.GetVATSMode, false),
+            "getvatstargetheight" => None(Function.GetVatsTargetHeight, false),
+            "getarmorrating" => None(Function.GetArmorRating),
+            "isswimming" => None(Function.IsSwimming),
+            "getforcehitreaction" => None(Function.GetForceHitReaction),
+            "getdialogueemotion" => None(Function.GetDialogueEmotion),
             "getpos" => new([FalloutScriptArgumentKind.Identifier], arguments =>
                 Call(Function.GetPos, number: arguments[0].Identifier!.ToUpperInvariant() switch
                 {
@@ -76,6 +92,14 @@ internal sealed partial class FalloutConditionRuntime
             "istalking" => None(Function.IsTalking),
             "getsandman" => None(Function.GetSandman),
             "getcannibal" => None(Function.GetCannibal),
+            "getplantedexplosive" => None(Function.GetPlantedExplosive),
+            "getvatsvalue" => new([FalloutScriptArgumentKind.Number, FalloutScriptArgumentKind.OptionalNumber], arguments =>
+            {
+                if (arguments.Count > 2) throw new InvalidDataException("GetVATSValue accepts one selector and one optional value.");
+                return Call(Function.GetVATSValue, number: Index(arguments[0].Number),
+                    second: arguments.Count == 2 ? Index(arguments[1].Number) : 0, scoped: false);
+            })
+            { ReadOnly = true },
             "getdisabled" => None(Function.GetDisabled),
             "getdead" => None(Function.GetDead),
             "getunconscious" => None(Function.GetUnconscious),

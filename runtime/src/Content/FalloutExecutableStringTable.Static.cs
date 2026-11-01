@@ -24,7 +24,7 @@ internal static partial class FalloutExecutableStringTable
             for (var at = 0; at <= bytes.Length - 12; at += 4)
             {
                 var name = image.Literal(U32(bytes, at + 8));
-                if (name is null || !Regex.IsMatch(name, @"^[sfibur][A-Za-z0-9_][A-Za-z0-9_ ]*(?::[A-Za-z0-9_ ]+)?$", RegexOptions.CultureInvariant)) continue;
+                if (name is null || !Regex.IsMatch(name, @"^[Ssfibur][A-Za-z0-9_][A-Za-z0-9_ ]*(?::[A-Za-z0-9_ ]+)?$", RegexOptions.CultureInvariant)) continue;
                 var vtable = U32(bytes, at);
                 if (!types.TryGetValue(vtable, out var collection)) types.Add(vtable, collection = image.StaticSettingCollection(vtable));
                 if (collection is not { } owner) continue;

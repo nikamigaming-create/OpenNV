@@ -26,6 +26,7 @@ internal partial class RuntimeNativeNpc : INativeSandboxActivityOwner
         if (_furnitureApproaching || _sitting is 2 or 4 || _idlePlayback is not null || _responseIdleActive) return false;
         if (_sitting != 1) throw new InvalidOperationException("Sandbox furniture has no physical procedure phase.");
         _sandboxFurniturePackageExit = false;
+        Combat!.ObserveSandboxPhase(1);
         _furnitureOccupied = Transform;
         _sitting = 4;
         StartFurnitureAnimation();
@@ -38,6 +39,20 @@ internal partial class RuntimeNativeNpc : INativeSandboxActivityOwner
         if (activity.Activity == FalloutSandboxActivity.IdleMarker)
         { AdvanceSandboxMarker(package, source, activity, delta); return; }
         if (_idlePlayback is not null || _responseIdleActive) return;
+        var nativePhase = Combat!.CurrentSandboxActivity?.NativePhase;
+        if (nativePhase == 1 && _furnitureSandboxActivity && _sitting == 4) return;
+        if (nativePhase is null && _furnitureSandboxActivity && _sitting == 1)
+        {
+            activity = Combat.ObserveSandboxPhase(3);
+            nativePhase = 3;
+        }
+        if (nativePhase is null or 1)
+        {
+            if (!IdleRequestsReady || _idleRetirementPending) return;
+            activity = Combat.ObserveSandboxPhase(2);
+        }
+        else if (nativePhase == 2 && _furnitureSandboxActivity && _sitting is 1 or 2 or 4)
+            activity = Combat.ObserveSandboxPhase(3);
         var target = activity.Target ?? throw new InvalidDataException("Furniture activity has no selected reference.");
         if (!_furnitureSandboxActivity)
         {
@@ -84,7 +99,7 @@ internal partial class RuntimeNativeNpc : INativeSandboxActivityOwner
             StartPending = false,
             Position = [position.X, position.Y, position.Z],
             Rotation = [rotation.X, rotation.Y, rotation.Z, rotation.W],
-            Sandbox = activity,
+            Sandbox = Combat?.CurrentSandboxActivity ?? activity,
             Wander = null,
             Eat = null
         };

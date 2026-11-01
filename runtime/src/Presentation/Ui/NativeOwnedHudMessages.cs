@@ -9,6 +9,9 @@ namespace OpenNV.Runtime.Presentation.Ui;
 
 internal sealed partial class NativeOwnedHudMessages : Control
 {
+    // The message queue's default mood selects this owned resource when no
+    // explicit MICN icon is supplied. A null INAM does not suppress the icon.
+    private const string DefaultMessageIcon = "Interface/Icons/Message Icons/glow_message_vaultboy_very_happy.dds";
     private readonly FalloutPluginStack _records;
     private readonly FalloutHudNotifications _queue;
     private readonly FalloutScriptSounds? _noteSounds;
@@ -234,7 +237,7 @@ internal sealed partial class NativeOwnedHudMessages : Control
         if (value.Kind == FalloutHudEventKind.NoteAdded)
         {
             if (record.Signature != "NOTE" || value.Text is null) throw new InvalidDataException("Note HUD event has no NOTE text.");
-            result = (value.Text, "Interface/Icons/Message Icons/glow_message_vaultboy_very_happy.dds", 2);
+            result = (value.Text, DefaultMessageIcon, 2);
         }
         else if (value.Kind is FalloutHudEventKind.ItemAdded or FalloutHudEventKind.ItemRemoved)
         {
@@ -255,7 +258,7 @@ internal sealed partial class NativeOwnedHudMessages : Control
             var message = FalloutSourceMessage.Read(record);
             if (message.AutomaticTime || message.DisplaySeconds is null or 0)
                 throw new NotSupportedException($"HUD message {value.Source} automatic lifetime needs an owner.");
-            string? icon = null;
+            var icon = DefaultMessageIcon;
             if (message.Icon is { } key)
             {
                 var iconRecord = _records.GetEffective(key);

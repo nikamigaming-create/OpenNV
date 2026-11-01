@@ -93,7 +93,12 @@ public partial class NativePipBoyAudit : Node
                 saved.PlayerName, FalloutNativeTagSkillResolver.Resolve(records, FalloutOpeningPlayerControlResolver.Resolve(records, ["VCG00", "VCG01"])).Skills, saved.TagSkills, saved.Traits,
                 FalloutCellSceneReader.ParentWorldspace(records.GetEffective(saved.ActiveCell)),
                 new(saved.PlayerPosition[0] / .0142875f, -saved.PlayerPosition[2] / .0142875f, saved.PlayerPosition[1] / .0142875f), 0)
-            { LocalMap = color => new NativeOwnedLocalMap(GetViewport().World3D, Vector3.Zero, false, color, 0) };
+            {
+                LocalMap = color => new NativeOwnedLocalMap(GetViewport().World3D,
+                    new(saved.PlayerPosition[0], saved.PlayerPosition[1], saved.PlayerPosition[2]), color, 0,
+                    OpenNV.Runtime.RuntimeCoordinator.ReadNativeLocalMapSource(records, references, saved.ActiveCell,
+                        new(saved.PlayerPosition[0] / .0142875f, -saved.PlayerPosition[2] / .0142875f, saved.PlayerPosition[1] / .0142875f), .0142875f), new())
+            };
             AddChild(menu);
             var failures = new List<string>();
             var selections = new[] { (FalloutPipBoyPage.Stats, 0), (FalloutPipBoyPage.Stats, 1),

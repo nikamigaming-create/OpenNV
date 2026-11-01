@@ -188,14 +188,16 @@ internal static class NativeFaceGenMaterial
         }
 
         void light() {
-            float diffuse = max(dot(NORMAL, LIGHT), 0.0);
-            float grazing = 1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0);
-            float backscatter = 0.5 * max(dot(VIEW, -LIGHT), 0.0) * grazing * grazing;
-            // Godot supplies LIGHT_COLOR multiplied by PI; the source light RGB
-            // has no Lambertian 1/PI normalization.
-            DIFFUSE_LIGHT += (diffuse + backscatter) * (LIGHT_COLOR / PI) * ATTENUATION;
-            SPECULAR_LIGHT += source_specular * source_specular_mask * (LIGHT_COLOR / PI) * ATTENUATION *
-                pow(max(dot(NORMAL, normalize(LIGHT + VIEW)), 0.0), source_glossiness);
+            if (!owned_isolated_world) {
+                float diffuse = max(dot(NORMAL, LIGHT), 0.0);
+                float grazing = 1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0);
+                float backscatter = 0.5 * max(dot(VIEW, -LIGHT), 0.0) * grazing * grazing;
+                // Godot supplies LIGHT_COLOR multiplied by PI; the source light RGB
+                // has no Lambertian 1/PI normalization.
+                DIFFUSE_LIGHT += (diffuse + backscatter) * (LIGHT_COLOR / PI) * ATTENUATION;
+                SPECULAR_LIGHT += source_specular * source_specular_mask * (LIGHT_COLOR / PI) * ATTENUATION *
+                    pow(max(dot(NORMAL, normalize(LIGHT + VIEW)), 0.0), source_glossiness);
+            }
         }
         """;
 

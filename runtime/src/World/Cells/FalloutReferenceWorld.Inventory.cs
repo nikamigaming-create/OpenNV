@@ -60,6 +60,7 @@ internal sealed partial class FalloutReferenceWorld
 
     internal void BindPlayerInventory(FalloutPlayerInventory inventory)
     {
+        inventory.BindLeveledItems(LeveledItems);
         _playerInventory = new(inventory) { InitialArmorResolved = true };
     }
 
@@ -82,6 +83,7 @@ internal sealed partial class FalloutReferenceWorld
         var npc = records.GetEffective(actor.Base);
         if (npc.Signature is "NPC_" or "CREA") InitializeActorTemplates(reference, level, globals);
         actor.Inventory ??= SourceInventory(actor, npc, level, globals);
+        actor.Inventory.Contents.BindLeveledItems(LeveledItems);
         BindInventoryRemoval(actor);
         return actor.Inventory;
     }
@@ -100,6 +102,7 @@ internal sealed partial class FalloutReferenceWorld
     {
         var fields = owner.ReadSubrecords().ToArray();
         var inventory = new FalloutReferenceInventory(randomState);
+        inventory.Contents.BindLeveledItems(LeveledItems);
         var declarations = new List<(FalloutFormKey Form, int Count, FalloutItemVariant? Extra)>();
         for (var index = 0; index < fields.Length; index++)
         {
@@ -132,7 +135,7 @@ internal sealed partial class FalloutReferenceWorld
         foreach (var entry in declarations)
         {
             var additions = inventory.Contents.Add(records, entry.Form, entry.Count, inventoryLevel, true, globals, entry.Extra,
-                nativeContainerOrder: true);
+                nativeContainerOrder: true, leveledItems: LeveledItems);
             if (records.GetEffective(entry.Form).Signature != "LVLI") continue;
             // Resolve retains each temporary container's actual traversal.
             // Changed entries merge in place and new forms append.

@@ -8,6 +8,21 @@ internal partial class RuntimeNativePlayer
     private FalloutBodyPartData? _combatBodyParts;
     private readonly Dictionary<string, byte> _combatHitParts = new(StringComparer.Ordinal);
     internal IReadOnlyList<Rid> CombatCollisionRids => SelfQueryBodies.ToArray();
+    internal Vector3 DetectionOrigin
+    {
+        get
+        {
+            var actor = _firstPerson ?? throw new NotSupportedException("Player detection requires its source first-person skeleton.");
+            var camera = actor.Skeleton.BoneIndex("Camera1st");
+            if (camera < 0) throw new NotSupportedException("Player detection lacks its source eye-height node.");
+            // Native caches the first-person Camera1st height at construction;
+            // animated camera sway and the third-person view are separate.
+            var eye = (actor.Skeleton.Node.Transform * actor.Skeleton.Node.GetBoneGlobalRest(camera).Origin).Y * _sourceScale;
+            if (Activity.Sneaking) eye *= .57f;
+            if (!float.IsFinite(eye) || eye <= 0) throw new InvalidDataException("Player source detection eye height is invalid.");
+            return GlobalPosition + Vector3.Up * eye;
+        }
+    }
 
     private Vector3 SourceCombatTargetPoint()
     {

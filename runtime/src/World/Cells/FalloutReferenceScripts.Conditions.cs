@@ -26,6 +26,8 @@ internal sealed partial class FalloutReferenceScripts
         Sitting = host.Sitting,
         CurrentPackage = host.CurrentPackage,
         Distance = host.Distance,
+        HeadingAngle = (caller, target) => (host.HeadingAngle ??
+            throw new NotSupportedException("GetHeadingAngle has no spatial owner."))(caller, target),
         SameCell = host.IsInSameCell,
         InCell = host.IsInCell,
         Interior = host.IsInInterior,

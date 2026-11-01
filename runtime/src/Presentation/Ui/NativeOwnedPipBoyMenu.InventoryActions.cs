@@ -25,12 +25,14 @@ internal sealed partial class NativeOwnedPipBoyMenu
         _actionRevision = _inventory.Revision; _offset = 0; Refresh();
     }
 
-    private void InventoryActionButton(string name, string label, Action action)
+    private void InventoryActionButton(string name, string label, Action action, bool enabled = true)
     {
         var tile = Tile(name);
         _tiles.Bind(tile, "visible", 1);
         _tiles.Text[tile] = label;
+        _tiles.Bind(tile, "target", enabled ? 1 : 0);
         Target(tile, label, action);
+        _buttons[^1].Button.Disabled = !enabled;
     }
 
     private void BindInventoryActions(FalloutCampaignItem selected)
@@ -38,16 +40,18 @@ internal sealed partial class NativeOwnedPipBoyMenu
         if (DropItem is not null && !selected.UnequipLocked &&
             FalloutInventoryAccess.CanTransfer(_records, _records.GetEffective(selected.FormKey), true))
             InventoryActionButton("IM_DropButton", "Drop", () => BeginInventoryAction("drop", selected));
-        if (selected.RecordType is "WEAP" or "ARMO" && !selected.UnequipLocked)
-        {
-            var materials = _inventory.RepairMaterials(_records, selected.FormKey, _selectedVariant, _references.FormLists);
-            if (materials.Count != 0)
-                InventoryActionButton("IM_RepairButton", "Repair", () => BeginInventoryAction("repair", selected));
-        }
+        var canRepair = selected.RecordType is "WEAP" or "ARMO" && !selected.UnequipLocked &&
+            _inventory.RepairMaterials(_records, selected.FormKey, _selectedVariant, _references.FormLists).Count != 0;
+        InventoryActionButton("IM_RepairButton", Setting("sInventoryRepair"),
+            () => BeginInventoryAction("repair", selected), canRepair);
         if (selected.RecordType is "WEAP" or "ARMO" or "ALCH" or "INGR")
             InventoryActionButton("IM_HotkeyButton", "Hotkey", () => BeginInventoryAction("hotkey", selected));
-        if (selected.RecordType == "WEAP" && FalloutWeaponModifications.Read(_records, selected.FormKey).Count != 0)
-            InventoryActionButton("IM_ModButton", "Mod", () => BeginInventoryAction("mod", selected));
+        var instance = _inventory.Instances(selected.FormKey)[_selectedVariant].Extra;
+        var canModify = selected.RecordType == "WEAP" && FalloutWeaponModifications.Read(_records, selected.FormKey)
+            .Any(modification => (instance.WeaponMods & (1 << modification.Slot)) == 0 &&
+                _inventory.Item(modification.Item) is { Count: > 0 });
+        InventoryActionButton("IM_ModButton", Setting("sInventoryMod"),
+            () => BeginInventoryAction("mod", selected), canModify);
     }
 
     private bool BuildInventoryActionList()

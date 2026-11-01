@@ -6,11 +6,12 @@ namespace OpenNV.Runtime.Gameplay.State;
 // measured by the source game-hour calculation, not elapsed render seconds.
 internal sealed record FalloutSandboxActivityProgress(FalloutSandboxActivity Activity,
     float StartedHour, float Duration, byte[] Preferences, FalloutFormKey? Target = null,
-    FalloutSandboxActivity? ScheduledActivity = null, bool DailyFoodAvailable = false, bool DailyBedAvailable = false)
+    FalloutSandboxActivity? ScheduledActivity = null, bool DailyFoodAvailable = false, bool DailyBedAvailable = false,
+    int? NativePhase = null)
 {
     internal void Validate()
     {
-        if (!Enum.IsDefined(Activity) || !float.IsFinite(StartedHour) || StartedHour is < 0 or >= 24 ||
+        if (!Enum.IsDefined(Activity) || NativePhase is < 0 or > 3 || !float.IsFinite(StartedHour) || StartedHour is < 0 or >= 24 ||
             !float.IsFinite(Duration) || Duration < 0 || Preferences is null)
             throw new InvalidDataException("Saved Sandbox activity is invalid.");
         _ = new FalloutSandboxPreferences(Preferences);

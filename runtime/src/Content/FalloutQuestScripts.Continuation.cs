@@ -61,10 +61,17 @@ internal sealed partial class FalloutQuestScripts
         var actorFlagsReady = References is not null && instance.PendingCommand is { GameMode: true } &&
             Regex.IsMatch(error, @"^Reached (?:native script|object-script) command SetEssential \(2 arguments\) has no owner\.$",
                 RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
-        if ((!soundReady && !actorFlagsReady) || instance.PendingCommand is { GameMode: false }) return;
+        var leveledItemsReady = References is not null && instance.PendingCommand is { GameMode: true } &&
+            Regex.IsMatch(error, @"^Reached (?:native script|object-script) command AddItemToLeveledList \(5 arguments\) has no owner\.$",
+                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        var positionReady = References is not null && instance.PendingCommand is { GameMode: true } &&
+            Regex.IsMatch(error, @"^Reached (?:native script|object-script) command \w+\.SetPos \(2 arguments\) has no owner\.$",
+                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        if ((!soundReady && !actorFlagsReady && !leveledItemsReady && !positionReady) || instance.PendingCommand is { GameMode: false }) return;
         bool Fixed(string token) => double.TryParse(token, NumberStyles.Float, CultureInfo.InvariantCulture, out var number)
             ? double.IsFinite(number) :
             token.Length >= 2 && token[0] == '"' && token[^1] == '"' ||
+            positionReady && token.ToLowerInvariant() is "x" or "y" or "z" ||
             FalloutScriptBindings.IsPlayer(token) && instance.Bindings.HasPlayerReference ||
             instance.Bindings.TryForm(token) is { Signature: not "GLOB" } && !instance.Bindings.HasVariable(token);
         // Legacy errors do not identify their block. Refuse an ambiguous

@@ -44,7 +44,13 @@ internal partial class NativeOwnedGameplayHud : Control
         sourceControls = _lastControls,
         condition = _lastCondition,
         conditionError = _conditionError,
-        conditionBoundary = "ammo-abbreviation-offset,condition-arrows,opacity-and-warning-cadence-unverified",
+        conditionBoundary = "ammo-abbreviation-offset,opacity-and-warning-cadence-unverified",
+        conditionArrow = _conditionArrows is null ? null : new
+        {
+            position = new[] { _tiles.Number(_conditionArrows, "x"), _tiles.Number(_conditionArrows, "y") },
+            size = new[] { _tiles.Number(_conditionArrows, "width"), _tiles.Number(_conditionArrows, "height") },
+            visible = _tiles.Number(_conditionArrows, "visible") > 0
+        },
         hitPointsVisible = _hp is not null && _tiles.Number(_hp, "visible") > 0,
         actionPointsVisible = _ap is not null && _tiles.Number(_ap, "visible") > 0,
         reticleVisible = _tiles.Number(_reticle, "visible") > 0,
@@ -99,7 +105,8 @@ internal partial class NativeOwnedGameplayHud : Control
                 _tiles.Bind(_ammo, "visible", 0); _tiles.Bind(_ammo, "alpha", 255);
             }
         }
-        InitializeMeterDetails(records, Template, condition);
+        InitializeMeterDetails(records, Template, condition,
+            condition is not null && _ap is not null ? Branch("CNDArrows") : null);
         if (notice is not null)
         {
             _warning = Template("template_justify_center_text", menu);

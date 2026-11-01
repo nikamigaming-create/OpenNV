@@ -17,10 +17,41 @@ internal sealed partial class RuntimeNativeActorCombat
 {
     private long _ambientAttempts, _ambientStarted;
     private FalloutGameTimeBindings? _sandboxTimeBindings;
+    private FalloutSandboxActivityProgress? _executingSandboxActivity;
+    internal FalloutSandboxActivityProgress? CurrentSandboxActivity => _executingSandboxActivity ?? _state.PackageMotion?.Sandbox;
+    internal int ScriptSandboxProcedure
+    {
+        get
+        {
+            var activity = CurrentSandboxActivity ?? throw new NotSupportedException("Sandbox has no retained activity phase.");
+            if (activity.NativePhase is { } phase) return FalloutSandboxProcedure.Read(phase, activity.Activity);
+            if (activity.Activity == FalloutSandboxActivity.Wander && _state.PackageMotion?.Wander is not null)
+                return FalloutSandboxProcedure.Read(3, activity.Activity);
+            throw new NotSupportedException("Legacy Sandbox activity has no qualified native phase.");
+        }
+    }
+
+    internal FalloutSandboxActivityProgress ObserveSandboxPhase(int phase)
+    {
+        var previous = CurrentSandboxActivity ?? throw new InvalidOperationException("Sandbox phase has no selected activity.");
+        _ = FalloutSandboxProcedure.Read(phase, previous.Activity);
+        var current = previous with { NativePhase = phase };
+        if (_executingSandboxActivity is not null) _executingSandboxActivity = current;
+        if (_state.PackageMotion is { } motion && motion.Sandbox == previous)
+            _state.PackageMotion = motion with { Sandbox = current };
+        return current;
+    }
     internal object SandboxObservation => new { attempts = _ambientAttempts, started = _ambientStarted };
 
     internal FalloutWanderProgress? AdvanceSandboxWander(FalloutPluginRecord package, FalloutSandboxPackage source,
         FalloutWanderProgress? progress, double delta, INativeSandboxActivityOwner? physical = null)
+    {
+        try { return AdvanceSandboxWanderCore(package, source, progress, delta, physical); }
+        finally { _executingSandboxActivity = null; }
+    }
+
+    private FalloutWanderProgress? AdvanceSandboxWanderCore(FalloutPluginRecord package, FalloutSandboxPackage source,
+        FalloutWanderProgress? progress, double delta, INativeSandboxActivityOwner? physical)
     {
         if (OwnsPose || !PackageMovementReady) return progress;
         var context = _context ?? throw new NotSupportedException("Sandbox has no gameplay context.");
@@ -48,12 +79,18 @@ internal sealed partial class RuntimeNativeActorCombat
                 _state.DeferredPackageContinuation?.RetainedAssignment is null)
                 _state.PackageMotion = previousMotion with { Eat = null };
         }
+        else if (_state.PackageMotion?.Package == package.FormKey)
+            activity = _state.PackageMotion.Sandbox ?? activity; // Release can publish phase one before the handler runs.
         if (activity is null) throw new InvalidOperationException("Sandbox has no selected activity.");
+        _executingSandboxActivity = activity;
+        if (activity.NativePhase == 1 && activity.Activity is not (FalloutSandboxActivity.Furniture or FalloutSandboxActivity.IdleMarker))
+            activity = ObserveSandboxPhase(2);
         if (physical?.Supports(activity.Activity) == true)
         {
             if (_state.PackageMotion?.Package != package.FormKey || _state.PackageMotion.Sandbox != activity)
                 HoldSandboxActivity(package, source, activity, 0);
             physical.Advance(package, source, activity, delta);
+            activity = CurrentSandboxActivity ?? throw new InvalidOperationException("Sandbox activity lost its live phase.");
             _state.PackageMotion = (_state.PackageMotion ?? throw new InvalidOperationException("Physical Sandbox activity lost its motion owner."))
                 with
             { Sandbox = activity, Wander = null };
@@ -95,11 +132,16 @@ internal sealed partial class RuntimeNativeActorCombat
                 ++_ambientStarted;
                 using (OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Measure(OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Owner.SandboxActivitySelection))
                     activity = SelectSandboxActivity(source, activity, hour, delta, context, physical);
+                _executingSandboxActivity = activity;
+                if (activity.Activity is not (FalloutSandboxActivity.Furniture or FalloutSandboxActivity.IdleMarker)) activity = ObserveSandboxPhase(2);
                 _state.PackageMotion = _state.PackageMotion! with { Sandbox = activity, Wander = null };
                 StopPackageMotion();
             }
             return null;
         }
+        // Native Wander acknowledges phase three before its handler, whether
+        // this accepted destination is moving or already reached.
+        activity = ObserveSandboxPhase(3);
         var selectedDestination = progress is null || progress.Arrived;
         if (selectedDestination)
         {
@@ -186,7 +228,7 @@ internal sealed partial class RuntimeNativeActorCombat
         var threat = CurrentThreat();
         return FalloutSandboxActivityProgress.Select(_records.NumericSettings, threat.Energy,
             selected.Activity, hour, preferences, _state.SoundRandom.NextUnitFloat, selected.Reference) with
-        { ScheduledActivity = scheduled, DailyFoodAvailable = foodAvailable, DailyBedAvailable = bedAvailable };
+        { ScheduledActivity = scheduled, DailyFoodAvailable = foodAvailable, DailyBedAvailable = bedAvailable, NativePhase = 1 };
     }
 
     private uint SandboxDay(NativeActorCombatContext context)

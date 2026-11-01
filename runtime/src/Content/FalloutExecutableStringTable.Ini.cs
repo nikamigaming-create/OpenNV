@@ -5,6 +5,21 @@ namespace OpenNV.Runtime.Content;
 
 internal static partial class FalloutExecutableStringTable
 {
+    internal static IReadOnlyDictionary<string, string> ReadIniStringDefaults(string path)
+    {
+        var bytes = File.ReadAllBytes(path);
+        var (_, image) = Load(bytes);
+        var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var row in ReadIniDeclarations(bytes).Where(row => row.Kind is 's' or 'S' && row.Payload != 0))
+        {
+            var value = image.Literal(row.Payload) ?? throw new NotSupportedException($"Owned INI string has no admitted literal: {row.Name}.");
+            if (result.TryGetValue(row.Name, out var previous) && previous != value)
+                throw new NotSupportedException($"Owned INI string has ambiguous collection defaults: {row.Name}.");
+            result[row.Name] = value;
+        }
+        return result;
+    }
+
     internal static IReadOnlyList<FalloutIniDeclaration> ReadIniDeclarations(string path) => ReadIniDeclarations(File.ReadAllBytes(path));
     internal static IReadOnlyList<FalloutIniDeclaration> ReadIniDeclarations(byte[] bytes)
     {

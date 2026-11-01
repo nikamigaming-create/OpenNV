@@ -270,6 +270,8 @@ internal partial class RuntimeNativeOpeningStageDriver
             FactionRelations = _scripts.References.CaptureFactionRelations(),
             Reputations = _scripts.References.CaptureReputations(),
             FormLists = _scripts.References.FormLists.Capture(),
+            LeveledItems = _scripts.References.LeveledItems.Capture(),
+            PipBoyLight = _player.CapturePipBoyLight(),
             ActorBaseFlags = _scripts.References.ActorBaseFlags.Capture(),
             PlayerNotes = _scripts.References.PlayerNotes.Capture(),
             PlayerCaravanCards = _scripts.References.PlayerCaravanCards.Capture(),

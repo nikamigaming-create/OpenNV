@@ -11,11 +11,12 @@ internal partial class NativeOwnedGameplayHud
     private FalloutNumericIniSettings? _hudIni;
     private Func<NativeHudCondition?>? _condition;
     private NativeHudCondition? _lastCondition;
-    private XElement? _conditionLabel, _conditionMeter, _conditionBackground;
+    private XElement? _conditionLabel, _conditionMeter, _conditionBackground, _conditionArrows;
+    private float _conditionArrowInitialMeterX;
     private string? _conditionError;
 
     private void InitializeMeterDetails(FalloutPluginStack records,
-        Func<string, XElement, XElement> template, Func<NativeHudCondition?>? condition)
+        Func<string, XElement, XElement> template, Func<NativeHudCondition?>? condition, XElement? conditionArrows)
     {
         _hudIni = records.IniSettings;
         _condition = condition;
@@ -33,10 +34,17 @@ internal partial class NativeOwnedGameplayHud
         _conditionBackground = template("template_meter_background", _ap);
         _tiles.Bind(_conditionBackground, "y", 83); _tiles.Bind(_conditionBackground, "brightness", 100);
         _conditionMeter = template("template_meter", _ap);
+        _conditionArrowInitialMeterX = _tiles.Number(_conditionMeter, "x");
         _tiles.SetFilename(_conditionMeter, "Interface/VATS/vats_bar.dds");
         _tiles.Bind(_conditionMeter, "_OriginalX", 90); _tiles.Bind(_conditionMeter, "_TotalWidth", 60);
         _tiles.Bind(_conditionMeter, "_ImageWidth", 1); _tiles.Bind(_conditionMeter, "zoom", 200);
         _tiles.Bind(_conditionMeter, "y", 83); _tiles.Bind(_conditionMeter, "brightness", 175);
+        _conditionArrows = conditionArrows ?? throw new InvalidDataException("Source HUD condition arrows are unavailable.");
+        // Native initializes the root arrow with the HUD palette even though
+        // the shipped XML leaves its system-color declaration empty.
+        if (string.IsNullOrWhiteSpace(_conditionArrows.Element("systemcolor")?.Value))
+            _conditionArrows.SetElementValue("systemcolor", "entity_hudmain");
+        _tiles.Bind(_conditionArrows, "height", _tiles.Number(_conditionBackground, "height"));
         BindMeter(_conditionMeter, 0, false, 0);
         ShowCondition(false);
     }
@@ -58,6 +66,16 @@ internal partial class NativeOwnedGameplayHud
         _tiles.Bind(_ap!, "x", (int)Size.X - 2f * x - _tiles.Number(_ap!, "width") + 30);
         _tiles.Bind(_hp!, "y", (int)Size.Y - 2f * y - _tiles.Number(_hp!, "height"));
         _tiles.Bind(_ap!, "y", (int)Size.Y - 2f * y - _tiles.Number(_ap!, "height"));
+        if (_conditionArrows is not null)
+        {
+            // The authored root image marks the fixed 75% condition boundary.
+            // Native placement uses the full background and initial meter
+            // coordinate, before the filled meter receives its current width.
+            _tiles.Bind(_conditionArrows, "x", (float)((double)_tiles.Number(_ap!, "x") +
+                _tiles.Number(_conditionLabel!, "x") + _conditionArrowInitialMeterX +
+                .75 * _tiles.Number(_conditionBackground!, "width") + 8));
+            _tiles.Bind(_conditionArrows, "y", _tiles.Number(_ap!, "y") + _tiles.Number(_conditionMeter!, "y"));
+        }
     }
 
     private void BindMeter(XElement meter, float fraction, bool right, int minimumSegments)
@@ -78,7 +96,7 @@ internal partial class NativeOwnedGameplayHud
     private void ShowCondition(bool shown)
     {
         if (_conditionMeter is null) return;
-        foreach (var tile in new[] { _conditionLabel!, _conditionMeter, _conditionBackground! })
+        foreach (var tile in new[] { _conditionLabel!, _conditionMeter, _conditionBackground!, _conditionArrows! })
             _tiles.Bind(tile, "visible", shown ? 1 : 0);
     }
 
