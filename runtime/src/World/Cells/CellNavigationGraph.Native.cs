@@ -23,6 +23,21 @@ internal sealed partial class CellNavigationGraph
             if (association.Error is { } error) throw new InvalidDataException(error);
     }
 
+    internal bool ContainsDoorFloor(FalloutFormKey door, Vector3 point, float tolerance)
+    {
+        if (!point.IsFinite() || !float.IsFinite(tolerance) || tolerance < 0)
+            throw new ArgumentOutOfRangeException(nameof(point));
+        RequireDoorAssociations(door);
+        foreach (var association in DoorAssociations.Where(value => value.Source.Door == door))
+        {
+            if (!_navmeshesByFormId.TryGetValue(association.Mesh.ToString(), out var mesh))
+                throw new InvalidDataException("Door association lost its owning NAVM geometry.");
+            if (mesh.ClosestPoint(association.Source.Triangle, point).DistanceSquaredTo(point) <= tolerance * tolerance)
+                return true;
+        }
+        return false;
+    }
+
     internal static CellNavigationGraph LoadOwned(FalloutPluginStack stack, FalloutFormKey cell)
         => LoadOwned(stack, new HashSet<FalloutFormKey> { cell });
 

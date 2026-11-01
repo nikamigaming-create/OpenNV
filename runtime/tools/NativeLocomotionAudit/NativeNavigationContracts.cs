@@ -19,6 +19,18 @@ internal static partial class NativeNavigationContracts
             catch (NotSupportedException) { continue; }
             throw new InvalidOperationException("Package projection admitted an absent, distant or overhead floor.");
         }
+        var portalFloor = floor + Vector3.Right * 10;
+        var visits = 0;
+        bool AuthoredDoorFloor(Vector3 point) { visits++; return point == portalFloor; }
+        if (RuntimeNativeActorCombat.ProjectPackageDestination(marker, [portalFloor], .3f, AuthoredDoorFloor) != portalFloor || visits != 1)
+            throw new InvalidOperationException("An authored portal floor retained the generic marker-radius restriction.");
+        try
+        {
+            RuntimeNativeActorCombat.ProjectPackageDestination(marker, [], .3f, AuthoredDoorFloor);
+            throw new InvalidOperationException("A portal association invented an absent floor.");
+        }
+        catch (NotSupportedException) { }
+        if (visits != 1) throw new InvalidOperationException("Absent floor invoked portal membership without an actual endpoint.");
         Console.WriteLine("OPENNV_PACKAGE_MARKER_FLOOR_PASS elevated=true lateralAndOverheadRefused=true missingRefused=true");
     }
 

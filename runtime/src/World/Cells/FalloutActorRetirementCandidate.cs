@@ -141,6 +141,7 @@ internal sealed class FalloutActorRetirementCandidate
         _state.ObjectAnimations,
         _state.ConversationSuppressionSeconds,
         _state.ConversationHistory,
+        sandboxRescan = _state.SandboxRescan?.StableState,
         soundRandom = _state.SoundRandom.State,
     });
 

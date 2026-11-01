@@ -10,6 +10,7 @@ internal static class FalloutSandboxProcedure
         2 => 0,
         3 => activity switch
         {
+            OpenNV.Runtime.Gameplay.State.FalloutSandboxActivityProgress.NoActivity => -1,
             FalloutSandboxActivity.Furniture => 48,
             FalloutSandboxActivity.Sleep => 8,
             FalloutSandboxActivity.Eat => 10,

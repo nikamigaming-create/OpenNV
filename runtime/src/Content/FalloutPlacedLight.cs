@@ -12,6 +12,7 @@ internal sealed record FalloutPlacedLight(
 
 internal static class FalloutPlacedLightResolver
 {
+    internal const uint DynamicFlag = 1;
     private const int StaticDuration = -1;
     private const float StaticFalloff = 1.0f;
     private const float StaticFieldOfViewDegrees = 90.0f;
@@ -35,9 +36,8 @@ internal static class FalloutPlacedLightResolver
             throw new NotSupportedException(
                 $"Native light reference {reference.FormKey} has unsupported XSCL {reference.Scale:R}.");
         RequirePoint(source, baseObject.FormKey);
-        if (baseObject.ModelPath is not null)
-            throw new NotSupportedException(
-                $"Native LIGH {baseObject.FormKey} source model {baseObject.ModelPath} requires a light/model/controller owner.");
+        // Immutable point parameters are independent of model construction.
+        // The presentation builder requires the actual source model owner.
         // XESP belongs to the shared reference world and native presentation.
         // Resolving immutable light parameters must not replace that authority.
         var adjustment = reference.RadiusAdjustmentGameUnits ?? 0.0f;
@@ -53,7 +53,7 @@ internal static class FalloutPlacedLightResolver
             emittance = new FalloutExternalEmittance(records, form, regionEmittance).Sample();
         }
         return new FalloutPlacedLight(reference.FormKey, baseObject.FormKey, radius, source.ColorRgb,
-            source.Intensity, ModulateColor(source.ColorRgb, emittance), reference.Emittance, source.Flags);
+            source.Intensity, ModulateColor(source.ColorRgb, emittance), reference.Emittance, source.Flags & (FalloutLightFlicker.Flags | FalloutLightPulse.Flags));
     }
 
     // Existing non-placed consumers must opt into their actual animation owner.
@@ -65,7 +65,7 @@ internal static class FalloutPlacedLightResolver
 
     internal static void RequirePoint(FalloutLightDefinition source, FalloutFormKey form)
     {
-        if (source.Duration != StaticDuration || (source.Flags & ~(FalloutLightFlicker.Flags | FalloutLightPulse.Flags)) != 0 ||
+        if (source.Duration != StaticDuration || (source.Flags & ~(DynamicFlag | FalloutLightFlicker.Flags | FalloutLightPulse.Flags)) != 0 ||
             source.Falloff != StaticFalloff ||
             source.FieldOfViewDegrees != StaticFieldOfViewDegrees ||
             source.NearClip != StaticNearClip || source.Period != StaticPeriod ||

@@ -204,7 +204,9 @@ internal partial class RuntimeNativeNpc
             }
             var location = progress.PortalDoor is { } portal ? _aiWorld!.Placement(portal).Position : progress.Location;
             var authored = GetParent<Node3D>().ToGlobal(new Vector3(location[0], location[2], -location[1]) * Skeleton.UnitsToMetres);
-            var destination = _nativeMarkerTravelDestination ??= Combat.ProjectPackageDestination(authored);
+            var destination = _nativeMarkerTravelDestination ??= progress.PortalDoor is { } destinationDoor
+                ? Combat.ProjectPackagePortalDestination(authored, destinationDoor, _navigation!)
+                : Combat.ProjectPackageDestination(authored);
             if (progress.RouteTarget is { } retainedTarget)
             {
                 var retained = new Vector3(retainedTarget[0], retainedTarget[1], retainedTarget[2]);

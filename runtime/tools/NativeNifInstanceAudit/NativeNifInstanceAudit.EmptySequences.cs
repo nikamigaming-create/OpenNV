@@ -9,6 +9,7 @@ public partial class NativeNifInstanceAudit
 {
     private void ExerciseEmptyManagedSequences()
     {
+        ExercisePrimaryKfSelection();
         var nif = FalloutNifFile.Read(EmptyManagedSequenceFixture());
         var prototype = new RuntimeNativeNifPrototype(nif, .02f);
         Node3D? first = null; Node3D? second = null;

@@ -54,7 +54,7 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
     FalloutSandboxIdleSelectionSnapshot? SandboxIdleSelection = null,
     FalloutActorLastIdleRequest? LastIdleRequest = null, bool ReferenceEssential = false, FalloutActorEssentialKnockout? EssentialKnockout = null,
     FalloutHitKnockback? HitKnockback = null, FalloutAmbientIdleSnapshot? AmbientIdle = null,
-    bool RegionCellAttached = false, bool RegionImposterRole = false)
+    bool RegionCellAttached = false, bool RegionImposterRole = false, FalloutSandboxRescanSnapshot? SandboxRescan = null)
 {
     internal static void Validate(IReadOnlyList<FalloutReferenceSnapshot> snapshots)
     {
@@ -82,6 +82,11 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
             snapshot.ConversationHistory?.Validate();
             snapshot.PackageStartLocation?.Validate();
             snapshot.SandboxDailyWindow?.Validate();
+            snapshot.SandboxRescan?.Validate();
+            if (snapshot.PackageMotion is { Sandbox.Activity: FalloutSandboxActivityProgress.NoActivity } emptyMotion &&
+                (snapshot.SandboxRescan is not { } rescan || rescan.Package != emptyMotion.Package ||
+                    !rescan.PackageSha256.Equals(emptyMotion.PackageSha256, StringComparison.OrdinalIgnoreCase)))
+                throw new InvalidDataException("No-activity Sandbox has no matching retained rescan owner.");
             snapshot.IdleRequests?.Validate();
             snapshot.SandboxMarker?.Validate();
             snapshot.SandboxIdleSelection?.Validate();
@@ -239,6 +244,7 @@ internal sealed partial class FalloutReferenceInstance
     internal float? ConversationSuppressionSeconds { get; set; }
     internal FalloutConversationHistory? ConversationHistory { get; set; }
     internal FalloutSandboxDailyWindow? SandboxDailyWindow { get; set; }
+    internal FalloutSandboxRescanOwner? SandboxRescan { get; set; }
     internal uint IdleMarkerUsedMask { get; set; }
     internal FalloutActorIdleRequestsSnapshot? IdleRequests { get; set; }
     internal Func<bool>? CanCaptureIdleRequests { get; set; }
@@ -584,7 +590,7 @@ internal sealed partial class FalloutReferenceInstance
                 ? captureSandboxStart() : PendingSandboxStart?.Copy() : null,
             ProjectileLaunch: ProjectileLaunch, Ingestibles: Ingestibles?.Copy(),
             InterruptedSandboxAdmission: InterruptedSandboxAdmissionCaptureReady ? InterruptedSandboxAdmission?.Copy() : null,
-            PackageStartLocation: PackageStartLocation?.Copy(), SandboxDailyWindow: SandboxDailyWindow,
+            PackageStartLocation: PackageStartLocation?.Copy(), SandboxDailyWindow: SandboxDailyWindow, SandboxRescan: SandboxRescan?.Capture(),
             IdleMarkerUsedMask: IdleMarkerUsedMask == 0 ? null : IdleMarkerUsedMask,
             IdleRequests: CaptureIdleRequests is { } captureIdles ? captureIdles() : IdleRequests?.Copy(),
             SandboxMarker: CaptureSandboxMarker is { } captureMarker ? captureMarker() : SandboxMarker?.Copy(),
@@ -1113,6 +1119,12 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
                 _ = validated.Actor(snapshot.Reference);
                 instance.ConversationSuppressionSeconds = suppression;
             }
+            if (snapshot.SandboxRescan is { } rescan)
+            {
+                _ = validated.Actor(snapshot.Reference);
+                rescan.Validate(records);
+                instance.SandboxRescan = new(rescan, validated._sandboxProcessClock);
+            }
             if (snapshot.SandboxDailyWindow is { } dailyWindow)
             {
                 _ = validated.Actor(snapshot.Reference);
@@ -1388,6 +1400,8 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
             // Validation owns a temporary world. Retained sound ledgers must
             // query the destination owner after the successful atomic transfer.
             instance.BindReferenceEnableQuery(() => IsEnabled(key));
+            if (instance.SandboxRescan is { } rescan)
+                instance.SandboxRescan = new(rescan.Capture(), _sandboxProcessClock);
             _instances.Add(key, instance);
             instance.BindStateChanges(_instances.Count, TrackReferenceWork);
             BindInventoryRemoval(instance);

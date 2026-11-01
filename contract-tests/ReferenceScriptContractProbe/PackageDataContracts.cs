@@ -288,6 +288,12 @@ internal static class PackageDataContracts
                 Require(data.Flags == 0x89abcdef && data.Procedure == 17 && data.BehaviorFlags == 0x1234 &&
                     data.SourceExtent == extent && data.SpecificFlags == (extent == 8 ? null : (ushort?)0x5678),
                     "Package data lost common fields, source extent or absent type-specific flags.");
+                Require(FalloutPackageData.CurrentAiPackageCode(FalloutPackageData.Read(Source(6)).Procedure) == 34 &&
+                    FalloutPackageData.CurrentAiPackageCode(FalloutPackageData.Read(Source(5)).Procedure) == 35 &&
+                    FalloutPackageData.CurrentAiPackageCode(FalloutPackageData.Read(Source(3)).Procedure) == 14 &&
+                    FalloutPackageData.CurrentAiPackageCode(null) == 0 &&
+                    FalloutPackageData.CurrentAiPackageCode(17) == -1 && FalloutPackageData.CurrentAiPackageCode(byte.MaxValue) == -1,
+                    "Current package condition confused source kinds, known absence or invalid runtime discriminator.");
                 Require(FalloutScriptPackage.Read(Source(3)) is { Procedure: 6, LocationType: 3, Flags: 0 },
                     "Generic package declaration rejected a supported source extent.");
                 Require(FalloutFindFurniturePackage.Read(Source(0)).TargetType == 2 &&

@@ -62,13 +62,15 @@ internal static class PlacedLightEnableContracts
 
             var source = scene.BaseObjects[Key(0x100)];
             var first = lights[0];
-            Reject(() => FalloutPlacedLightResolver.Resolve(first, source with { ModelPath = "meshes/source-light.nif" }), "light/model/controller owner");
+            Require(FalloutPlacedLightResolver.Resolve(first, source with { ModelPath = "meshes/source-light.nif" }).RadiusGameUnits ==
+                FalloutPlacedLightResolver.Resolve(first, source).RadiusGameUnits,
+                "Immutable point parameters incorrectly depend on model construction.");
             Reject(() => FalloutPlacedLightResolver.Resolve(first with { Scale = 1.39f }, source), "unsupported XSCL");
-            foreach (var flags in new uint[] { 1, 0x600, 0x80000000 })
+            foreach (var flags in new uint[] { 2, 4, 0x20, 0x600, 0x80000000 })
                 Reject(() => FalloutPlacedLightResolver.Resolve(first, source with { Light = source.Light! with { Flags = flags } }), "qualified point-light contract");
-            foreach (var flags in new uint[] { 8, 0x40, 0x48 })
-                Require(FalloutPlacedLightResolver.Resolve(first, source with { Light = source.Light! with { Flags = flags } }).AnimationFlags == flags,
-                    "Placed light lost its qualified source flicker flags.");
+            foreach (var flags in new uint[] { 0, 1, 8, 9, 0x40, 0x41, 0x48, 0x49, 0x81, 0x101 })
+                Require(FalloutPlacedLightResolver.Resolve(first, source with { Light = source.Light! with { Flags = flags } }).AnimationFlags == (flags & ~FalloutPlacedLightResolver.DynamicFlag),
+                    "Placed light confused Dynamic classification with its source animation flags.");
             Reject(() => FalloutPlacedLightResolver.Resolve(first with { RadiusAdjustmentGameUnits = -200 }, source), "invalid effective radius");
             Reject(() => FalloutPlacedLightResolver.Resolve(first with { RadiusAdjustmentGameUnits = float.NaN }, source), "invalid effective radius");
 

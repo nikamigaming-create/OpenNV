@@ -89,8 +89,8 @@ internal static partial class CellGraphAuditContracts
                     "A rejected checkpoint leaked reference state or metadata into source evaluation.");
                 var light = root.GetProperty("references").EnumerateArray().Single(reference => reference.GetProperty("identity").GetString() == Key(0x813).ToString());
                 Require(light.GetProperty("disposition").GetString() == "source-light" &&
-                    light.GetProperty("failures").EnumerateArray().Any(failure => failure.GetProperty("lane").GetString() == "light-admission"),
-                    "Source inspection concealed the unowned modeled light runtime behavior.");
+                    !light.GetProperty("failures").EnumerateArray().Any(failure => failure.GetProperty("lane").GetString() == "light-admission"),
+                    "Source inspection rejected the admitted modeled light declaration.");
                 var model = root.GetProperty("resources").EnumerateArray().Single(resource => resource.GetProperty("path").GetString() == "meshes/modeled-light.nif");
                 Require(model.GetProperty("sha256").GetString() == Convert.ToHexString(SHA256.HashData(lightBytes)) &&
                     model.GetProperty("decodedBlocks").GetInt32() == 6 &&

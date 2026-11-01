@@ -717,7 +717,7 @@ public partial class RuntimeCoordinator
             }
             if (_nativeGameTime is not null)
             {
-                _nativeGameTimeAdapter = new(_nativeGameTime);
+                _nativeGameTimeAdapter = new(_nativeGameTime, _nativeReferences!.ObserveSandboxProcessClock);
                 AddChild(_nativeGameTimeAdapter);
             }
         }
@@ -1029,7 +1029,7 @@ public partial class RuntimeCoordinator
             Observe("internal-static");
             return;
         }
-        if (baseObject.Light is not null)
+        if (baseObject.Light is not null && baseObject.ModelPath is null)
         {
             AddNativePlacedLight(root, reference, baseObject);
             Observe("light");
@@ -1191,6 +1191,10 @@ public partial class RuntimeCoordinator
         }
         if (baseObject.ModelPath is null)
             return;
+        if (baseObject.Light is not null)
+            _ = FalloutPlacedLightResolver.Resolve(reference, baseObject, _nativePluginStack,
+                region => (_nativeSkyLighting ?? throw new InvalidOperationException("Sky lighting state is absent."))
+                    .RegionEmittance(region, (_nativeGameTime ?? throw new InvalidOperationException("Sky has no simulation clock.")).Hour));
         if (preparedStaticRoot is null && !_nativeNifPrototypes.TryGetValue(baseObject.ModelPath, out _))
         {
             if (baseObject.ModelPath.EndsWith(".spt", StringComparison.OrdinalIgnoreCase))
@@ -1236,6 +1240,7 @@ public partial class RuntimeCoordinator
             (reference.Flags & 0x00008000) != 0)
             NativeExteriorDetailBlend.Bind(instance, terrain: false);
         AddNativeReferenceEmittance(instance, reference);
+        if (baseObject.Light is not null) AddNativePlacedLight(root, reference, baseObject, instance);
         var controllers = instance.FindChildren("*", "", true, false).OfType<RuntimeNifControllerPlayer>().ToArray();
         if (controllers.Any(controller => controller.HasTextKeys))
         {
@@ -1250,7 +1255,8 @@ public partial class RuntimeCoordinator
         if (controllers.Length != 0)
             GD.Print($"OPENNV_NATIVE_REFERENCE_CONTROLLERS source={reference.FormKey} " +
                 $"sequences={string.Join(',', controllers.SelectMany(controller => controller.SequenceNames))} binding=per-instance");
-        Observe("model");
+        if (baseObject.Light is not null) RecordNativeLightSoundBoundary(instance, reference, baseObject);
+        Observe(baseObject.Light is null ? "model" : "light/model");
         if (baseObject.Signature == "DOOR" && reference.Teleport is not null)
             AddNativeDoorPortal(instance, reference);
         else if (baseObject.Signature == "DOOR" || RuntimeNativeDoorMotion.HasOpenClose(controllers))
@@ -1456,21 +1462,24 @@ public partial class RuntimeCoordinator
     private void AddNativePlacedLight(
         Node3D root,
         FalloutPlacedReference reference,
-        FalloutBaseObjectDefinition baseObject)
+        FalloutBaseObjectDefinition baseObject,
+        Node3D? sourceModel = null)
     {
+        var attachment = sourceModel is null ? root : RuntimeNativePlacedLightBuilder.ModelAttachment(sourceModel);
         var light = RuntimeNativePlacedLightBuilder.Build(
             reference,
             baseObject,
-            ReferenceTransform(reference),
+            sourceModel is null ? ReferenceTransform(reference) : Transform3D.Identity,
             _configuration.World.GameUnitsToMeters,
             _configuration.Renderer.PointLightEnergyScale,
             _configuration.Renderer.MinimumPointLightEnergy,
             _configuration.Renderer.AuthoredPointLightShadows,
             _nativePluginStack,
             region => (_nativeSkyLighting ?? throw new InvalidOperationException("Sky lighting state is absent."))
-                .RegionEmittance(region, (_nativeGameTime ?? throw new InvalidOperationException("Sky has no simulation clock.")).Hour));
-        light.SetMeta("opennv_reference_form_key", reference.FormKey.ToString());
-        root.AddChild(light);
+                .RegionEmittance(region, (_nativeGameTime ?? throw new InvalidOperationException("Sky has no simulation clock.")).Hour), sourceModel);
+        if (sourceModel is null) light.SetMeta("opennv_reference_form_key", reference.FormKey.ToString());
+        try { attachment.AddChild(light); }
+        catch { light.Free(); throw; }
     }
 
     private void AddNativePlayer(FalloutCellScene initialCell, FalloutReferencePlacement? startupPlacement = null)

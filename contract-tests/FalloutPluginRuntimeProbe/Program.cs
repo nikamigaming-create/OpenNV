@@ -2302,13 +2302,15 @@ try
     ExpectFailure(() => FalloutPlacedLightResolver.Resolve(cell.References[1], syntheticLightBase), "no XEMI source resolver");
     ExpectFailure(() => FalloutPlacedLightResolver.Resolve(cell.References[1] with { Emittance = new("Cell.esm", 0x110) },
         syntheticLightBase, cellStack), "STAT emittance owner");
-    ExpectFailure(
-        () => FalloutPlacedLightResolver.Resolve(
-            cell.References[1], syntheticLightBase with
-            {
-                Light = syntheticLightBase.Light! with { Flags = 0x0000_0001 },
-            }),
-        "outside the qualified point-light contract");
+    var dynamicLight = FalloutPlacedLightResolver.Resolve(
+        cell.References[1], syntheticLightBase with
+        {
+            Light = syntheticLightBase.Light! with { Flags = FalloutPlacedLightResolver.DynamicFlag },
+        }, cellStack);
+    Require(dynamicLight.AnimationFlags == 0 &&
+        dynamicLight.ShaderColorRgb.SequenceEqual(syntheticLight.ShaderColorRgb) &&
+        dynamicLight.RadiusGameUnits == syntheticLight.RadiusGameUnits,
+        "Dynamic classification must preserve emittance/radius without inventing a pulse flag.");
     var parentedLight = FalloutPlacedLightResolver.Resolve(cell.References[1] with
     {
         EnableParent = new FalloutFormKey("Cell.esm", 0x130),

@@ -9,12 +9,17 @@ internal sealed record FalloutSandboxActivityProgress(FalloutSandboxActivity Act
     FalloutSandboxActivity? ScheduledActivity = null, bool DailyFoodAvailable = false, bool DailyBedAvailable = false,
     int? NativePhase = null)
 {
+    internal const FalloutSandboxActivity NoActivity = (FalloutSandboxActivity)(-1);
+    internal static FalloutSandboxActivityProgress Empty(float hour, FalloutSandboxPreferences preferences) =>
+        new(NoActivity, hour, 0, preferences.Capture(), NativePhase: 1);
     internal void Validate()
     {
-        if (!Enum.IsDefined(Activity) || NativePhase is < 0 or > 3 || !float.IsFinite(StartedHour) || StartedHour is < 0 or >= 24 ||
+        if ((Activity != NoActivity && !Enum.IsDefined(Activity)) || NativePhase is < 0 or > 3 || !float.IsFinite(StartedHour) || StartedHour is < 0 or >= 24 ||
             !float.IsFinite(Duration) || Duration < 0 || Preferences is null)
             throw new InvalidDataException("Saved Sandbox activity is invalid.");
         _ = new FalloutSandboxPreferences(Preferences);
+        if (Activity == NoActivity && (Duration != 0 || Target is not null || ScheduledActivity is not null || NativePhase is not (1 or 3)))
+            throw new InvalidDataException("No-activity Sandbox retains a selected task or invalid phase.");
         if (ScheduledActivity is { } scheduled &&
             (scheduled is not (FalloutSandboxActivity.Eat or FalloutSandboxActivity.Sleep) || scheduled != Activity))
             throw new InvalidDataException("Saved Sandbox scheduled activity conflicts with its selection.");

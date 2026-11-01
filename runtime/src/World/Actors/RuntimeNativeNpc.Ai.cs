@@ -125,141 +125,149 @@ internal partial class RuntimeNativeNpc
 
     private int CurrentAiPackage => Combat?.ScriptCombatPackage ?? (_requestedSelection is not null || _aiError is not null
         ? throw new NotSupportedException("Current AI package code has no admitted native continuation.")
-        : _packageIdleSource is null ? 0 : _packageIdleSource.Procedure switch
-        {
-            0 => 0,
-            2 => 2,
-            4 => 4,
-            6 => 14, // Source PACK travel type -> script-visible Travel package.
-            12 => 36, // Sandbox's script package code differs from its PACK type.
-            13 => 37, // Fallout script-visible Patrol code (not the PACK type).
-            _ => throw new NotSupportedException("Current package condition needs its active procedure owner."),
-        });
+        : FalloutPackageData.CurrentAiPackageCode(_packageIdleSource?.Procedure));
 
-    internal object AiState => new
+
+    // Diagnostics may observe an unqualified owner without granting a value
+    // to scripts, package conditions or capture admission.
+    internal static (int? Value, string? Error) ObserveProcedureDiagnostic(Func<int> query)
     {
-        retainedPackageMotion = Combat?.PackageMotion,
-        follow = FollowState,
-        package = _aiPackage?.FormKey.ToString(),
-        selectedPackage = CurrentPackage?.ToString(),
-        evaluationPending = _requestedSelection is not null,
-        pendingSelectionCaptureReady = CanCapturePendingSelection(),
-        furniture = _furnitureReference?.ToString(),
-        marker = _seat?.MarkerId,
-        sandboxMarker = _sandboxMarker is { } selectedMarker ? new
+        try { return (query(), null); }
+        catch (Exception error) when (error is NotSupportedException or InvalidOperationException or IOException)
         {
-            reference = selectedMarker.ToString(),
-            phase = _sandboxMarkerPhase.ToString(),
-            nativePhase = _sandboxMarkerNativePhase,
-            procedure = AdmittedSandboxMarkerProcedure,
-            selectedIdle = _sandboxIdleSelection.SelectedIdle?.ToString()
-        } : null,
-        sitting = SittingState,
-        sleeping = SleepingState,
-        dailyWindow = _aiReferenceState?.SandboxDailyWindow,
-        furniturePhase = _furnitureApproaching ? "approaching" : _sitting switch
+            return (null, error.Message);
+        }
+    }
+
+    internal object AiState
+    {
+        get
         {
-            1 => "occupied",
-            2 => "entering",
-            4 => "exiting",
-            _ => "none",
-        },
-        furnitureInitialPlacement = _furnitureInitialPlacement,
-        findFurniture = _findFurniture,
-        pendingPackage = _pendingPackage?.FormKey.ToString(),
-        packageEvents = _packageEvents is null ? null : new
-        {
-            package = _packageEvents.Active?.Form.ToString(),
-            _packageEvents.Done,
-            _packageEvents.Revision,
-            _packageEvents.LastEvent,
-            lastPackage = _packageEvents.LastPackage?.ToString(),
-            _packageEvents.Error,
-        },
-        randomState = _aiRandom.State.ToString("x16", System.Globalization.CultureInfo.InvariantCulture),
-        randomOwner = "opennv-authoritative-retail-stream-unmatched",
-        activity = new
-        {
-            Activity.Alerted,
-            Activity.Attacked,
-            Activity.WeaponDrawn,
-            Activity.Running,
-            Activity.Sneaking,
-            Activity.InCombat,
-            Activity.Revision,
-        },
-        factions = _factions.Select(value => new { faction = value.Key.ToString(), rank = value.Value }).ToArray(),
-        currentProcedure = Combat?.ScriptCombatProcedure ?? Combat?.ScriptEatProcedure ?? (_sitting == 2 || _requestedSelection is not null || _aiError is not null || _guardPackage is not null || _followPackage is not null ||
-            _sandboxPackage is not null && !(_furnitureSandboxActivity && _seat is not null &&
-                (_sitting == 1 || _sitting == 4 && !_sandboxFurniturePackageExit) || AdmittedSandboxMarkerProcedure is not null)
-            ? (int?)null : CurrentAiProcedure),
-        navigation = TravelState,
-        escort = EscortState,
-        editorTravel = EditorTravelState,
-        patrol = _patrol is null ? null : new { source = _patrol.SourceSha256, points = _patrol.Points.Count, progress = _patrolProgress, status = _patrolStatus },
-        guard = _guardPackage is null ? null : new { source = _guardPackage, progress = _guardProgress },
-        dialoguePackage = _dialoguePackage is null ? null : new
-        {
-            source = _dialoguePackage,
-            requested = _dialoguePackageRequested,
-            waitReached = _dialogueWaitReached,
-            nativeTargetMovement = _dialogueNativeMovement,
-            unbound = new[] { "package-camera-zoom", "package-head-target-priority", "pre-conversation-target-movement" }
-        },
-        idleCollection = _packageIdleSource is null ? null : new
-        {
-            source = _packageIdleSource.Form.ToString(),
-            flags = _packageIdleSource.IdleFlags,
-            timer = _packageIdleSource.IdleTimer,
-            idles = _packageIdleSource.Idles.Select(value => value.ToString()).ToArray(),
-            owner = _packageIdleSource.Idles.Count == 0 ? "empty-source-collection" : "source-collection-clock",
-            conditions = "candidate-then-source-parents",
-            lastConditionDecision = _idleConditions?.LastDecision is not { } decision ? null : new
+            var procedure = ObserveProcedureDiagnostic(() => CurrentAiProcedure);
+            return new
             {
-                candidate = decision.Candidate.ToString(),
-                decision.Eligible,
-                stoppedAt = decision.StoppedAt?.ToString(),
-                decision.ConditionsEvaluated,
-            },
-            waitSeconds = _packageIdles?.WaitSeconds,
-            complete = _packageIdles?.Complete,
-            cursor = _packageIdles?.Cursor,
-            error = _packageIdleError,
-        },
-        error = _aiError,
-        stoppedSandboxAdmissionCaptureReady = CanCaptureSandboxAdmissionFailure(),
-        stoppedSandboxAdmissionStage = _sandboxAdmissionFailure is null ? null : _sandboxAdmissionFailure.UnchosenMeal is not null
-            ? "selected-activity-before-meal-choice" : "candidate-admission-before-first-activity",
-        stoppedBindingCaptureReady = CanCaptureBindingFailure(),
-        stoppedBindingCapture = _selectionCaptureBlocker is null ? null : new
-        {
-            finiteSoundReady = CanCaptureBindingFailure(allowFiniteSoundWait: true),
-            referenceBlockerBound = _aiReferenceState?.ProcedureCaptureBlocker == _selectionCaptureBlocker,
-            failedPackage = _failedPackage?.ToString(),
-            failedPackageIsSelected = _failedPackage == _selectedSourcePackage,
-            activePackage = _aiPackage?.FormKey.ToString(),
-            hasIdleSource = _packageIdleSource is not null,
-            hasIdleCollection = _packageIdles is not null,
-            activeAnimation = _animation is not null,
-            independentIdleCaptureReady = _animation is null || CanCaptureStoppedIndependentIdle(),
-            independentIdleFiniteCaptureReady = _animation is null || CanCaptureStoppedIndependentIdle(allowFiniteSoundWait: true),
-            idleOwner = _idleOwner,
-            idlePlaybackComplete = _idlePlayback?.Complete,
-            activeAnimationObjects = _animationObjects.Count,
-            animationObjectsCaptureReady = CanCaptureIdleObjects(),
-            hasAnimationWeapon = Combat?.AnimationWeapon is not null,
-            responseIdleActive = _responseIdleActive,
-            pendingTravelArrival = _travelProgress?.ArrivalPending,
-            conversationTarget = _conversationTarget?.ToString(),
-            animationError = AnimationError,
-            baseResource = _baseClock.Resource
-        },
-        stoppedPoseCapture = _selectionCaptureBlocker is null ? null : ReadStoppedPoseCaptureDiagnostic(),
-        scheduleTime = _aiScheduleTime,
-        evaluationPolicy = "quest-activity-hour-changes-and-ten-second-poll;retail-cadence-unmatched",
-        referencePackageEventOwner = _aiWorld is null ? "unbound-no-reference-world" : "shared-reference-world",
-        unbound = new[] { "retail-navigation-timing", "furniture-entry-script-procedure-code", "furniture-idle-variations", "idle-internal-loop-counts", "head-eye-aiming", "actor-save-restoration", "combat-event-dispatch" },
-    };
+                retainedPackageMotion = Combat?.PackageMotion,
+                follow = FollowState,
+                package = _aiPackage?.FormKey.ToString(),
+                selectedPackage = CurrentPackage?.ToString(),
+                evaluationPending = _requestedSelection is not null,
+                pendingSelectionCaptureReady = CanCapturePendingSelection(),
+                furniture = _furnitureReference?.ToString(),
+                marker = _seat?.MarkerId,
+                sandboxMarker = _sandboxMarker is { } selectedMarker ? new
+                {
+                    reference = selectedMarker.ToString(),
+                    phase = _sandboxMarkerPhase.ToString(),
+                    nativePhase = _sandboxMarkerNativePhase,
+                    procedure = AdmittedSandboxMarkerProcedure,
+                    selectedIdle = _sandboxIdleSelection.SelectedIdle?.ToString()
+                } : null,
+                sitting = SittingState,
+                sleeping = SleepingState,
+                dailyWindow = _aiReferenceState?.SandboxDailyWindow,
+                furniturePhase = _furnitureApproaching ? "approaching" : _sitting switch
+                {
+                    1 => "occupied",
+                    2 => "entering",
+                    4 => "exiting",
+                    _ => "none",
+                },
+                furnitureInitialPlacement = _furnitureInitialPlacement,
+                findFurniture = _findFurniture,
+                pendingPackage = _pendingPackage?.FormKey.ToString(),
+                packageEvents = _packageEvents is null ? null : new
+                {
+                    package = _packageEvents.Active?.Form.ToString(),
+                    _packageEvents.Done,
+                    _packageEvents.Revision,
+                    _packageEvents.LastEvent,
+                    lastPackage = _packageEvents.LastPackage?.ToString(),
+                    _packageEvents.Error,
+                },
+                randomState = _aiRandom.State.ToString("x16", System.Globalization.CultureInfo.InvariantCulture),
+                randomOwner = "opennv-authoritative-retail-stream-unmatched",
+                activity = new
+                {
+                    Activity.Alerted,
+                    Activity.Attacked,
+                    Activity.WeaponDrawn,
+                    Activity.Running,
+                    Activity.Sneaking,
+                    Activity.InCombat,
+                    Activity.Revision,
+                },
+                factions = _factions.Select(value => new { faction = value.Key.ToString(), rank = value.Value }).ToArray(),
+                currentProcedure = procedure.Value,
+                currentProcedureError = procedure.Error,
+                navigation = TravelState,
+                escort = EscortState,
+                editorTravel = EditorTravelState,
+                patrol = _patrol is null ? null : new { source = _patrol.SourceSha256, points = _patrol.Points.Count, progress = _patrolProgress, status = _patrolStatus },
+                guard = _guardPackage is null ? null : new { source = _guardPackage, progress = _guardProgress },
+                dialoguePackage = _dialoguePackage is null ? null : new
+                {
+                    source = _dialoguePackage,
+                    requested = _dialoguePackageRequested,
+                    waitReached = _dialogueWaitReached,
+                    nativeTargetMovement = _dialogueNativeMovement,
+                    unbound = new[] { "package-camera-zoom", "package-head-target-priority", "pre-conversation-target-movement" }
+                },
+                idleCollection = _packageIdleSource is null ? null : new
+                {
+                    source = _packageIdleSource.Form.ToString(),
+                    flags = _packageIdleSource.IdleFlags,
+                    timer = _packageIdleSource.IdleTimer,
+                    idles = _packageIdleSource.Idles.Select(value => value.ToString()).ToArray(),
+                    owner = _packageIdleSource.Idles.Count == 0 ? "empty-source-collection" : "source-collection-clock",
+                    conditions = "candidate-then-source-parents",
+                    lastConditionDecision = _idleConditions?.LastDecision is not { } decision ? null : new
+                    {
+                        candidate = decision.Candidate.ToString(),
+                        decision.Eligible,
+                        stoppedAt = decision.StoppedAt?.ToString(),
+                        decision.ConditionsEvaluated,
+                    },
+                    waitSeconds = _packageIdles?.WaitSeconds,
+                    complete = _packageIdles?.Complete,
+                    cursor = _packageIdles?.Cursor,
+                    error = _packageIdleError,
+                },
+                error = _aiError,
+                stoppedSandboxAdmissionCaptureReady = CanCaptureSandboxAdmissionFailure(),
+                stoppedSandboxAdmissionStage = _sandboxAdmissionFailure is null ? null : _sandboxAdmissionFailure.UnchosenMeal is not null
+                    ? "selected-activity-before-meal-choice" : "candidate-admission-before-first-activity",
+                stoppedBindingCaptureReady = CanCaptureBindingFailure(),
+                stoppedBindingCapture = _selectionCaptureBlocker is null ? null : new
+                {
+                    finiteSoundReady = CanCaptureBindingFailure(allowFiniteSoundWait: true),
+                    referenceBlockerBound = _aiReferenceState?.ProcedureCaptureBlocker == _selectionCaptureBlocker,
+                    failedPackage = _failedPackage?.ToString(),
+                    failedPackageIsSelected = _failedPackage == _selectedSourcePackage,
+                    activePackage = _aiPackage?.FormKey.ToString(),
+                    hasIdleSource = _packageIdleSource is not null,
+                    hasIdleCollection = _packageIdles is not null,
+                    activeAnimation = _animation is not null,
+                    independentIdleCaptureReady = _animation is null || CanCaptureStoppedIndependentIdle(),
+                    independentIdleFiniteCaptureReady = _animation is null || CanCaptureStoppedIndependentIdle(allowFiniteSoundWait: true),
+                    idleOwner = _idleOwner,
+                    idlePlaybackComplete = _idlePlayback?.Complete,
+                    activeAnimationObjects = _animationObjects.Count,
+                    animationObjectsCaptureReady = CanCaptureIdleObjects(),
+                    hasAnimationWeapon = Combat?.AnimationWeapon is not null,
+                    responseIdleActive = _responseIdleActive,
+                    pendingTravelArrival = _travelProgress?.ArrivalPending,
+                    conversationTarget = _conversationTarget?.ToString(),
+                    animationError = AnimationError,
+                    baseResource = _baseClock.Resource
+                },
+                stoppedPoseCapture = _selectionCaptureBlocker is null ? null : ReadStoppedPoseCaptureDiagnostic(),
+                scheduleTime = _aiScheduleTime,
+                evaluationPolicy = "quest-activity-hour-changes-and-ten-second-poll;retail-cadence-unmatched",
+                referencePackageEventOwner = _aiWorld is null ? "unbound-no-reference-world" : "shared-reference-world",
+                unbound = new[] { "retail-navigation-timing", "furniture-entry-script-procedure-code", "furniture-idle-variations", "idle-internal-loop-counts", "head-eye-aiming", "actor-save-restoration", "combat-event-dispatch" },
+            };
+        }
+    }
 
     internal void ConfigureAi(FalloutPluginStack stack, FalloutQuestState quests, FalloutCellScene cell,
         Func<FalloutPlacedReference, Transform3D> referenceTransform,

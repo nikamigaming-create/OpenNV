@@ -63,13 +63,12 @@ internal sealed partial class RuntimeNativeCreature
     {
         if (idle.Objects.Count != 0) throw new NotSupportedException("Creature event idle requires its ANIO attachment owner.");
         var nif = NativeAnimationResources.For(_content).Read(idle.AnimationPath);
-        var sequences = nif.Roots.Select(nif.ReadObject).OfType<FalloutNifControllerSequence>().ToArray();
-        if (sequences.Length != 1) throw new NotSupportedException("Creature event idle requires one source sequence.");
+        var sequence = FalloutKfSequenceSource.Primary(nif);
         var attachments = IndexAttachmentTargets();
         var targets = attachments.Keys.ToHashSet(StringComparer.Ordinal);
-        targets.UnionWith(sequences[0].ControlledBlocks.Select(link => link.NodeName).Where(name =>
+        targets.UnionWith(sequence.ControlledBlocks.Select(link => link.NodeName).Where(name =>
             Skeleton.HasSourceTarget(name) || Skeleton.MaterialChannels.HasSourceTarget(name)));
-        var animation = new RuntimeNativeNifAnimation(nif, sequences[0], Skeleton, link => BindAttachment(nif, link, attachments),
+        var animation = new RuntimeNativeNifAnimation(nif, sequence, Skeleton, link => BindAttachment(nif, link, attachments),
             externalObjectTargets: targets, externalAccumulationRoot: externalAccumulationRoot);
         if (animation.UnboundChannels.Count != 0)
             throw new NotSupportedException("Creature event idle has unbound source channels: " +
