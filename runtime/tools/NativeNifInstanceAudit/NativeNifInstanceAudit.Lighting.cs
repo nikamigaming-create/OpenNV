@@ -32,6 +32,7 @@ public partial class NativeNifInstanceAudit
             }
             finally { light.Free(); }
         }
+        ExercisePlacedLightModelAttachment(source, reference);
         ExerciseLightFlicker(source, reference);
         ExerciseLightPulse(source, reference);
         ExercisePointLightOverflow();

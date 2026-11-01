@@ -8,6 +8,7 @@ internal sealed partial class RuntimeNativeGameTime : Node
 {
     private readonly FalloutGameTime _clock;
     private string? _error;
+    private readonly Action<bool>? _processClock;
     internal object State => new
     {
         hour = _clock.Hour,
@@ -20,9 +21,10 @@ internal sealed partial class RuntimeNativeGameTime : Node
         error = _error,
     };
 
-    internal RuntimeNativeGameTime(FalloutGameTime clock)
+    internal RuntimeNativeGameTime(FalloutGameTime clock, Action<bool>? processClock = null)
     {
         _clock = clock;
+        _processClock = processClock;
         Name = "NativeGameTime";
         ProcessMode = ProcessModeEnum.Always;
         ProcessPriority = int.MinValue;
@@ -30,6 +32,7 @@ internal sealed partial class RuntimeNativeGameTime : Node
 
     public override void _Process(double delta)
     {
+        _processClock?.Invoke(GetTree().Paused);
         if (_error is not null || GetTree().Paused) return;
         try { _clock.AdvanceSimulation((float)delta); }
         catch (Exception error)

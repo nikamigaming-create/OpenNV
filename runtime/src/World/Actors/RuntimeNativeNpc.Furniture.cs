@@ -178,9 +178,7 @@ internal partial class RuntimeNativeNpc
         if (!content.TryRead(source.AnimationPath, null, out var bytes, out var identity))
             throw new FileNotFoundException("Furniture animation is absent.", source.AnimationPath);
         var nif = FalloutNifFile.Read(bytes);
-        var sequences = nif.Roots.Select(nif.ReadObject).OfType<FalloutNifControllerSequence>().ToArray();
-        if (sequences.Length != 1) throw new NotSupportedException("Furniture KF requires one sequence.");
-        var sequence = sequences[0];
+        var sequence = FalloutKfSequenceSource.Primary(nif);
         if (sequence.Frequency <= 0 || sequence.StopTime <= sequence.StartTime ||
             sequence.CycleType != (sitting is 2 or 4 ? 2 : 0))
             throw new NotSupportedException("Furniture procedure has an unsupported source clock.");

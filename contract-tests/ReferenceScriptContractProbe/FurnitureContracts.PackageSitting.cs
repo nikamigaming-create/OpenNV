@@ -9,6 +9,7 @@ internal static partial class FurnitureContracts
 {
     private static void PackageSittingContracts()
     {
+        SandboxEmptyRescanContracts();
         foreach (var activity in Enum.GetValues<FalloutSandboxActivity>())
         {
             Require(FalloutSandboxProcedure.Read(0, activity) == 45 && FalloutSandboxProcedure.Read(1, activity) == 21 &&

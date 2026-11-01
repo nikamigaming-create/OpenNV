@@ -115,17 +115,15 @@ internal partial class RuntimeNativeNpc : CharacterBody3D
         if (saved is not null && (!source.Sha256.Equals(saved.Sha256, StringComparison.OrdinalIgnoreCase) ||
             !path.Equals(saved.Resource, StringComparison.OrdinalIgnoreCase) || !timing.AdmitsAdditionalLoops(saved.Clock.SelectedAdditionalLoops)))
             throw new InvalidDataException("Saved collection KF or chosen repetitions differ from the winning source.");
-        var sequences = source.Roots.Select(source.ReadObject).OfType<FalloutNifControllerSequence>().ToArray();
-        if (sequences.Length != 1)
-            throw new NotSupportedException($"IDLE {idle.Form} requires one source KF sequence, found {sequences.Length}.");
-        if (!float.IsFinite(sequences[0].Frequency) || sequences[0].Frequency <= 0 ||
-            !float.IsFinite(sequences[0].StartTime) || !float.IsFinite(sequences[0].StopTime) ||
-            sequences[0].StopTime <= sequences[0].StartTime)
+        var sequence = FalloutKfSequenceSource.Primary(source);
+        if (!float.IsFinite(sequence.Frequency) || sequence.Frequency <= 0 ||
+            !float.IsFinite(sequence.StartTime) || !float.IsFinite(sequence.StopTime) ||
+            sequence.StopTime <= sequence.StartTime)
             throw new InvalidDataException($"IDLE {idle.Form} has an invalid source clock.");
         var created = new List<Node3D>();
         var objectBindings = new List<FalloutActorIdleObjectBinding>();
         var staticObjects = true;
-        var controlledNodes = sequences[0].ControlledBlocks
+        var controlledNodes = sequence.ControlledBlocks
             .Where(link => link.ControllerType is "NiTransformController" or "NiVisController" && link.PropertyType.Length == 0 &&
                 link.Variable1.Length == 0 && link.Variable2.Length == 0)
             .Select(link => link.NodeName).ToHashSet(StringComparer.Ordinal);
@@ -190,7 +188,7 @@ internal partial class RuntimeNativeNpc : CharacterBody3D
                 return RuntimeNifScalarBinding.Visibility(source, link,
                     () => { RequireLive(); return target.Visible; }, value => { RequireLive(); target.Visible = value; });
             }
-            var selected = new RuntimeNativeNifAnimation(source, sequences[0], Skeleton, BindObject,
+            var selected = new RuntimeNativeNifAnimation(source, sequence, Skeleton, BindObject,
                 externalObjectTargets: externalTargets, bindScalarChannel: BindScalar);
             if (selected.UnboundChannels.Count != 0)
                 throw new NotSupportedException($"IDLE {idle.Form} has unbound source channels: " +

@@ -221,9 +221,9 @@ internal static class ManualSavePreparationContracts
         Reject(() => catalog.Create(Guid.NewGuid(), () => { File.WriteAllText(canonical, "invalid"); throw new IOException("Actual writer failure."); }));
         Require(File.ReadAllBytes(canonical).SequenceEqual(before) && catalog.ReadSlots().Count == slots,
             "Writer failure replaced the prior complete Continue save or published a slot.");
-        Reject(() => catalog.Create(Guid.NewGuid(), () => File.WriteAllText(canonical, "{}")));
+        var invalidCandidateFailure = Reject(() => catalog.Create(Guid.NewGuid(), () => File.WriteAllText(canonical, "{}")));
         Require(File.ReadAllBytes(canonical).SequenceEqual(before) && catalog.ReadSlots().Count == slots,
-            "Invalid candidate replaced Continue before its complete slot committed.");
+            $"Invalid candidate replaced Continue before its complete slot committed. {invalidCandidateFailure}");
         var validations = 0;
         var readFailure = new RuntimeSaveSlotCatalog(canonical, root =>
         {
@@ -271,10 +271,10 @@ internal static class ManualSavePreparationContracts
         Require(root.GetProperty("Schema").GetString() == Schema && root.GetProperty("SaveCompatibilityId").GetString() == source &&
             root.GetProperty("References").ValueKind == JsonValueKind.Array, "Component capture lacks its strict source/world identity.");
     }
-    private static void Reject(Action action)
+    private static Exception Reject(Action action)
     {
         try { action(); }
-        catch (Exception error) when (error is IOException or InvalidDataException or InvalidOperationException or NotSupportedException or JsonException or KeyNotFoundException) { return; }
+        catch (Exception error) when (error is IOException or InvalidDataException or InvalidOperationException or NotSupportedException or JsonException or KeyNotFoundException) { return error; }
         throw new InvalidDataException("Invalid save preparation/capture was admitted.");
     }
     private static void Require(bool value, string message) { if (!value) throw new InvalidDataException(message); }

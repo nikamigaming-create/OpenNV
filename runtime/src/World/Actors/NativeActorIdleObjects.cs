@@ -22,9 +22,8 @@ internal sealed class NativeActorIdleObjects : IDisposable
     {
         _units = skeleton.UnitsToMetres;
         _animation = NativeAnimationResources.For(content).Read(idle.AnimationPath);
-        var sequences = _animation.Roots.Select(_animation.ReadObject).OfType<FalloutNifControllerSequence>().ToArray();
-        if (sequences.Length != 1) throw new NotSupportedException("ANIO owner requires one source IDLE sequence.");
-        var controlled = sequences[0].ControlledBlocks.Where(link => link.ControllerType is "NiTransformController" or "NiVisController" &&
+        var sequence = FalloutKfSequenceSource.Primary(_animation);
+        var controlled = sequence.ControlledBlocks.Where(link => link.ControllerType is "NiTransformController" or "NiVisController" &&
             link.PropertyType.Length == 0 && link.Variable1.Length == 0 && link.Variable2.Length == 0)
             .Select(link => link.NodeName).ToHashSet(StringComparer.Ordinal);
         var bindings = new List<FalloutActorIdleObjectBinding>();

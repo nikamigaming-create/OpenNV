@@ -71,7 +71,7 @@ internal sealed partial class RuntimeNativeActorCombat
             activity.DailyFoodAvailable, activity.DailyBedAvailable);
         var dailyChanged = activity is not null && scheduled != activity.ScheduledActivity;
         var randomBeforeSelection = _state.SoundRandom.State;
-        var selectedActivity = activity is null || (activity.Expired(hour) || dailyChanged) &&
+        var selectedActivity = activity is null || activity.Activity == FalloutSandboxActivityProgress.NoActivity || (activity.Expired(hour) || dailyChanged) &&
             (physical?.Supports(activity.Activity) != true || physical.ReleaseForReselection(activity));
         if (selectedActivity)
         {
@@ -86,6 +86,11 @@ internal sealed partial class RuntimeNativeActorCombat
             activity = _state.PackageMotion.Sandbox ?? activity; // Release can publish phase one before the handler runs.
         if (activity is null) throw new InvalidOperationException("Sandbox has no selected activity.");
         _executingSandboxActivity = activity;
+        if (activity.Activity == FalloutSandboxActivityProgress.NoActivity)
+        {
+            HoldSandboxActivity(package, source, activity, delta);
+            return null;
+        }
         if (activity.NativePhase == 1 && activity.Activity is not (FalloutSandboxActivity.Furniture or FalloutSandboxActivity.IdleMarker))
             activity = ObserveSandboxPhase(2);
         if (physical?.Supports(activity.Activity) == true)
@@ -136,7 +141,7 @@ internal sealed partial class RuntimeNativeActorCombat
                 using (OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Measure(OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Owner.SandboxActivitySelection))
                     activity = SelectSandboxActivity(source, activity, hour, delta, context, physical);
                 _executingSandboxActivity = activity;
-                if (activity.Activity is not (FalloutSandboxActivity.Furniture or FalloutSandboxActivity.IdleMarker)) activity = ObserveSandboxPhase(2);
+                if (activity.Activity is not (FalloutSandboxActivityProgress.NoActivity or FalloutSandboxActivity.Furniture or FalloutSandboxActivity.IdleMarker)) activity = ObserveSandboxPhase(2);
                 _state.PackageMotion = _state.PackageMotion! with { Sandbox = activity, Wander = null };
                 StopPackageMotion();
             }
@@ -181,7 +186,7 @@ internal sealed partial class RuntimeNativeActorCombat
         INativeSandboxActivityOwner? physical)
     {
         var busy = context.DialogueBusy ?? throw new NotSupportedException("Sandbox has no dialogue participant owner.");
-        var candidates = _world.SandboxCandidateSources(_state.Reference, source,
+        var candidates = _world.SandboxCandidatesAtRescan(_state.Reference, source,
             context.Level(), context.Globals, _skeleton.UnitsToMetres);
         var admitted = new List<FalloutSandboxCandidateSource>();
         foreach (var candidate in candidates)
@@ -222,7 +227,7 @@ internal sealed partial class RuntimeNativeActorCombat
         var categories = preferences.ActivityWeights(scheduled, foodAvailable, furnitureAvailable, _state.ConversationSuppressionSeconds is > 0);
         var weights = admitted.Select(candidate => FalloutSandboxPreferences.CandidateWeight(1, categories[(int)candidate.Activity])).ToArray();
         var total = weights.Aggregate(0, (sum, weight) => checked(sum + weight));
-        if (total == 0) throw new NotSupportedException("Sandbox has no admitted activity; its retry owner is unbound.");
+        if (total == 0) return FalloutSandboxActivityProgress.Empty(hour, preferences);
         var selected = admitted[FalloutSandboxPreferences.Choose(weights, _state.SoundRandom.NextUInt32() % (uint)total)];
         if (selected.Activity is not (FalloutSandboxActivity.Wander or FalloutSandboxActivity.Eat or FalloutSandboxActivity.Dialogue) &&
             physical?.Supports(selected.Activity) != true)

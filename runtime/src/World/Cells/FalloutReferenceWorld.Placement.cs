@@ -99,6 +99,7 @@ internal sealed partial class FalloutReferenceWorld
         instance.RegionCellAttached = false;
         instance.SandboxAdmissionFailure = relocated;
         instance.PackageMotion = null;
+        instance.SandboxRescan = null;
         instance.Engagement = null;
         instance.AggroWarning = null;
         instance.HitReaction = null;

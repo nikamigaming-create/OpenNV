@@ -13,6 +13,45 @@ internal readonly record struct FalloutPackageData(uint Flags, byte Procedure, u
     internal bool BlocksAmbientConversation => Procedure is >= 18 and <= 25 or
         >= 27 and <= 29 or >= 31 and <= 36;
 
+    // Public condition110 codes describe the actual current process package,
+    // not its editor PACK discriminator. Known absence is the native result0;
+    // unresolved ownership must be refused by the caller before reaching here.
+    internal static int CurrentAiPackageCode(byte? sourceType) => sourceType switch
+    {
+        null or 0 => 0,
+        1 => 1,
+        2 => 2,
+        3 => 3,
+        4 => 4,
+        5 => 13,
+        6 => 14,
+        7 => 15,
+        8 => 16,
+        9 => 17,
+        10 => 18,
+        11 => 19,
+        12 => 36,
+        13 => 37,
+        14 => 35,
+        15 => 34,
+        16 => 33,
+        18 => 5,
+        19 => 20,
+        20 => 7,
+        21 => 8,
+        22 => 10,
+        23 => 11,
+        24 => 9,
+        25 => 12,
+        26 => 21,
+        27 => 24,
+        28 => 6,
+        29 => 28,
+        30 => 29,
+        31 => 32,
+        _ => -1,
+    };
+
     internal static FalloutPackageData Read(FalloutPluginRecord record)
     {
         if (record.Signature != "PACK") throw new InvalidDataException("Package data source is not PACK.");

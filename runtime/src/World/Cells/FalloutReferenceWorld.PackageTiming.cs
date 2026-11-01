@@ -21,6 +21,7 @@ internal sealed partial class FalloutReferenceWorld
 
     internal void MarkPackageStart(FalloutFormKey actor, FalloutPluginRecord package, FalloutGameTime? clock)
     {
+        Get(actor).SandboxRescan = null;
         if (!OncePerDay(package)) return;
         _ = Actor(actor);
         var state = Get(actor);

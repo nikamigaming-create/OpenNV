@@ -1,11 +1,20 @@
 using System.Text.Json;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.World.Cells;
+using OpenNV.Runtime.World.Actors;
 
 internal static class CaptureDiagnosticContracts
 {
     internal static void Run(FalloutPluginStack records)
     {
+        var observed = RuntimeNativeNpc.ObserveProcedureDiagnostic(() => 8);
+        Require(observed.Value == 8 && observed.Error is null, "Procedure diagnostics lost their actual owner value.");
+        const string refusal = "Sleep transition has no admitted native procedure phase.";
+        observed = RuntimeNativeNpc.ObserveProcedureDiagnostic(() => throw new NotSupportedException(refusal));
+        Require(observed.Value is null && observed.Error == refusal,
+            "An unqualified procedure erased its diagnostic or invented a phase.");
+        var refusalJson = JsonSerializer.Serialize(observed.Error);
+        Require(JsonSerializer.Deserialize<string>(refusalJson) == refusal, "Procedure refusal did not survive diagnostic publication.");
         var reference = new FalloutFormKey("Pose.esm", 0x900);
         var cell = new FalloutFormKey("Pose.esm", 0x800);
         using var world = new FalloutReferenceWorld(records);

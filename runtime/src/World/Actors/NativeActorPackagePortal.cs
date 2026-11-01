@@ -43,7 +43,7 @@ internal sealed class NativeActorPackagePortal(CharacterBody3D body, RuntimeNati
         var location = world.Placement(door).Position;
         var authored = body.GetParent<Node3D>().ToGlobal(new Vector3(location[0], location[2], -location[1]) * unitsToMetres);
         if (_destination is not { } previous || !previous.Authored.IsEqualApprox(authored))
-            _destination = (authored, process.ProjectPackageDestination(authored));
+            _destination = (authored, process.ProjectPackagePortalDestination(authored, door, world.TravelNavigation(world.Placement(door).Cell)));
         var destination = _destination.Value.Floor;
         var distance = process.PackageActivationRange * .75f;
         process.AdvancePackageMotion(package(), destination, distance, running, delta, requireArrivalHeight: true, sneaking: sneaking);

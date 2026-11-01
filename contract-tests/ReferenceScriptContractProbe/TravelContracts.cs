@@ -860,6 +860,12 @@ internal static class TravelContracts
             graph.DoorAssociationErrors[0].Contains("Base.esm:000904", StringComparison.OrdinalIgnoreCase),
             "Auxiliary door divergence discarded valid geometry or lost exact source identities.");
         graph.RequireDoorAssociations(Key(0x903));
+        var floor = graph.FindNearestPoint(new Godot.Vector3(20, 20, 0));
+        Require(graph.ContainsDoorFloor(Key(0x903), floor, .001f) &&
+            !graph.ContainsDoorFloor(Key(0x999), floor, .001f) &&
+            !graph.ContainsDoorFloor(Key(0x903), floor + Godot.Vector3.Up * 1000, .001f),
+            "Door floor admission lost actual association identity or admitted unrelated geometry.");
+        Reject(() => graph.ContainsDoorFloor(Key(0x904), floor, .001f));
         Reject(() => graph.RequireDoorAssociations(Key(0x904)));
         var route = graph.FindPath(new Godot.Vector3(10, 10, 0), new Godot.Vector3(20, 20, 0));
         Require(route.Count == 1 && route[0].DistanceTo(new Godot.Vector3(20, 20, 0)) < .001f,

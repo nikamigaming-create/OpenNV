@@ -76,7 +76,8 @@ internal static class OwnedPackageDataProbe
             throw new InvalidDataException("Owned checkpoint priority selection differs from its expected source package.");
         var header = FalloutPackageData.Read(selected);
         var declaration = FalloutScriptPackage.Read(selected);
-        if (header.SourceExtent != 8 || header.SpecificFlags is not null || declaration.Procedure != 6 || declaration.LocationType != 3)
+        if (header.SourceExtent != 8 || header.SpecificFlags is not null || declaration.Procedure != 6 || declaration.LocationType != 3 ||
+            FalloutPackageData.CurrentAiPackageCode(header.Procedure) != 14)
             throw new InvalidDataException("Selected owned priority proof is not the shorter editor-location Travel declaration.");
         var editorTravel = FalloutEditorTravelPackage.Read(selected);
         var progress = editorTravel.Start(world, reference);

@@ -778,6 +778,7 @@ internal static partial class RuntimeNativeNifMeshBuilder
                 throw new NotSupportedException(
                     $"NIF node {source.Block.Index} has unsupported dynamic effects.");
             var result = CreateNode(source.Name, source.Block.Index, source.Transform, source.Flags);
+            result.SetMeta("opennv_nif_source_node", true);
             var inheritedEditorMarkers = _omitInheritedEditorMarkers;
             try
             {

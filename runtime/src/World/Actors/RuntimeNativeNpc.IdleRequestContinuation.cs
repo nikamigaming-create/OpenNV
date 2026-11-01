@@ -101,7 +101,7 @@ internal partial class RuntimeNativeNpc
         var nif = FalloutNifFile.Read(bytes);
         if (!nif.Sha256.Equals(source.Sha256, StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException("Idle transition counterpart KF differs from its retained hash.");
-        var sequence = nif.Roots.Select(nif.ReadObject).OfType<FalloutNifControllerSequence>().Single();
+        var sequence = FalloutKfSequenceSource.Primary(nif);
         var keys = sequence.TextKeys < 0 ? Array.Empty<FalloutNifTextKey>() :
             ((FalloutNifTextKeyExtraData)nif.ReadObject(sequence.TextKeys)).Keys;
         return FalloutIdleGroupTextKeys.Read(sequence.Name, keys).Blend;
@@ -161,7 +161,7 @@ internal partial class RuntimeNativeNpc
             if (!content.TryRead(terminal.Resource!, null, out var bytes, out _)) throw new FileNotFoundException("Terminal idle sequence is absent.", terminal.Resource);
             var source = FalloutNifFile.Read(bytes);
             if (!source.Sha256.Equals(terminal.Sha256, StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("Terminal idle sequence hash differs.");
-            var sequence = source.Roots.Select(source.ReadObject).OfType<FalloutNifControllerSequence>().Single();
+            var sequence = FalloutKfSequenceSource.Primary(source);
             _currentIdleRequest = new(_aiStack!, terminal.Idle, terminal.Owner) { Procedure = terminal.Procedure };
             _currentIdleRequest.RestoreTerminal(sequence, terminal.Resource!, source.Sha256);
         }

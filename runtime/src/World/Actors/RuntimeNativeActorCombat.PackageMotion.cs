@@ -139,14 +139,30 @@ internal sealed partial class RuntimeNativeActorCombat
         return ProjectPackageDestination(authored, route, _radius);
     }
 
-    internal static Vector3 ProjectPackageDestination(Vector3 authored, IReadOnlyList<Vector3> route, float radius)
+    internal Vector3 ProjectPackagePortalDestination(Vector3 authored, FalloutFormKey door, CellNavigationGraph navigation)
+    {
+        PrepareMovement();
+        var route = _context!.Route(authored, authored);
+        var parent = _actor.GetParent<Node3D>();
+        bool AuthoredDoorFloor(Vector3 point)
+        {
+            var local = parent.ToLocal(point) / _skeleton.UnitsToMetres;
+            return navigation.ContainsDoorFloor(door, new(local.X, -local.Z, local.Y),
+                _mover!.SafeMargin / _skeleton.UnitsToMetres);
+        }
+        return ProjectPackageDestination(authored, route, _radius, AuthoredDoorFloor);
+    }
+
+    internal static Vector3 ProjectPackageDestination(Vector3 authored, IReadOnlyList<Vector3> route, float radius,
+        Func<Vector3, bool>? authoredDoorFloor = null)
     {
         // Source markers may float above their NAVM floor. Their elevation is
         // not a locomotion step: movement still follows and physically refines
         // the authored route to the projected floor. Retain lateral proximity
         // and the existing bound for projections above the marker.
         var offset = route.Count == 0 ? Vector3.Inf : route[^1] - authored;
-        if (!offset.IsFinite() || new Vector3(offset.X, Math.Max(0, offset.Y), offset.Z).Length() > radius * 6)
+        if (!offset.IsFinite() || new Vector3(offset.X, Math.Max(0, offset.Y), offset.Z).Length() > radius * 6 &&
+            authoredDoorFloor?.Invoke(route[^1]) != true)
             throw new NotSupportedException("Package destination has no nearby authored navigation floor.");
         return route[^1];
     }

@@ -231,8 +231,8 @@ internal sealed partial class RuntimeNativeCreature
         Function.IsWeaponOut => Activity.WeaponDrawn ? 1 : 0,
         Function.GetKnockedState => (_aiWorld ?? throw new NotSupportedException("Knockdown query has no reference world."))
             .GetKnockedState(Appearance?.Reference ?? throw new NotSupportedException("Knockdown query has no placed actor.")),
-        Function.GetCurrentAIPackage => Combat?.ScriptCombatPackage ?? (_aiPackage is null ? 0 : _sandboxPackage is not null ? 36 :
-            throw new NotSupportedException("Creature current package needs its native procedure owner.")),
+        Function.GetCurrentAIPackage => Combat?.ScriptCombatPackage ??
+            FalloutPackageData.CurrentAiPackageCode(_aiPackage is null ? null : FalloutPackageData.Read(_aiPackage).Procedure),
         Function.GetEquipped => (Combat ?? throw new NotSupportedException("Creature equipment has no live owner.")).PackageIsEquipped(condition.FormArgument1) ? 1 : 0,
         Function.IsSneaking => Activity.Sneaking ? 1 : 0,
         Function.IsRunning => Activity.Running ? 1 : 0,
