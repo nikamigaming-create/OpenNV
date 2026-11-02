@@ -134,7 +134,7 @@ internal sealed partial class RuntimeNativeActorCombat
     {
         14 when condition.Argument1 is >= 25 and <= 31 => _world.BodyParts(_state.Reference)
             .LimbCondition((int)condition.Argument1, _world.Health(_state.Reference).Base, _state.Injury?.LimbDamage),
-        25 => Activity.Running || _actor is RuntimeNativeNpc { Traveling: true } ? 1 : 0,
+        25 => Activity.Running || PackageMoving || _actor is RuntimeNativeNpc { Traveling: true } ? 1 : 0,
         49 => _world.GetSleeping(_state.Reference),
         72 => _state.Base == condition.FormArgument1 ? 1 : 0,
         77 => _state.HitReactionRandom.NextBounded(100),
