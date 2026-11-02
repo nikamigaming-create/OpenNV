@@ -27,7 +27,14 @@ internal sealed record BotCombatShot(long Ordinal, string Weapon, string? Ammuni
     BotCombatImpact? ImmediateImpact = null);
 
 internal sealed record BotCombatFiring(long Shots, int PendingImpacts, BotCombatShot? Last,
-    BotCombatImpact? LastImpact, string? ImpactToken, string? Error = null);
+    BotCombatImpact? LastImpact, string? ImpactToken, string? Error = null)
+{
+    public long MeleeAttacks { get; init; }
+    public BotCombatMelee? LastMelee { get; init; }
+}
+
+internal sealed record BotCombatMelee(long Ordinal, string Weapon, string? Reference,
+    bool Hit, float? HealthDamage, float? HealthBefore, float? HealthAfter);
 
 internal sealed record BotCombatObservation(long Sample, string Scene, BotSkillBinding Binding,
     Vector3 Camera, Vector3 Forward, Vector3 Muzzle, Vector3 MuzzleForward, string? AimedReference,
