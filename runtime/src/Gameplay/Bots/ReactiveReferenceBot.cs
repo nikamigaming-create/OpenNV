@@ -489,7 +489,12 @@ internal sealed partial class ReactiveReferenceBot
                 CancelRoute(); _path = null; _projectionRadius = 2;
                 _endpointReplans = _obstructionReplans = 0;
             }
-            var intent = _steering.Step(state.Camera, state.Forward, aim, move, seconds);
+            // Route waypoints and closing progress belong to the player root.
+            // A third-person camera can be metres behind that root; steering
+            // from it keeps driving past a reached waypoint or orbiting it.
+            // Retain eye height for pitch and the actual view for target aim.
+            var steeringOrigin = move ? new Vector3(state.Position.X, state.Camera.Y, state.Position.Z) : state.Camera;
+            var intent = _steering.Step(steeringOrigin, state.Forward, aim, move, seconds);
             if (!move) intent = intent with { AimAt = state.Aim };
             if (intent.Forward)
             {
