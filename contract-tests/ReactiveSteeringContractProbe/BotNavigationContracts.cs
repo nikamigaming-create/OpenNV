@@ -20,7 +20,23 @@ internal static class BotNavigationContracts
         RefinementProvenance();
         ObservedProjectionHandoff();
         WaypointFloorHandoff();
+        CameraPullbackNavigation();
         Console.WriteLine("Reference bot navigation: short/inside endpoints, partial corridors, projection refinement, moving-target endpoints, queued/stale planning, ordinary route doors, ray result, closing progress and stationary bounds PASS.");
+    }
+
+    private static void CameraPullbackNavigation()
+    {
+        foreach (var pullback in new[] { 0f, 5f })
+        {
+            var observation = Observation(6) with { Camera = new(0, 1, -pullback) };
+            SteeringIntent input = default;
+            var bot = new ReactiveReferenceBot(_ => observation, (_, end, _) =>
+                new([new(1, 0, .2f)], end, end, false), (intent, _) => input = intent);
+            bot.Start("reference", "approach", 1); bot.Tick(.016f);
+            Require(!input.Forward && input.YawRadians > 0,
+                "Camera pullback drove forwards past a lateral player-root waypoint instead of turning.");
+            bot.Stop();
+        }
     }
 
     private static void WaypointFloorHandoff()

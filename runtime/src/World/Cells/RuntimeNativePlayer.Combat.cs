@@ -72,6 +72,9 @@ internal partial class RuntimeNativePlayer
         using var query = PhysicsRayQueryParameters3D.Create(origin, target, _configuration.Player.CollisionLayer, excluded);
         query.CollideWithAreas = true;
         query.CollideWithBodies = false;
+        // A source strike bone may already overlap the target anatomy at its
+        // Hit key. That is contact, even with no intervening entry surface.
+        query.HitFromInside = true;
         using var collision = GetWorld3D().DirectSpaceState.IntersectRay(query);
         if (collision.Count == 0) return null;
         if (collision["collider"].AsGodotObject() is not Node collider) return null;
