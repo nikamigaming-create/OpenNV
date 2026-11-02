@@ -12,24 +12,43 @@ internal static class BotCombatTelemetry
     {
         var firing = handling.GetProperty("firing");
         var shots = firing.GetProperty("shots").GetInt64();
+        var meleeAttacks = firing.GetProperty("meleeAttacks").GetInt64();
         var pending = firing.GetProperty("pendingHitscanImpacts").GetInt32();
         var error = Error(handling, "error") ?? Error(firing, "error", "damageError", "hitEventError", "muzzleError");
         if (firing.TryGetProperty("effectErrors", out var effects) && effects.ValueKind == JsonValueKind.Object)
             error ??= effects.EnumerateObject().Select(value => value.Value.GetString()).FirstOrDefault(value => value is not null);
         BotCombatShot? last = null;
+        BotCombatMelee? lastMelee = null;
         if (Object(firing, "last") is { } shot)
         {
-            var weapon = shot.GetProperty("weapon").GetString()!;
-            var projectile = shot.GetProperty("projectile").GetString()!;
-            BotCombatImpact? immediate = null;
-            if (Object(shot, "damage") is { } damage)
-                immediate = new(Form(damage.GetProperty("reference")), weapon, projectile,
-                    damage.GetProperty("healthDamage").GetSingle(), damage.GetProperty("died").GetBoolean(),
-                    error is null, error, damage.GetProperty("healthBefore").GetSingle(), damage.GetProperty("healthAfter").GetSingle());
-            last = new(shot.GetProperty("ordinal").GetInt64(), weapon, Text(shot, "ammunition"), projectile,
-                Text(shot, "reference"), Text(shot, "collider"), shot.GetProperty("distanceMeters").GetSingle(),
-                shot.GetProperty("projectiles").GetInt32(), shot.GetProperty("projectileDamageEventsPending").GetInt32(), immediate);
-            error ??= Error(shot, "damageError");
+            // The player publishes distinct source melee and projectile events
+            // through the same last-action slot. A melee Hit has no projectile
+            // and does not advance the ranged discharge ordinal.
+            if (Text(shot, "kind") == "source-melee-Hit")
+            {
+                float? Number(string name) => shot.GetProperty(name) is { ValueKind: JsonValueKind.Number } number
+                    ? number.GetSingle() : null;
+                lastMelee = new(shot.GetProperty("ordinal").GetInt64(), shot.GetProperty("weapon").GetString()!,
+                    Text(shot, "reference"), shot.GetProperty("hit").GetBoolean(), Number("damage"),
+                    Number("healthBefore"), Number("healthAfter"));
+                error ??= Error(shot, "impactError");
+            }
+            else
+            {
+                if (Text(shot, "kind") is { } kind)
+                    throw new InvalidDataException($"Native firing event kind {kind} has no combat observation owner.");
+                var weapon = shot.GetProperty("weapon").GetString()!;
+                var projectile = shot.GetProperty("projectile").GetString()!;
+                BotCombatImpact? immediate = null;
+                if (Object(shot, "damage") is { } damage)
+                    immediate = new(Form(damage.GetProperty("reference")), weapon, projectile,
+                        damage.GetProperty("healthDamage").GetSingle(), damage.GetProperty("died").GetBoolean(),
+                        error is null, error, damage.GetProperty("healthBefore").GetSingle(), damage.GetProperty("healthAfter").GetSingle());
+                last = new(shot.GetProperty("ordinal").GetInt64(), weapon, Text(shot, "ammunition"), projectile,
+                    Text(shot, "reference"), Text(shot, "collider"), shot.GetProperty("distanceMeters").GetSingle(),
+                    shot.GetProperty("projectiles").GetInt32(), shot.GetProperty("projectileDamageEventsPending").GetInt32(), immediate);
+                error ??= Error(shot, "damageError");
+            }
         }
         BotCombatImpact? impact = null;
         string? token = null;
@@ -51,7 +70,7 @@ internal static class BotCombatTelemetry
                 Text(requests[0], "projectile") != last.Projectile || Text(requests[0], "reference") != last.Reference)
                 error ??= "Native pending impact does not belong to the observed single source shot.";
         }
-        return new(shots, pending, last, impact, token, error);
+        return new(shots, pending, last, impact, token, error) { MeleeAttacks = meleeAttacks, LastMelee = lastMelee };
     }
 
     internal static JsonElement? Object(JsonElement root, string name) =>

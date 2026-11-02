@@ -334,7 +334,7 @@ internal static class CombatSkillContracts
     private static void NativeObservationShape()
     {
         using var document = JsonDocument.Parse("""
-            {"error":null,"firing":{"shots":7,"pendingHitscanImpacts":0,"pendingHitscan":[],
+            {"error":null,"firing":{"shots":7,"meleeAttacks":0,"pendingHitscanImpacts":0,"pendingHitscan":[],
              "error":null,"damageError":null,"hitEventError":null,"muzzleError":null,"effectErrors":{},
              "last":{"ordinal":7,"weapon":"Fixture.esm:000201","ammunition":"Fixture.esm:000301",
               "projectile":"Fixture.esm:000401","reference":"Fixture.esm:000101","collider":"/actual/body",
@@ -347,7 +347,7 @@ internal static class CombatSkillContracts
             firing.Last?.ImmediateImpact is { Reference: Target, HealthDamage: 35, Died: true, HitEventMarked: true },
             "Native source FormKey/shot/contact observation was not read exactly.");
         using var delayed = JsonDocument.Parse("""
-            {"firing":{"shots":8,"pendingHitscanImpacts":1,
+            {"firing":{"shots":8,"meleeAttacks":0,"pendingHitscanImpacts":1,
              "pendingHitscan":[{"weapon":"Fixture.esm:000201","projectile":"Fixture.esm:000401","reference":"another-actor"}],
              "last":{"ordinal":8,"weapon":"Fixture.esm:000201","ammunition":"Fixture.esm:000301",
               "projectile":"Fixture.esm:000401","reference":"Fixture.esm:000101","collider":"/actual/body",
@@ -356,7 +356,7 @@ internal static class CombatSkillContracts
             """);
         Require(BotCombatTelemetry.ReadFiring(delayed.RootElement).Error is not null, "A different source pending impact was silently bound to this shot.");
         using var resolved = JsonDocument.Parse("""
-            {"firing":{"shots":8,"pendingHitscanImpacts":0,"last":null,
+            {"firing":{"shots":8,"meleeAttacks":0,"pendingHitscanImpacts":0,"last":null,
              "lastHitscanImpact":{"state":"actor-damaged","reference":"Fixture.esm:000101",
               "weapon":"Fixture.esm:000201","projectile":"Fixture.esm:000401",
               "healthBefore":27,"healthAfter":17,"healthDamage":10,"died":false,"hitEventMarked":true}}}
@@ -364,6 +364,16 @@ internal static class CombatSkillContracts
         Require(BotCombatTelemetry.ReadFiring(resolved.RootElement).LastImpact is
             { HealthBefore: 27, HealthAfter: 17, HealthDamage: 10 },
             "Delayed impact lost its own actor health transaction.");
+        using var melee = JsonDocument.Parse("""
+            {"firing":{"shots":8,"meleeAttacks":3,"pendingHitscanImpacts":0,
+             "last":{"ordinal":3,"kind":"source-melee-Hit","weapon":"Fixture.esm:000202",
+              "reference":"Fixture.esm:000101","hit":true,"damage":12,"healthBefore":30,"healthAfter":18,
+              "impactError":null},"lastHitscanImpact":null}}
+            """);
+        Require(BotCombatTelemetry.ReadFiring(melee.RootElement) is
+            { Shots: 8, MeleeAttacks: 3, Last: null, Error: null,
+                LastMelee: { Ordinal: 3, Hit: true, HealthDamage: 12, HealthBefore: 30, HealthAfter: 18 } },
+            "Source melee event was read as a projectile discharge or lost its own health transaction.");
     }
 
     private static void Refusal(BotCombatObservation rejected, string kind, BotCombatObservation? initial = null)
