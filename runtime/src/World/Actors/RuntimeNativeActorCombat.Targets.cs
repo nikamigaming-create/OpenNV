@@ -193,6 +193,7 @@ internal sealed partial class RuntimeNativeActorCombat
         if (_opponent is null) return null;
         using var query = PhysicsRayQueryParameters3D.Create(origin, _opponent.BodyTargetPoint(), _mask | _layer, new(CollisionRids));
         query.CollideWithAreas = true;
+        query.HitFromInside = true;
         using var hit = _actor.GetWorld3D().DirectSpaceState.IntersectRay(query);
         return hit.Count != 0 && hit["collider"].AsGodotObject() is Node collider && Find(collider) == _opponent ? collider : null;
     }
