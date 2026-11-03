@@ -63,6 +63,30 @@ Source effect-shader decoding and a persistent, preflighted delivered-script
 Start/Finish lifecycle pass their selected checks. Pulse/fire effect admission
 remains closed until actor-surface emission, shader evaluation, add-ons, recast
 and gore state have qualified owners.
+
+PR350 is merged with all five hosted checks passing. The next shared repair
+batch preserves authored empty billboard nodes, ignores texture indices never
+visited by the loaded geometry, caches immutable actor perk declarations and
+prepares dormant impact resources on equip. Synthetic billboard/texture checks
+pass. The owned 496-weapon audit now reports findings on 61 records, down from
+67, with 19 assembly failures removed across 15 records. The complete runtime
+gate and owned impact/projectile lifecycle checks pass; this is not encounter
+acceptance.
+A bounded 9mm/Bloatfly comparison reached source-area setup but stopped before
+firing on retail pose telemetry failure. Both games closed after 109 seconds.
+
+The Q-35 now completes ordinary equip, one discharge and reload from 11 to 12
+rounds in both games in a bounded source-gecko setup. Neither registered target
+damage, so hit parity remains open. Both games closed after 132 seconds.
+OpenNV's first-shot work measured 49.50 ms. A following shared preparation change
+holds a detached projectile model for first discharge and reuses immutable
+geometry for independent subsequent flights. The full gate passes and the
+Release is exported. A 97-second follow-up fired three shots with no weapon
+errors; shot work was 2.21, 20.32 and 26.84 ms. All missed the moving gecko with
+unconfirmed aim precision, so contact and causal performance acceptance remain
+open. The session closed before its planned unpaused timing window.
+The available legacy checkpoints lack retained inventory script ordering; fresh
+ordinary New Game/acquisition/save is required to check those scripts honestly.
 Unrelated classic import changes remain outside the combat publication.
 
 ## Current gameplay evidence

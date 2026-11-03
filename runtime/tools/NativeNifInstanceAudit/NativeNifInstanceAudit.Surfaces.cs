@@ -146,6 +146,7 @@ public partial class NativeNifInstanceAudit
 
     private static void ExerciseDormantBillboardEnvironmentFlag()
     {
+        ExerciseAuthoredEmptyBillboard();
         string? shaderCode = null;
         foreach (var flags2 in new uint[] { 1, 0x2001, 0x4001, 0x6001, 0xa001, 0xe001 })
         {
@@ -192,6 +193,39 @@ public partial class NativeNifInstanceAudit
         }
     }
 
+    private static void ExerciseAuthoredEmptyBillboard()
+    {
+        var scene = RuntimeNativeNifMeshBuilder.Build(
+            FalloutNifFile.Read(SurfaceFixture(0x82000101, billboardMode: 1, billboardChildren: false)), .02f);
+        try
+        {
+            var node = scene.Root.GetChild<Node3D>(0);
+            var owner = node.GetChildren().OfType<NativeNifBillboard>().Single();
+            if (scene.Surfaces != 0 || node.GetMeta("opennv_nif_geometry_block", -1).AsInt32() != -1 ||
+                node.GetMeta("opennv_nif_source_name").AsString() != "surface" ||
+                node.GetMeta("opennv_nif_billboard_mode").AsInt32() != 1 ||
+                node.GetMeta("opennv_nif_billboard_disposition").AsString() != "authored-empty" || owner.IsProcessing())
+                throw new InvalidDataException("Authored empty billboard lost its source node, mode or dormant disposition.");
+        }
+        finally { scene.Root.Free(); }
+
+        Reject(1, children: true, expected: "Billboard surface has no source shader owner.");
+        Reject(7, children: false, expected: "NIF billboard mode 7 is unbound.");
+        GD.Print("OPENNV_AUTHORED_EMPTY_BILLBOARD_PASS sourceNodeRetained=true modeRetained=true populatedUnboundRejected=true unsupportedModeRejected=true");
+
+        static void Reject(ushort mode, bool children, string expected)
+        {
+            try
+            {
+                var rejected = RuntimeNativeNifMeshBuilder.Build(
+                    FalloutNifFile.Read(SurfaceFixture(0x82000101, billboardMode: mode, billboardChildren: children)), .02f);
+                rejected.Root.Free();
+                throw new InvalidDataException("An unsupported billboard declaration was admitted.");
+            }
+            catch (NotSupportedException error) when (error.Message == expected) { }
+        }
+    }
+
     private static void ExerciseLocalMapHideSecret()
     {
         string? shaderCode = null;
@@ -216,7 +250,8 @@ public partial class NativeNifInstanceAudit
     }
 
     private static byte[] SurfaceFixture(uint flags, string environmentMask = "", uint flags2 = 1, string environmentTexture = "",
-        ushort? refractionFlags = null, int refractionTarget = 3, byte alphaThreshold = 128)
+        ushort? refractionFlags = null, int refractionTarget = 3, byte alphaThreshold = 128,
+        ushort? billboardMode = null, bool billboardChildren = true)
     {
         void Net(BinaryWriter w, int controller = -1) { w.Write(0); w.Write(0); w.Write(controller); }
         void Av(BinaryWriter w, params int[] properties)
@@ -227,7 +262,14 @@ public partial class NativeNifInstanceAudit
         }
         (string Type, byte[] Data)[] blocks =
         [
-            ("NiNode", Bytes(w => { Av(w); w.Write(1); w.Write(1); w.Write(0); })),
+            (billboardMode is null ? "NiNode" : "NiBillboardNode", Bytes(w =>
+            {
+                Av(w);
+                w.Write(billboardChildren ? 1 : 0);
+                if (billboardChildren) w.Write(1);
+                w.Write(0);
+                if (billboardMode is { } mode) w.Write(mode);
+            })),
             ("NiTriShape", Bytes(w => { Av(w, 3, 5); w.Write(2); w.Write(-1); w.Write(0); w.Write(-1); w.Write(false); })),
             ("NiTriShapeData", Bytes(w =>
             {

@@ -38,7 +38,9 @@ internal static partial class ActorSourceContracts
                 Record("NPC_", 7, Field("EDID", Text("PlayerBase"))),
                 Record("NPC_", 0x80b, Field("PKID", BitConverter.GetBytes(0x8f6u))),
                 Creature(0x803, 0, 0, "creatures/test/skeleton.nif", "../escape.nif", 1),
-                Creature(0x804, 256, 0x800, "creatures/test/skeleton.nif", "body.nif", 1),
+                Creature(0x804, 256, 0x800, "creatures/test/skeleton.nif", "body.nif", 1,
+                    Field("PRKR", Join(BitConverter.GetBytes(0x8e2u), [0, 0, 0, 0])),
+                    Field("PRKR", Join(BitConverter.GetBytes(0x8e5u), [1, 0, 0, 0]))),
                 Creature(0x805, 66, 0x820, "creatures/local/skeleton.nif", "local.nif", 1),
                 Creature(0x806, 66, 0x821, "creatures/local/skeleton.nif", "local.nif", 1),
                 Creature(0x80c, 64, 0, "creatures/local/skeleton.nif", "local.nif", 1),
@@ -56,7 +58,7 @@ internal static partial class ActorSourceContracts
                 Record("PERK", 0x8e2, Field("PRKE", [2, 0, 0]), Field("DATA", [0, 3, 2]),
                     Field("PRKC", [1]), Field("CTDA", Condition(35, 0)), Field("EPFT", [1]),
                     Field("EPFD", BitConverter.GetBytes(2f)), Field("PRKF", [])),
-                Record("CSTY", 0x8e3, Field("CSSD", new byte[64])),
+                Record("CSTY", 0x8e3, Field("CSSD", new byte[64])), Record("PERK", 0x8e5),
                 Cell(0x881, Record("REFR", 0x908, Field("NAME", BitConverter.GetBytes(0x844u)),
                     Field("XSRF", BitConverter.GetBytes(0x0a080002u)), Field("XSRD", BitConverter.GetBytes(0u)),
                     Field("DATA", new float[] { 10, 20, 30, 0, 0, 1 }.SelectMany(BitConverter.GetBytes).ToArray()))),
@@ -404,6 +406,36 @@ internal static partial class ActorSourceContracts
             world.ChangeFaction(Key(0x901), Key(0x8e1), -1, changeBase: false);
             Check(world.ActorFactions(Key(0x901))[Key(0x8e1)] == -1 && world.ActorFactions(Key(0x902))[Key(0x8e1)] == 2,
                 "Base faction rank or reference removal lost its independent scope.");
+            var sourcePerk = Key(0x8e5);
+            var teammatePerk = Key(0x8e2);
+            var perkPlayer = Key(0x14);
+            var perkActor = Key(0x901);
+            var perkPeer = Key(0x902);
+            Check(world.AcquiredPerks(perkActor).SequenceEqual([sourcePerk]), "Actor lost its declared source perk.");
+            var priorObserver = FalloutPluginRecord.ReadObserver;
+            var repeatedBaseReads = 0;
+            try
+            {
+                FalloutPluginRecord.ReadObserver = (record, _) =>
+                {
+                    if (record.FormKey == Key(0x804)) repeatedBaseReads++;
+                };
+                Check(world.AcquiredPerks(perkPeer).SequenceEqual([sourcePerk]) && world.AcquiredPerks(perkActor).SequenceEqual([sourcePerk]),
+                    "Same-base references lost their cached immutable declaration.");
+            }
+            finally { FalloutPluginRecord.ReadObserver = priorObserver; }
+            Check(repeatedBaseReads == 0, "Acquired perk queries reread the shared winning actor declaration.");
+            world.ChangePerk(perkPlayer, teammatePerk, true, forTeammates: true);
+            world.SetPlayerTeammate(perkActor, true);
+            Check(world.AcquiredPerks(perkActor).SequenceEqual([teammatePerk, sourcePerk]) &&
+                world.AcquiredPerks(perkPeer).SequenceEqual([sourcePerk]) && !world.AcquiredPerks(perkPlayer).Contains(teammatePerk),
+                "Cached actor perks lost live teammate grants or rank-zero source order.");
+            world.SetPlayerTeammate(perkActor, false);
+            world.ChangePerk(perkPlayer, teammatePerk, false, forTeammates: true);
+            Check(world.AcquiredPerks(perkActor).SequenceEqual([sourcePerk]), "Dismissal retained a shared grant.");
+            world.ChangePerk(perkActor, sourcePerk, false);
+            Check(world.AcquiredPerks(perkActor).Count == 0 && world.AcquiredPerks(perkPeer).SequenceEqual([sourcePerk]),
+                "Reference removal modified the immutable base perk declaration.");
             world.ChangePerk(Key(0x901), Key(0x8e2), true);
             world.SetActorFlag(Key(0x901), true, friendlyHits: true);
             world.SetCombatStyle(Key(0x901), Key(0x8e3));
@@ -416,7 +448,8 @@ internal static partial class ActorSourceContracts
             {
                 coldOverrides.Restore(world.Capture()); coldOverrides.RestoreActorOverrides(savedOverrides);
                 Check(coldOverrides.IgnoresFriendlyHits(Key(0x901)) && coldOverrides.ActorFactions(Key(0x902))[Key(0x8e1)] == 2 &&
-                    coldOverrides.AcquiredPerks(Key(0x901)).Contains(Key(0x8e2)) && coldOverrides.CombatStyle(Key(0x901))?.Form == Key(0x8e3),
+                    coldOverrides.AcquiredPerks(perkActor).SequenceEqual([teammatePerk]) &&
+                    coldOverrides.AcquiredPerks(perkPeer).SequenceEqual([sourcePerk]) && coldOverrides.CombatStyle(perkActor)?.Form == Key(0x8e3),
                     "Cold restoration lost companion effects or base faction scope.");
                 Reject(() => coldOverrides.RestoreActorOverrides([savedOverrides[0] with { SourceSha256 = new string('0', 64) }]));
                 Check(coldOverrides.IgnoresFriendlyHits(Key(0x901)), "Rejected actor restoration partially replaced authoritative state.");

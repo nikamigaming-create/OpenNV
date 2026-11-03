@@ -9,6 +9,7 @@ internal sealed partial class FalloutReferenceWorld
 {
     private readonly Dictionary<FalloutFormKey, FalloutActorOverrides> _actorOverrides = [];
     private readonly FalloutAbilityModifiers _perkAbilities = new(records);
+    private readonly Dictionary<FalloutPluginRecord, (Dictionary<FalloutFormKey, int> Ranks, IReadOnlyList<FalloutFormKey> Acquired)> _basePerks = [];
     private static string RecordHash(FalloutPluginRecord record) => Convert.ToHexString(SHA256.HashData(record.ReadData())).ToLowerInvariant();
 
     private FalloutPluginRecord ActorOverrideSource(FalloutFormKey target)
@@ -102,16 +103,29 @@ internal sealed partial class FalloutReferenceWorld
         var shared = _actorOverrides.GetValueOrDefault(player)?.TeammatePerks ?? [];
         if (forTeammates && reference == player)
             return shared.Where(item => item.Value > 0).Select(item => item.Form).ToArray();
-        var result = new Dictionary<FalloutFormKey, int>();
         var source = records.GetEffective(ActorBase(reference));
-        foreach (var field in source.ReadSubrecords().Where(field => field.Signature == "PRKR"))
+        source.Plugin.ValidateReadSource();
+        if (!_basePerks.TryGetValue(source, out var sourcePerks))
         {
-            var data = field.Data.Span;
-            if (data.Length != 8 || data[4] > 1) throw new NotSupportedException("Actor perk rank extent/rank is unbound.");
-            result[source.Plugin.AdjustFormId(BinaryPrimitives.ReadUInt32LittleEndian(data))] = data[4];
+            var ranks = new Dictionary<FalloutFormKey, int>();
+            foreach (var field in source.ReadSubrecords())
+            {
+                if (field.Signature != "PRKR") continue;
+                var data = field.Data.Span;
+                if (data.Length != 8 || data[4] > 1) throw new NotSupportedException("Actor perk rank extent/rank is unbound.");
+                ranks[source.Plugin.AdjustFormId(BinaryPrimitives.ReadUInt32LittleEndian(data))] = data[4];
+            }
+            sourcePerks = (ranks, Array.AsReadOnly(ranks.Where(item => item.Value > 0).Select(item => item.Key).ToArray()));
+            _basePerks.Add(source, sourcePerks);
         }
-        foreach (var item in _actorOverrides.GetValueOrDefault(reference)?.Perks ?? []) result[item.Form] = item.Value;
-        if (reference != player && Actor(reference).PlayerTeammate)
+        var overrides = _actorOverrides.GetValueOrDefault(reference)?.Perks ?? [];
+        var teammate = reference != player && Actor(reference).PlayerTeammate;
+        if (overrides.Count == 0 && (!teammate || shared.Count == 0)) return sourcePerks.Acquired;
+        // Only the winning declaration is cached. Mutable grants and removals
+        // are merged in their existing order on each live reference query.
+        var result = new Dictionary<FalloutFormKey, int>(sourcePerks.Ranks);
+        foreach (var item in overrides) result[item.Form] = item.Value;
+        if (teammate)
             foreach (var item in shared.Where(item => item.Value > 0)) result[item.Form] = item.Value;
         return result.Where(item => item.Value > 0).Select(item => item.Key).ToArray();
     }

@@ -69,8 +69,8 @@ ordering remain unfinished or unqualified. Do not widen admission to hide them.
 
 The complete required runtime gate passes: Release/Debug, formatting/analyzers,
 contract probes, launcher checks and native Godot loading/behavior audits. The
-selected existing owned weapon audit completed all 496 records; 67 still report
-findings (previously 83). These are assembly checks, not accepted encounters.
+selected existing owned weapon audit completed all 496 records; 61 still report
+findings (previously 67). These are assembly checks, not accepted encounters.
 The current Release executable is `tmp/development-runtime/windows/OpenNV.exe`.
 
 Bounded source-gecko encounters used the existing guarded player MoveTo followed
@@ -86,7 +86,7 @@ scale 1, with ten FPS samples between 58 and 60, p95 frame interval 18.73 ms and
 maximum 22.50 ms across the 1,188 observed host-draw intervals. This is not
 sustained 4K60 or display-presentation acceptance. The earlier RCW window retained
 a 166.62 ms spike; different encounter states do not establish causal speedup.
-The active branch addresses synchronous beam/impact work with shared immutable
+Merged PR350 addresses synchronous beam/impact work with shared immutable
 geometry, independent materials/controllers, preparation on equip, and bounded
 reuse of completed effects. Fresh overlaps still create independent owners. Its
 complete required runtime gate passes. Selected owned controller/geometry and
@@ -118,10 +118,49 @@ The compact run does expose OpenNV's unowned animated muzzle light and 28.99 ms
 last-shot work, including 22.54 ms in damage scheduling. Aggregate timing includes
 loading/menu states and cannot certify combat 4K60.
 
-Next owner is root: publish the verified effects/throughput batch, then repair
-the shared animated muzzle-light lifetime and investigate actual input/discharge
-timing and synchronous damage scheduling before the next bounded encounter batch.
-The branch preserves finite signed projectile coefficients, with unqualified
+A bounded 9mm/Bloatfly comparison reached the source area in OpenNV and equipped
+the weapon in both games, but retail's scoped pose sample reported seven read
+failures. Firing was not attempted; both games closed after 109 seconds. This is
+an observation failure, not an accepted encounter or a weapon damage verdict.
+
+The active model/impact-preparation branch repairs source-empty billboard
+handling and nonnegative texture-index declarations that the loaded geometry
+never visits. Populated unsupported billboards and invalid signed indices still
+fail. Existing synthetic checks pass. The owned audit completes all 496 records
+with findings on 61, down from 67; 19 assembly failures across 15 records are gone.
+This remains assembly/admission coverage, not encounter acceptance.
+
+It also caches immutable actor perk declarations while merging live reference
+and teammate grants per query, prepares dormant impact graphs on equip within
+the existing eight-entry pool, and separates beam time from casing time. Eager
+preparation errors remain visible separately from actual contact errors. First
+activation, concurrent effects and source audio retain independent owners.
+The owned impact-lifecycle check passes, including actual finite audio retirement;
+unqualified reverb and listener-submersion lanes remain explicit.
+
+A paired Q-35/source-gecko session completed one discharge in each game and
+reload from 11 to 12 rounds, then closed both games after 132 seconds. OpenNV
+reported no weapon errors; neither engine registered target damage. Its first
+shot took 49.50 ms in the combined preparation/collision path. The branch now
+prepares one detached projectile model on equip and shares immutable geometry
+across later independent flight graphs. The owned Q-35 preparation check passes
+for dormancy, overlapping flights, same-model re-equip and retirement. The final
+runtime gate passes and the Release was exported with these changes. A 97-second
+follow-up fired three ordinary Q-35 shots with no weapon errors, then closed
+normally. Their shot work measured 2.21, 20.32 and 26.84 ms. All missed the moving
+gecko; aim precision was unconfirmed. The run stopped before its performance
+window. This does not establish hit parity, causal speedup or sustained 4K60.
+
+The selected legacy checkpoint lacks PlayerInventoryChangeEntries. Its carried
+script traversal cannot recover the historical source order. A bounded scan of
+existing nearby checkpoints found no usable journal. Fresh New Game initializes
+it; use ordinary acquisition and F5 to establish a current checkpoint. Never
+backfill or edit saved history.
+
+Next owner is root: publish this verified batch, establish the fresh ordinary
+checkpoint, then continue shared contact and frame-budget repairs. Animated muzzle phase/refire semantics,
+actual input/discharge timing and remaining contact work are still open.
+Merged PR350 preserves finite signed projectile coefficients, with unqualified
 negative flight behavior refused at admission. It adds source EFSH metadata and
 a preflighted, persistent Start/Finish lifecycle, but no pulse/fire admission:
 posed actor emission, shader evaluation, add-ons, recast and gore state remain
@@ -133,13 +172,15 @@ exclude paused/menu timing from gameplay results.
 
 ## Publication and local candidate
 
-PR348 and the navigation/script-cache follow-up PR349 are merged with all hosted
-checks passing. Main was verified against origin/main at
-`26a2d9fe4bfd8d34ead88b9a0ff66ab11bf797f5`. The active branch is
-`codex/combat-effects-and-throughput`, based on that main. Publish completed
+PR348, PR349 and the effect-lifetime/resource batch PR350 are merged with all
+five hosted checks passing. Main was verified against origin/main at
+`33243bc6a8b936c244d27e737ecc904a6775718a`, with no open PR for that batch.
+The active branch is `codex/weapon-models-and-impact-preparation`, based on that main. Publish completed
 changes through a checked PR and verify main against origin/main afterward.
 
-The current Release executable is `tmp/development-runtime/windows/OpenNV.exe`.
+The current Release executable is `tmp/development-runtime/windows/OpenNV.exe`;
+it contains the verified model, perk, impact and projectile preparation changes.
+The latest gameplay session is closed; recording stayed off.
 Unrelated classic import changes remain outside these commits. Private assets,
 saves, captures and raw reverse-engineering outputs stay outside public history.
 The November 2 experimental ZIP predates the repairs and is not current.

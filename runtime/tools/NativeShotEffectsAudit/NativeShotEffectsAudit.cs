@@ -24,27 +24,41 @@ public partial class NativeShotEffectsAudit : Node3D
             var shot = FalloutWeaponShot.Read(records, form, magazine.Ammunition);
             const float units = .0142875f;
             CheckGrowFade();
+            CheckProjectilePreparation(records, content, units);
             await CheckImpactMaterials(content, units);
             var camera = new Camera3D { Position = new(0, 1.7f, 0) }; AddChild(camera);
-            long[] ExerciseMuzzle(double[] steps)
+            async Task<long[]> ExerciseMuzzle(double[] steps)
             {
                 if (!content.TryRead(shot.Projectile.MuzzleFlash!, null, out var bytes, out _)) throw new FileNotFoundException("Muzzle model missing.");
                 var root = NativeNifMeshBuilder.Build(bytes, units).Root; AddChild(root);
+                root.SetMeta("opennv_reference_form_key", records.RuntimeFormKey(0x14).ToString());
+                var events = new FalloutAnimationSoundEvents(records.RuntimeFormKey(0x14), () => root.IsInsideTree());
+                var sounds = new NativeOwnedAnimationSoundPlayer(records, content, root, units, new FalloutSoundRandomState(1), events);
+                AddChild(sounds);
                 try
                 {
-                    var clock = new NativeNifEffectPlayback(root, shot.Projectile.MuzzleSeconds, false); clock.Start();
+                    var clock = new NativeNifEffectPlayback(root, shot.Projectile.MuzzleSeconds, false, sounds); clock.Start();
+                    if (clock.AudioError is { } audioError)
+                        throw new InvalidDataException($"Source muzzle audio failed: {audioError}; {JsonSerializer.Serialize(sounds.State)}");
                     foreach (var step in steps) clock.Advance(step);
                     var births = clock.Particles.Select(p => p.BirthCount).ToArray();
                     if (births.Length == 0 || births.Sum() == 0 || clock.Particles.Any(p => p.EmissionEnabled))
                         throw new InvalidOperationException("Muzzle source emission was skipped or did not stop.");
                     clock.Advance(10);
                     if (clock.Active || clock.Particles.Any(p => p.ActiveCount != 0)) throw new InvalidOperationException("Expired muzzle retained particles.");
+                    var waitStarted = System.Diagnostics.Stopwatch.GetTimestamp();
+                    while ((sounds.HasPendingEmitterSounds(root) || sounds.HasEmitterVoices(root)) &&
+                        System.Diagnostics.Stopwatch.GetElapsedTime(waitStarted).TotalSeconds < 5)
+                        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                    if (!sounds.CanRetireEmitter(root))
+                        throw new InvalidOperationException("Expired muzzle did not retire its source audio: " + JsonSerializer.Serialize(sounds.State));
+                    GD.Print($"OPENNV_MUZZLE_AUDIO_LIFETIME_PASS events={events.EventCount} remainingVoices=0 partialMixLanes={string.Join(',', events.OwnedLanes)}");
                     return births;
                 }
-                finally { root.Free(); }
+                finally { sounds.RetirePlayback(); sounds.Free(); root.Free(); }
             }
-            var regular = ExerciseMuzzle(Enumerable.Repeat(1.0 / 120, 30).ToArray());
-            var hitch = ExerciseMuzzle([.25]);
+            var regular = await ExerciseMuzzle(Enumerable.Repeat(1.0 / 120, 30).ToArray());
+            var hitch = await ExerciseMuzzle([.25]);
             if (!regular.SequenceEqual(hitch)) throw new InvalidOperationException("Host hitch changed the source emission count.");
             GD.Print($"OPENNV_MUZZLE_CLOCK_PASS weapon={form} particles={string.Join(',', regular)} hitchSeconds=.25 expired=true");
             var blood = FalloutImpact.Resolve(records, shot.ImpactDataSet!.Value, 6)!;
@@ -106,6 +120,12 @@ public partial class NativeShotEffectsAudit : Node3D
             var effects = new RuntimeNativeShotEffects(records, content, units, shooter, 1); AddChild(effects);
             try
             {
+                try { effects.PrepareImpactDataSet(shot.ImpactDataSet!.Value); }
+                catch (NotSupportedException error)
+                { GD.Print($"OPENNV_IMPACT_PREPARATION_REFUSAL {error.Message}"); }
+                var warmed = JsonSerializer.SerializeToElement(effects.State);
+                if (warmed.GetProperty("preparedImpacts").GetInt32() is < 1 or > 8 || warmed.GetProperty("active").GetInt32() != 0)
+                    throw new InvalidDataException("Equipped IPDS preparation published active effects or exceeded the retained pool.");
                 effects.PrepareShell(weapon);
                 effects.EjectCasing(new(new Basis(Vector3.Up, .7f), new(0, 2, -1)), camera.GlobalPosition);
                 var casing = effects.FindChildren("*", "", true, false).OfType<RuntimeNifRigidBody>().Single();
@@ -144,7 +164,26 @@ public partial class NativeShotEffectsAudit : Node3D
                     // Isolate recycling from wall-clock audio completion. The
                     // ordinary gameplay pass checks the original impact voices.
                     var silentBlood = blood with { Sounds = [] };
+                    var soundOwner = pool.GetChildren().OfType<NativeOwnedAnimationSoundPlayer>().Single();
+                    pool.PrepareImpact(blood);
+                    pool.PrepareImpact(blood);
+                    var unused = Enumerable.Range(0, 12).Select(material => FalloutImpact.Resolve(records, shot.ImpactDataSet!.Value, material))
+                        .OfType<FalloutImpact>().First(impact => impact.Form != blood.Form);
+                    try
+                    {
+                        pool.PrepareImpact(unused with { Model = "meshes/opennv_audit_missing_impact.nif", Sounds = [] });
+                        throw new InvalidDataException("A missing unused impact model was admitted by eager preparation.");
+                    }
+                    catch (FileNotFoundException) { }
+                    var prepared = JsonSerializer.SerializeToElement(pool.State);
+                    if (prepared.GetProperty("preparedImpacts").GetInt32() != 1 || prepared.GetProperty("active").GetInt32() != 0 ||
+                        prepared.GetProperty("particles").GetArrayLength() != 0 || soundOwner.ActiveNativeVoices.Count != 0 ||
+                        soundOwner.HasPendingEmitterSounds(pool) || pool.GetChildren().OfType<Node3D>().Any(node => node != soundOwner))
+                        throw new InvalidDataException("Impact preparation published a visible root, active particles or a source voice.");
                     pool.Impact(silentBlood, Vector3.Zero, Vector3.Up, Vector3.Down);
+                    var first = JsonSerializer.SerializeToElement(pool.State).GetProperty("lastImpact");
+                    if (!first.GetProperty("prepared").GetBoolean() || first.GetProperty("reused").GetBoolean())
+                        throw new InvalidDataException("A primed impact did not take its first Start path.");
                     pool.Impact(silentBlood, new(8, 0, 0), Vector3.Up, Vector3.Down, shooter);
                     var decals = pool.GetChildren().OfType<RuntimeNativeImpactDecals>().Single();
                     if (decals.Count != 2 || blood.Decal is null) throw new InvalidDataException("Shot impacts lost their source decal owner.");
@@ -157,21 +196,26 @@ public partial class NativeShotEffectsAudit : Node3D
                     if (simultaneous.Length != 2 || simultaneous[0] == simultaneous[1])
                         throw new InvalidDataException("Concurrent impacts shared a live instance.");
                     pool._Process(10);
-                    var retained = Instances().Single();
+                    if (Instances().Length != 2 || simultaneous.Any(instance => instance.Visible))
+                        throw new InvalidDataException("Completed impact graphs did not become independently dormant.");
                     pool.Impact(silentBlood, new(16, 0, 0), Vector3.Up, Vector3.Down);
-                    if (Instances().Single() != retained || retained.GlobalPosition.X != 16)
+                    var retained = Instances().Single(instance => instance.Visible);
+                    if (!simultaneous.Contains(retained) || retained.GlobalPosition.X != 16)
                         throw new InvalidDataException("Completed source impact did not reuse its own instance at the new hit.");
                     pool._Process(.1);
                     var particles = retained.FindChildren("*", "", true, false).OfType<RuntimeNifParticleSystem>().ToArray();
                     if (particles.All(particle => particle.ActiveCount == 0))
                         throw new InvalidDataException("Reused impact has no visible particles.");
                     pool._Process(10);
-                    if (Instances().Length != 1 || retained.Visible)
+                    if (Instances().Length != 2 || Instances().Any(instance => instance.Visible))
                         throw new InvalidDataException("The completed impact pool is unbounded or still visible.");
-                    decals._Process(FalloutGameSettingFloats.Read(records, "fDecalLifetime:Display") + 1);
+                    decals._Process(records.IniSettings.Float("fDecalLifetime:Display") + 1);
                     if (decals.Count != 0) throw new InvalidDataException("Source decal lifetime leaked a projected surface.");
                     GD.Print("OPENNV_IMPACT_DECAL_PASS sourceDimensions=true movingAttachment=true independentLifetime=true expired=true pixels=separate");
-                    GD.Print("OPENNV_IMPACT_REUSE_PASS concurrent=independent retained=one clocks=reset source=blood-model audio=separate");
+                    RemoveChild(pool);
+                    if (JsonSerializer.SerializeToElement(pool.State).GetProperty("retainedImpacts").GetInt32() != 0)
+                        throw new InvalidDataException("Retiring the shot owner retained prepared or completed impact graphs.");
+                    GD.Print("OPENNV_IMPACT_REUSE_PASS preparation=dormant unusedFailure=isolated first=start concurrent=independent clocks=reset retirement=cleared source=blood-model audio=separate");
                 }
                 finally { pool.Free(); }
             }
@@ -182,6 +226,66 @@ public partial class NativeShotEffectsAudit : Node3D
             GetTree().Quit();
         }
         catch (Exception error) { GD.PushError(error.ToString()); GetTree().Quit(1); }
+    }
+
+    private void CheckProjectilePreparation(FalloutPluginStack records, RuntimeLiveContentSource content, float units)
+    {
+        var source = FalloutProjectile.Read(records, records.RuntimeFormKey(0x0e83be));
+        var effects = new RuntimeNativeShotEffects(records, content, units, null, 1);
+        AddChild(effects);
+        try
+        {
+            effects.PrepareProjectileModel(source);
+            var prepared = JsonSerializer.SerializeToElement(effects.State);
+            if (!prepared.GetProperty("preparedProjectileModel").GetBoolean() ||
+                prepared.GetProperty("projectileLaunches").GetInt64() != 0 ||
+                prepared.GetProperty("projectileFlights").GetArrayLength() != 0 ||
+                effects.GetChildCount() != 1 || !effects.CaptureReady)
+                throw new InvalidDataException("Projectile preparation published a flight or attached its dormant model.");
+
+            var first = effects.PrepareProjectile(source, 9.81f, Vector3.Zero, Vector3.Forward, 1, []);
+            try
+            {
+                var second = effects.PrepareProjectile(source, 9.81f, Vector3.Zero, Vector3.Forward, 1, []);
+                try
+                {
+                    if (first.GetChild<Node3D>(0) == second.GetChild<Node3D>(0) ||
+                        JsonSerializer.SerializeToElement(effects.State).GetProperty("preparedProjectileModel").GetBoolean())
+                        throw new InvalidDataException("Projectile dispatch retained or shared the consumed model owner.");
+                    effects.LaunchProjectile(first);
+                    effects.LaunchProjectile(second);
+                    var launched = JsonSerializer.SerializeToElement(effects.State);
+                    if (launched.GetProperty("projectileLaunches").GetInt64() != 2 ||
+                        launched.GetProperty("projectileFlights").GetArrayLength() != 2)
+                        throw new InvalidDataException("Independent source projectile flights failed to launch together.");
+                    effects.PrepareProjectileModel(source);
+                    var reequipped = JsonSerializer.SerializeToElement(effects.State);
+                    if (!reequipped.GetProperty("preparedProjectileModel").GetBoolean() ||
+                        reequipped.GetProperty("projectileFlights").GetArrayLength() != 2 ||
+                        effects.GetChildCount() != 3)
+                        throw new InvalidDataException("Same-source re-equip failed to retain a fresh detached model alongside live flights.");
+                }
+                finally { second.Free(); }
+            }
+            finally { first.Free(); }
+        }
+        finally { effects.Free(); }
+
+        var teardown = new RuntimeNativeShotEffects(records, content, units, null, 1);
+        AddChild(teardown);
+        try
+        {
+            teardown.PrepareProjectileModel(source);
+            teardown.PrepareProjectileModel(null);
+            if (JsonSerializer.SerializeToElement(teardown.State).GetProperty("preparedProjectileModel").GetBoolean())
+                throw new InvalidDataException("Projectile preparation survived clearing the equipped model.");
+            teardown.PrepareProjectileModel(source);
+            RemoveChild(teardown);
+            if (JsonSerializer.SerializeToElement(teardown.State).GetProperty("preparedProjectileModel").GetBoolean())
+                throw new InvalidDataException("Detached projectile preparation survived effects owner teardown.");
+        }
+        finally { teardown.Free(); }
+        GD.Print("OPENNV_PROJECTILE_MODEL_PREPARATION_PASS detached=true simultaneousFlights=2 cleared=true");
     }
 
     private static void CheckGrowFade()

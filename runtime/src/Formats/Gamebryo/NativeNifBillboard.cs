@@ -51,7 +51,7 @@ internal sealed partial class NativeNifBillboard : Node
     private Node3D _root = null!;
     private readonly List<(MeshInstance3D Mesh, ShaderMaterial Material, Transform3D Last)> _meshes = [];
 
-    internal void Configure(Node3D root, ushort mode)
+    internal void Configure(Node3D root, ushort mode, bool authoredEmpty)
     {
         mode &= 7;
         if (mode is not (0 or 1 or 2 or 3 or 4)) throw new NotSupportedException($"NIF billboard mode {mode} is unbound.");
@@ -70,7 +70,16 @@ internal sealed partial class NativeNifBillboard : Node
                 mesh.ExtraCullMargin = Math.Max(mesh.ExtraCullMargin, mesh.GetAabb().Size.Length() * 2);
                 _meshes.Add((mesh, material, local));
             }
-        if (_meshes.Count == 0) throw new NotSupportedException("Billboard has no bound mesh surfaces.");
+        root.SetMeta("opennv_nif_billboard_mode", (int)mode);
+        if (_meshes.Count == 0)
+        {
+            if (!authoredEmpty) throw new NotSupportedException("Billboard has no bound mesh surfaces.");
+            // The source has a real transform node with no drawable children.
+            // Preserve its identity and authored pose for external animation.
+            root.SetMeta("opennv_nif_billboard_disposition", "authored-empty");
+            SetProcess(false);
+        }
+        else root.SetMeta("opennv_nif_billboard_disposition", "source-shader-surfaces");
     }
     private Transform3D Local(Node3D node)
     {
