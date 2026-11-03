@@ -86,21 +86,46 @@ scale 1, with ten FPS samples between 58 and 60, p95 frame interval 18.73 ms and
 maximum 22.50 ms across the 1,188 observed host-draw intervals. This is not
 sustained 4K60 or display-presentation acceptance. The earlier RCW window retained
 a 166.62 ms spike; different encounter states do not establish causal speedup.
-Beam/impact creation still performs synchronous per-shot work.
+The active branch addresses synchronous beam/impact work with shared immutable
+geometry, independent materials/controllers, preparation on equip, and bounded
+reuse of completed effects. Fresh overlaps still create independent owners. Its
+complete required runtime gate passes. Selected owned controller/geometry and
+finite audio-lifetime audits pass, as does decoding the four source pulse/fire
+effect shaders. No measured speedup is claimed yet.
 
 The final combined runtime gate passes, including both navigation additions and
 immutable script caching. The existing owned Mojave route audit also passes:
 4,037 NAVMs, 589,719 triangles, the same 41 source waypoints, no unavailable meshes.
 This is one source route, not world traversal acceptance.
 
-A single bounded retry of the retained retail launcher produced neither bridge
-nor live state; the created process was closed. Do not leave it running or loop
-on harness recovery. Paired retail execution is currently unavailable.
+Retail startup is restored. Steam's ActiveProcess registration pointed to a
+dead process while a different client was running. With no active Steam games,
+a graceful client restart refreshed that registration. The unchanged isolated
+game-launch path then produced fresh bridge/state in three seconds. That bounded
+check was closed. The existing private launcher now refuses stale Steam process
+registration before starting a game. Temporary startup files were removed.
+The existing observer launcher also selects the current controlled-sampling
+build and starts with sampling off. The user is away; no manual launch is needed.
 
-Next owner is root: continue bounded source-area weapon/mob encounters and shared
-capability repairs. Prioritize complete delivered timed/scripted effects,
-qualified negative projectile coefficients, and source beam/impact preparation
-with independent effect-instance lifetimes. Unreachable floor queries can still
+A fresh paired Laser RCW encounter reached the same source-placed gecko in its
+area and completed ordinary fire/reload, then closed both games and the harness
+after 128 seconds. Recording stayed off. OpenNV spent two rounds, recorded one
+torso hit for 8.925 damage, and reloaded from 58 to 60. Retail spent one round,
+recorded hit location 1 with a reported x2 multiplier for 17.55 damage, and
+reloaded from 59 to 60. These different hit locations, starting player states,
+and observed shot counts do not qualify a damage-formula change or parity claim.
+The compact run does expose OpenNV's unowned animated muzzle light and 28.99 ms
+last-shot work, including 22.54 ms in damage scheduling. Aggregate timing includes
+loading/menu states and cannot certify combat 4K60.
+
+Next owner is root: publish the verified effects/throughput batch, then repair
+the shared animated muzzle-light lifetime and investigate actual input/discharge
+timing and synchronous damage scheduling before the next bounded encounter batch.
+The branch preserves finite signed projectile coefficients, with unqualified
+negative flight behavior refused at admission. It adds source EFSH metadata and
+a preflighted, persistent Start/Finish lifecycle, but no pulse/fire admission:
+posed actor emission, shader evaluation, add-ons, recast and gore state remain
+unqualified. Unreachable floor queries can still
 exhaust the remaining component synchronously; retained reachability does not
 certify a frame budget. Use existing in-world performance publication with cell,
 pose and loading state. Close sessions before coding, keep recording off, and
@@ -108,11 +133,11 @@ exclude paused/menu timing from gameplay results.
 
 ## Publication and local candidate
 
-The combat base is PR348 (`87a57ac8d7d6fbafca81ae5d3373beb0993d13cd`), with all
-five hosted checks passing. The navigation/script-cache follow-up source branch
-is `codex/combat-navigation-reachability`; its final required local gate and
-selected owned route check pass. Publish through the checked PR workflow and
-verify main against origin/main before the next feature branch.
+PR348 and the navigation/script-cache follow-up PR349 are merged with all hosted
+checks passing. Main was verified against origin/main at
+`26a2d9fe4bfd8d34ead88b9a0ff66ab11bf797f5`. The active branch is
+`codex/combat-effects-and-throughput`, based on that main. Publish completed
+changes through a checked PR and verify main against origin/main afterward.
 
 The current Release executable is `tmp/development-runtime/windows/OpenNV.exe`.
 Unrelated classic import changes remain outside these commits. Private assets,

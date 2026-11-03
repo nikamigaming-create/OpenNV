@@ -137,6 +137,7 @@ internal sealed record FalloutWeaponShot(FalloutFormKey Weapon, FalloutFormKey? 
         RequireSupportedAmmoEffects();
         if (Projectile.Type is not (1 or 2 or 8) || Projectile.Speed <= 0 || Projectile.Model is null)
             throw new NotSupportedException($"Projectile {Projectile.Form} needs its source flight, orientation or ammo-effect owner.");
+        Projectile.RequireFlightBounceOwner();
         if (((Projectile.Flags & 2) != 0) != (Projectile.ExplosionSource is not null))
             throw new InvalidDataException($"Projectile {Projectile.Form} explosion flag and reference disagree.");
         if (Projectile.Detonates || Projectile.HasAlternateTrigger && Projectile.ExplosionAltTriggerProximity > 0)

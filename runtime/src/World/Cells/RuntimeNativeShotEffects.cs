@@ -15,16 +15,20 @@ internal sealed partial class RuntimeNativeShotEffects : Node3D
     private readonly PhysicsBody3D? _shooter;
     private readonly Random _random = new();
     private readonly List<Effect> _effects = [];
-    private Effect? _spareImpact;
-    private sealed class Effect(Node3D root, double remaining, NativeNifEffectPlayback? playback, FalloutFormKey? impact = null)
+    private const int MaximumRetainedEffects = 8;
+    private readonly List<Effect> _completedEffects = [];
+    private readonly record struct EffectKey(bool Beam, FalloutFormKey Form);
+
+    private sealed class Effect(Node3D root, double remaining, NativeNifEffectPlayback? playback, EffectKey? reusable = null)
     {
         internal Node3D Root { get; } = root;
         internal double Remaining { get; set; } = remaining;
         internal NativeNifEffectPlayback? Playback { get; } = playback;
-        internal FalloutFormKey? Impact { get; } = impact;
+        internal EffectKey? Reusable { get; } = reusable;
         internal Func<Transform3D>? Follow { get; set; }
         internal Action? Completed { get; init; }
         internal Action<string>? Failed { get; init; }
+        internal bool WasPlayed { get; set; }
         internal bool Faulted { get; set; }
         internal string? Error { get; set; }
     }
@@ -69,7 +73,7 @@ internal sealed partial class RuntimeNativeShotEffects : Node3D
         casings = _casings,
         impacts = _impacts,
         active = _effects.Count,
-        retainedImpacts = _spareImpact is null ? 0 : 1,
+        retainedImpacts = _completedEffects.Count(effect => effect.Reusable is { Beam: false }),
         particles = _effects.Where(effect => effect.Playback is not null).SelectMany(effect => effect.Playback!.Particles)
             .Select(particle => new { particle.BirthCount, particle.ActiveCount, particle.EmissionEnabled, particle.SimulatedSeconds }).ToArray(),
         projectileLaunches = _projectileLaunches,
@@ -106,7 +110,6 @@ internal sealed partial class RuntimeNativeShotEffects : Node3D
         _shell ??= FalloutShellCasing.Read(_records);
         var prototype = weapon.ShellModel is { } path ? new RuntimeNativeNifPrototype(ReadBytes(path), _units) : null;
         _shellPrototype?.Scene.Root.Free();
-        _spareImpact?.Root.Free(); _spareImpact = null;
         _shellPrototype = prototype; _shellPath = weapon.ShellModel;
     }
 
@@ -153,6 +156,7 @@ internal sealed partial class RuntimeNativeShotEffects : Node3D
     internal RuntimeNativeProjectileFlight PrepareProjectile(FalloutProjectile source, float gravity,
         Vector3 origin, Vector3 direction, uint collisionMask, IEnumerable<Rid> exclusions)
     {
+        source.RequireFlightBounceOwner();
         var path = source.Model ?? throw new NotSupportedException($"Projectile {source.Form} has no source model.");
         if (_projectilePath != path)
         {
@@ -188,13 +192,17 @@ internal sealed partial class RuntimeNativeShotEffects : Node3D
         var started = System.Diagnostics.Stopwatch.GetTimestamp();
         var direction = source.Orientation switch { 0 => normal, 1 => incoming, 2 => incoming.Bounce(normal), _ => throw new InvalidDataException("Impact orientation is invalid.") };
         if (!direction.IsFinite() || direction.LengthSquared() < .0001f) throw new InvalidDataException("Impact frame is degenerate.");
-        var reused = _spareImpact?.Impact == source.Form;
-        var effect = reused ? _spareImpact : null;
-        if (reused) _spareImpact = null;
+        var key = new EffectKey(false, source.Form);
+        var effect = TakeCompletedEffect(key);
+        var reused = effect is not null;
         var root = effect?.Root ?? new Node3D();
         if (!reused && source.Model is { } path)
         {
-            try { root.AddChild(RuntimeNativeNifMeshBuilder.Build(ReadModel(path), _units, contentSource: _content).Root); }
+            try
+            {
+                root.AddChild(RuntimeNativeNifMeshBuilder.Build(ReadModel(path), _units,
+                    contentSource: _content, shareImmutableGeometry: true).Root);
+            }
             catch { root.Free(); throw; }
         }
         var built = System.Diagnostics.Stopwatch.GetTimestamp();
@@ -210,11 +218,11 @@ internal sealed partial class RuntimeNativeShotEffects : Node3D
             else playback?.Start();
             if (effect is null)
             {
-                // Retain one completed effect. Concurrent shots keep independent
-                // controllers, particles and sounds; physics-bearing effects are
+                // Concurrent shots keep independent controllers, particles and
+                // sounds. Physics-bearing effects are
                 // rebuilt because their full reset contract is not established.
                 var recyclable = playback is not null && !root.FindChildren("*", "", true, false).Any(node => node is CollisionObject3D);
-                effect = new(root, source.Duration, playback, recyclable ? source.Form : null);
+                effect = new(root, source.Duration, playback, recyclable ? key : null);
             }
             effect.Remaining = source.Duration;
             effect.Follow = follow;
@@ -274,24 +282,50 @@ internal sealed partial class RuntimeNativeShotEffects : Node3D
             }
             if (effect.Remaining > 0 || effect.Playback is { Active: true } ||
                 effect.Root.FindChildren("*", "AudioStreamPlayer3D", true, false).OfType<AudioStreamPlayer3D>().Any(voice => voice.Playing) ||
-                _sounds.HasPendingEmitterSounds(effect.Root) ||
+                _sounds.HasPendingEmitterSounds(effect.Root) || _sounds.HasEmitterVoices(effect.Root) ||
                 effect.Completed is not null && !_sounds.CanRetireEmitter(effect.Root)) continue;
             _effects.RemoveAt(i);
-            if (effect.Impact is not null)
-            {
-                _spareImpact?.Root.Free(); _spareImpact = effect;
-            }
+            // A voice may be owned by the shared sound host outside this
+            // subtree. Its emitter must finish before a pooled root can move.
+            if (effect.Reusable is not null && _sounds.CanRetireEmitter(effect.Root))
+                RetainCompletedEffect(effect);
             else effect.Root.Free();
             effect.Completed?.Invoke();
         }
     }
 
+    private Effect? TakeCompletedEffect(EffectKey key)
+    {
+        var index = _completedEffects.FindLastIndex(effect => effect.Reusable == key);
+        if (index < 0) return null;
+        var effect = _completedEffects[index];
+        _completedEffects.RemoveAt(index);
+        return effect;
+    }
+
+    private void RetainCompletedEffect(Effect effect)
+    {
+        effect.Follow = null;
+        if (_completedEffects.Count == MaximumRetainedEffects)
+        {
+            _completedEffects[0].Root.Free();
+            _completedEffects.RemoveAt(0);
+        }
+        _completedEffects.Add(effect);
+    }
+
     public override void _ExitTree()
     {
+        foreach (var effect in _completedEffects)
+        {
+            if (effect.Root.GetParent() is null) effect.Root.Free();
+            else effect.Root.QueueFree();
+        }
+        _completedEffects.Clear();
         foreach (var effect in _effects) effect.Failed?.Invoke("Explosion effect retired before natural completion.");
         _shellPrototype?.Scene.Root.Free(); _shellPrototype = null;
         _projectilePrototype?.Scene.Root.Free(); _projectilePrototype = null;
-        _beamPrototype?.Scene.Root.Free(); _beamPrototype = null;
+        _beamPrototype?.Scene.Root.Free(); _beamPrototype = null; _beamPath = null;
     }
 
     private void ProjectileFinished(RuntimeNativeProjectileFlight projectile)
@@ -304,7 +338,7 @@ internal sealed partial class RuntimeNativeShotEffects : Node3D
         else _projectileMisses++;
     }
 
-    private FalloutNifFile ReadModel(string path) => FalloutNifFile.Read(ReadBytes(path));
+    private FalloutNifFile ReadModel(string path) => NativeOwnedNifCache.Read(_content, path, out _);
     private byte[] ReadBytes(string path) => _content.TryRead(path, null, out var bytes, out _) ? bytes :
         throw new FileNotFoundException("Source shot effect model is missing.", path);
     private float Signed() => _random.NextSingle() * 2 - 1;

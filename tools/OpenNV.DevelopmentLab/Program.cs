@@ -354,6 +354,7 @@ if (args[0] == "record")
         {
             record.FormKey,
             record.Signature,
+            effectShader = record.Signature == "EFSH" ? FalloutEffectShader.Read(records, record.FormKey) : null,
             groups = record.Groups.Select(group => new { group.Type, group.LabelAsUInt32 }).ToArray(),
             fields = record.ReadSubrecords().Select(field => new
             {

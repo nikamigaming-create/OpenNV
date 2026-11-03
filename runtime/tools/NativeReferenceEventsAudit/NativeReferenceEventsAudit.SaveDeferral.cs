@@ -72,6 +72,8 @@ public partial class NativeReferenceEventsAudit
                 _ => throw new InvalidOperationException("Unexpected ability condition in save-deferral fixture."));
             abilities.BindExecutor((_, _, _, _) => throw new InvalidOperationException("Unexpected active effect in save-deferral fixture."));
             Bind("_playerAbilities", abilities);
+            Bind("_deliveredEffects", new FalloutDeliveredEffects(records,
+                (_, _, _, _) => throw new InvalidOperationException("Unexpected delivered effect in save-deferral fixture."), null));
             Bind("_activeCell", Key(0x800));
             Bind("_stageResults", new FalloutQuestStages(records, new(records),
                 (_, _, _) => throw new InvalidOperationException("Unexpected stage result in save-deferral fixture."),

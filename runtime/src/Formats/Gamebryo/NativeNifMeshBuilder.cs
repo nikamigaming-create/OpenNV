@@ -157,7 +157,8 @@ internal static partial class RuntimeNativeNifMeshBuilder
         string? preferredTextureArchive = null,
         RuntimeLiveContentSource? contentSource = null,
         Action<FalloutNifGeometry>? unboundPropertyFreeLod = null,
-        IReadOnlySet<string>? externalTransformTargets = null, HashSet<uint>? addonAncestors = null, bool autoStartManagedLoops = true)
+        IReadOnlySet<string>? externalTransformTargets = null, HashSet<uint>? addonAncestors = null, bool autoStartManagedLoops = true,
+        bool shareImmutableGeometry = false)
     {
         if (!float.IsFinite(unitsToMetres) || unitsToMetres <= 0.0f)
             throw new ArgumentOutOfRangeException(
@@ -170,7 +171,7 @@ internal static partial class RuntimeNativeNifMeshBuilder
             root.Name = "NativeNif";
             root.SetMeta("opennv_nif_fixed_strings", source.Strings.ToArray());
             var state = new BuildState(source, unitsToMetres, preferredTextureArchive, externalSkeleton: externalTransformTargets is not null, contentSource: contentSource)
-            { AutoStartManagedLoops = autoStartManagedLoops, UnboundPropertyFreeLod = unboundPropertyFreeLod, ExternalTransformTargets = externalTransformTargets, AddonAncestors = addonAncestors ?? [] };
+            { AutoStartManagedLoops = autoStartManagedLoops, ShareImmutableGeometry = shareImmutableGeometry, UnboundPropertyFreeLod = unboundPropertyFreeLod, ExternalTransformTargets = externalTransformTargets, AddonAncestors = addonAncestors ?? [] };
             foreach (var rootIndex in source.Roots)
                 if (unboundPropertyFreeLod is not null && source.Blocks[rootIndex].TypeName is ("NiTriShape" or "NiTriStrips" or "BSSegmentedTriShape") &&
                     source.ReadGeometry(rootIndex) is { } unbound && unbound.Properties.All(index => index == -1))
@@ -373,6 +374,7 @@ internal static partial class RuntimeNativeNifMeshBuilder
         internal Func<FalloutNifFile, FalloutNifGeometry, FalloutNifMeshData, IReadOnlyDictionary<string, System.Numerics.Vector3[]>>? MorphOwner { get; init; }
 
         internal bool AutoStartManagedLoops { get; init; } = true;
+        internal bool ShareImmutableGeometry { get; init; }
 
         internal BuildState(
             FalloutNifFile source,
@@ -1616,31 +1618,40 @@ internal static partial class RuntimeNativeNifMeshBuilder
                         $"NIF skin {instance.Block.Index} does not use the proven sibling-root hierarchy.");
             }
 
-            var prepared = PreparedArrays(source, data, morph, cache: source.Controller == -1 &&
-                source.SkinInstance == -1 && geometryMorph is null && _geometryOwner is null && MorphOwner is null);
-            using var arrays = new Godot.Collections.Array();
-            arrays.Resize((int)Mesh.ArrayType.Max);
+            var immutable = source.SkinInstance == -1 && geometryMorph is null && _geometryOwner is null && MorphOwner is null;
+            var shareMesh = ShareImmutableGeometry && immutable && morph is null && collision is null;
+            var prepared = PreparedArrays(source, data, morph, cache: immutable && (source.Controller == -1 || shareMesh));
             var vertices = prepared.Vertices;
-            arrays[(int)Mesh.ArrayType.Vertex] = vertices;
-            if (prepared.Normals.Length != 0) arrays[(int)Mesh.ArrayType.Normal] = prepared.Normals;
-            if (prepared.Tangents.Length != 0) arrays[(int)Mesh.ArrayType.Tangent] = prepared.Tangents;
-            if (prepared.Colors.Length != 0) arrays[(int)Mesh.ArrayType.Color] = prepared.Colors;
-            if (prepared.Uv.Length != 0) arrays[(int)Mesh.ArrayType.TexUV] = prepared.Uv;
-            if (morph is not null) arrays[(int)Mesh.ArrayType.TexUV2] = prepared.MorphHeights;
-            if (skinBinding is not null)
-            {
-                arrays[(int)Mesh.ArrayType.Bones] = skinBinding.BoneIndices;
-                arrays[(int)Mesh.ArrayType.Weights] = skinBinding.Weights;
-            }
             var indices = prepared.Indices;
             if (indices.Length == 0)
                 throw new InvalidDataException($"NIF geometry data {data.Block.Index} contains no non-degenerate triangles.");
-            arrays[(int)Mesh.ArrayType.Index] = indices;
-            var mesh = new ArrayMesh();
-            mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays,
-                BuildMorphArrays(mesh, source, data, arrays, Enumerable.Range(0, data.Vertices.Length).ToArray()));
+
+            ArrayMesh CreateMesh()
+            {
+                using var arrays = new Godot.Collections.Array();
+                arrays.Resize((int)Mesh.ArrayType.Max);
+                arrays[(int)Mesh.ArrayType.Vertex] = vertices;
+                if (prepared.Normals.Length != 0) arrays[(int)Mesh.ArrayType.Normal] = prepared.Normals;
+                if (prepared.Tangents.Length != 0) arrays[(int)Mesh.ArrayType.Tangent] = prepared.Tangents;
+                if (prepared.Colors.Length != 0) arrays[(int)Mesh.ArrayType.Color] = prepared.Colors;
+                if (prepared.Uv.Length != 0) arrays[(int)Mesh.ArrayType.TexUV] = prepared.Uv;
+                if (morph is not null) arrays[(int)Mesh.ArrayType.TexUV2] = prepared.MorphHeights;
+                if (skinBinding is not null)
+                {
+                    arrays[(int)Mesh.ArrayType.Bones] = skinBinding.BoneIndices;
+                    arrays[(int)Mesh.ArrayType.Weights] = skinBinding.Weights;
+                }
+                arrays[(int)Mesh.ArrayType.Index] = indices;
+                var mesh = new ArrayMesh();
+                if (shareMesh) mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
+                else mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays,
+                    BuildMorphArrays(mesh, source, data, arrays, Enumerable.Range(0, data.Vertices.Length).ToArray()));
+                return mesh;
+            }
+
             var material = BuildMaterial(source);
-            mesh.SurfaceSetMaterial(0, material);
+            var mesh = shareMesh ? ImmutableMesh(source.Block.Index, CreateMesh) : CreateMesh();
+            if (!shareMesh) mesh.SurfaceSetMaterial(0, material);
             var result = new MeshInstance3D();
             try
             {
@@ -1648,6 +1659,7 @@ internal static partial class RuntimeNativeNifMeshBuilder
                 result.Transform = ConvertTransform(source.Transform);
                 result.Visible = (source.Flags & HiddenFlag) == 0;
                 result.Mesh = mesh;
+                if (shareMesh) result.SetSurfaceOverrideMaterial(0, material);
                 // A retained export shape without a shader has no runtime
                 // draw pass. Keep its source geometry and identity; Godot's
                 // default material must not turn it into a visible solid.
@@ -2735,6 +2747,8 @@ internal sealed class RuntimeNativeNifPrototype
     private readonly FalloutNifFile _source;
     private readonly float _unitsToMetres;
     private readonly bool _requiresFreshOwners;
+    private readonly RuntimeLiveContentSource? _contentSource;
+    private readonly bool _shareImmutableGeometry;
     internal RuntimeNativeNifScene Scene { get; }
     internal bool RequiresFreshOwners => _requiresFreshOwners;
     internal FalloutNifFile Source => _source;
@@ -2742,15 +2756,21 @@ internal sealed class RuntimeNativeNifPrototype
     internal RuntimeNativeNifPrototype(ReadOnlyMemory<byte> payload, float unitsToMetres)
         : this(FalloutNifFile.Read(payload), unitsToMetres) { }
 
-    internal RuntimeNativeNifPrototype(FalloutNifFile source, float unitsToMetres)
-        : this(source, unitsToMetres, RuntimeNativeNifMeshBuilder.Build(source, unitsToMetres)) { }
+    internal RuntimeNativeNifPrototype(FalloutNifFile source, float unitsToMetres, bool shareImmutableGeometry = false,
+        RuntimeLiveContentSource? contentSource = null)
+        : this(source, unitsToMetres, RuntimeNativeNifMeshBuilder.Build(source, unitsToMetres,
+            contentSource: contentSource, shareImmutableGeometry: shareImmutableGeometry), shareImmutableGeometry, contentSource)
+    { }
 
-    internal RuntimeNativeNifPrototype(FalloutNifFile source, float unitsToMetres, RuntimeNativeNifScene scene)
+    internal RuntimeNativeNifPrototype(FalloutNifFile source, float unitsToMetres, RuntimeNativeNifScene scene,
+        bool shareImmutableGeometry = false, RuntimeLiveContentSource? contentSource = null)
     {
         _source = source;
         _unitsToMetres = unitsToMetres;
+        _shareImmutableGeometry = shareImmutableGeometry;
+        _contentSource = contentSource;
         Scene = scene;
-        _requiresFreshOwners = Scene.Root.FindChildren("*", "", true, false).Any(node => node is RuntimeNifControllerPlayer or RuntimeNifParticleSystem or NativeNifBillboard or RuntimeNifHingeJoint or NativeNifWorldAxes);
+        _requiresFreshOwners = shareImmutableGeometry || Scene.Root.FindChildren("*", "", true, false).Any(node => node is RuntimeNifControllerPlayer or RuntimeNifParticleSystem or NativeNifBillboard or RuntimeNifHingeJoint or NativeNifWorldAxes);
     }
 
     internal Node3D Instantiate(bool autoStartManagedLoops = true)
@@ -2758,8 +2778,9 @@ internal sealed class RuntimeNativeNifPrototype
         // Godot Duplicate copies engine properties, not configured C# delegates
         // and their target objects. Reuse the decoded source, but create fresh
         // controllers/material/joint owners for each reference.
-        if (_requiresFreshOwners) return RuntimeNativeNifMeshBuilder.Build(_source, _unitsToMetres,
-            autoStartManagedLoops: autoStartManagedLoops).Root;
+        if (_requiresFreshOwners)
+            return RuntimeNativeNifMeshBuilder.Build(_source, _unitsToMetres, contentSource: _contentSource,
+                autoStartManagedLoops: autoStartManagedLoops, shareImmutableGeometry: _shareImmutableGeometry).Root;
         // Dynamic-body scripts bind their cloned visual parent on tree entry;
         // no configured delegates or source-instance references are copied.
         return Scene.Root.Duplicate((int)(Node.DuplicateFlags.UseInstantiation | Node.DuplicateFlags.Scripts)) as Node3D ??

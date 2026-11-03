@@ -33,6 +33,7 @@ internal partial class RuntimeNativePlayer
                 _shotEffects ??= new(_presentationRecords!, RuntimeLiveContentSource.Current!, UnitsToMeters, this, CollisionMask, _weaponSounds);
                 if (!_shotEffects.IsInsideTree()) AddChild(_shotEffects);
                 if (!weapon.IsNonDischargeAction) _shotEffects.PrepareShell(weapon);
+                if (_shot is { Projectile.Type: 4 } shot) _shotEffects.PrepareBeam(shot.Projectile);
                 foreach (var sound in weapon.Sounds.Values.Distinct()) _weaponSounds!.PrepareSound(sound);
             }
         }

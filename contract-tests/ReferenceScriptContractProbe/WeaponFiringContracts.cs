@@ -57,6 +57,8 @@ internal static class WeaponFiringContracts
             var timedBeamProjectile = (byte[])alternateBeamProjectile.Clone(); Float(timedBeamProjectile, 28, 1);
             var alternateFlightProjectile = new byte[84]; alternateFlightProjectile[0] = 0x8c; alternateFlightProjectile[1] = 0x02; alternateFlightProjectile[2] = 1;
             Float(alternateFlightProjectile, 8, 200); Float(alternateFlightProjectile, 12, 1000);
+            var signedBounceProjectile = (byte[])alternateFlightProjectile.Clone(); Float(signedBounceProjectile, 80, -1.98179996f);
+            var nonfiniteBounceProjectile = (byte[])signedBounceProjectile.Clone(); Float(nonfiniteBounceProjectile, 80, float.NaN);
             var explosiveBeamProjectile = (byte[])beamProjectile.Clone(); explosiveBeamProjectile[0] = 2; UInt(explosiveBeamProjectile, 36, 12);
             var flameProjectile = new byte[84]; flameProjectile[0] = 0x8d; flameProjectile[2] = 8;
             Float(flameProjectile, 8, 12000); Float(flameProjectile, 12, 640);
@@ -143,6 +145,8 @@ internal static class WeaponFiringContracts
                 .Concat(Record("PROJ", 19, Field("MODL", Text("Effects/explosive-beam.nif")), Field("DATA", explosiveBeamProjectile)))
                 .Concat(Record("PROJ", 28, Field("MODL", Text("Effects/timed-beam.nif")), Field("DATA", timedBeamProjectile)))
                 .Concat(Record("PROJ", 29, Field("MODL", Text("Effects/alternate-flight.nif")), Field("DATA", alternateFlightProjectile)))
+                .Concat(Record("PROJ", 0x962, Field("MODL", Text("Effects/signed-flight.nif")), Field("DATA", signedBounceProjectile)))
+                .Concat(Record("PROJ", 0x963, Field("DATA", nonfiniteBounceProjectile)))
                 .Concat(Record("PROJ", 25, Field("DATA", flameProjectile)))
                 .Concat(Record("PROJ", 26, Field("MODL", Text("Effects/flame.nif")), Field("DATA", missileFlameProjectile)))
                 .Concat(Record("WEAP", 24, Field("EDID", Text("TestFlamer")), Field("MODL", Text("test-flamer.nif")),
@@ -260,6 +264,18 @@ internal static class WeaponFiringContracts
                 alternateFlight.Projectile.PassesThroughSmallTransparent,
                 "Source alternate-trigger projectile flags were not retained for in-flight shots.");
             alternateFlight.RequireRuntimeAttackOwner();
+            var signedBounce = FalloutProjectile.Read(records, Key(0x962));
+            Require(BitConverter.SingleToInt32Bits(signedBounce.BouncyMultiplier) == BitConverter.SingleToInt32Bits(-1.98179996f),
+                "Source signed Bouncy Mult lost its exact serialized value.");
+            var signedFlightRefused = false;
+            try { (alternateFlight with { Projectile = signedBounce }).RequireRuntimeAttackOwner(); }
+            catch (NotSupportedException error) when (error.Message.Contains("signed Bouncy Mult", StringComparison.Ordinal))
+            { signedFlightRefused = true; }
+            Require(signedFlightRefused, "Unqualified signed Bouncy Mult reached flight admission.");
+            var nonfiniteBounceRefused = false;
+            try { _ = FalloutProjectile.Read(records, Key(0x963)); }
+            catch (InvalidDataException) { nonfiniteBounceRefused = true; }
+            Require(nonfiniteBounceRefused, "Nonfinite Bouncy Mult passed source parsing.");
             var flameShot = FalloutWeaponShot.Read(records, Key(24), Key(27));
             Require(flameShot.Projectile.Type == 8 && flameShot.Projectile.Hitscan && flameShot.Projectile.HasAlternateTrigger &&
                 flameShot.Projectile.PassesThroughActors && flameShot.Projectile.Speed == 12000 && flameShot.Projectile.Range == 640,

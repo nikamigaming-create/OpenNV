@@ -20,9 +20,10 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer
     private readonly Dictionary<string, Node3D> _emitters = new(StringComparer.Ordinal);
 
     internal bool CanRetireEmitter(Node3D emitter) => !_lostCaptureAtRetirement && !HasUnreceiptedFault &&
-        !HasPendingEmitterSounds(emitter) &&
-        !_voices.Values.Any(voice => voice.Emitter == emitter ||
-            GodotObject.IsInstanceValid(voice.Emitter) && emitter.IsAncestorOf(voice.Emitter));
+        !HasPendingEmitterSounds(emitter) && !HasEmitterVoices(emitter);
+
+    internal bool HasEmitterVoices(Node3D emitter) => _voices.Values.Any(voice => voice.Emitter == emitter ||
+        GodotObject.IsInstanceValid(voice.Emitter) && emitter.IsAncestorOf(voice.Emitter));
 
     private string DispatchNifEvent(FalloutNifTextKeyDeclaration declaration)
     {

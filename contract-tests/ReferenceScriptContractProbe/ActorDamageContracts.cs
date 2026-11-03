@@ -71,6 +71,19 @@ internal static class ActorDamageContracts
                         Red: 170, Blue: 4, Flags: 0xca, KnownFlags: 2, ReservedFlags: 0xc8,
                         Diffuse: "textures/Decals/source.dds", Normal: "textures/Decals/source_n.dds" },
                     "Impact lost decal dimensions, color, texture, retained reserved bits or a valid legacy material extent.");
+            var cachedImpact = FalloutImpact.Resolve(records, Key(0x73), 6);
+            var previousReadObserver = FalloutPluginRecord.ReadObserver;
+            try
+            {
+                FalloutPluginRecord.ReadObserver = (record, _) =>
+                {
+                    if (record.Signature is "IPDS" or "IPCT" or "TXST")
+                        throw new InvalidOperationException("A repeated material contact reread immutable impact data.");
+                };
+                Check(cachedImpact is not null && ReferenceEquals(cachedImpact, FalloutImpact.Resolve(records, Key(0x73), 6)),
+                    "A repeated material contact did not reuse its winning impact declaration.");
+            }
+            finally { FalloutPluginRecord.ReadObserver = previousReadObserver; }
             Check(FalloutImpact.Resolve(records, Key(0x73), 11) is null, "An absent late material selected a legacy impact.");
             Reject(() => FalloutImpact.Resolve(records, Key(0x76), 6));
             var invalidDecal = (byte[])decal.Clone(); Float(invalidDecal, 16, -1);

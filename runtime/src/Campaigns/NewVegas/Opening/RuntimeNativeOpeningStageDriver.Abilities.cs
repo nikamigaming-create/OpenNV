@@ -8,6 +8,7 @@ namespace OpenNV.Runtime.Campaigns.NewVegas.Opening;
 internal partial class RuntimeNativeOpeningStageDriver
 {
     private FalloutPlayerAbilityScripts _playerAbilities = null!;
+    private FalloutDeliveredEffects _deliveredEffects = null!;
 
     private void BindPlayerAbilityState(FalloutNativeCampaignRestore? restore, FalloutGameTime? gameTime)
     {
@@ -34,6 +35,7 @@ internal partial class RuntimeNativeOpeningStageDriver
                 RewardXp: value => (_experience ?? throw new NotSupportedException("Ability XP command requires initialized experience.")).Reward(value),
                 GameTime: gameTime, RewardKarma: RewardPlayerKarma));
         _playerAbilities.BindExecutor(executor.ExecuteActiveEffect);
+        _deliveredEffects = new(_pluginStack, executor.ExecuteActiveEffect, restore?.State.DeliveredEffects);
         _playerSkills.BindAbilityScripts(_playerAbilities);
         _playerActorValues.BindAbilityLifecycle(_playerAbilities.Synchronize);
     }

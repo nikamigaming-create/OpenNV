@@ -14,6 +14,11 @@ internal static partial class RuntimeNativeNifMeshBuilder
     private static readonly ConditionalWeakTable<FalloutNifFile,
         ConcurrentDictionary<(int Block, float Units), PreparedGeometry>> PreparedGeometryCache = new();
 
+    // The transient-effect opt-in shares only material-free, rigid surface
+    // resources. Fresh scene nodes bind their own materials and controllers.
+    private static readonly ConditionalWeakTable<FalloutNifFile,
+        Dictionary<(int Block, float Units), ArrayMesh>> ImmutableMeshes = new();
+
     internal static void PrepareStaticGeometry(FalloutNifFile source, float units, CancellationToken cancellation, bool externalSkeleton = false)
     {
         var state = new BuildState(source, units, null, externalSkeleton: externalSkeleton);
@@ -31,6 +36,17 @@ internal static partial class RuntimeNativeNifMeshBuilder
 
     private sealed partial class BuildState
     {
+        internal ArrayMesh ImmutableMesh(int block, Func<ArrayMesh> create)
+        {
+            var meshes = ImmutableMeshes.GetOrCreateValue(_source);
+            lock (meshes)
+            {
+                var key = (block, _unitsToMetres);
+                if (!meshes.TryGetValue(key, out var mesh)) meshes.Add(key, mesh = create());
+                return mesh;
+            }
+        }
+
         internal PreparedGeometry PreparedArrays(FalloutNifGeometry geometry, FalloutNifMeshData data,
             FalloutNifLandscapeMorphData? morph, bool cache)
         {
