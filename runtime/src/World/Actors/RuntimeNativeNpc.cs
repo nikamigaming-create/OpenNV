@@ -320,7 +320,10 @@ internal partial class RuntimeNativeNpc : CharacterBody3D
             Skeleton.ResetMorphPublication();
             if (IdleSnapshotActive) PublishIdleSnapshot();
             else if (_outgoingIdles.Count != 0 || _idleEaseIn is not null || _currentIdleEaseOut is not null) PublishIdleRequestLayers();
-            else if (Combat?.PackageOwnsPose == true && _animation is not null) PublishIdleRequestLayers();
+            // The package owns Idle0 and its movement layer even without a special idle.
+            // Recompose those layers after the render-side morph reset; applying
+            // the adopted Idle0 alone would erase the physics-published gait.
+            else if (Combat?.PackageOwnsPose == true) PublishIdleRequestLayers();
             else if (_baseAnimation is not null && _animation is not null)
                 RuntimeNativeNifAnimation.ApplyLayers((_baseAnimation, _baseAnimationSeconds), (_animation, _animationSeconds));
             else if (_baseAnimation is not null) _baseAnimation.ApplySourceTime(_baseAnimationSeconds);

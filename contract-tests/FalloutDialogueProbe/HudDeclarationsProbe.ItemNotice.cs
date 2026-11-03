@@ -51,6 +51,9 @@ internal static partial class HudDeclarationsProbe
         using var source = RuntimeLiveContentSource.Open(root, campaign);
         using var records = FalloutPluginStack.Load(source.PluginSources);
         var declaration = FalloutExecutableStringTable.ReadHudMessageDeclarations(source.FalloutExecutablePath);
+        var discovery = FalloutExecutableStringTable.ReadDiscoveryHudDeclaration(source.FalloutExecutablePath);
+        var discoveryPrefix = FalloutGameSettingStrings.Read(records, discovery.PrefixSetting);
+        var discoverySound = FalloutSoundRecordReader.Find(records, discovery.SoundEditorId).FormKey;
         var iconPath = declaration.ItemIcon.Replace('\\', '/');
         if (!iconPath.StartsWith("textures/", StringComparison.OrdinalIgnoreCase)) iconPath = "textures/" + iconPath;
         if (!source.TryRead(iconPath, null, out var icon, out var iconIdentity))
@@ -64,6 +67,9 @@ internal static partial class HudDeclarationsProbe
             source.SaveCompatibilityId,
             executableSha256 = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(source.FalloutExecutablePath))),
             declaration,
+            discovery,
+            discoveryPrefix,
+            discoverySound,
             iconPath,
             iconIdentity,
             iconSha256 = Convert.ToHexString(SHA256.HashData(icon)),

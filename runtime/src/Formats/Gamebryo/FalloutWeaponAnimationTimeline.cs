@@ -8,6 +8,8 @@ internal sealed class FalloutWeaponAnimationTimeline
     private readonly FalloutNifTextKeyTimeline? _internalLoop;
     private readonly double _loopStart, _loopStop;
     private readonly bool _loop;
+    private readonly float _start, _frequency;
+    private readonly FalloutNifTextKey? _refire;
     internal double Duration { get; }
     internal double Period => _internalLoop is null ? Duration : _loopStop - _loopStart;
     internal double? Hold { get; }
@@ -23,6 +25,13 @@ internal sealed class FalloutWeaponAnimationTimeline
         bool loop = false, bool weaponCadence = false)
     {
         _loop = loop;
+        _start = start; _frequency = frequency;
+        foreach (var key in keys)
+            if (key.Value.StartsWith("a:", StringComparison.OrdinalIgnoreCase) && key.Value.Length >= 3)
+            {
+                _refire = key;
+                break;
+            }
         // AttackLoop can be a continuous pose with no KF discharge marker.
         // Its gameplay events come from WEAP shots/sec, not an invented KF hit.
         UsesWeaponCadence = weaponCadence && !keys.SelectMany(key => key.Value.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)).Any(DischargesWeapon);
@@ -50,6 +59,31 @@ internal sealed class FalloutWeaponAnimationTimeline
         }
         else Discharges = texts.Count(key => DischargesWeapon(key.Text));
         if (Hold is < 0 || Hold > Duration) throw new InvalidDataException("Weapon Hold marker leaves its sequence.");
+    }
+
+    internal bool IsRefireMarker(string text) => _refire is { } key && key.Value.Trim().Equals(text, StringComparison.Ordinal);
+
+    internal bool TryRefire(double elapsed, out string? nextGroup)
+    {
+        nextGroup = null;
+        if (!double.IsFinite(elapsed) || elapsed < 0) throw new InvalidDataException("Weapon animation clock is invalid.");
+        // The first authored action marker admits another attack before the visual
+        // tail ends. The source also admits a strictly sub-half-second tail.
+        // Missing-marker transitions retain the existing finite-action boundary.
+        if (_refire is not { } marker) return false;
+        var sourceTime = _start + (float)(elapsed * _frequency);
+        if (sourceTime < marker.Time && (float)Duration - (double)sourceTime >= .5) return false;
+        nextGroup = char.ToUpperInvariant(marker.Value[2]) switch
+        {
+            '3' => "attack3",
+            '4' => "attack4",
+            '5' => "attack5",
+            '6' => "attack6",
+            '7' => "attack7",
+            '8' => "attack8",
+            _ => null
+        };
+        return true;
     }
 
     internal double SampleSeconds(double elapsed, bool loop)

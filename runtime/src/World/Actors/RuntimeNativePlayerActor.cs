@@ -29,6 +29,7 @@ internal sealed partial class RuntimeNativePlayerActor : Node3D
     internal RuntimeNativeNpc Actor { get; }
     internal FalloutWeaponPresentation? Weapon { get; }
     internal RuntimeNativeNifSkeleton Skeleton => Actor.Skeleton;
+    internal NativeActorWeaponAttachment? AnimationWeapon => _equippedObject;
     internal FalloutNifSphereBound? CurrentLightingBound(MeshInstance3D mesh)
         => Actor.CurrentMeshWorldBound(_content, mesh);
     internal string? Error { get; private set; }
@@ -105,6 +106,7 @@ internal sealed partial class RuntimeNativePlayerActor : Node3D
         Name = firstPerson ? "NativeFirstPersonBody" : "NativeThirdPersonBody";
         _records = records; _content = content; _first = firstPerson;
         _directory = firstPerson ? "meshes/characters/_1stperson" : appearance.SkeletonPath[..appearance.SkeletonPath.LastIndexOf('/')];
+        appearance = FalloutWeaponBipedModels.Apply(records, appearance, weapon, formLists);
         var models = firstPerson ? appearance.Models.Where(part => part.Role is "body" or "hand-left" or "hand-right" or "armor" or "armor-addon")
             .Select(FirstPersonPart).ToArray() : appearance.Models;
         try
@@ -133,13 +135,19 @@ internal sealed partial class RuntimeNativePlayerActor : Node3D
             if (weapon is { } form)
             {
                 Weapon = FalloutWeaponPresentation.Read(records, form, firstPerson, weaponMods, formLists);
-                _equippedObject = new(Weapon, Skeleton, _content);
-                _weaponAttachment = _equippedObject.Attachment; _weaponRoot = _equippedObject.Root; _weaponRest = _weaponRoot.Transform;
-                _weaponNodes.AddRange(_equippedObject.Nodes);
-                if (firstPerson)
-                    foreach (var part in _equippedObject.BodyAttachments)
-                        foreach (var mesh in part.FindChildren("*", "", true, false).OfType<GeometryInstance3D>())
-                        { mesh.Layers = 0; mesh.CastShadow = GeometryInstance3D.ShadowCastingSetting.Off; }
+                var bipedModel = Weapon.BipedList is not null &&
+                    FalloutWeaponBipedModels.Read(records, form, appearance.Female, formLists).Any(part => part.ModelPath is not null);
+                if (Weapon.Model is not null ? NativeActorWeaponAttachment.CanAttachSourceModel(Weapon, _content) :
+                    !Weapon.DefaultUnarmed && !bipedModel)
+                {
+                    _equippedObject = new(Weapon, Skeleton, _content);
+                    _weaponAttachment = _equippedObject.Attachment; _weaponRoot = _equippedObject.Root; _weaponRest = _weaponRoot.Transform;
+                    _weaponNodes.AddRange(_equippedObject.Nodes);
+                    if (firstPerson)
+                        foreach (var part in _equippedObject.BodyAttachments)
+                            foreach (var mesh in part.FindChildren("*", "", true, false).OfType<GeometryInstance3D>())
+                            { mesh.Layers = 0; mesh.CastShadow = GeometryInstance3D.ShadowCastingSetting.Off; }
+                }
             }
             if (firstPerson) NativePlayerSelfVisibility.Apply(Actor);
             SetAmbient(ambient);
@@ -157,7 +165,7 @@ internal sealed partial class RuntimeNativePlayerActor : Node3D
     private byte[] Read(string path) => _content.TryRead(path, null, out var bytes, out _) ? bytes : throw new FileNotFoundException($"Player source resource is missing: {path}", path);
     private FalloutNpcAppearancePart FirstPersonPart(FalloutNpcAppearancePart part)
     {
-        if ((part.BipedSlots & 0x18) == 0 || part.ModelPath is not { } path || !path.EndsWith(".nif", StringComparison.OrdinalIgnoreCase)) return part;
+        if (part.ModelPath is not { } path || !path.EndsWith(".nif", StringComparison.OrdinalIgnoreCase)) return part;
         // Owned hand variants carry inverse binds for the first-person finger
         // hierarchy. Keeping the third-person inverse binds distorts the grip.
         var candidate = path[..^4] + "1st.nif";

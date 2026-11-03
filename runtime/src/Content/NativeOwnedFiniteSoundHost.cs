@@ -20,6 +20,7 @@ internal sealed partial class NativeOwnedFiniteSoundHost : Node3D
         private readonly NativeOwnedFiniteSoundHost _host;
         private Node3D? _emitter;
         private readonly Action _cancel;
+        private readonly NativeOwnedSoundSourceScene? _sourceScene;
         private readonly Action _update;
         private bool _disposed;
         internal Node Voice { get; }
@@ -30,13 +31,14 @@ internal sealed partial class NativeOwnedFiniteSoundHost : Node3D
         internal bool EmitterRetired => FollowEmitter && _emitter is null;
         internal bool Alive => !_disposed && !_host._retiring && GodotObject.IsInstanceValid(Voice) && Voice.IsInsideTree();
 
-        internal Attachment(NativeOwnedFiniteSoundHost host, Node voice, Node3D emitter, Action cancel, Action update, bool followEmitter)
+        internal Attachment(NativeOwnedFiniteSoundHost host, Node voice, Node3D emitter, Action cancel, Action update, bool followEmitter, NativeOwnedSoundSourceScene? sourceScene)
         {
+            _sourceScene = sourceScene;
             _host = host; Voice = voice; _emitter = followEmitter ? emitter : null; _cancel = cancel; _update = update;
             FollowEmitter = followEmitter;
             EmitterNativeOwner = emitter.GetInstanceId(); EmitterPath = emitter.GetPath().ToString();
             RuntimeNativeNifSoundEmitters.Refresh(emitter);
-            LastRealPosition = emitter.GlobalPosition;
+            LastRealPosition = _sourceScene?.Position(emitter) ?? emitter.GlobalPosition;
             if (followEmitter) emitter.TreeExiting += RetireEmitter;
         }
 
@@ -48,7 +50,7 @@ internal sealed partial class NativeOwnedFiniteSoundHost : Node3D
                 if (GodotObject.IsInstanceValid(emitter) && emitter.IsInsideTree())
                 {
                     RuntimeNativeNifSoundEmitters.Refresh(emitter);
-                    LastRealPosition = emitter.GlobalPosition;
+                    LastRealPosition = _sourceScene?.Position(emitter) ?? emitter.GlobalPosition;
                 }
                 else RetireEmitter();
             }
@@ -65,7 +67,7 @@ internal sealed partial class NativeOwnedFiniteSoundHost : Node3D
                 if (emitter.IsInsideTree())
                 {
                     RuntimeNativeNifSoundEmitters.Refresh(emitter);
-                    LastRealPosition = emitter.GlobalPosition;
+                    LastRealPosition = _sourceScene?.Position(emitter) ?? emitter.GlobalPosition;
                 }
                 emitter.TreeExiting -= RetireEmitter;
             }
@@ -88,14 +90,14 @@ internal sealed partial class NativeOwnedFiniteSoundHost : Node3D
 
     internal static Attachment Attach(FalloutPluginStack records, FalloutAnimationSoundEvents events,
         long generation, Node voice, Node3D emitter, FalloutSoundLoop loop, Action cancel, Action update,
-        bool followEmitter = true)
+        bool followEmitter = true, NativeOwnedSoundSourceScene? sourceScene = null)
     {
         if (!GodotObject.IsInstanceValid(emitter) || !emitter.IsInsideTree())
             throw new NotSupportedException("Finite sound requires its actual resident emitter at creation.");
         var entry = events.Events.SingleOrDefault(entry => entry.Generation == generation);
         var stream = voice is AudioStreamPlayer3D spatial ? spatial.Stream : (voice as AudioStreamPlayer)?.Stream;
         if (entry is not { Played: true, End: FalloutAnimationSoundEnd.Active, Error: null } ||
-            loop.Mode != FalloutSoundLoopMode.None || NativeOwnedSoundVoice.Reference(records, emitter) != events.Reference ||
+            loop.Mode != FalloutSoundLoopMode.None || NativeOwnedSoundVoice.Identity(records, emitter) != events.Identity ||
             stream is null || !double.IsFinite(stream.GetLength()) || stream.GetLength() <= 0 ||
             !FalloutAnimationSoundEventsSnapshot.Hash(entry.MediaSha256) ||
             !stream.GetMeta("opennv_owned_media_sha256", "").AsString().Equals(entry.MediaSha256, StringComparison.OrdinalIgnoreCase) ||
@@ -106,12 +108,16 @@ internal sealed partial class NativeOwnedFiniteSoundHost : Node3D
             !Convert.ToHexString(SHA256.HashData(source.ReadData())).Equals(entry.SoundSha256, StringComparison.OrdinalIgnoreCase) ||
             FalloutSoundLoop.Read(FalloutSoundRecordReader.Read(source)).Mode != FalloutSoundLoopMode.None)
             throw new InvalidDataException("Finite sound lifetime differs from its winning source sound.");
-        var viewport = emitter.GetViewport();
+        sourceScene?.RequireEmitter(emitter);
+        var audioReference = sourceScene?.AudioReference ?? emitter;
+        if (NativeOwnedSoundVoice.Identity(records, audioReference) != events.Identity)
+            throw new NotSupportedException("Finite sound audio-space reference differs from its source history.");
+        var viewport = audioReference.GetViewport();
         if (!Hosts.TryGetValue(records, out var host) || !GodotObject.IsInstanceValid(host))
         {
-            Node scene = emitter;
+            Node scene = audioReference;
             while (scene.GetParent() is { } parent && parent != viewport) scene = parent;
-            if (scene.GetParent() != viewport || scene == emitter ||
+            if (scene.GetParent() != viewport || scene == audioReference ||
                 scene.HasMeta("opennv_reference_form_key") || scene.HasMeta("opennv_nif_fixed_strings"))
                 throw new NotSupportedException("Finite sound has no scene lifetime outside its source model.");
             host = new NativeOwnedFiniteSoundHost { Name = "OwnedFiniteSourceVoices" };
@@ -128,7 +134,7 @@ internal sealed partial class NativeOwnedFiniteSoundHost : Node3D
         }
         if (host._retiring || !host.IsInsideTree() || host.GetViewport() != viewport)
             throw new NotSupportedException("Finite sound has no current source-graph audio lifetime.");
-        var attachment = new Attachment(host, voice, emitter, cancel, update, followEmitter);
+        var attachment = new Attachment(host, voice, emitter, cancel, update, followEmitter, sourceScene);
         try
         {
             host.AddChild(voice); host._attachments.Add(attachment); attachment.PublishPosition();

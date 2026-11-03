@@ -11,10 +11,12 @@ internal sealed partial class RuntimeNativeActorCombat
 
     private bool TryAcquireThreat(RuntimeNativePlayer? player)
     {
-        _detectRange = ThreatRadius(_threat!);
+        _detectRange = FalloutGameSettingFloats.Read(_records, "fSneakMaxDistance") * _skeleton.UnitsToMetres;
         if (!float.IsFinite(_detectRange) || _detectRange <= 0)
             throw new InvalidDataException("Actor threat radius is invalid.");
-        var maximumDistanceSquared = _detectRange * _detectRange;
+        var warningDistance = _threat!.WarningDistance(_skeleton.UnitsToMetres);
+        var candidateDistance = Math.Max(_detectRange, warningDistance);
+        var maximumDistanceSquared = candidateDistance * candidateDistance;
         var candidates = new List<(FalloutFormKey Reference, RuntimeNativeActorCombat? Actor, float DistanceSquared)>();
         foreach (var candidate in CombatActors)
         {
@@ -37,8 +39,8 @@ internal sealed partial class RuntimeNativeActorCombat
                      .ThenBy(value => value.Reference.ToString(), StringComparer.Ordinal))
         {
             var relation = _world.ActorRelation(_state.Reference, candidate.Reference);
-            var initiates = _threat!.Initiates(relation);
-            var warns = _threat.Warns(relation);
+            var (initiates, warns) = _threat!.AcquisitionAt(relation, candidate.DistanceSquared,
+                _detectRange, _skeleton.UnitsToMetres);
             var eligible = initiates || warns;
             bool? visible = eligible ? CanSeePoint(candidate.Actor?.BodyTargetPoint() ?? player!.CombatTargetPoint, candidate.Actor) : null;
             decisions.Add(new { reference = candidate.Reference, candidate.DistanceSquared, relation, eligible, visible, warns });
@@ -46,7 +48,7 @@ internal sealed partial class RuntimeNativeActorCombat
             if (!PackageAllowsUnprovokedCombat()) continue;
             selected = true;
             _relation = relation;
-            if (initiates || candidate.DistanceSquared <= maximumDistanceSquared / 4)
+            if (initiates || candidate.DistanceSquared <= warningDistance * warningDistance / 4)
             {
                 _state.AggroWarning = null;
                 _state.Engagement = new(candidate.Reference);
@@ -60,7 +62,9 @@ internal sealed partial class RuntimeNativeActorCombat
         if (!selected) ClearRadiusWarning();
         _lastAcquisition = new
         {
-            radius = _detectRange,
+            radius = candidateDistance,
+            detectionDistance = _detectRange,
+            warningDistance,
             candidates = candidates.Count,
             decisions,
             selected = _state.Engagement?.Target,

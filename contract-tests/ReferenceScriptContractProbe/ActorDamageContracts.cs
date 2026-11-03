@@ -2,6 +2,7 @@ using System.Buffers.Binary;
 using System.Text;
 using System.Text.Json;
 using OpenNV.Runtime.Content;
+using OpenNV.Runtime.Formats.Gamebryo;
 using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.World.Cells;
 using OpenNV.Runtime.World.Actors;
@@ -10,6 +11,7 @@ internal static class ActorDamageContracts
 {
     internal static void Run()
     {
+        ExerciseMeleeBounds();
         var directory = Path.Combine(Path.GetTempPath(), "opennv-actor-damage-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(directory);
         try
@@ -22,7 +24,10 @@ internal static class ActorDamageContracts
             BinaryPrimitives.WriteUInt16LittleEndian(scaledAcbs.AsSpan(10), 10);
             BinaryPrimitives.WriteUInt16LittleEndian(scaledAcbs.AsSpan(12), 40);
             var entry = new byte[12]; entry[0] = 1; UInt(entry, 4, 3); entry[8] = 2;
-            var references = Join(Reference(0x91), Reference(0x92),
+            var projectile = new byte[84]; projectile[2] = 2; Float(projectile, 8, 400); Float(projectile, 12, 1000);
+            var references = Join(Reference(0x91), Reference(0x92, 1.25f),
+                Record("PGRE", 0x94, Field("NAME", BitConverter.GetBytes(0x24u)), Field("DATA", new byte[24])),
+                Record("REFR", 0x95, Field("NAME", BitConverter.GetBytes(3u)), Field("DATA", new byte[24])),
                 Record("ACHR", 0x93, Field("NAME", BitConverter.GetBytes(0x12u)), Field("DATA", new byte[24])));
             var group = new byte[24 + references.Length]; Encoding.ASCII.GetBytes("GRUP").CopyTo(group, 0);
             UInt(group, 4, (uint)group.Length); UInt(group, 8, 0x80); UInt(group, 12, 6); references.CopyTo(group, 24);
@@ -42,6 +47,7 @@ internal static class ActorDamageContracts
                 Record("BPTD", 5, Field("BPNN", Text("Root")), Field("BPND", new byte[83])),
                 Npc(0x10, 30, 3, 8, 0), Npc(0x11, 30, 3, 8, 0x10), Npc(0x12, 0, 20, 8, 0),
                 Npc(0x13, 30, 3, 8, 0x90), Npc(0x14, 30, 0, 0, 0x10), Npc(0x15, 30, 0, 8, 0),
+                Record("PROJ", 0x24, Field("EDID", Text("EnvironmentalProjectile")), Field("DATA", projectile)),
                 Record("BPTD", 0x1d, Part(0, 1, "Root"), Part(1, 2, "Neck")),
                 Setting(0x61, "fAVDNPCHealthEnduranceOffset", -1), Setting(0x62, "fAVDNPCHealthEnduranceMult", 5.25f),
                 Setting(0x63, "fAVDNPCHealthLevelMult", 5),
@@ -52,6 +58,13 @@ internal static class ActorDamageContracts
                 Record("CELL", 0x80, Field("EDID", Text("SourceCell")), Field("DATA", [1])), group));
             using var records = FalloutPluginStack.Load(directory, ["Test.esm"]);
             FalloutFormKey Key(uint id) => new("Test.esm", id);
+            Check(FalloutActorEngagement.IsActorAttacker(records, records.RuntimeFormKey(0x14)) &&
+                FalloutActorEngagement.IsActorAttacker(records, Key(0x91)) &&
+                FalloutActorEngagement.IsActorAttacker(records, Key(0x93)) &&
+                !FalloutActorEngagement.IsActorAttacker(records, Key(0x94)) &&
+                !FalloutActorEngagement.IsActorAttacker(records, Key(0x95)) &&
+                !FalloutActorEngagement.IsActorAttacker(records, Key(0x10)),
+                "Environmental hit sources or unplaced actor definitions became combat actors, or real actors lost retaliation.");
             foreach (var dataset in new uint[] { 0x73, 0x74, 0x75 })
                 Check(FalloutImpact.Resolve(records, Key(dataset), 6)?.Decal is
                     { MinimumWidth: 12, MaximumWidth: 20, MinimumHeight: 8, MaximumHeight: 30, Depth: 50,
@@ -131,6 +144,7 @@ internal static class ActorDamageContracts
             Check(restoredVitals.ExactHitPoints == 199.75f && restoredVitals.RadiationRads == 12.5f,
                 "Fractional player health or radiation was lost during persistence.");
             var cell = FalloutCellSceneReader.Read(records, Key(0x80));
+            WeaponTouchEffectContracts.Run(records, cell);
             var deathCondition = new FalloutCondition(records.GetEffective(Key(1)), 0, 0, 46, 0, 0, 2, 0x91);
             FalloutDialogueConditions DeathConditions(FalloutReferenceWorld owner) => new(records, new(records), Key(0x91),
                 new FalloutDialogueSpeaker(Key(1), Key(1), Key(0x850), "Synthetic", null, false), isDead: reference =>
@@ -168,6 +182,9 @@ internal static class ActorDamageContracts
             }
             using var world = new FalloutReferenceWorld(records);
             world.LoadCell(cell);
+            Check(world.Get(Key(0x91)).ActorReferenceScale == 1 && world.Get(Key(0x92)).ActorReferenceScale == 1.25f &&
+                FalloutCellSceneReader.ReadReferenceScale(records.GetEffective(Key(0x92))) == 1.25f,
+                "Logical actor reference scale lost source XSCL, its absent default or its retained world owner.");
             Check(world.ActorValue(Key(0x91), "Health") == 50 && !world.IsDead(Key(0x91)), "Source CREA health was not initialized.");
             Check(DeathConditions(world).Evaluate(deathCondition) == 0, "Dialogue considered a living actor dead.");
             var healthBeforeScript = world.Health(Key(0x92));
@@ -268,7 +285,8 @@ internal static class ActorDamageContracts
         return Join(Field("BPNN", Text(node)), Field("BPNT", Text(node)), Field("BPND", data),
             Field("NAM1", Text(type == 1 ? "Gore/source-head.nif" : "")), Field("NAM4", Text(node)));
     }
-    private static byte[] Reference(uint id) => Record("ACRE", id, Field("NAME", BitConverter.GetBytes(1u)), Field("DATA", new byte[24]));
+    private static byte[] Reference(uint id, float? scale = null) => Record("ACRE", id, Field("NAME", BitConverter.GetBytes(1u)),
+        Field("DATA", new byte[24]), scale is { } value ? Field("XSCL", BitConverter.GetBytes(value)) : []);
     private static byte[] Text(string value) => Encoding.ASCII.GetBytes(value + '\0');
     private static byte[] Join(params byte[][] fields) => fields.SelectMany(value => value).ToArray();
     private static void Float(byte[] bytes, int offset, float value) => BinaryPrimitives.WriteSingleLittleEndian(bytes.AsSpan(offset), value);
@@ -283,6 +301,65 @@ internal static class ActorDamageContracts
         var data = Join(fields); var bytes = new byte[24 + data.Length]; Encoding.ASCII.GetBytes(name).CopyTo(bytes, 0);
         UInt(bytes, 4, (uint)data.Length); UInt(bytes, 12, id); data.CopyTo(bytes, 24); return bytes;
     }
+    private static void ExerciseMeleeBounds()
+    {
+        // Synthetic long creature: the vertical/lateral capsule radius is
+        // deliberately smaller than its source forward BBX extent.
+        var center = new FalloutNifVector3(0, 3, 2);
+        var dimensions = new FalloutNifVector3(4, 12, 2);
+        var attacker = FalloutActorMeleeBounds.MaximumY(center, dimensions, .5f, .02f);
+        var target = FalloutActorMeleeBounds.MaximumY(new(0, 0, 5), new(3, 2, 5), 1, .02f);
+        const float rawReach = .05f, contactDistance = .2f, minimumCapsuleRadius = .02f;
+        Check(Math.Abs(attacker - .15f) < .000001f && Math.Abs(target - .04f) < .000001f &&
+            contactDistance > rawReach + minimumCapsuleRadius + target && contactDistance < rawReach + attacker + target,
+            "Source melee bounds reused a narrow collision radius and refused an otherwise reachable contact.");
+        Check(Math.Abs(FalloutActorMeleeBounds.MaximumY(center, dimensions, 1, .02f) - attacker * 2) < .000001f &&
+            FalloutActorMeleeBounds.MaximumY(new(0, -20, 2), dimensions, .5f, .02f) < 0,
+            "Melee maximum-Y lost source center, actor scale or signed bound semantics.");
+        var baseScale = .5f; var referenceScale = 2f;
+        var scaledReach = FalloutActorMeleeBounds.NaturalReach(8, baseScale * referenceScale, .02f);
+        Check(Math.Abs(scaledReach - .16f) < .000001f &&
+            Math.Abs(FalloutActorMeleeBounds.NaturalReach(8, baseScale * 3, .02f) - .24f) < .000001f,
+            "Creature reach omitted placed/reference scale or retained a stale prepared scale.");
+        var height = FalloutActorMeleeBounds.VerticalSpan(new(0, 90, 40), new(4, 125, 20), .35f, .02f);
+        Check(Math.Abs(height - .28f) < .000001f &&
+            Math.Abs(FalloutActorMeleeBounds.VerticalSpan(new(0, -90, 400), new(4, 125, 20), .7f, .02f) - height * 2) < .000001f,
+            "Detection height reused a horizontal/radius bound, retained a center offset, or omitted current actor scale.");
+        Check(FalloutActorMeleeBounds.VerticalSpan(center, new(4, 12, 0), .5f, .02f) == 0,
+            "An actual zero-height source span invented a nonzero sight point.");
+        Reject(() => FalloutActorMeleeBounds.VerticalSpan(center, new(4, 12, -1), .5f, .02f));
+        Reject(() => FalloutActorMeleeBounds.VerticalSpan(center, dimensions, float.NaN, .02f));
+        Reject(() => FalloutActorMeleeBounds.VerticalSpan(center, new(4, 12, 1e30f), 1e20f, 1e-20f));
+        var standing = new FalloutMeleeActorGeometry(new(0, 0, 0), .25f, 0, 1.8f, false);
+        var low = new FalloutMeleeActorGeometry(new(0, 0, -.8f), .15f, 0, .5f, false);
+        Check(FalloutActorMeleeSelection.Distance(standing, low) < .5f &&
+            System.Numerics.Vector3.Distance(new(0, 1.7f, 0), new(0, .3f, -.8f)) > .5f,
+            "Low actor contact spent source reference reach on camera-to-torso height.");
+        Check(FalloutActorMeleeSelection.Distance(standing, low with { Position = new(0, 2, -.8f) }) > .5f,
+            "Grounded actor reach ignored actual reference elevation.");
+        var swimmer = standing with { Swimming = true };
+        var otherSwimmer = low with { Swimming = true, Position = new(0, 1, -.8f), MaximumHeight = 1 };
+        Check(Math.Abs(FalloutActorMeleeSelection.Distance(swimmer, otherSwimmer) - .4f) < .000001f &&
+            FalloutActorMeleeSelection.Distance(swimmer, otherSwimmer with { Position = new(0, 3, -.8f) }) > 2,
+            "Swimming melee lost source vertical overlap or flattened disjoint actors.");
+        Check(FalloutActorMeleeSelection.Distance(swimmer,
+            otherSwimmer with { Position = new(0, .5f, -.8f), MaximumHeight = .1f }) > .5f,
+            "Swimming melee replaced the asymmetric source endpoint test with generic interval overlap.");
+        Check(Math.Abs(FalloutActorMeleeSelection.Reach(true, 0, 1, 128, 1, .02f) - 2.56f) < .000001f &&
+            Math.Abs(FalloutActorMeleeSelection.Reach(false, .6f, 1, 128, 2, .02f) - 3.072f) < .000001f,
+            "Intrinsic hands reused zero default-WEAP reach or equipped melee lost source/reference scaling.");
+        Check(FalloutActorMeleeSelection.Angle(new(0, -40, -1), new(0, 100, -1)) == 0 &&
+            FalloutActorMeleeSelection.InCone(60, 1, 25, .02f, false, 2) &&
+            !FalloutActorMeleeSelection.InCone(60, 3, 25, .02f, false, 2) &&
+            !FalloutActorMeleeSelection.InCone(60, 2.56f, 25, .02f, false, 2) &&
+            FalloutActorMeleeSelection.InCone(40, 3, 25, .02f, true, 2),
+            "Player melee used a pitched eye cone, omitted close-range widening or lost the source dead-target multiplier.");
+        Reject(() => FalloutActorMeleeSelection.Distance(standing with { SurfaceExtent = float.NaN }, low));
+        Reject(() => FalloutActorMeleeSelection.Reach(true, 0, float.NaN, 128, 1, .02f));
+        Reject(() => FalloutActorMeleeBounds.MaximumY(center, dimensions, 0, .02f));
+        Reject(() => FalloutActorMeleeBounds.MaximumY(center, new(4, float.NaN, 2), .5f, .02f));
+    }
+
     private static void Check(bool condition, string message) { if (!condition) throw new InvalidOperationException(message); }
     private static void RequirePose(FalloutActorRagdollState actual, FalloutActorRagdollState expected) =>
         Check(JsonSerializer.Serialize(actual) == JsonSerializer.Serialize(expected), "Cold reference restoration lost its death pose.");

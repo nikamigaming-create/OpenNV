@@ -87,13 +87,38 @@ internal partial class RuntimeNativePlayer
 
     private void RequestWeaponFire()
     {
+        if (FatigueKnockoutActive) return;
         if (IsDefeated?.Invoke() == true) return;
-        if (_weaponAction is not null || _firstPerson?.Weapon is not { } weapon) return;
+        if (_firstPerson?.Weapon is not { } weapon) return;
         var started = System.Diagnostics.Stopwatch.GetTimestamp();
         try
         {
+            var attackGroup = weapon.AttackGroup;
+            var replacingAttack = _weaponAction is not null;
+            if (replacingAttack)
+            {
+                if (VatsExecuting || weapon.Automatic || weapon.IsThrownWeapon || weapon.IsMine || IsMeleeWeapon(weapon) ||
+                    _weaponAction is not ("attackleft" or "attackright" or "attack3" or "attack4" or "attack5" or "attack6" or "attack7" or "attack8") ||
+                    _pendingShotCount != 0 || _shotsFired == _weaponActionShotsAtStart ||
+                    _weaponActionKeys is not { Discharges: 1 } timeline ||
+                    !timeline.TryRefire(_weaponActionSeconds, out var nextGroup)) return;
+                attackGroup = nextGroup ?? attackGroup;
+            }
+            if (weapon.IsNonDischargeAction)
+            {
+                if (VatsExecuting) throw new NotSupportedException("Non-discharge weapon action has no source VATS action owner.");
+                if (!_weaponHandling!.Drawn || !_weaponHandling.CanUse(weapon)) return;
+                _ = PrepareAttackVariants(weapon, attackGroup);
+                _shot = null;
+                _firePreparationError = null;
+                RequestWeaponAction(attackGroup);
+                return;
+            }
             if (weapon.IsMine)
-                throw new NotSupportedException("Mine placement and proximity detonation are unbound.");
+            {
+                RequestMineWeaponFire(weapon);
+                return;
+            }
             if (IsMeleeWeapon(weapon))
             {
                 RequestMeleeWeaponFire(weapon);
@@ -113,8 +138,11 @@ internal partial class RuntimeNativePlayer
             var ammunition = _weaponHandling.Ammunition(weapon);
             if (_shot?.Weapon != weapon.Form || _shot.Ammunition != ammunition)
             {
-                _shot = FalloutWeaponShot.Read(_presentationRecords!, weapon.Form, ammunition, weapon.HasAmmunitionSource);
-                _shot = FalloutWeaponModifications.Apply(_presentationRecords!, _shot, _presentationInventory!.WeaponModMask(weapon.Form));
+                _shot = null;
+                var prepared = FalloutWeaponShot.Read(_presentationRecords!, weapon.Form, ammunition, weapon.HasAmmunitionSource);
+                prepared = FalloutWeaponModifications.Apply(_presentationRecords!, prepared, _presentationInventory!.WeaponModMask(weapon.Form));
+                prepared.RequireRuntimeAttackOwner();
+                _shot = prepared;
             }
             _shot.RequireRuntimeAttackOwner();
             var definitionDone = System.Diagnostics.Stopwatch.GetTimestamp();
@@ -125,12 +153,15 @@ internal partial class RuntimeNativePlayer
             var casingDone = System.Diagnostics.Stopwatch.GetTimestamp();
             if (!float.IsFinite(weapon.AttackMultiplier) || weapon.AttackMultiplier <= 0)
                 throw new InvalidDataException("WEAP attack multiplier is invalid.");
-            _ = PrepareAttackVariants(weapon, weapon.AttackGroup);
+            _ = PrepareAttackVariants(weapon, attackGroup);
             var clipDone = System.Diagnostics.Stopwatch.GetTimestamp();
             PrepareWeaponMuzzle(_shot.Projectile);
             var muzzleDone = System.Diagnostics.Stopwatch.GetTimestamp();
             _firePreparationError = null;
-            RequestWeaponAction(weapon.AttackGroup);
+            // Replacement retires only the remaining pose/events. Already crossed
+            // discharge events and their ammunition/projectiles remain committed.
+            if (replacingAttack) CancelWeaponAction();
+            RequestWeaponAction(attackGroup);
             var actionDone = System.Diagnostics.Stopwatch.GetTimestamp();
             _firePreparationTiming = new
             {
@@ -159,6 +190,34 @@ internal partial class RuntimeNativePlayer
         if (_firstPerson?.Weapon is not { } weapon || _modalInput ||
             _xr is { } xr && (!xr.RightGrip.GetHasTrackingData() || !xr.RightAim.GetHasTrackingData() || xr.PointAtPipBoy is not null ||
                 xr.WorldPointer || _xrRightContact?.Valid != true || !_firstPerson.XrRightContactReached)) return;
+        if (weapon.IsNonDischargeAction)
+        {
+            try
+            {
+                for (var action = 0; action < pending; action++)
+                {
+                    _presentationInventory!.AdmitInventoryWeaponFire(_presentationRecords!, weapon.Form, _presentationRecords!.RuntimeFormKey(0x14));
+                    _shotsFired++;
+                    _lastShot = new { ordinal = _shotsFired, weapon = weapon.Form.ToString(), owner = "source-OnFire;non-discharge-action" };
+                }
+            }
+            catch (Exception error)
+            {
+                _weaponActionError = _firePreparationError = error.Message;
+                GD.PushError("OPENNV_WEAPON_ONFIRE_UNBOUND " + error.Message);
+            }
+            return;
+        }
+        if (weapon.IsMine)
+        {
+            try { PublishMineRelease(weapon, pending); }
+            catch (Exception error)
+            {
+                _weaponActionError = _firePreparationError = error.Message;
+                GD.PushError("OPENNV_MINE_DEPLOYMENT_UNBOUND " + error.Message);
+            }
+            return;
+        }
         if (_shot is null || _shot.Weapon != weapon.Form)
         {
             if (!IsMeleeWeapon(weapon)) return;
@@ -179,6 +238,7 @@ internal partial class RuntimeNativePlayer
             if (weapon.Automatic && _automaticFireStopped) return;
             try
             {
+                var shot = _shot ?? throw new InvalidOperationException("Discharge source is absent.");
                 var started = System.Diagnostics.Stopwatch.GetTimestamp();
                 var actor = WeaponActor ?? throw new InvalidOperationException("Actual held source weapon presentation is absent.");
                 var muzzle = actor.ProjectileTransform();
@@ -186,7 +246,7 @@ internal partial class RuntimeNativePlayer
                     muzzle = _camera.GlobalTransform * _firstPerson.SourceCamera.AffineInverse() * muzzle;
                 var from = muzzle.Origin;
                 var direction = -muzzle.Basis.Z.Normalized();
-                var shotRange = _shot.Projectile.Range * UnitsToMeters;
+                var shotRange = shot.Projectile.Range * UnitsToMeters;
                 var sourceRecords = _presentationRecords ?? throw new InvalidOperationException("Shot settings have no source owner.");
                 var autoAimMaxDist = FalloutGameSettingFloats.Read(sourceRecords, "fAutoAimMaxDistance") * UnitsToMeters;
                 var autoAimMaxDeg = FalloutGameSettingFloats.Read(sourceRecords,
@@ -202,20 +262,26 @@ internal partial class RuntimeNativePlayer
                     direction = (target - from).Normalized();
                 else if (_xr is null)
                     direction = (aimOrigin + aimDirection * shotRange - from).Normalized();
-                var medianSpreadDegrees = ResolvePlayerShotSpread(_shot);
+                var medianSpreadDegrees = ResolvePlayerShotSpread(shot);
                 if (!from.IsFinite() || !direction.IsFinite() || direction.LengthSquared() < .99f)
                     throw new InvalidDataException("Source projectile transform is invalid.");
                 // Collision resolution is independent of later damage/effect lanes.
                 // Unsupported impact behavior remains identified in the observation.
-                var isInstantRay = _shot.Projectile.IsInstantRayAttack;
+                var isInstantRay = shot.Projectile.IsInstantRayAttack;
                 _lastProjectileTransparentLayerPassThroughs = 0;
                 _lastProjectileTransparentLayerUnresolvedContacts = 0;
                 IReadOnlyList<PlayerProjectileTrace> traces = isInstantRay ? TraceProjectiles(from, direction, medianSpreadDegrees) : [];
+                var damageOwner = _damage ?? throw new InvalidOperationException("Player damage owner is absent.");
+                // Discharge captures source item, condition and event-list before
+                // ammunition/condition publication can replace the selection.
+                var directDamage = damageOwner.Resolve(shot);
+                FalloutWeaponDamage? blastDamage = isInstantRay && shot.Projectile.ExplosionSource is { } sourceExplosion
+                    ? damageOwner.Resolve(shot, sourceExplosion.Damage) : null;
                 List<RuntimeNativeProjectileFlight> preparedFlights = isInstantRay
                     ? []
-                    : PrepareProjectileFlights(from, direction, medianSpreadDegrees,
-                        (_damage ?? throw new InvalidOperationException("Player damage owner is absent.")).Resolve(_shot));
-                if (!_weaponHandling!.ConsumeShot(weapon, _shot, _presentationRecords!))
+                    : PrepareProjectileFlights(from, direction, medianSpreadDegrees, directDamage);
+                var loadedBeforeDischarge = _weaponHandling!.Loaded(weapon.Form);
+                if (!_weaponHandling!.ConsumeShot(weapon, shot, _presentationRecords!))
                 {
                     foreach (var flight in preparedFlights) flight.Free();
                     if (weapon.Automatic)
@@ -229,22 +295,25 @@ internal partial class RuntimeNativePlayer
                 }
                 if (weapon.Automatic && !_weaponHandling.CanFire(weapon)) _automaticFireStopped = true;
                 _shotsFired++;
+                if (!VatsExecuting && _weaponHandling.NeedsAutomaticReload(weapon, loadedBeforeDischarge))
+                    _automaticReloadAfterDischarge = (weapon.Form, _presentationInventory!.SelectedWeapon(weapon.Form).Extra.Instance ??
+                        throw new InvalidOperationException("Discharged weapon has no source instance."), loadedBeforeDischarge);
                 var collisionDone = System.Diagnostics.Stopwatch.GetTimestamp();
                 EnsureWeaponSounds();
                 if (weapon.Sounds.TryGetValue("shoot", out var sound)) _weaponSounds!.DispatchSound(sound);
                 else _weaponUnboundEvents.Add("weapon-shoot-sound");
                 actor.FlashMuzzle();
                 var audioDone = System.Diagnostics.Stopwatch.GetTimestamp();
-                var damage = isInstantRay ? ApplyProjectileTraces(traces) : new PlayerProjectileDamageSummary(0, 0, 0, 0, 0, null);
+                var damage = isInstantRay ? ApplyProjectileTraces(traces, shot, directDamage, blastDamage) : new PlayerProjectileDamageSummary(0, 0, 0, 0, 0, null);
                 if (isInstantRay) PublishVatsShot();
                 // A source discharge already consumed ammunition and owns AP.
                 // Unsupported damage must fault that action, not report success.
                 if (isInstantRay && VatsBurstActive && _damageError is { } vatsDamageError)
                     throw new InvalidOperationException(vatsDamageError);
                 var damageDone = System.Diagnostics.Stopwatch.GetTimestamp();
-                if (_shot.Projectile.Type == 4)
+                if (shot.Projectile.Type == 4)
                     foreach (var trace in traces)
-                        TryShotEffect("beam", () => _shotEffects!.Beam(_shot.Projectile, from, trace.Point));
+                        TryShotEffect("beam", () => _shotEffects!.Beam(shot.Projectile, from, trace.Point));
                 if (!weapon.IsThrownWeapon && !weapon.IsMine && weapon.ShellModel is not null && actor.HasShellSocket && !_shotEffectErrors.ContainsKey("casing-prepare"))
                     TryShotEffect("casing", () =>
                     {
@@ -262,11 +331,11 @@ internal partial class RuntimeNativePlayer
                 {
                     ordinal = _shotsFired,
                     weapon = weapon.Form.ToString(),
-                    weaponAnimationType = _shot.WeaponAnimationType,
-                    attackAnimation = _shot.AttackAnimation,
-                    ammunition = _shot.Ammunition?.ToString(),
-                    projectile = _shot.Projectile.Form.ToString(),
-                    projectiles = _shot.Projectiles,
+                    weaponAnimationType = shot.WeaponAnimationType,
+                    attackAnimation = shot.AttackAnimation,
+                    ammunition = shot.Ammunition?.ToString(),
+                    projectile = shot.Projectile.Form.ToString(),
+                    projectiles = shot.Projectiles,
                     projectileHits = damage.HitCount,
                     projectileActorHits = damage.ActorHitCount,
                     projectileActorHitsPending = damage.PendingActorHits,
@@ -309,9 +378,9 @@ internal partial class RuntimeNativePlayer
                         medianDeviationDegrees = medianSpreadDegrees,
                         source = "FNV aim and minimum weapon spread; skill, movement, arm injuries, requirements and CGS perks; AMEF"
                     },
-                    tracer = _shot.Projectile.TracerChance == 0 ? "source-disabled" : "unbound-source-tracer"
+                    tracer = shot.Projectile.TracerChance == 0 ? "source-disabled" : "unbound-source-tracer"
                 };
-                GD.Print($"OPENNV_WEAPON_SHOT weapon={weapon.Form} projectile={_shot.Projectile.Form} reference={lastTrace?.Reference} pellets={_shot.Projectiles} hits={damage.HitCount} loaded={_weaponHandling.Loaded(weapon.Form)} damage={damage.LastDamage?.HealthDamage} damageError={_damageError}");
+                GD.Print($"OPENNV_WEAPON_SHOT weapon={weapon.Form} projectile={shot.Projectile.Form} reference={lastTrace?.Reference} pellets={shot.Projectiles} hits={damage.HitCount} loaded={_weaponHandling.Loaded(weapon.Form)} damage={damage.LastDamage?.HealthDamage} damageError={_damageError}");
             }
             catch (Exception error)
             {

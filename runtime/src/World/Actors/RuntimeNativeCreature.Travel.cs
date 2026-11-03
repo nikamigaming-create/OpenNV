@@ -9,6 +9,10 @@ internal sealed partial class RuntimeNativeCreature
     private FalloutTravelPackage? _travelPackage;
     private FalloutTravelProgress? _travelProgress;
     private Vector3? _travelDestination;
+    private int CurrentTravelProcedure => _aiError is null && _travelPackage is { } source &&
+        source.Form == _aiPackage?.FormKey && _travelProgress is { } progress
+        ? progress.Complete ? 17 : 0
+        : throw new NotSupportedException("Creature Travel has no admitted current procedure phase.");
     private object? TravelState => _travelPackage is null ? null : new
     {
         source = _travelPackage,
@@ -45,7 +49,9 @@ internal sealed partial class RuntimeNativeCreature
             { progress = current; _travelDestination = null; }
         }
         _travelProgress = progress;
-        if (AdvancePackagePortal(progress.Cell, source.Running, source.Sneaking, delta)) return;
+        // A completed Travel retains its arrival/end continuation, not an
+        // unfinished portal leg. The portal owner deliberately rejects it.
+        if (!progress.Complete && AdvancePackagePortal(progress.Cell, source.Running, source.Sneaking, delta)) return;
         var authored = GetParent<Node3D>().ToGlobal(new Vector3(progress.Location[0], progress.Location[2], -progress.Location[1]) * Skeleton.UnitsToMetres);
         var destination = _travelDestination ??= Combat!.ProjectPackageDestination(authored);
         var radius = Math.Max(source.Radius * Skeleton.UnitsToMetres, SafeMargin * 8);

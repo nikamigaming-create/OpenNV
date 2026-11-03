@@ -23,7 +23,7 @@ internal sealed partial class RuntimeLiveHarness
         var operation = command.GetProperty("op").GetString()!;
         if (operation.StartsWith("rig.", StringComparison.Ordinal))
         {
-            var mutating = operation is not ("rig.source" or "rig.status");
+            var mutating = operation is not ("rig.source" or "rig.status" or "rig.travel.status");
             if (mutating && _inputRecording is not null)
                 throw new InvalidOperationException("Finish the ordinary input segment before controlled rig preparation/actions.");
             if (mutating && _inputPlayback?.Active == true)
@@ -42,7 +42,8 @@ internal sealed partial class RuntimeLiveHarness
                 operation,
                 state,
                 ordinaryInput = false,
-                evidenceKind = "controlled-rig-not-campaign-acceptance"
+                evidenceKind = operation is "rig.map.reveal" or "rig.player.moveto" or "rig.travel.status"
+                    ? "diagnostic-source-travel-not-ordinary-fast-travel-acceptance" : "controlled-rig-not-campaign-acceptance"
             }, Json));
             return true;
         }

@@ -270,6 +270,26 @@ internal sealed partial class RuntimeNativeActorCombat
     {
         if (slot == 1 && requested is not null && PackageIsIdle(requested)) requested = null;
         if (requested is null) { StopPackageLayer(ref owner, slot); return; }
+        if (slot == 1 && _actor is RuntimeNativeCreature { AutomaticMovementReplacementPending: true } creature)
+        {
+            // The movement slot holds an incoming request while its current
+            // snapshot/activation owns the source phase. It then replaces that
+            // same slot, rather than running two full-weight slot-1 sequences.
+            if (!creature.AutomaticMovementReplacementReady) return;
+            if (owner is not null) throw new InvalidDataException("Automatic movement slot has two selected owners.");
+            var previous = AutomaticIdleReplacementSource(creature.AutomaticMovementSource);
+            if (PackageKeys(previous).HasSynchronization || PackageKeys(requested).HasSynchronization)
+                throw new NotSupportedException("Synchronized automatic movement replacement has no qualified phase owner.");
+            var ease = new FalloutIdleDeactivation(PackageKeys(previous).Blend, PackageBlendSettings(), PackageKeys(requested).Blend);
+            creature.BeginAutomaticMovementReplacement(requested);
+            ease.Advance(0);
+            requested.Animation.RestoreAccumulationTime(null);
+            _packageLayerClips.TryAdd(requested.Path, requested);
+            owner = new(requested, 0, true);
+            if (ease.DurationSeconds > 0.009999999776482582)
+            { owner.EaseIn = ease; owner.EaseFrom = previous; }
+            return;
+        }
         _packageLayerClips.TryAdd(requested.Path, requested);
         _packageOutgoingLayers.RemoveAll(fade => fade.Layer.Clip.Path.Equals(requested.Path, StringComparison.OrdinalIgnoreCase));
         if (owner is { } selected)
@@ -421,17 +441,17 @@ internal sealed partial class RuntimeNativeActorCombat
         if (_packageMovementLayer is { } movement) Add(movement);
     }
 
-    // Slot7 composition reads the actual package clocks; it never advances or
-    // replaces their physical root-motion owner.
+    // Automatic composition reads the actual package clocks; a slot-1 outgoing
+    // idle precedes its incoming movement sequence in the same source slot.
     internal void ComposeIdleLayers(List<(RuntimeNativeNifAnimation Animation, float Time, float Ease)> layers,
         RuntimeNativeNifAnimation? family, float familySeconds,
-        RuntimeNativeNifAnimation.ControllerSnapshot? snapshot = null)
+        RuntimeNativeNifAnimation.ControllerSnapshot? snapshot = null, byte automaticSlot = 7)
     {
         _packageBlendLayers.Clear(); _packageBlendSnapshots.Clear();
         if (PackageOwnsPose && _packageLayerPosePublished && _packageIdleLayer is not null)
             AppendPackageAnimationLayers(_packageBlendLayers, _packageBlendSnapshots);
         else if (family is not null) _packageBlendLayers.Add((family, familySeconds, 1));
-        _packageBlendLayers.AddRange(layers);
+        InsertAutomaticIdleLayers(_packageBlendLayers, layers, automaticSlot);
         if (snapshot is { } pose) _packageBlendSnapshots.Add(pose);
         try
         {

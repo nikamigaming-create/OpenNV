@@ -62,7 +62,8 @@ internal partial class NativeOwnedGameplayHud
                     (marker.Kind == "actor" ? _compassNpcGroup! : _compassGroup!).Add(tile);
                     validate = true;
                 }
-                _tiles.Bind(tile, "_Heading", marker.Heading); _tiles.Bind(tile, "_Distance", marker.Distance);
+                _tiles.Bind(tile, "_Heading", marker.Heading);
+                if (marker.Kind != "actor") _tiles.Bind(tile, "_Distance", marker.BlinkDistanceSquared ?? marker.Distance);
                 if (marker.Kind == "actor")
                     tile.SetElementValue("systemcolor", marker.Hostile ? "entity_hudalt" : "entity_hudmain");
                 if (marker.Kind == "landmark")
@@ -74,7 +75,7 @@ internal partial class NativeOwnedGameplayHud
             }
             foreach (var key in _compassIcons.Keys.Where(key => !active.Contains(key)).ToArray())
             {
-                var tile = _compassIcons[key]; _tiles.Forget(tile); tile.Remove(); _compassIcons.Remove(key);
+                var tile = _compassIcons[key]; _compassBlinkStates.Remove(tile); _tiles.Forget(tile); tile.Remove(); _compassIcons.Remove(key);
                 validate = true;
             }
             if (validate) _tiles.ValidateDrawing();

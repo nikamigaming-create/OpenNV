@@ -8,6 +8,26 @@ internal static class WeaponFiringContracts
 {
     internal static void Run()
     {
+        VatsSelectionCameraContracts();
+        var skillBadgeData = new byte[204];
+        BinaryPrimitives.WriteInt32LittleEndian(skillBadgeData.AsSpan(104), 41);
+        BinaryPrimitives.WriteInt32LittleEndian(skillBadgeData.AsSpan(168), 7);
+        BinaryPrimitives.WriteInt32LittleEndian(skillBadgeData.AsSpan(200), 25);
+        var badge = FalloutWeaponSkillBadge.Read(skillBadgeData);
+        Require(badge.ActorValue == 41 && badge.Requirement == 25 &&
+            badge.Icon == @"Interface\Icons\TypeIcons\weap_skill_icon_sm_arms.dds",
+            "Inventory weapon badge used the STR field or a shot/ammunition family admission.");
+        foreach (var skill in new[] { 33, 34, 35, 38, 41, 45 })
+            Require(FalloutWeaponSkillBadge.IconFor(skill) is not null, "Source weapon skill icon is missing.");
+        Require(FalloutWeaponSkillBadge.IconFor(36) is null && FalloutWeaponSkillBadge.IconFor(-1) is null,
+            "Unknown source skill minted a fallback weapon badge.");
+        BinaryPrimitives.WriteInt32LittleEndian(skillBadgeData.AsSpan(200), -1);
+        Require(FalloutWeaponSkillBadge.Read(skillBadgeData).Requirement == -1,
+            "Source signed requirement formatting was silently clamped.");
+        var missingSkillSuffixRefused = false;
+        try { _ = FalloutWeaponSkillBadge.Read(new byte[172]); }
+        catch (NotSupportedException) { missingSkillSuffixRefused = true; }
+        Require(missingSkillSuffixRefused, "Unknown minimum-skill suffix initialization was invented.");
         var directory = Path.Combine(Path.GetTempPath(), "opennv-firing-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(directory);
         try
@@ -52,21 +72,63 @@ internal static class WeaponFiringContracts
             var meleeEconomics = (byte[])economics.Clone(); BinaryPrimitives.WriteInt16LittleEndian(meleeEconomics.AsSpan(12), 25);
             var impacts = new byte[48]; UInt(impacts, 4 * 4, 7); UInt(impacts, 4, 1);
             var impactData = new byte[24]; Float(impactData, 0, .25f); UInt(impactData, 4, 2); Float(impactData, 8, 90); Float(impactData, 12, 16);
+            var projectileCountAmmunition = new[] { 3u, 0x100u, 0x101u, 129u, uint.MaxValue, 128u }
+                .Select((count, index) =>
+                {
+                    var countAmmo = (byte[])ammo.Clone(); UInt(countAmmo, 0, count);
+                    return Record("AMMO", checked((uint)(0x901 + index)), Field("DATA", new byte[13]), Field("DAT2", countAmmo));
+                }).SelectMany(record => record).ToArray();
+            var projectileModWeapons = new[]
+            {
+                (Id: 0x931u, Count: (byte)1, Value: 2f, Duplicate: true),
+                (Id: 0x932u, Count: (byte)3, Value: -.5f, Duplicate: false),
+                (Id: 0x933u, Count: (byte)254, Value: 3f, Duplicate: false),
+                (Id: 0x934u, Count: (byte)0, Value: 2f, Duplicate: false),
+                (Id: 0x935u, Count: (byte)1, Value: -1f, Duplicate: false),
+                (Id: 0x936u, Count: (byte)1, Value: -MathF.Pow(2, -60), Duplicate: false),
+                (Id: 0x937u, Count: (byte)1, Value: float.MaxValue, Duplicate: false),
+                (Id: 0x938u, Count: (byte)3, Value: -4f, Duplicate: false),
+                (Id: 0x939u, Count: (byte)3, Value: .1f, Duplicate: false),
+                (Id: 0x93au, Count: (byte)1, Value: MathF.Pow(2, -60), Duplicate: false),
+            }.Select(value =>
+            {
+                var dnam = (byte[])weaponData.Clone(); dnam[42] = value.Count;
+                UInt(dnam, 140, 12); Float(dnam, 152, value.Value);
+                if (value.Duplicate) { UInt(dnam, 144, 12); Float(dnam, 156, 9); }
+                var fields = new List<byte[]> { Field("DATA", economics), Field("DNAM", dnam), Field("WMI1", BitConverter.GetBytes(0x940u)) };
+                if (value.Duplicate) fields.Add(Field("WMI2", BitConverter.GetBytes(0x941u)));
+                return Record("WEAP", value.Id, fields.ToArray());
+            }).SelectMany(record => record).Concat(Record("IMOD", 0x940)).Concat(Record("IMOD", 0x941)).ToArray();
+            var loopRateDnam = (byte[])weaponData.Clone(); loopRateDnam[12] |= 2; loopRateDnam[41] = 74;
+            Float(loopRateDnam, 60, 1.5f); Float(loopRateDnam, 64, 3); Float(loopRateDnam, 88, 71);
+            UInt(loopRateDnam, 140, 8); Float(loopRateDnam, 152, .25f);
+            UInt(loopRateDnam, 144, 8); Float(loopRateDnam, 156, .75f);
+            var loopRateWeapon = Record("WEAP", 0x950, Field("DATA", economics), Field("DNAM", loopRateDnam),
+                Field("ETYP", BitConverter.GetBytes(2)),
+                Field("WMI1", BitConverter.GetBytes(0x940u)), Field("WMI2", BitConverter.GetBytes(0x941u)));
             var shortDnamWeaponRecords = new[] { 164, 172, 180, 196 }.Select((extent, index) =>
             {
                 var dnam = weaponData[..extent];
                 if (index == 1) { dnam[12] = 0; UInt(dnam, 56, 0x100); Float(dnam, 28, 37); }
                 if (extent >= 172) UInt(dnam, 168, 7);
+                if (extent >= 180) Float(dnam, 176, .3f);
                 return Record("WEAP", checked((uint)(30 + index)), Field("EDID", Text("TestWeaponDnam" + extent)),
                     Field("MODL", Text("test-layout-weapon.nif")), Field("DATA", economics),
                     Field("ETYP", BitConverter.GetBytes(1)), Field("DNAM", dnam), Field("NAM0", BitConverter.GetBytes(2u)));
             }).ToArray();
+            var rechargeableDnam = (byte[])weaponData.Clone(); Float(rechargeableDnam, 176, .3f);
+            var unarmedDnam = (byte[])melee1hmWeapon.Clone(); UInt(unarmedDnam, 0, 0); Float(unarmedDnam, 8, 0); UInt(unarmedDnam, 104, 45);
+            var unarmedData = (byte[])meleeEconomics.Clone(); BinaryPrimitives.WriteInt16LittleEndian(unarmedData.AsSpan(12), 0);
+            var rechargeableAmmo = (byte[])ammo.Clone(); UInt(rechargeableAmmo, 12, 0); Float(rechargeableAmmo, 16, 0);
             File.WriteAllBytes(Path.Combine(directory, "Test.esm"), Record("TES4", 0, Field("HEDR", header))
                 .Concat(Record("WEAP", 1, Field("EDID", Text("TestGun")), Field("MODL", Text("test.nif")),
                     Field("NNAM", Text("SourceEmitter")),
                     Field("DATA", economics), Field("ETYP", BitConverter.GetBytes(1)), Field("DNAM", weaponData), Field("NAM0", BitConverter.GetBytes(2u)), Field("MOD2", Text("Projectiles/test-case.nif")),
                     Field("INAM", BitConverter.GetBytes(6u))))
                 .Concat(Record("AMMO", 2, Field("EDID", Text("TestAmmo")), Field("DATA", new byte[13]), Field("DAT2", ammo)))
+                .Concat(Record("WEAP", 0x960, Field("EDID", Text("TestRecharger")), Field("DATA", economics),
+                    Field("ETYP", BitConverter.GetBytes(1)), Field("DNAM", rechargeableDnam), Field("NAM0", BitConverter.GetBytes(0x961u))))
+                .Concat(Record("AMMO", 0x961, Field("EDID", Text("TestGeneratedAmmo")), Field("DATA", new byte[13]), Field("DAT2", rechargeableAmmo)))
                 .Concat(Record("AMMO", 27, Field("EDID", Text("TestFlameFuel")), Field("DATA", new byte[13])))
                 .Concat(Record("PROJ", 3, Field("DATA", projectile)))
                 .Concat(Record("PROJ", 4, Field("DATA", overrideProjectile)))
@@ -95,6 +157,7 @@ internal static class WeaponFiringContracts
                     Field("DATA", meleeEconomics), Field("ETYP", BitConverter.GetBytes(3)), Field("DNAM", melee1hmWeapon)))
                 .Concat(Record("WEAP", 51, Field("EDID", Text("Test2hmHammer")), Field("MODL", Text("test-hammer.nif")),
                     Field("DATA", meleeEconomics), Field("ETYP", BitConverter.GetBytes(4)), Field("DNAM", melee2hmWeapon)))
+                .Concat(Record("WEAP", 0x1f4, Field("DATA", unarmedData), Field("ETYP", BitConverter.GetBytes(4)), Field("DNAM", unarmedDnam)))
                 .Concat(Record("MISC", 5, Field("EDID", Text("TestCasing")), Field("DATA", new byte[8])))
                 .Concat(Record("IPDS", 6, Field("DATA", impacts)))
                 .Concat(Record("IPCT", 7, Field("DATA", impactData), Field("MODL", Text("Effects/test-metal.nif"))))
@@ -109,7 +172,7 @@ internal static class WeaponFiringContracts
                 .Concat(Record("NPC_", 0x801, Field("EDID", Text("AmmoOwner"))))
                 .Concat(Record("FACT", 0x802, Field("EDID", Text("AmmoFaction"))))
                 .Concat(Record("GLOB", 0x803, Field("EDID", Text("AmmoOwnershipGlobal")), Field("FNAM", [(byte)'f']), Field("FLTV", BitConverter.GetBytes(1f))))
-                .Concat(shortDnamWeaponRecords.SelectMany(record => record)).ToArray());
+                .Concat(shortDnamWeaponRecords.SelectMany(record => record)).Concat(projectileCountAmmunition).Concat(projectileModWeapons).Concat(loopRateWeapon).ToArray());
             using var records = FalloutPluginStack.Load(directory, ["Test.esm"]);
             FalloutFormKey Key(uint id) => new("Test.esm", id);
             var weapon = FalloutWeaponPresentation.Read(records, Key(1));
@@ -126,13 +189,38 @@ internal static class WeaponFiringContracts
             Require(weapon.SightFieldOfViewDegrees == 55 && weapon.AimGroup(true, true) == "1hpaim" &&
                 weapon.AimGroup(false, true) == "1hpaimis", "First-person sight exclusion also changed third-person or lost the source angle.");
             CheckSight(records, weapon);
+            Require(FalloutWeaponShot.Read(records, Key(1), Key(0x901)).Projectiles == 6 &&
+                FalloutWeaponShot.Read(records, Key(1), Key(0x902)).Projectiles == weaponData[42] &&
+                FalloutWeaponShot.Read(records, Key(1), Key(0x903)).Projectiles == 2 &&
+                FalloutWeaponShot.Read(records, Key(1), Key(0x904)).Projectiles == 2 &&
+                FalloutWeaponShot.Read(records, Key(1), Key(0x905)).Projectiles == 254,
+                "AMMO count did not preserve source low-byte override, AmmoUse multiplication or WEAP fallback.");
+            Reject(() => FalloutWeaponShot.Read(records, Key(1), Key(0x906)).RequireRuntimeAttackOwner());
+            FalloutWeaponShot ModifiedShot(uint id, byte mask = 1) => FalloutWeaponModifications.Apply(records,
+                FalloutWeaponShot.Read(records, Key(id), Key(2)), mask);
+            Require(ModifiedShot(0x931, 0).Projectiles == 1 && ModifiedShot(0x931, 2).Projectiles == 3 &&
+                ModifiedShot(0x931, 3).Projectiles == 3 && ModifiedShot(0x932).Projectiles == 2 &&
+                ModifiedShot(0x933).Projectiles == 1 && ModifiedShot(0x938).Projectiles == 255 &&
+                ModifiedShot(0x939).Projectiles == 3 && ModifiedShot(0x93a).Projectiles == 1,
+                "Projectile modifier lost installed admission, first-authored priority, sum truncation or byte storage.");
+            var rescued = ModifiedShot(0x934);
+            Require(rescued.Projectiles == 2, "A source projectile modifier could not rescue its zero base count.");
+            rescued.RequireRuntimeAttackOwner();
+            Require(ModifiedShot(0x935).Projectiles == 0, "Zero source result was replaced with invented projectiles.");
+            Reject(() => ModifiedShot(0x935).RequireRuntimeAttackOwner());
+            Reject(() => (ModifiedShot(0x935) with { Projectile = FalloutProjectile.Read(records, Key(26)) }).RequireRuntimeAttackOwner());
+            Reject(() => ModifiedShot(0x936)); Reject(() => ModifiedShot(0x937));
             var shot = FalloutWeaponShot.Read(records, Key(1), Key(2));
+            WeaponHandlingContracts.RechargeShot(records, FalloutWeaponPresentation.Read(records, Key(0x960)),
+                FalloutWeaponShot.Read(records, Key(0x960), Key(0x961)));
             WeaponInstanceMagazineContracts.Run(records, weapon, shot);
             shot.RequireInstantRay();
             foreach (var (extent, index) in new[] { 164, 172, 180, 196 }.Select((extent, index) => (extent, index)))
             {
                 var key = Key(checked((uint)(30 + index)));
                 var sourceWeapon = FalloutWeaponPresentation.Read(records, key, firstPerson: false);
+                Require(sourceWeapon.AmmoRegenerationSeconds == (extent >= 180 ? .3f : 0),
+                    "Source recharge interval was lost, rounded or fabricated for an older DNAM extent.");
                 Require(sourceWeapon.SightFieldOfViewDegrees == (index == 1 ? 37 : 55) &&
                     sourceWeapon.FirstPersonIronSightsAnimation == (index == 1) &&
                     sourceWeapon.ThirdPersonIronSightsAnimation == (index != 1), "Short WEAP lost independent sight fields.");
@@ -185,6 +273,23 @@ internal static class WeaponFiringContracts
             Require(explosiveShot.ExplosionSource is { Damage: 14, Radius: 160 } && explosiveShot.Model == "meshes/Effects/rocket.nif",
                 "Projectile did not resolve its winning EXPL record and source model.");
             (shot with { Projectile = explosiveShot }).RequireRuntimeAttackOwner();
+            var explosiveRay = shot with { Projectile = explosiveShot with { Flags = 3 } };
+            explosiveRay.RequireRuntimeAttackOwner();
+            Require(explosiveRay.Projectile.IsInstantRayAttack && explosiveRay.Projectile.ExplosionSource?.Form == Key(12) &&
+                explosiveRay.Projectile.HitscanImpactDelaySeconds(5, .01f) > 0,
+                "Explosive Hitscan lost its actual EXPL or source contact delay.");
+            Reject(() => (explosiveRay with { Projectile = explosiveRay.Projectile with { Flags = 7 } }).RequireRuntimeAttackOwner());
+            Reject(() => (explosiveRay with { Projectile = explosiveRay.Projectile with { Flags = 0x403 } }).RequireRuntimeAttackOwner());
+            (explosiveRay with { Projectile = explosiveRay.Projectile with { Type = 4 } }).RequireRuntimeAttackOwner();
+            var explosiveBeam = shot with { Projectile = FalloutProjectile.Read(records, Key(19)) };
+            explosiveBeam.RequireRuntimeAttackOwner();
+            Require(explosiveBeam.Projectile.Type == 4 && !explosiveBeam.Projectile.Hitscan &&
+                explosiveBeam.Projectile.ExplosionSource?.Form == Key(12) &&
+                explosiveBeam.Projectile.HitscanImpactDelaySeconds(5, .01f) == 0,
+                "Explosive beam lost its immediate ray contact or source EXPL owner.");
+            (explosiveBeam with { Projectile = explosiveBeam.Projectile with { Flags = 0x020a } }).RequireRuntimeAttackOwner();
+            Reject(() => (explosiveBeam with { Projectile = explosiveBeam.Projectile with { Flags = 6 } }).RequireRuntimeAttackOwner());
+            Reject(() => (explosiveBeam with { Projectile = explosiveBeam.Projectile with { Flags = 0x402 } }).RequireRuntimeAttackOwner());
             var mineProjectileSource = FalloutProjectile.Read(records, Key(20));
             Require(mineProjectileSource.Type == 2 && mineProjectileSource.HasAlternateTrigger && mineProjectileSource.CanBeDisabled &&
                 mineProjectileSource.CanBePickedUp && mineProjectileSource.ExplosionAltTriggerProximity == 100 &&
@@ -194,6 +299,16 @@ internal static class WeaponFiringContracts
             Require(!detonatesProjectileSource.HasAlternateTrigger && detonatesProjectileSource.CanBeDisabled &&
                 detonatesProjectileSource.CanBePickedUp && detonatesProjectileSource.Detonates,
                 "Detonating projectile flags were confused with proximity triggering.");
+            var remoteSource = FalloutMineSource.Read(records, Key(22)) ?? throw new InvalidOperationException("Remote source was rejected.");
+            var armedRemote = FalloutMineState.Initial(remoteSource);
+            var commandedRemote = armedRemote.CommandDetonation(remoteSource, Key(0x14));
+            Require(detonatesProjectileSource.IsRemoteMine && !detonatesProjectileSource.IsProximityMine &&
+                commandedRemote.Phase == FalloutMinePhase.Countdown && commandedRemote.RemainingSeconds == 0 &&
+                commandedRemote.TriggerActor == Key(0x14) && armedRemote.Phase == FalloutMinePhase.Armed,
+                "Remote explosive command lost its source distinction, actor attribution or deferred blast commit.");
+            var disabledRemote = armedRemote.Disable(remoteSource);
+            try { disabledRemote.CommandDetonation(remoteSource, Key(0x14)); throw new InvalidDataException("Disabled remote explosive was commanded."); }
+            catch (InvalidOperationException) { }
             var timedMineProjectileSource = FalloutProjectile.Read(records, Key(23));
             Require(timedMineProjectileSource.HasAlternateTrigger && timedMineProjectileSource.HasExplicitRotation &&
                 timedMineProjectileSource.ExplosionAltTriggerProximity == 0 && timedMineProjectileSource.ExplosionAltTriggerTimer == 15,
@@ -229,11 +344,30 @@ internal static class WeaponFiringContracts
                 weapon.ShellModel == "meshes/Projectiles/test-case.nif",
                 "Ammo projectile override or attack declaration was lost.");
             var inventory = new FalloutPlayerInventory();
+            var unarmed = FalloutWeaponPresentation.Read(records, FalloutDefaultUnarmedWeapon.Require(records));
+            var bareInventory = new FalloutPlayerInventory();
+            var bareDamage = new FalloutWeaponDamageResolver(records, bareInventory,
+                value => value == 56 ? 20 : value == 45 ? 40 : throw new InvalidDataException("Unexpected unarmed damage AV."), () => []);
+            Require(unarmed.DefaultUnarmed && unarmed.Model is null && unarmed.IsMeleeWeapon && unarmed.Reach == 0 &&
+                bareDamage.Resolve(unarmed.Form, 0).Amount == 20 && bareDamage.Resolve(unarmed.Form, 3).Amount == 26 &&
+                bareInventory.Items.Count == 0 && bareInventory.Equipped.Count == 0,
+                "Default unarmed source required a model/item or scaled derived AV damage twice.");
             inventory.Add(records, Key(1), 1, 1, true); inventory.Add(records, Key(2), 9, 1, true); inventory.Equip(records, Key(1));
             var damage = new FalloutWeaponDamageResolver(records, inventory,
                 value => value == 41 ? 40 : throw new InvalidDataException("Weapon requested the wrong source skill."), () => []);
             Require(MathF.Abs(damage.Resolve(shot).Amount - 17.6f) < .00001f && damage.Resolve(shot).LimbMultiplier == 1.5f,
                 "Source weapon damage, skill, settings or limb multiplier changed.");
+            var multiProjectileDamage = damage.Resolve(shot with { Projectiles = 7 });
+            var slugDamage = damage.Resolve(shot with { Projectiles = 1 });
+            Require(MathF.Abs(multiProjectileDamage.Amount * 7 - slugDamage.Amount) < .00001f &&
+                multiProjectileDamage.LimbMultiplier == slugDamage.LimbMultiplier &&
+                multiProjectileDamage.AmmoEffects == slugDamage.AmmoEffects &&
+                damage.Resolve(shot with { Projectiles = 7 }, 14).Amount == damage.Resolve(shot, 14).Amount,
+                "Multi-projectile contacts multiplied the discharge damage, lost target modifiers or divided independent blast damage.");
+            var zeroProjectileDamageRefused = false;
+            try { _ = damage.Resolve(shot with { Projectiles = 0 }); }
+            catch (InvalidDataException) { zeroProjectileDamageRefused = true; }
+            Require(zeroProjectileDamageRefused, "Zero-projectile source action produced damage.");
             var wornInventory = new FalloutPlayerInventory();
             wornInventory.Add(records, Key(1), 1, 1, true, extra: new(1, .25f));
             var worn = new FalloutWeaponDamageResolver(records, wornInventory, _ => 40, () => []);
@@ -247,13 +381,59 @@ internal static class WeaponFiringContracts
             Reject(() => FalloutWeaponDamageResolver.NewVegasConditionMultiplier(-.01f));
             Reject(() => FalloutWeaponDamageResolver.NewVegasConditionMultiplier(1.01f));
             wornInventory.Add(records, Key(1), 1, 1, true, extra: new(1, .9f));
+            var inventoryDamageRevision = wornInventory.Revision;
+            var hovered = wornInventory.Instances(Key(1)).Single(instance => instance.Extra.Condition == .9f).Extra;
+            var hoveredDamage = worn.ResolveInventory(Key(1), shot.BaseDamage, hovered, shot.AmmoEffects);
+            Require(hoveredDamage.Condition == .9f && MathF.Abs(hoveredDamage.Amount - 17.6f) < .00001f &&
+                wornInventory.Revision == inventoryDamageRevision,
+                "Inventory damage used the first variant or mutated equipment while inspecting another carried instance.");
+            var staleInventoryVariantRefused = false;
+            try { _ = worn.ResolveInventory(Key(1), shot.BaseDamage, hovered with { Condition = .8f }, shot.AmmoEffects); }
+            catch (InvalidOperationException) { staleInventoryVariantRefused = true; }
+            Require(staleInventoryVariantRefused, "Inventory damage admitted a variant that is no longer carried.");
+            Require(FalloutInventoryItemStatistics.ConditionValue(100, .5f, .2f, .08f, 2) == 180 &&
+                FalloutInventoryItemStatistics.ConditionValue(.4f, 1, 1, 1, 1) == .4f &&
+                FalloutInventoryItemStatistics.RoundIncrement(.15f, .1f) == .2f &&
+                FalloutInventoryItemStatistics.RoundIncrement(1.4999999f, 1) == 1,
+                "Inventory value lost condition scaling, fractional values or its native rounding boundaries.");
+            Reject(() => FalloutInventoryItemStatistics.ConditionValue(100, float.NaN, .2f, .08f, 2));
+            Reject(() => FalloutInventoryItemStatistics.RoundIncrement(float.PositiveInfinity, .1f));
             var mixedCondition = worn.Resolve(shot).Condition;
             Require(mixedCondition is .25f or .9f, "Mixed condition variants did not select one usable weapon instance.");
+            var loopRate = FalloutWeaponPresentation.Read(records, Key(0x950));
+            Require(loopRate.Automatic && loopRate.SourceFireRate == 3 && loopRate.AttackShotsPerSecond == 4.5f &&
+                FalloutWeaponPresentation.Read(records, Key(0x950), weaponMods: 2).AttackShotsPerSecond == 5.25f &&
+                FalloutWeaponPresentation.Read(records, Key(0x950), weaponMods: 3).AttackShotsPerSecond == 5.25f,
+                "Gameplay loop cadence used animation-authoring shots/sec or stacked/multiplied the installed effect8 values.");
             var handling = new FalloutWeaponHandling(inventory);
             Require(!handling.ConsumeShot(weapon, shot, records), "Empty magazine consumed ammunition.");
             handling.CompleteReload(weapon);
             Require(handling.ConsumeShot(weapon, shot, records) && handling.Loaded(Key(1)) == 3 && inventory.Item(Key(2))!.Count == 7 && inventory.Item(Key(5))!.Count == 2,
                 "Shot did not conserve source AmmoUse and recovered casings.");
+            var autoInventory = new FalloutPlayerInventory(); var autoItems = inventory.Capture();
+            autoInventory.Restore(autoItems.Inventory, autoItems.EquippedRuntimeFormIds.ToArray(), autoItems.InventoryRandomState);
+            var autoHandling = new FalloutWeaponHandling(autoInventory);
+            var autoInstance = autoInventory.SelectedWeapon(weapon.Form).Extra.Instance!.Value;
+            autoInventory.SetWeaponMagazine(weapon.Form, autoInstance, new(shot.Ammunition!.Value, weapon.AmmoUse));
+            var beforeAuto = autoHandling.Loaded(weapon.Form); var carriedBeforeAuto = autoInventory.Item(shot.Ammunition.Value)!.Count;
+            Require(!autoHandling.NeedsAutomaticReload(weapon, 0) &&
+                autoHandling.ConsumeShot(weapon, shot, records) && autoHandling.NeedsAutomaticReload(weapon, beforeAuto),
+                "Actual last-round consumption did not admit source auto reload, or an empty query invented it.");
+            var exhaustedInventory = new FalloutPlayerInventory(); var exhaustedItems = autoInventory.Capture();
+            exhaustedInventory.Restore(exhaustedItems.Inventory, exhaustedItems.EquippedRuntimeFormIds.ToArray(), exhaustedItems.InventoryRandomState);
+            var actualProcessAmmo = shot.Ammunition.Value;
+            exhaustedInventory.Remove(actualProcessAmmo, exhaustedInventory.Item(actualProcessAmmo)!.Count, silent: true);
+            var alternateAmmo = Key(27);
+            exhaustedInventory.Add(records, alternateAmmo, 3, 1, true);
+            var exhaustedHandling = new FalloutWeaponHandling(exhaustedInventory);
+            var alternateWeapon = weapon with { Ammunition = [actualProcessAmmo, alternateAmmo] };
+            Require(exhaustedHandling.CanReload(alternateWeapon) && !exhaustedHandling.NeedsAutomaticReload(alternateWeapon, beforeAuto),
+                "Automatic reload cycled away from an exhausted actual process AMMO without its source selection producer.");
+            autoHandling.CompleteReload(weapon);
+            Require(autoHandling.Loaded(weapon.Form) == Math.Min(weapon.ClipSize, carriedBeforeAuto - weapon.AmmoUse) &&
+                autoInventory.Item(shot.Ammunition.Value)!.Count == carriedBeforeAuto - weapon.AmmoUse &&
+                !autoHandling.NeedsAutomaticReload(weapon, beforeAuto),
+                "Auto reload repeated consumption, granted ammunition, or retained the empty transition.");
             var snapshot = handling.Capture(); var items = inventory.Capture();
             var coldInventory = new FalloutPlayerInventory(); coldInventory.Restore(items.Inventory, items.EquippedRuntimeFormIds.ToArray(), items.InventoryRandomState);
             var cold = new FalloutWeaponHandling(coldInventory); cold.Restore(snapshot, _ => weapon);
@@ -276,7 +456,6 @@ internal static class WeaponFiringContracts
             Reject(() => shot.Projectile.HitscanImpactDelaySeconds(-.01f, .01f));
             Reject(() => (shot with { Projectile = shot.Projectile with { Flags = 0x0101 } }).RequireRuntimeAttackOwner());
             Reject(() => (shot with { Projectile = FalloutProjectile.Read(records, Key(28)) }).RequireRuntimeAttackOwner());
-            Reject(() => (shot with { Projectile = FalloutProjectile.Read(records, Key(19)) }).RequireRuntimeAttackOwner());
             Reject(() => (flameShot with { Projectile = flameShot.Projectile with { Flags = (ushort)(flameShot.Projectile.Flags | 0x0100) } }).RequireRuntimeAttackOwner());
             Reject(() => (shot with { Projectiles = 0 }).RequireInstantRay());
             Reject(() => (shot with { AmmoEffects = [new FalloutAmmoEffect(Key(5), FalloutAmmoEffect.Fatigue + 1, 0, 0)] }).RequireInstantRay());
@@ -360,4 +539,42 @@ internal static class WeaponFiringContracts
         var payload = fields.SelectMany(field => field).ToArray(); var result = new byte[24 + payload.Length];
         Encoding.ASCII.GetBytes(signature).CopyTo(result, 0); UInt(result, 4, (uint)payload.Length); UInt(result, 12, id); payload.CopyTo(result, 24); return result;
     }
+    private static void VatsSelectionCameraContracts()
+    {
+        var source = new FalloutVatsSelectionCamera(46, 30, 1750, 1.5f, 2, 20, .4f, .2f, .1f);
+        var near = source.Fov(100, 200, 1);
+        var far = source.Fov(100, 1750, 1);
+        var scaled = source.Fov(200, 3500, 1);
+        const float units = .0142875f;
+        var metreNear = source.Fov(100 * units, 200 * units, units);
+        if (MathF.Abs(near.World - MathF.PI / 4 * (46 - 16 * (200f / 1750))) > .00001f ||
+            near.FirstPerson != 20 || MathF.Abs(metreNear.World - near.World) > .00001f || MathF.Abs(far.World - (float)Math.Atan(200f / 1750) * 30) > .00001f ||
+            MathF.Abs(scaled.World - far.World) > .00001f || source.Fov(0, 200, 1).World != 1.5f)
+            throw new InvalidOperationException("VATS camera lost source bound/distance units, near/far interpolation, minimum or separate first-person cap.");
+        var points = new System.Numerics.Vector3[] { new(5, 0, 0), new(-5, 2, 0) };
+        if (FalloutVatsSelectionCamera.Focus(System.Numerics.Vector3.Zero, new(0, 0, 299), points, 1) != new System.Numerics.Vector3(0, 0, 299) ||
+            FalloutVatsSelectionCamera.Focus(System.Numerics.Vector3.Zero, new(0, 0, 300), points, 1) != new System.Numerics.Vector3(0, 1, 0))
+            throw new InvalidOperationException("VATS camera changed strict source head distance or the actual BPNT-node mean.");
+        var forward = FalloutVatsSelectionCamera.Angles(new(0, 1, 0), 1);
+        var right = FalloutVatsSelectionCamera.Angles(new(1, 0, 0), 1);
+        var vertical = FalloutVatsSelectionCamera.Angles(new(0, 0, 1), 1);
+        if (forward != (0f, 0f) || MathF.Abs(right.Yaw - MathF.PI / 2) > .000001f ||
+            MathF.Abs(vertical.Pitch + MathF.PI / 2) > .000001f || MathF.Abs(vertical.Yaw + MathF.PI / 2) > .000001f)
+            throw new InvalidOperationException("VATS camera changed native source axes, pitch sign or vertical-direction yaw.");
+        try { _ = FalloutVatsSelectionCamera.Angles(System.Numerics.Vector3.Zero, 1); throw new InvalidOperationException("Degenerate VATS camera angle was admitted."); }
+        catch (InvalidDataException) { }
+        foreach (var duration in new[] { 0f, -1f })
+        {
+            var immediate = new FalloutVatsCameraTransition(10, 20, duration);
+            if (!immediate.Complete || immediate.Current != 20 || immediate.Advance(.1f) != 20)
+                throw new InvalidOperationException("VATS nonpositive source camera duration lost its immediate endpoint.");
+        }
+        var curve = new FalloutVatsCameraTransition(10, 20, 1);
+        if (curve.Current != 10 || MathF.Abs(curve.Advance(.25f) - 11.188384f) > .0001f ||
+            MathF.Abs(curve.Advance(.25f) - 15) > .00001f || curve.Complete || curve.Advance(.5f) != 20 || !curve.Complete)
+            throw new InvalidOperationException("VATS camera transition changed native sample/global-progress interpolation or completion.");
+        try { _ = source.Fov(1, 0, 1); throw new InvalidOperationException("Degenerate VATS camera distance was admitted."); }
+        catch (InvalidDataException) { }
+    }
+
 }

@@ -116,6 +116,12 @@ public partial class RuntimeCoordinator
             RepairJuryRigging = () => driver.PlayerJuryRigging,
             LocalMap = color => CreateNativeLocalMap(player, color),
             ActiveEffects = () => driver.IngestibleState,
+            InventoryCarryCapacity = player.InventoryCarryCapacity,
+            InventoryDefense = driver.PlayerInventoryDefense,
+            InventoryHardcore = () => driver.InventoryHardcore,
+            InventoryDamage = player.InventoryDamageText,
+            InventoryStrength = player.InventoryStrengthText,
+            InventoryAmmo = player.InventoryAmmunitionText,
             DateTimeText = NativePipBoyDateTime,
             CurrentLocation = () => _nativeActiveCell!.Cell.Worldspace is null ? _nativeActiveCell.Cell.FormKey : source.World,
             PlayNote = driver.PlayPipBoyNote
@@ -134,14 +140,29 @@ public partial class RuntimeCoordinator
             return new(FalloutGameSettingStrings.Read(_nativePluginStack, "sTargetTypeTake"),
                 label.IsEmpty ? dropped.Item.Base.ToString() : FalloutDialogueTopic.Text(label.Span), null);
         }
+        if (RuntimeNativePlacedMine.Find(collider) is { Identity.RuntimeId: not null } dynamicMine)
+        {
+            if (!dynamicMine.CanInteract) return null;
+            var projectile = _nativePluginStack!.GetEffective(dynamicMine.Source.Projectile.Form);
+            var fullName = projectile.ReadSubrecords().SingleOrDefault(field => field.Signature == "FULL").Data;
+            if (fullName.IsEmpty) return null;
+            return new(FalloutGameSettingStrings.Read(_nativePluginStack, dynamicMine.ActionSetting), FalloutDialogueTopic.Text(fullName.Span), null);
+        }
         if (_nativeReferenceEvents?.AimedReference(collider) is not { } reference) return null;
         var source = _nativePluginStack!.GetEffective(reference.Base);
+        var mine = RuntimeNativePlacedMine.Find(collider);
         var full = source.ReadSubrecords().SingleOrDefault(field => field.Signature == "FULL").Data;
         var name = source.Signature == "DOOR" ? NativeDoorDestinationName(reference) : null;
+        if (source.Signature is "NPC_" or "CREA")
+        {
+            name = _nativeReferences!.ActorDisplayName(reference.FormKey);
+            if (name.Length == 0) return null;
+        }
         if (name is null && full.IsEmpty) return null;
         name ??= FalloutDialogueTopic.Text(full.Span);
         var action = source.Signature switch
         {
+            "PROJ" when mine is not null => mine.ActionSetting,
             "DOOR" => _nativeReferences!.Get(reference.FormKey).DoorOpen ? "sCloseButton" : "sTargetTypeOpenDoor",
             "CONT" => "sSearch",
             "FURN" => "sTargetTypeSit",
@@ -166,6 +187,12 @@ public partial class RuntimeCoordinator
     {
         var world = _nativeReferences!;
         var player = actor == _nativePluginStack!.RuntimeFormKey(0x14);
+        if (player && type == "PROJ" && node is not null && RuntimeNativePlacedMine.Find(node) is { } mine)
+        {
+            mine.Activate(_nativeInventory, _nativeOpeningStageDriver!.RewardExperience);
+            SaveNativeInteraction();
+            return;
+        }
         if (!player && (type != "DOOR" || !world.CanNpcOpenDoor(reference.FormKey, actor)))
             throw new NotSupportedException($"Default interaction by {actor} requires an ordinary door admitting that NPC.");
         var hacked = type == "TERM" && _nativeOpeningStageDriver!.TerminalHacked(reference.FormKey);
@@ -213,7 +240,13 @@ public partial class RuntimeCoordinator
                     _nativeContainerReference = null;
                     GetTree().Paused = wasPaused; _nativePlayer!.SetModalInput(false);
                     Input.MouseMode = Input.MouseModeEnum.Captured; SaveNativeInteraction();
-                }, () => { }, () => _nativePlayer!.InventoryBurden);
+                }, () => { }, () => _nativePlayer!.InventoryBurden, transferWithEvents: (side, transfers) =>
+                {
+                    var playerReference = _nativePluginStack!.RuntimeFormKey(0x14);
+                    _nativeOpeningStageDriver!.InventoryAcquisition.Transfer(
+                        side == 1 ? inventory : _nativeInventory, side == 1 ? _nativeInventory : inventory,
+                        side == 1 ? reference.FormKey : playerReference, side == 1 ? playerReference : reference.FormKey, transfers);
+                });
             _nativePlayer!.SetModalInput(true); Input.MouseMode = Input.MouseModeEnum.Visible;
             _nativeContainerLayer = new CanvasLayer { Name = "NativeContainerLayer", Layer = 100, ProcessMode = ProcessModeEnum.Always };
             AddChild(_nativeContainerLayer);

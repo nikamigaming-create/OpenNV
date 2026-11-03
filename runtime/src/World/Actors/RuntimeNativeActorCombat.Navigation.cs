@@ -22,6 +22,12 @@ internal sealed record NativePackageRouteRequest(NativePackageRouteIdentity Iden
 // enter saves; a reconstructed pending request must earn a new live receipt.
 internal sealed record NativePackageRouteReceipt(NativePackageRouteRequest Request, Vector3[] Path)
 {
+    // Existing occupancy is a physical arrival observation, not evidence of a
+    // traveled route or a projected NAVM endpoint.
+    internal static bool AlreadyWithinRegion(Vector3 position, Vector3 target, float radius, bool onFloor, bool requireHeight) =>
+        onFloor && position.IsFinite() && target.IsFinite() && float.IsFinite(radius) && radius >= 0 &&
+        (requireHeight ? position.DistanceTo(target) : new Vector2(position.X - target.X, position.Z - target.Z).Length()) <= radius;
+
     internal static bool ContinuesPose(FalloutActorPackageMotion? previous, FalloutFormKey package,
         Vector3 position, Quaternion rotation) => previous is not null && previous.Package == package &&
         position == new Vector3(previous.Position[0], previous.Position[1], previous.Position[2]) &&
@@ -61,6 +67,7 @@ internal sealed partial class RuntimeNativeActorCombat
     private string? _routeError;
     private IEnumerator<IReadOnlyList<Vector3>?>? _routeSearch;
     private NativeNavigationProbe? _routeProbe;
+    private NativePursuitQueryGoal? _routeQueryGoal;
     private Vector3 _routeEnd;
     private float _routeSpacing;
     private float _routeArrivalRadius;
@@ -70,6 +77,7 @@ internal sealed partial class RuntimeNativeActorCombat
     private Func<Vector3, bool>? _routeArrival;
     private int _retiredPursuitSearches;
     private NativeNavigationWorkSnapshot? _routeWork;
+    private bool _routeDirectOnly;
     private NativePackageRouteRequest? _packageRouteRequest;
     private NativePackageRouteReceipt? _packageRouteReceipt;
     private FalloutFormKey? _routePackage;
@@ -98,8 +106,10 @@ internal sealed partial class RuntimeNativeActorCombat
     }
 
     private void BeginNativeRouteSearch(NativeNavigationIntent intent, Func<Vector3, bool>? arrival,
-        NativePackageRouteRequest? request, FalloutFormKey? package)
+        NativePackageRouteRequest? request, FalloutFormKey? package, NativePursuitQueryGoal goal, bool directOnly = false)
     {
+        _routeQueryGoal = goal;
+        _routeDirectOnly = directOnly;
         _pursuitPath = []; _pursuitCursor = 0;
         _routeFacingPending = true;
         _routeTurning = false;
@@ -114,12 +124,17 @@ internal sealed partial class RuntimeNativeActorCombat
         _routeProbe = new(NativeCapsuleNavigation.FirstCorridorContact(_mover!, _actor.GlobalPosition, prefix), _context!.CollisionReference);
         _routeSearch = NativeCapsuleNavigation.Search(_mover!, _actor.GlobalPosition, intent.Target,
             _context.StepHeight, _routeSpacing, _context.Resident, 512, _routeProbe, intent.ArrivalRadius,
-            intent.Corridor, arrival, sourceFloor: _movementCorridorFloor).GetEnumerator();
+            directOnly ? prefix : intent.Corridor, arrival, sourceFloor: _movementCorridorFloor, directOnly: directOnly).GetEnumerator();
         _routeClock = .5;
     }
     private void DisposeRouteSearch()
     {
         _routeSearch?.Dispose();
+        CompleteRouteDisposal();
+    }
+
+    private void CompleteRouteDisposal()
+    {
         _routeWork = NativeCapsuleNavigation.Work(_routeSearch) ?? _routeWork;
         _routeSearch = null;
     }
@@ -128,13 +143,17 @@ internal sealed partial class RuntimeNativeActorCombat
         FalloutFormKey? package = null, string? navigationSha256 = null)
     {
         if (package is null || navigationSha256 is null) InvalidatePackageRouteReceipt();
+        var goal = new NativePursuitQueryGoal(target, stoppingDistance, package, navigationSha256,
+            package is null ? _state.Engagement?.Target : null);
+        RetireObsoletePursuitSearch(goal);
         // Ground-relative source animations (including hovering creatures)
         // still need a supported controller root before planning floor edges.
         if (!_mover!.IsOnFloor() && _pursuitPath.Length == 0) return null;
         _routeClock -= delta;
         if (_routeDoor is not null && target.DistanceTo(_routeTarget) > _radius) ResetDoorNavigation();
-        // Finish this bounded query against its captured destination. Repeated
-        // target motion must not discard every query before pursuit can move.
+        // A pending iterator owns its captured destination and arrival closure.
+        // Retain small target motion under the existing route reuse threshold;
+        // obsolete work must retire before it can spend another navigation slice.
         ConsumeReachedPursuitWaypoints();
         if (_pursuitCursor < _pursuitPath.Length)
         {
@@ -163,7 +182,7 @@ internal sealed partial class RuntimeNativeActorCombat
                 // supported endpoint admits a new query, never final arrival.
                 ++_routeRequests;
                 _routeWork = null;
-                BeginNativeRouteSearch(approach, null, completed.Request with { Identity = current, Intent = approach }, owner);
+                BeginNativeRouteSearch(approach, null, completed.Request with { Identity = current, Intent = approach }, owner, goal);
             }
         }
         if (_routeSearch is null && _routeClock <= 0 && (_pursuitCursor >= _pursuitPath.Length ||
@@ -185,8 +204,27 @@ internal sealed partial class RuntimeNativeActorCombat
                 // Package destinations are already source-projected. They need
                 // authored prefix regions, but not combat's whole-component
                 // destination-region search on every short movement slice.
-                var source = context.RouteRegion?.Invoke(_actor.GlobalPosition, target,
-                    _state.Engagement is not null ? stoppingDistance : 0);
+                NativeActorNavigationRoute? source;
+                try
+                {
+                    source = context.RouteRegion?.Invoke(_actor.GlobalPosition, target,
+                        _state.Engagement is not null ? stoppingDistance : 0);
+                }
+                catch (NativeNavigationRegionUnavailableException) when (package is null && stoppingDistance > 0 &&
+                    _state.Engagement is not null && context.RouteRegion is not null)
+                {
+                    // A target may stand beyond the authored NAVM boundary.
+                    // Keep known source connectivity to its projected floor,
+                    // then admit only an actually supported direct approach.
+                    // An obstructed edge cannot fall back to an off-mesh lattice.
+                    source = context.RouteRegion(_actor.GlobalPosition, target, 0);
+                    if (source.Points.Length == 0 || source.CorridorFloor is null)
+                        throw new InvalidOperationException("Direct combat approach has no connected source route.");
+                    _movementCorridorFloor = null;
+                    BeginNativeRouteSearch(new(target, 1, stoppingDistance, true, []), null, null, null, goal, directOnly: true);
+                    source = null;
+                }
+                if (_routeSearch is not null) return null;
                 _movementCorridorFloor = source?.CorridorFloor;
                 var coarse = source?.Points ?? context.Route(_actor.GlobalPosition, target);
                 if (coarse.Length == 0) throw new InvalidOperationException("No source navigation corridor.");
@@ -199,7 +237,7 @@ internal sealed partial class RuntimeNativeActorCombat
                     ? new(PackageRouteIdentity(requestPackage, target, stoppingDistance, expected), source, intent, coarse.Length) : null;
                 // NAVM supplies bounded intent; the complete actor capsule and
                 // ordinary support/residency queries validate every guide edge.
-                BeginNativeRouteSearch(intent, SourceArrival(intent, coarse, source), request, package);
+                BeginNativeRouteSearch(intent, SourceArrival(intent, coarse, source), request, package, goal);
             }
             catch (InvalidOperationException error)
             {
@@ -248,11 +286,44 @@ internal sealed partial class RuntimeNativeActorCombat
     // An iterator with no movement intent is an unused native query, not an
     // outstanding gameplay event. Retain its completed failure and any door
     // obligation; never retire a requested pursuit merely because it is waiting.
+    private void RetireObsoletePursuitSearch(NativePursuitQueryGoal current)
+    {
+        if (_routeSearch is null) return;
+        var captured = _routeQueryGoal ?? throw new InvalidOperationException("Pending pursuit query has no captured goal owner.");
+        if (!captured.RetireIfObsolete(_routeSearch, current, _radius)) return;
+        CompleteRouteDisposal();
+        _pursuitPath = []; _pursuitCursor = 0;
+        _retiredPursuitSearches++;
+        InvalidatePackageRouteReceipt();
+        // Retire obsolete work immediately, but preserve the existing planning
+        // admission clock, shared work budget and actual failure accounting.
+        _routeStall = 0;
+        _waypointDistance = float.PositiveInfinity;
+    }
+
     private void RetireUnusedPursuitSearch()
     {
         if (_routeSearch is null) return;
         DisposeRouteSearch();
         _retiredPursuitSearches++;
+    }
+
+    private void RetireDisplacedPursuit()
+    {
+        // Hit reactions and ragdolls replace the controller's root trajectory.
+        // A query captured before that displacement cannot publish a path from
+        // its old start, even when its target and source graph are unchanged.
+        RetireUnusedPursuitSearch();
+        InvalidatePackageRouteReceipt();
+        if (_routeDoor is { Requested: false }) ResetDoorNavigation();
+        // Requested door actions remain reference-owned and may still finish;
+        // only this actor's obsolete physical approach is discarded.
+        _pursuitPath = []; _pursuitCursor = 0;
+        _routeQueryGoal = null; _routeIntent = null; _routeArrival = null;
+        _movementCorridorFloor = null; _routeDirectOnly = false;
+        _routeFacingPending = false; _routeTurning = false;
+        _routeClock = 0; _routeStall = 0;
+        _waypointDistance = float.PositiveInfinity;
     }
     private void AdvanceRouteSearch()
     {
@@ -287,7 +358,8 @@ internal sealed partial class RuntimeNativeActorCombat
                 _routeRefinementRequests++;
                 _routeSearch = NativeCapsuleNavigation.Search(_mover!, _actor.GlobalPosition, _routeEnd,
                     _context!.StepHeight, _routeSpacing, _context.Resident, 512, _routeProbe, _routeArrivalRadius,
-                    _routeIntent!.Corridor, _routeArrival, sourceFloor: _movementCorridorFloor).GetEnumerator();
+                    _routeDirectOnly ? [_routeEnd] : _routeIntent!.Corridor, _routeArrival,
+                    sourceFloor: _movementCorridorFloor, directOnly: _routeDirectOnly).GetEnumerator();
                 return;
             }
             BeginDoorNavigation();

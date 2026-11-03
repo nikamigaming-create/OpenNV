@@ -6,4 +6,5 @@ internal static class FalloutEngineForms
 {
     internal const uint PlayerBase = 0x7;
     internal const uint PlayerReference = 0x14;
+    internal const uint DefaultUnarmedWeapon = 0x1f4;
 }

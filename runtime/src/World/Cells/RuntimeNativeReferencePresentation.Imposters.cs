@@ -10,6 +10,7 @@ internal partial class RuntimeNativeReferencePresentation
     private FalloutRegionImposterVisibility? _imposterVisibility;
     private FalloutPlayerRegionMembership? _playerRegions;
     private bool _imposterPublicationPending;
+    private bool _imposterNewCellActivation;
 
     internal object ImposterState => new
     {
@@ -18,6 +19,7 @@ internal partial class RuntimeNativeReferencePresentation
         selected = _imposterVisibility?.Selected.Count ?? 0,
         droppedSourceRegions = _playerRegions?.DroppedSourceRegions?.Select(key => key?.ToString()).ToArray(),
         pending = _imposterPublicationPending,
+        gameplayActivationPending = _world.RegionPublicationPending,
         error = _imposterVisibility?.Error,
         owner = "source-player-CELL-entry/type8-reference-attachment-and-render-cull"
     };
@@ -32,15 +34,21 @@ internal partial class RuntimeNativeReferencePresentation
             if (!_world.RegionPublicationPending) _imposterVisibility.RestorePublished(membership.Current);
         }
         _playerRegions = membership;
-        _imposterPublicationPending = _world.RegionPublicationPending;
+        _imposterNewCellActivation = _world.RegionPublicationPending;
+        // A fresh view must still verify actual selected 3D. A completed
+        // gameplay/cache receipt is not proof that a prior render succeeded.
+        _imposterPublicationPending = true;
     }
 
     internal void PublishImposterRegions()
     {
         if (!_imposterPublicationPending || _playerRegions is null || _imposterVisibility is null) return;
         _imposterPublicationPending = false;
-        var published = _imposterVisibility.Publish(_playerRegions.Current, reference =>
+        _imposterVisibility.Publish(_playerRegions.Current, reference =>
         {
+            // Same-CELL/cold cache reuse must not reactivate a reference which
+            // a real source script already moved away after accepted entry.
+            if (!_imposterNewCellActivation && _world.Placement(reference).Cell != _playerRegions.Cell) return;
             if (!_referencesByKey.ContainsKey(reference) || _world.Placement(reference).Cell != _playerRegions.Cell)
                 throw new NotSupportedException("Selected regional reference has no current-CELL attachment owner.");
             if (_world.IsEnabled(reference) && Resolve(reference) is null)
@@ -48,10 +56,10 @@ internal partial class RuntimeNativeReferencePresentation
             _world.AdoptRegionImposter(reference);
         }, (reference, admitted) =>
         {
+            if (!_imposterNewCellActivation && _world.Placement(reference).Cell != _playerRegions.Cell) return;
             _imposterAdmission[reference] = admitted;
             if (_nodes.TryGetValue(reference, out var node)) ApplyImposterVisibility(reference, node);
         });
-        if (published) _world.CompleteRegionPublication();
     }
 
     private void ApplyImposterVisibility(FalloutFormKey reference, Node3D node)

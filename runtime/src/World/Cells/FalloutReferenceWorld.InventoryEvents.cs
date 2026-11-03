@@ -5,6 +5,8 @@ namespace OpenNV.Runtime.World.Cells;
 
 internal sealed partial class FalloutReferenceWorld
 {
+    internal FalloutInventoryAcquisition? InventoryAcquisition { get; set; }
+
     // A placed reference provides the real calling identity. The currently
     // admitted effects are staged; unsupported commands never publish pickup.
     private bool TakeWithInventoryEvent(FalloutFormKey reference, FalloutReferenceInstance instance,
@@ -22,6 +24,11 @@ internal sealed partial class FalloutReferenceWorld
         var events = FalloutGameModeProgram.ReadEvents(FalloutDialogueTopic.ScriptText(source[0].Data.Span));
         if (!events.Any(block => block.Event.Equals("OnAdd", StringComparison.OrdinalIgnoreCase) &&
             (block.Filter is null || bindings.Reference(block.Filter) == recipient))) return false;
+        if (InventoryAcquisition is { } acquisition)
+        {
+            acquisition.TakePlaced(reference, instance, variant);
+            return true;
+        }
         if (variant.Count != 1 || FalloutScriptLocals.ReadDeclarations(script).Count != 0)
             throw new NotSupportedException("Item event needs a persistent stack or script-local instance owner.");
         var oldItem = player.Item(instance.Base);

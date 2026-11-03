@@ -9,22 +9,22 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer
     {
         get
         {
-            if (_lostCaptureAtRetirement || _retiredCaptureDiagnostic is not null) return false;
+            if (SourcePosePending || _pcmRestoreFailure is not null || _lostCaptureAtRetirement || _retiredCaptureDiagnostic is not null) return false;
             if (_events is null) return _voices.Count == 0 && _unbound.Count == 0;
             if (!(_events.CanCapture || _events.CanAwaitNativeCompletion) ||
-                _unbound.Except(_events.OwnedLanes, StringComparer.Ordinal).Any()) return false;
+                _unbound.Any(lane => !_events!.OwnsLane(lane))) return false;
             // Several sound components share one actor ledger. A component
             // with no local voice must still join the other retained native
             // generations instead of mistaking their activity for a fault.
             var pending = _events.PendingNativeCompletion.ToDictionary(entry => entry.Generation);
             if (pending.Count != 0)
             {
-                var proofs = _records.SoundVoices.PendingFiniteSourceVoices(_events.Reference);
+                var proofs = _records.SoundVoices.PendingFiniteSourceVoices(_events.Identity);
                 if (proofs is null || proofs.Count != pending.Count) return false;
                 foreach (var proof in proofs)
                 {
                     proof.Validate();
-                    if (proof.Reference != _events.Reference || !pending.Remove(proof.Generation, out var entry) ||
+                    if (proof.Reference != _events.Identity || !pending.Remove(proof.Generation, out var entry) ||
                         proof.Sound != entry.Sound || proof.SoundSha256 != entry.SoundSha256 ||
                         proof.Path != entry.Path || proof.MediaSha256 != entry.MediaSha256) return false;
                 }

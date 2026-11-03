@@ -23,6 +23,7 @@ internal static partial class ScriptDeathContracts
             File.WriteAllBytes(Path.Combine(directory, "Death.esm"), Join(Record("TES4", 0, Field("HEDR", header)),
                 Creature(1, 0x50), Creature(2, 0x51), Creature(3, 0x52), Creature(4, 0x53, flags: 2),
                 Creature(5, 0x53, flags: 0x40000000), Creature(6, 0x53, deathItem: 0x20), Creature(7, 0x53, health: 0), Creature(8, 0, template: 1),
+                Creature(9, 0, flags: 1u << 26), Creature(10, 0, flags: 1u << 23),
                 Record("GMST", 0x70, Field("EDID", Text("fEssentialDeathTime")), Field("DATA", BitConverter.GetBytes(2f))),
                 Record("GMST", 0x71, Field("EDID", Text("fEssentialHealthPercentReGain")), Field("DATA", BitConverter.GetBytes(.1f))),
                 Record("BPTD", 0x20, Field("BPNN", Text("Root")), Field("BPNT", Text("Root")), Field("BPND", part)),
@@ -148,6 +149,7 @@ internal static partial class ScriptDeathContracts
             Require(migrated.GetDeadCount(Key(1)) == 1 && migrated.GetDeadCount(Key(7)) == 0,
                 "Legacy supported death/corpse evidence did not restore its consumed transition.");
             RunEssentialOwners(records, directory);
+            RunFatigueKnockoutPersistence(records);
             Console.WriteLine("OPENNV_DEATH_COUNT_PASS cumulative=true childTemplateIdentity=true repeatedCorpse=false " +
                 "initialCorpseNotKilled=true failedLootAtomic=true unloadedAndCold=true laterLifetime=true legacyConsumedDeath=true invalidAtomic=true");
             Console.WriteLine("OPENNV_SCRIPT_DEATH_CONTRACT_PASS aliases=true inheritedAndQualifiedLocals=true unknownKiller=true filteredEvents=true lootOnce=true coldState=true recoveryBeforeMutation=true unsupportedBeforeMutation=true");

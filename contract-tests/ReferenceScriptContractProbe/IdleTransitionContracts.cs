@@ -114,6 +114,12 @@ internal static class IdleTransitionContracts
             var selected = tree.Select(_ => { draws++; return 10; }, cold.Replay.CanSelect);
             Require(selected?.FormKey == new FalloutFormKey("Automatic.esm", 12) && draws == 2,
                 "Automatic source order, conditions-before-replay or chance draw count changed.");
+            Require(new FalloutFurnitureIdleTree(records, "meshes/creatures/Any/skeleton.nif").SelectProcedure(10, _ => 10) is null &&
+                selected is not null,
+                "Eat's generic source-root producer cannot require an explicit procedure10 branch to select general idles.");
+            cold.Started(selected!, FalloutIdleAnimationData.Read(selected!).ReplayDelaySeconds);
+            Require(tree.Select(_ => 10, cold.Replay.CanSelect) is null,
+                "Shared Eat/automatic source selection ignored actual replay membership or invented a fallback.");
             var disabled = new FalloutAmbientIdleState();
             Require(!disabled.Advance(2, 0, true) && !disabled.Advance(100, 0, true),
                 "Zero source wait admitted an automatic idle.");

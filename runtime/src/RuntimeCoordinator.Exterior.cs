@@ -59,7 +59,7 @@ public partial class RuntimeCoordinator
         if (_nativeDoorLoading || _nativeActiveCell is null || _nativeCurrentCellRoot is null) return false;
         if (_nativeActiveCell.Cell.Worldspace is null) return true;
         var width = 4096 * _configuration.World.GameUnitsToMeters;
-        var radius = _configuration.Player.CapsuleRadiusMeters;
+        var radius = _nativePlayer?.PhysicalRadius ?? _configuration.Player.CapsuleRadiusMeters;
         for (var x = (int)MathF.Floor((position.X - radius) / width); x <= (int)MathF.Floor((position.X + radius) / width); x++)
             for (var y = (int)MathF.Floor((-position.Z - radius) / width); y <= (int)MathF.Floor((-position.Z + radius) / width); y++)
                 if (!_nativeWalkableGrid.Contains((x, y))) return false;

@@ -13,6 +13,7 @@ internal static class NativeOwnedSoundPlayback
     internal static AudioStreamPlayer CreateMenu(FalloutSoundRecord descriptor, FalloutPluginStack records,
         RuntimeLiveContentSource source, FalloutSoundRandomState random)
     {
+        descriptor = FalloutSoundRecordReader.ResolveAvailableMedia(descriptor, source);
         var before = random.State;
         var stagedRandom = new FalloutSoundRandomState(before);
         var selected = descriptor.LogicalPath;
@@ -58,6 +59,7 @@ internal static class NativeOwnedSoundPlayback
         FalloutSoundRecord descriptor, FalloutPluginStack records, float pitch)
     {
         ArgumentNullException.ThrowIfNull(descriptor);
+        if (records.OwnedSource is { } content) descriptor = FalloutSoundRecordReader.ResolveAvailableMedia(descriptor, content);
         if (!descriptor.HasExactFile)
             throw Unsupported(descriptor, "folder-based random variant selection");
         if (!descriptor.IsTwoDimensional)
@@ -129,6 +131,7 @@ internal static class NativeOwnedSoundPlayback
         Node3D listener,
         uint environmentReverbAreaMask)
     {
+        if (records.OwnedSource is { } content) descriptor = FalloutSoundRecordReader.ResolveAvailableMedia(descriptor, content);
         FalloutSoundPlaybackContract.ValidateThreeDimensional(descriptor);
         if (!float.IsFinite(gameUnitsToMetres) || gameUnitsToMetres <= 0.0f)
             throw new ArgumentOutOfRangeException(nameof(gameUnitsToMetres),

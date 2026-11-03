@@ -15,7 +15,7 @@ internal sealed record FalloutQuestObjectiveChange(FalloutFormKey Quest, string 
     FalloutQuestObjectiveSnapshot Before, FalloutQuestObjectiveSnapshot After, long Revision);
 
 /// <summary>Authoritative new-game quest values; observations never populate this owner.</summary>
-internal sealed class FalloutQuestState(FalloutPluginStack stack, FalloutHudNotifications? notifications = null)
+internal sealed partial class FalloutQuestState(FalloutPluginStack stack, FalloutHudNotifications? notifications = null)
 {
     private sealed class State
     {

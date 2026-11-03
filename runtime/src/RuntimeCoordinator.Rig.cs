@@ -38,6 +38,8 @@ public partial class RuntimeCoordinator
         var records = _nativePluginStack ?? throw new InvalidOperationException("No indexed rig source.");
         var world = _nativeReferences ?? throw new InvalidOperationException("No authoritative rig world.");
         var operation = command.GetProperty("op").GetString();
+        if (operation is "rig.map.reveal" or "rig.player.moveto" or "rig.travel.status")
+            return ControlNativeDiagnosticTravel(command, records, world);
         if (operation == "rig.source") return new
         {
             plugins = records.Plugins.Select(plugin => new { name = Path.GetFileName(plugin.Plugin.Path), plugin.Sha256, plugin.LoadOrderIndex }).ToArray(),

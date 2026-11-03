@@ -24,6 +24,7 @@ internal sealed partial class NativeOwnedHudMessages : Control
     private readonly Func<bool> _loading;
     private readonly FalloutHudMessageLayout _declaration;
     private FalloutHudMessageDeclarations? _itemDeclaration;
+    private FalloutEquipmentItemNotice? _unequipItemNotice, _equipItemNotice;
     private readonly FalloutInstallationSettings _settings;
     private readonly NativeOwnedMenuTree _tiles;
     private readonly XElement _messages, _icon, _text, _bracket;
@@ -36,6 +37,8 @@ internal sealed partial class NativeOwnedHudMessages : Control
     private FalloutChallengeHudDeclaration? _challengeDeclaration;
     private FalloutRadioHudDeclaration? _radioDeclaration;
     private FalloutCaravanMinimumNotice? _caravanMinimumNotice;
+    private FalloutQuickSaveNotice? _quickSaveNotice;
+    private IReadOnlyDictionary<string, FalloutKarmaNotice>? _karmaNotices;
     internal string? Error { get; private set; }
     internal object State => new
     {
@@ -101,6 +104,7 @@ internal sealed partial class NativeOwnedHudMessages : Control
         _objective = new XElement(_text); stages.Add(_objective);
         _questTitle = new XElement(_text); _quest.Add(_questTitle);
         foreach (var template in _quest.Elements("template").ToArray()) template.Remove();
+        InitializeDiscoveryTiles();
         _tiles = new(menu);
         _tiles.Bind(menu, "visible", 1);
         foreach (var (id, value) in _declaration.TextTraits)
@@ -148,6 +152,7 @@ internal sealed partial class NativeOwnedHudMessages : Control
             _settings.Number("Interface", wide ? "iSafeZoneYWide" : "iSafeZoneY"));
         _tiles.Bind(_quest, "x", (Size.X - _tiles.Number(_quest, "width")) / 2);
         _tiles.Bind(_quest, "y", (Size.Y - _tiles.Number(_quest, "height")) / 2);
+        LayoutDiscovery();
         QueueRedraw();
     }
     public override void _Process(double delta)
@@ -159,7 +164,7 @@ internal sealed partial class NativeOwnedHudMessages : Control
             if (_queue.ConsumeQuestUpdateCancellation(loading))
             {
                 _tiles.Bind(_quest, "visible", 0);
-                if (IsObjective(_queue.Current?.Event) || _queue.Current is null) _displayed = 0;
+                if (IsObjective(_queue.Current?.Event) || _queue.Current?.Event.Kind == FalloutHudEventKind.LocationDiscovered || _queue.Current is null) _displayed = 0;
                 QueueRedraw();
             }
             Visible = !loading && _shown();
@@ -175,6 +180,8 @@ internal sealed partial class NativeOwnedHudMessages : Control
             AdvanceCount++; AdvancedSeconds += delta;
             var current = _queue.Current;
             var objective = IsObjective(current?.Event);
+            var discovery = current?.Event.Kind == FalloutHudEventKind.LocationDiscovered;
+            if (discovery && _displayed == current!.Ordinal) AdvanceDiscovery();
             if (objective)
             {
                 var elapsed = _queue.Elapsed;
@@ -184,12 +191,17 @@ internal sealed partial class NativeOwnedHudMessages : Control
             }
             if ((current?.Ordinal ?? 0) == _displayed) return;
             _displayed = current?.Ordinal ?? 0;
+            Layout();
             _displayIcon = null;
-            _tiles.Bind(_messages, "visible", current is not null && !objective ? 1 : 0);
-            _tiles.Bind(_quest, "visible", objective ? 1 : 0);
+            _tiles.Bind(_messages, "visible", current is not null && !objective && !discovery ? 1 : 0);
+            _tiles.Bind(_quest, "visible", objective || discovery ? 1 : 0);
+            _tiles.Bind(_discoveryBranch!, "visible", discovery ? 1 : 0);
+            _tiles.Bind(_questTitle, "visible", objective ? 1 : 0);
+            _tiles.Bind(_objective.Parent!, "visible", objective ? 1 : 0);
             if (current is not null)
             {
                 var value = Resolve(current.Event);
+                if (discovery) PresentDiscovery(current);
                 _displayIcon = value.Icon;
                 _tiles.Text[_text] = value.Text;
                 if (objective)
@@ -234,10 +246,35 @@ internal sealed partial class NativeOwnedHudMessages : Control
     {
         if (_resolved.TryGetValue(value, out var result)) return result;
         var record = _records.GetEffective(value.Source);
-        if (value.Kind == FalloutHudEventKind.NoteAdded)
+        if (FalloutKarma.IsNotice(value.Kind))
+        {
+            if (record.Signature != "NPC_" || value.Text is null) throw new InvalidDataException("Karma HUD event lost its player source/caption.");
+            var descriptor = FalloutKarma.Notice(value.Kind);
+            _karmaNotices ??= FalloutExecutableStringTable.ReadKarmaNotices(
+                (RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("Karma HUD source is absent.")).FalloutExecutablePath);
+            var declaration = _karmaNotices[descriptor.Text];
+            result = (value.Text, FalloutGameSettingStrings.Read(_records, declaration.ImageSetting), declaration.Seconds);
+        }
+        else if (value.Kind == FalloutHudEventKind.NoteAdded)
         {
             if (record.Signature != "NOTE" || value.Text is null) throw new InvalidDataException("Note HUD event has no NOTE text.");
             result = (value.Text, DefaultMessageIcon, 2);
+        }
+        else if (value.Kind == FalloutHudEventKind.ItemEquipped)
+        {
+            if (record.Signature is not ("ARMO" or "WEAP" or "ALCH" or "INGR") || value.Text is null)
+                throw new InvalidDataException("Equip HUD event lost its source item/text.");
+            _equipItemNotice ??= FalloutExecutableStringTable.ReadEquipItemNotice(
+                (RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("Equip HUD source is absent.")).FalloutExecutablePath);
+            result = (value.Text, _equipItemNotice.Icon, _equipItemNotice.Seconds);
+        }
+        else if (value.Kind == FalloutHudEventKind.ItemUnequipped)
+        {
+            if (record.Signature is not ("ARMO" or "WEAP") || value.Text is null)
+                throw new InvalidDataException("Unequip HUD event lost its source equipment/text.");
+            _unequipItemNotice ??= FalloutExecutableStringTable.ReadUnequipItemNotice(
+                (RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("Unequip HUD source is absent.")).FalloutExecutablePath);
+            result = (value.Text, _unequipItemNotice.Icon, _unequipItemNotice.Seconds);
         }
         else if (value.Kind is FalloutHudEventKind.ItemAdded or FalloutHudEventKind.ItemRemoved)
         {
@@ -246,7 +283,7 @@ internal sealed partial class NativeOwnedHudMessages : Control
             // must not prevent unrelated startup scripts or messages from running.
             _itemDeclaration ??= FalloutExecutableStringTable.ReadHudMessageDeclarations(
                 (RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("Item HUD source is absent.")).FalloutExecutablePath);
-            var name = FalloutDialogueTopic.Text(record.ReadSubrecords().Single(field => field.Signature == "FULL").Data.Span);
+            var name = FalloutRecordDisplayName.Read(record);
             var added = FalloutGameSettingStrings.Read(_records, value.Kind == FalloutHudEventKind.ItemAdded ? "sAddItemtoInventory" : "sRemoveItemfromInventory");
             result = (value.Count == 1
                 ? Format(_itemDeclaration.SingleItemFormat, [name, added])
@@ -267,6 +304,12 @@ internal sealed partial class NativeOwnedHudMessages : Control
             }
             result = (FalloutMessageControlTokens.Resolve(message.Text, ControlLabel), icon, message.DisplaySeconds.Value);
         }
+        else if (value.Kind == FalloutHudEventKind.LocationDiscovered)
+        {
+            var marker = FalloutMapMarker.Read(record);
+            EnsureDiscoveryProfile();
+            result = (marker.Name, null, DiscoveryDuration(marker.Name));
+        }
         else if (value.Kind == FalloutHudEventKind.RadioDiscovered)
         {
             var station = FalloutRadioStation.Read(_records, record);
@@ -274,6 +317,12 @@ internal sealed partial class NativeOwnedHudMessages : Control
             var source = RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("Radio HUD has no owned source.");
             _radioDeclaration ??= FalloutExecutableStringTable.ReadRadioHudDeclaration(source.FalloutExecutablePath);
             result = (Format(FalloutGameSettingStrings.Read(_records, "sRadioStationDiscovered"), [name]), _radioDeclaration.Icon, _radioDeclaration.Seconds);
+        }
+        else if (value.Kind == FalloutHudEventKind.ExecutableNotice && value.Text == "sQuickSaving")
+        {
+            var source = RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("Quicksave notice source is absent.");
+            _quickSaveNotice ??= FalloutExecutableStringTable.ReadQuickSaveNotice(source.FalloutExecutablePath);
+            result = (FalloutGameSettingStrings.Read(_records, _quickSaveNotice.Setting), _quickSaveNotice.Icon, _quickSaveNotice.Seconds);
         }
         else if (value.Kind == FalloutHudEventKind.ExecutableNotice)
         {

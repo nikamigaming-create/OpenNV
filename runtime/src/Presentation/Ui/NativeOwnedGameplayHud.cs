@@ -11,6 +11,7 @@ internal sealed record NativeHudAmmo(int Loaded, int Reserve);
 internal partial class NativeOwnedGameplayHud : Control
 {
     private readonly NativeOwnedMenuTree _tiles;
+    private readonly FalloutPluginStack _compassRecords;
     private readonly bool _showReticle;
     private readonly XElement _reticle, _info, _prompt, _name;
     private readonly Func<NativeHudTarget?> _target;
@@ -41,6 +42,8 @@ internal partial class NativeOwnedGameplayHud : Control
         targetError = TargetError,
         compass = _lastCompass,
         compassError = _compassError,
+        compassBlinkError = _compassBlinkError,
+        compassPresentationBoundary = "native-pool-slot-reassignment,source-ui-clock-join-and-final-pixels-unverified",
         scriptUiRevision = _uiRevision,
         sourceControls = _lastControls,
         condition = _lastCondition,
@@ -65,6 +68,7 @@ internal partial class NativeOwnedGameplayHud : Control
         Func<float, OpenNV.Runtime.World.Cells.FalloutCompassFrame>? compass = null,
         Func<NativeHudCondition?>? condition = null, bool showReticle = true)
     {
+        _compassRecords = records;
         Name = "HUDMainMenuGameplay"; MouseFilter = MouseFilterEnum.Ignore; ProcessMode = ProcessModeEnum.Always;
         _showReticle = showReticle;
         _target = target; _shown = shown; _vitals = vitals; _ammunition = ammunition; _notice = notice;
@@ -159,6 +163,7 @@ internal partial class NativeOwnedGameplayHud : Control
             Visible = _shown();
             if (!Visible) return;
             UpdateCompass();
+            AdvanceCompassBlink((float)delta);
             UpdateCondition();
             var controls = _controls();
             if (controls != _lastControls)

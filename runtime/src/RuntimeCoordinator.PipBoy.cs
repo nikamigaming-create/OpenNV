@@ -11,37 +11,13 @@ public partial class RuntimeCoordinator
 {
     private FalloutFormKey? _nativePendingFastTravel;
     private double _nativeMapDiscoverySeconds;
-    private IReadOnlyDictionary<FalloutFormKey, FalloutPluginRecord[]>? _nativeMapDoors;
 
     private (FalloutFormKey? World, Vector3 Position) NativePipBoyMapContext(RuntimeNativePlayer player)
     {
-        if (_nativeActiveCell!.Cell.Worldspace is { } world) return (world, NativePipBoyMapPosition(player));
-        var records = _nativePluginStack!;
-        _nativeMapDoors ??= records.EffectiveRecords("REFR")
-            .Where(record => record.ReadSubrecords().Any(field => field.Signature == "XTEL"))
-            .Where(record => FalloutCellSceneReader.ParentCell(record) is not null)
-            .GroupBy(record => FalloutCellSceneReader.ParentCell(record)!.Value)
-            .ToDictionary(group => group.Key, group => group.ToArray());
-        var pending = new Queue<FalloutFormKey>();
-        var visited = new HashSet<FalloutFormKey>();
-        pending.Enqueue(_nativeActiveCell.Cell.FormKey);
-        while (pending.TryDequeue(out var cell))
-        {
-            if (!visited.Add(cell)) continue;
-            foreach (var door in _nativeMapDoors.GetValueOrDefault(cell) ?? [])
-            {
-                var target = FalloutCellSceneReader.ReadTeleport(door)!.Door;
-                var destination = records.GetEffective(target);
-                var destinationCell = FalloutCellSceneReader.ParentCell(destination)!.Value;
-                if (FalloutCellSceneReader.ParentWorldspace(destination) is { } exterior)
-                {
-                    var placement = _nativeReferences!.Placement(target);
-                    return (exterior, new(placement.Position[0], placement.Position[1], placement.Position[2]));
-                }
-                pending.Enqueue(destinationCell);
-            }
-        }
-        return (null, NativePipBoyMapPosition(player));
+        var position = NativePipBoyMapPosition(player);
+        var source = FalloutPipBoyMapSource.Resolve(_nativePluginStack!, _nativeReferences!, _nativeActiveCell!.Cell.FormKey,
+            new(position.X, position.Y, position.Z));
+        return (source.World, new(source.Position.X, source.Position.Y, source.Position.Z));
     }
 
     private string? RequestNativeFastTravel(FalloutFormKey reference)
@@ -86,9 +62,15 @@ public partial class RuntimeCoordinator
         {
             var distance = new Vector2(marker.X - position.X, marker.Y - position.Y).Length();
             if (distance > visible) continue;
-            if (distance <= discovered && !_nativeReferences!.MapMarkerState(marker.Marker).CanTravel)
-                _nativeOpeningStageDriver!.RewardExperience(records.NumericSettings.IntegerBits("iXPRewardDiscoverMapMarker"));
+            var newlyDiscovered = distance <= discovered && !_nativeReferences!.MapMarkerState(marker.Marker).CanTravel;
+            var notice = new FalloutHudEvent(FalloutHudEventKind.LocationDiscovered, marker.Marker.Reference, 0);
+            if (newlyDiscovered) _nativeInventory!.Notifications.RequirePublish([notice]);
             _nativeReferences!.ShowMap(marker.Marker.Reference, distance <= discovered);
+            if (newlyDiscovered)
+            {
+                _nativeInventory!.Notifications.Publish([notice]);
+                _nativeOpeningStageDriver!.RewardExperience(records.NumericSettings.IntegerBits("iXPRewardDiscoverMapMarker"));
+            }
         }
     }
 

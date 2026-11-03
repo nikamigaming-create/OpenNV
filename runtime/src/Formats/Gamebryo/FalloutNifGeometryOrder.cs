@@ -9,6 +9,10 @@ internal static class FalloutNifGeometryOrder
 
     internal static IReadOnlyList<FalloutNifGeometry> Read(FalloutNifFile source) => Cache.GetValue(source, ReadCore);
 
+    // Ordinary inventory-model attachment refuses a scene containing skin.
+    // Equipped biped parts have their separate actor-skeleton skin owner.
+    internal static bool HasSkinnedGeometry(FalloutNifFile source) => Read(source).Any(geometry => geometry.SkinInstance >= 0);
+
     private static IReadOnlyList<FalloutNifGeometry> ReadCore(FalloutNifFile source)
     {
         var result = new List<FalloutNifGeometry>();

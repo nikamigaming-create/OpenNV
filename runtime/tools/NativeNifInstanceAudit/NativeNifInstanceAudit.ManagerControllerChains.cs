@@ -199,7 +199,11 @@ public partial class NativeNifInstanceAudit
         })));
         blocks.Add(("NiMaterialProperty", Bytes(w =>
         { w.Write(0); w.Write(0); w.Write(15); foreach (var value in new[] { 0f, 0f, 0f, 0f, 0f, 0f, 1f, 1f, 1f }) w.Write(value); })));
-        blocks.Add(("NiAlphaController", Bytes(w => { Time(w, -1, 0x006c, 14, 2, 11); w.Write(16); })));
+        blocks.Add((mode == "emissive" ? "NiMaterialColorController" : "NiAlphaController", Bytes(w =>
+        {
+            Time(w, -1, 0x006c, 14, 2, 11); w.Write(16);
+            if (mode == "emissive") w.Write((ushort)3);
+        })));
         blocks.Add(("NiBlendFloatInterpolator", Bytes(w => { w.Write((byte)1); w.Write((byte)0); w.Write(0f); w.Write(0f); })));
         blocks.Add(("NiFloatInterpolator", Bytes(w => { w.Write(float.MinValue); w.Write(18); })));
         blocks.Add(("NiFloatData", Bytes(w => { w.Write(2); w.Write(1U); w.Write(2f); w.Write(.2f); w.Write(11f); w.Write(.9f); })));

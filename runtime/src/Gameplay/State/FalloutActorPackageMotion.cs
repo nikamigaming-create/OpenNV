@@ -12,7 +12,8 @@ internal sealed record FalloutActorPackageMotion(FalloutFormKey Package, string 
     FalloutTravelProgress? Guard = null, FalloutAccompanyPortalArrival? AccompanyPortal = null,
     FalloutWanderProgress? Wander = null, FalloutSandboxActivityProgress? Sandbox = null, FalloutActorEatProgress? Eat = null,
     FalloutActorSleepProgress? Sleep = null, FalloutActorEatPackageProgress? EatPackage = null,
-    FalloutActorPathTurn? PathTurn = null, FalloutActorPackageAnimationLayers? AnimationLayers = null)
+    FalloutActorPathTurn? PathTurn = null, FalloutActorPackageAnimationLayers? AnimationLayers = null,
+    FalloutActorPathTurn? ArrivalTurn = null, FalloutFindFoodProgress? FindFood = null)
 {
     // Captures and restores must not share mutable route, pose or activity
     // buffers with the live owner or a caller retaining the snapshot.
@@ -39,6 +40,9 @@ internal sealed record FalloutActorPackageMotion(FalloutFormKey Package, string 
     internal void Validate()
     {
         PathTurn?.Validate();
+        ArrivalTurn?.Validate();
+        if (ArrivalTurn is not null && (PathTurn is not null || Travel?.Complete != true))
+            throw new InvalidDataException("Arrival turning requires a completed Travel continuation.");
         AnimationLayers?.Validate();
         Patrol?.Validate();
         Escort?.Validate();
@@ -51,6 +55,12 @@ internal sealed record FalloutActorPackageMotion(FalloutFormKey Package, string 
         Eat?.Validate();
         Sleep?.Validate();
         EatPackage?.Validate();
+        FindFood?.Validate();
+        if (FindFood is not null && (new object?[] { Patrol, Escort, EditorTravel, Travel, Guard, AccompanyPortal, Sandbox, Eat, Sleep, EatPackage }
+            .Any(value => value is not null) || DialogueCompleted || Wander is not null && FindFood.Phase != FalloutFindFoodPhase.Wander))
+            throw new InvalidDataException("Find Food conflicts with another package procedure continuation.");
+        if (EatPackage?.Creature is not null && (Eat is not null || Wander is not null || Sandbox is not null || Travel is not null))
+            throw new InvalidDataException("Creature Eat cannot retain a Character meal or another procedure continuation.");
         if (Sleep is not null && (new object?[] { Patrol, Escort, EditorTravel, Guard, AccompanyPortal, Wander, Sandbox, Eat, EatPackage }
             .Any(value => value is not null) || DialogueCompleted || Sleep.Furniture && Travel is not null))
             throw new InvalidDataException("Sleep continuation conflicts with another procedure owner.");

@@ -27,6 +27,11 @@ public partial class NativePlayerPresentationAudit : Node3D
                 await AuditOwnedWeaponAction(args[1], args[2], args[3], args[4], args[5], args.Skip(6).ToArray());
                 GetTree().Quit(); return;
             }
+            if (args is ["--owned-weapon-action-installed", var installedGame, var installedCheckpoint, var installedWeapon])
+            {
+                await AuditOwnedWeaponAction(installedGame, null, null, installedCheckpoint, installedWeapon, []);
+                GetTree().Quit(); return;
+            }
             if (args.Length != 2 && !(args.Length == 4 && args[2] == "--weapon-coverage") &&
                 !(args.Length == 3 && args[2] is "--combat-controls" or "--xr-weapon-controls" or "--weapon-preparation"))
                 throw new ArgumentException("Expected owned Data, a real native checkpoint and optional --weapon-coverage output.jsonl.");

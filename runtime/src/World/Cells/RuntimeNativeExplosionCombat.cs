@@ -6,7 +6,7 @@ using OpenNV.Runtime.World.Actors;
 namespace OpenNV.Runtime.World.Cells;
 
 /// <summary>Applies source EXPL radius hits through the shared actor and player damage owners.</summary>
-internal static class RuntimeNativeExplosionCombat
+internal static partial class RuntimeNativeExplosionCombat
 {
     internal static object Detonate(Node3D owner, Node3D shooter, FalloutPluginStack records,
         FalloutExplosion explosion, FalloutWeaponDamage damage, Vector3 point, uint collisionMask,
@@ -20,12 +20,13 @@ internal static class RuntimeNativeExplosionCombat
         explosion.RequireRuntimeDamageOwner();
         if (!point.IsFinite() || !float.IsFinite(unitsToMeters) || unitsToMeters <= 0 || collisionMask == 0)
             throw new InvalidDataException("Explosion query inputs are invalid.");
-        player?.ReceiveExplosionExposure(explosion, point);
         var exposureDone = System.Diagnostics.Stopwatch.GetTimestamp();
 
         var radius = explosion.Radius * unitsToMeters;
         if (!float.IsFinite(radius)) throw new InvalidDataException("Explosion radius is not finite.");
         if (radius == 0)
+        {
+            player?.ReceiveExplosionExposure(explosion, point);
             return new
             {
                 explosion = explosion.Form.ToString(),
@@ -35,6 +36,7 @@ internal static class RuntimeNativeExplosionCombat
                 playerPart = (byte?)null,
                 visualUnbound = explosion.HasUnpresentedVisuals
             };
+        }
 
         using var shape = new SphereShape3D { Radius = radius };
         using var parameters = new PhysicsShapeQueryParameters3D
@@ -83,6 +85,9 @@ internal static class RuntimeNativeExplosionCombat
                 rigidTargets.Add(rigid);
         }
         var targetsDone = System.Diagnostics.Stopwatch.GetTimestamp();
+        var actorContacts = actorTargets.OrderBy(pair => pair.Value.Distance).Where(target => explosion.IgnoresLineOfSight ||
+            ClearLineOfSight(space, point, ((Node3D)target.Value.Collider).GlobalPosition,
+                collisionMask, shooter, target.Key)).ToArray();
 
         byte? playerPart = null;
         if (player is not null && playerTargets.Count != 0)
@@ -91,20 +96,24 @@ internal static class RuntimeNativeExplosionCombat
             playerPart = explosion.IgnoresLineOfSight
                 ? selected.Collider == player ? (byte)0 : player.CombatHitPart(selected.Collider)
                 : player.CombatHitPartFrom(point, shooter);
-            if (playerPart is { } part)
-            {
-                if (damagePlayer is null) throw new NotSupportedException("Explosion hit the player without a player damage owner.");
-                damagePlayer(damage, part);
-            }
+            if (playerPart is not null && damagePlayer is null)
+                throw new NotSupportedException("Explosion hit the player without a player damage owner.");
         }
 
+        List<Action> enchantments = explosion.TouchEnchantment is { } enchantment
+            ? PrepareTouchEnchantments(owner, records, enchantment, point, collisionMask, unitsToMeters,
+                actorContacts.Select(target => target.Key).ToArray(), player, playerPart is not null, attacker, level, globals)
+            : [];
+        // All source effect declarations and selected target conditions have
+        // passed before the first value, exposure or health mutation.
+        player?.ReceiveExplosionExposure(explosion, point);
+        if (playerPart is { } hitPart) damagePlayer!(damage, hitPart);
+
         var actorHits = new List<object>();
-        foreach (var target in actorTargets.OrderBy(pair => pair.Value.Distance))
+        foreach (var target in actorContacts)
         {
             var combat = target.Key;
             var collider = target.Value.Collider;
-            if (!explosion.IgnoresLineOfSight && !ClearLineOfSight(space, point,
-                ((Node3D)collider).GlobalPosition, collisionMask, shooter, combat)) continue;
             var hit = combat.Hit(collider, damage, attacker, level, globals,
                 weaponOnHitBehavior, nextWeaponRandomUnit, explosionDamage: true);
             combat.ApplyExplosionPhysics(explosion, hit, point, !explosion.PushesSourceOnly || shooter.IsAncestorOf(combat));
@@ -119,6 +128,9 @@ internal static class RuntimeNativeExplosionCombat
                 knockedDown = combat.KnockedDown,
             });
         }
+        // Native blast health contacts precede their magic value application.
+        // A lethal blast cannot leave an active value effect on its corpse.
+        foreach (var apply in enchantments) apply();
 
         var pushedBodies = 0;
         var objectHits = new List<object>();
@@ -171,11 +183,12 @@ internal static class RuntimeNativeExplosionCombat
                 totalMilliseconds = System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds,
             },
             actorHits,
+            enchantmentTargets = enchantments.Count,
             objectHits,
             pushedBodies,
             playerPart,
             visualUnbound = explosion.HasUnpresentedVisuals,
-            boundary = "source EXPL radius, LOS, knockdown, rigid impulses and object damage;distance attenuation, player knockdown, enchantment, placed objects, IPDS projection and retail parity remain open",
+            boundary = "source EXPL radius, LOS, knockdown, rigid impulses, object damage and admitted instant touch health/value effects;distance attenuation, timed/scripted/presented enchantments, stacking/conditional effect areas, placed objects, IPDS projection and retail parity remain open",
         };
     }
 

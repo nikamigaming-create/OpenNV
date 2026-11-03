@@ -69,6 +69,7 @@ internal static partial class FurnitureContracts
         restored.Restore(world.Capture());
         Require(restored.Get(actor).PackageMotion?.Eat?.Consumed == true,
             "World restoration dropped the standalone meal ownership.");
+        CreatureEatContracts(records, motion);
         Console.WriteLine("OPENNV_EAT_CONTRACT_PASS source=true restrictedFood=true consumedResume=true seatedNoFood=true clocks=true cold=true physicalPlayback=separate");
     }
 }

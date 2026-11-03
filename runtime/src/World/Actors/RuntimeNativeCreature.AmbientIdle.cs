@@ -13,7 +13,7 @@ internal sealed partial class RuntimeNativeCreature
         if (_aiState is not { } state || _aiRecords is not { } records || Combat is not { } combat) return;
         var automatic = state.AmbientIdle ??= new();
         automatic.Replay.Advance((float)delta);
-        var ready = !ScriptIdleActive && _eventIdleClock is null && _conversationTarget is null &&
+        var ready = _creatureEatPackage is null && !ScriptIdleActive && _eventIdleClock is null && _conversationTarget is null &&
             Error is null && state.ScriptError is null && !state.Unconscious && !state.Restrained &&
             !state.KnockedDown && !combat.Dead && !combat.OwnsPose && combat.AutomaticIdleRequestReady &&
             _aiWorld!.IsEnabled(state.Reference);
@@ -27,7 +27,7 @@ internal sealed partial class RuntimeNativeCreature
 
     private void ObserveAmbientInterruption(double delta)
     {
-        if (!AmbientIdleActive) return;
+        if (!AmbientIdleActive && !EatIdleActive) return;
         if (_aiState?.CreatureScriptIdle is null || Combat?.Dead == true)
         { ClearScriptIdleOwner(); return; }
         var saved = _aiState.CreatureScriptIdle!;
@@ -47,7 +47,7 @@ internal sealed partial class RuntimeNativeCreature
             return;
         }
         if (_scriptIdleDeactivation is null) { _ambientIdleInterrupted = true; BeginScriptIdleDeactivation(); }
-        if (!AmbientIdleActive) return;
+        if (!AmbientIdleActive && !EatIdleActive) return;
         _scriptIdleDeactivation!.Advance(delta);
         if (_scriptIdleDeactivation.Complete) { CompleteScriptIdle(); return; }
         _scriptIdleClock!.Advance(delta, interval => DispatchIdleInterval(_scriptIdleAnimation!, interval, saved.Animation.Idle), processGroup: false);
@@ -58,7 +58,8 @@ internal sealed partial class RuntimeNativeCreature
         List<RuntimeNativeNifAnimation.ControllerSnapshot> snapshots)
     {
         if (!AmbientIdleActive) return;
-        layers.Add((_scriptIdleAnimation!, _scriptIdleClock!.SourceSeconds, _scriptIdleDeactivation?.Weight ?? 1));
+        Combat!.InsertAutomaticIdleLayers(layers,
+            [(_scriptIdleAnimation!, _scriptIdleClock!.SourceSeconds, _scriptIdleDeactivation?.Weight ?? 1)], AutomaticExecutionSlot);
         if (_scriptIdleSequenceState == 5)
         {
             var factors = _scriptIdleTransition!.Factors;

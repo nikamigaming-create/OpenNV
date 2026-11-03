@@ -16,6 +16,7 @@ public partial class RuntimeCoordinator
         float fov, float near, float aspect)
     {
         var player = _configuration.Player;
+        var body = _nativePlayer ?? throw new InvalidOperationException("Native camera clearance has no player physics owner.");
         var eyeOffset = uprightBasis * (Vector3.Up * player.SpawnCenterHeightMeters +
             new Vector3(player.DesktopCameraOffsetMeters[0], player.DesktopCameraOffsetMeters[1], player.DesktopCameraOffsetMeters[2]));
         var evidence = new Dictionary<string, object?>
@@ -25,12 +26,13 @@ public partial class RuntimeCoordinator
             ["requestedCameraMeters"] = PostScreenshotCoordinates(requestedCamera),
             ["configuredEyeOffsetMeters"] = PostScreenshotCoordinates(eyeOffset),
             ["configuredEyeHeightMeters"] = eyeOffset.Y,
-            ["capsuleRadiusMeters"] = player.CapsuleRadiusMeters,
-            ["capsuleHeightMeters"] = player.CapsuleHeightMeters,
-            ["capsuleCenterHeightMeters"] = player.SpawnCenterHeightMeters,
+            ["capsuleRadiusMeters"] = body.PhysicalRadius,
+            ["capsuleHeightMeters"] = body.PhysicalHeight,
+            ["capsuleCenterHeightMeters"] = body.PhysicalCenterHeight,
+            ["physicalShape"] = body.PhysicalShapeObservation,
             ["collisionMask"] = player.CollisionMask,
             ["maximumWalkableSlopeDegrees"] = player.MaximumWalkableSlopeDegrees,
-            ["floorSnapMeters"] = player.CapsuleRadiusMeters,
+            ["floorSnapMeters"] = body.PhysicalRadius,
             ["floorToleranceMeters"] = _configuration.Proof.SpawnFloorToleranceMeters,
             ["physicsFrame"] = Engine.GetPhysicsFrames(),
             ["proxyActorCreated"] = false,
@@ -73,19 +75,16 @@ public partial class RuntimeCoordinator
             return Finish("native-floor-outside-intended-height");
         if (groundCamera)
         {
-            // The root ray touches a sloped plane below the capsule's bottom
-            // pole. An upright lower hemisphere needs r / nY vertical center
-            // separation, rather than r, to touch that plane without overlap.
-            // Derive this support lift from the observed normalized normal;
-            // the complete native capsule query below must still be clear.
+            // Use the actual body's support function, including its native
+            // convex radius; the complete physical query below must be clear.
             var precision = MathF.BitIncrement(MathF.Abs(point.Y)) - MathF.Abs(point.Y);
             var numericLift = MathF.Max(_configuration.Proof.PortalAlignmentToleranceMeters, precision * 4);
-            var slopeLift = MathF.Max(0, player.CapsuleRadiusMeters * (1 / normal.Y - 1));
+            var slopeLift = body.PhysicalSupportLift(uprightBasis.Inverse() * normal);
             var lift = slopeLift + numericLift;
             evidence["numericClearanceLiftMeters"] = numericLift;
             evidence["floorSlopeSupportLiftMeters"] = slopeLift;
             evidence["totalFloorSupportLiftMeters"] = lift;
-            if (!float.IsFinite(lift) || lift >= player.CapsuleRadiusMeters)
+            if (!float.IsFinite(lift) || lift >= body.PhysicalRadius)
                 return Finish("native-floor-support-lift-exceeds-snap");
             foot = point + Vector3.Up * lift;
             camera = foot + eyeOffset;
@@ -93,16 +92,16 @@ public partial class RuntimeCoordinator
         // Same root support/slope/snap rules as NativeCharacterStep.TrySupport,
         // expressed as a pure query because there is no gameplay body to move.
         using var rootRay = PhysicsRayQueryParameters3D.Create(foot + Vector3.Up * _configuration.Proof.PortalAlignmentToleranceMeters,
-            foot - Vector3.Up * MathF.Min(player.StepHeightMeters, player.CapsuleRadiusMeters), player.CollisionMask);
+            foot - Vector3.Up * MathF.Min(body.PhysicalStepHeight, body.PhysicalRadius), player.CollisionMask);
         rootRay.CollideWithAreas = false; rootRay.CollideWithBodies = true;
         using var rootSupport = space.IntersectRay(rootRay);
         if (rootSupport.Count == 0 || rootSupport["normal"].AsVector3().Dot(Vector3.Up) <
             MathF.Cos(Mathf.DegToRad(player.MaximumWalkableSlopeDegrees))) return Finish("ordinary-root-support-missing");
-        using var capsule = new CapsuleShape3D { Radius = player.CapsuleRadiusMeters, Height = player.CapsuleHeightMeters };
+        using var capsule = body.CreatePhysicalQueryShape(out var shapeOffset);
         using var capsuleQuery = new PhysicsShapeQueryParameters3D
         {
             Shape = capsule,
-            Transform = new(uprightBasis, foot + uprightBasis * Vector3.Up * player.SpawnCenterHeightMeters),
+            Transform = new(uprightBasis, foot + uprightBasis * shapeOffset),
             CollisionMask = player.CollisionMask,
             CollideWithAreas = false,
             CollideWithBodies = true,

@@ -7,6 +7,8 @@ using OpenNV.Runtime.Content;
 
 namespace OpenNV.Runtime.World.Cells;
 
+internal sealed class NativeNavigationRegionUnavailableException(string message) : InvalidOperationException(message) { }
+
 internal sealed partial class CellNavigationGraph
 {
     private const string ExpectedSchema = "opennv-owned-cell-navigation/v1";
@@ -87,29 +89,37 @@ internal sealed partial class CellNavigationGraph
         out Func<Vector3, int, float, float, Func<Vector3, bool>> prefixRegion,
         out Func<float, float, Func<Vector3, bool>> corridorFloor,
         Func<Vector3, bool>? permittedPortal = null,
-        float destinationRadiusGameUnits = 0, Func<Vector3, float>? portalPenalty = null)
+        float destinationRadiusGameUnits = 0, Func<Vector3, float>? portalPenalty = null, bool actorHeightProjection = false)
     {
         if (_navmeshes.Count == 0)
             throw new InvalidOperationException(
                 "Owned CELL has no navigation mesh for actor travel.");
-        var start = NearestNode(startGameUnits);
-        var destination = NearestNode(destinationGameUnits);
+        var start = actorHeightProjection ? NearestActorNode(startGameUnits) : NearestNode(startGameUnits);
+        var destination = actorHeightProjection ? NearestActorNode(destinationGameUnits) : NearestNode(destinationGameUnits);
+        if (actorHeightProjection && !NativeActorNavigationHeight.Admits(startGameUnits.Z, start.Point.Z))
+            throw new InvalidOperationException("Actor start has no source vertical navigation projection.");
         if (!float.IsFinite(destinationRadiusGameUnits) || destinationRadiusGameUnits < 0)
             throw new ArgumentOutOfRangeException(nameof(destinationRadiusGameUnits));
         var trianglePath = FindTrianglePath(start.Node, destination.Node, permittedPortal,
-            destinationGameUnits, destinationRadiusGameUnits, portalPenalty);
+            destinationGameUnits, destinationRadiusGameUnits, portalPenalty, actorHeightProjection);
         var result = new List<Vector3>();
         foreach (var pair in trianglePath.Zip(trianglePath.Skip(1)))
             result.Add(Portal(pair.First, pair.Second));
         var last = trianglePath[^1];
-        var endpoint = last.NavMesh.ClosestPoint(last.TriangleIndex, destinationGameUnits);
+        var endpoint = actorHeightProjection ? last.NavMesh.ActorProjectionPoint(last.TriangleIndex, destinationGameUnits)
+            : last.NavMesh.ClosestPoint(last.TriangleIndex, destinationGameUnits);
+        var endpointOffset = endpoint - destinationGameUnits;
+        if (actorHeightProjection && !NativeActorNavigationHeight.Admits(destinationGameUnits.Z, endpoint.Z))
+            throw new InvalidOperationException("Actor destination has no source vertical navigation projection.");
+        var endpointDistanceSquared = actorHeightProjection
+            ? new Vector2(endpointOffset.X, endpointOffset.Y).LengthSquared() : endpointOffset.LengthSquared();
         if (destinationRadiusGameUnits > 0 &&
-            endpoint.DistanceSquaredTo(destinationGameUnits) > destinationRadiusGameUnits * destinationRadiusGameUnits)
+            endpointDistanceSquared > destinationRadiusGameUnits * destinationRadiusGameUnits)
             throw new InvalidOperationException("Owned NAVM endpoint lies outside the source destination radius.");
         result.Add(endpoint);
         prefixRegion = (target, resume, horizontal, height) =>
-            PrefixRegion(startGameUnits, result, trianglePath, target, resume, horizontal, height);
-        corridorFloor = (horizontal, height) => ReachableCorridorFloor(start.Node, trianglePath, permittedPortal, horizontal, height);
+            PrefixRegion(startGameUnits, result, trianglePath, target, resume, horizontal, height, actorHeightProjection);
+        corridorFloor = (horizontal, height) => ReachableCorridorFloor(start.Node, trianglePath, permittedPortal, horizontal, height, actorHeightProjection);
         return result;
     }
 
@@ -207,15 +217,30 @@ internal sealed partial class CellNavigationGraph
         }
     }
 
+    private static bool InApproachRegion(NavigationNode node, Vector3 target, float radius, bool actorHeightProjection)
+    {
+        if (!actorHeightProjection)
+            return node.NavMesh.ClosestPoint(node.TriangleIndex, target).DistanceSquaredTo(target) <= radius * radius;
+        var projected = node.NavMesh.ActorProjectionPoint(node.TriangleIndex, target);
+        var offset = new Vector2(projected.X - target.X, projected.Y - target.Y);
+        return NativeActorNavigationHeight.Admits(target.Z, projected.Z) && offset.LengthSquared() <= radius * radius;
+    }
+
     private IReadOnlyList<NavigationNode> FindTrianglePath(
         NavigationNode start,
         NavigationNode destination,
         Func<Vector3, bool>? permittedPortal, Vector3 approachTarget, float approachRadius,
-        Func<Vector3, float>? portalPenalty)
+        Func<Vector3, float>? portalPenalty, bool actorHeightProjection)
     {
-        if (start == destination)
+        // The nearest triangle need not contain an admitted attack position.
+        // Radius queries must continue through reachable source neighbors until
+        // their existing destination-region predicate is actually satisfied.
+        var destinationAdmitted = approachRadius <= 0 || InApproachRegion(destination, approachTarget, approachRadius, actorHeightProjection);
+        if (!destinationAdmitted && !HasApproachRegion(approachTarget, approachRadius, actorHeightProjection))
+            throw new NativeNavigationRegionUnavailableException("Owned NAVM has no point within the source destination radius.");
+        if (start == destination && destinationAdmitted)
             return new[] { start };
-        var internalOnly = permittedPortal is null && portalPenalty is null && start.NavMesh == destination.NavMesh &&
+        var internalOnly = destinationAdmitted && permittedPortal is null && portalPenalty is null && start.NavMesh == destination.NavMesh &&
             start.NavMesh.CanReach(start.TriangleIndex, destination.TriangleIndex);
         NavigationSearchWork work;
         lock (_searchPoolGate) work = _searchPool.Count == 0 ? new() : _searchPool.Pop();
@@ -227,15 +252,16 @@ internal sealed partial class CellNavigationGraph
         {
             costs.Add(start, 0.0f);
             frontier.Enqueue(start, 0.0f);
+            var regionFound = false;
             while (frontier.TryDequeue(out var current, out _))
             {
                 if (!closed.Add(current)) continue;
-                if (current == destination)
-                    break;
-                if (approachRadius > 0 && current.NavMesh.ClosestPoint(current.TriangleIndex, approachTarget)
-                        .DistanceSquaredTo(approachTarget) <= approachRadius * approachRadius)
+                if (current == destination && destinationAdmitted)
+                { regionFound = true; break; }
+                if (approachRadius > 0 && InApproachRegion(current, approachTarget, approachRadius, actorHeightProjection))
                 {
                     destination = current;
+                    regionFound = true;
                     break;
                 }
                 foreach (var adjacent in Neighbors(current))
@@ -257,6 +283,8 @@ internal sealed partial class CellNavigationGraph
                         cost + adjacent.Centroid.DistanceTo(destination.Centroid));
                 }
             }
+            if (approachRadius > 0 && !regionFound)
+                throw new InvalidOperationException("Owned NAVM reachable component has no point within the source destination radius.");
             if (destination == start) return [start];
             if (!previous.ContainsKey(destination))
                 throw new InvalidOperationException(
@@ -396,7 +424,7 @@ internal sealed partial class CellNavigationGraph
         int TriangleIndex,
         uint Type = 0);
 
-    private sealed class NavigationMeshRecord
+    private sealed partial class NavigationMeshRecord
     {
         internal NavigationMeshRecord(
             string formId,
@@ -413,6 +441,8 @@ internal sealed partial class CellNavigationGraph
             Triangles = triangles;
             ExternalConnections = externalConnections;
             _internalComponents = new(ReadInternalComponents);
+            _verticalProjections = new(ReadVerticalProjections);
+            _verticalTriangleIndex = new(() => new(this));
             _minimum = _maximum = vertices[0];
             foreach (var vertex in vertices)
             {
@@ -423,6 +453,7 @@ internal sealed partial class CellNavigationGraph
 
         private readonly Vector3 _minimum, _maximum;
         private readonly Lazy<int[]> _internalComponents;
+        private readonly Lazy<VerticalProjection[]> _verticalProjections;
         internal (Vector3 Minimum, Vector3 Maximum) ProjectionBounds => (_minimum, _maximum);
         internal float BoundsDistanceSquared(Vector3 point)
         {
@@ -539,13 +570,65 @@ internal sealed partial class CellNavigationGraph
             return sum / TriangleCentroidDivisor;
         }
 
+        internal Vector3 ActorProjectionPoint(int triangleIndex, Vector3 point) =>
+            VerticalTrianglePoint(triangleIndex, point) ?? ClosestPoint(triangleIndex, point);
+
+        internal NearestTriangleResult? NearestVerticalTriangle(Vector3 point)
+        {
+            if (Triangles.Count > 32) return _verticalTriangleIndex.Value.Nearest(point);
+            var best = new NearestTriangleResult(-1, default, float.PositiveInfinity);
+            for (var index = 0; index < Triangles.Count; index++)
+            {
+                if ((Triangles[index].Flags & 8) != 0 || VerticalTrianglePoint(index, point) is not { } plane ||
+                    !NativeActorNavigationHeight.Admits(point.Z, plane.Z)) continue;
+                var distance = point.DistanceSquaredTo(plane);
+                if (float.IsFinite(distance) && distance < best.DistanceSquared) best = new(index, plane, distance);
+            }
+            return best.Index >= 0 ? best : null;
+        }
+
+        private VerticalProjection[] ReadVerticalProjections()
+        {
+            var result = new VerticalProjection[Triangles.Count];
+            for (var index = 0; index < result.Length; index++)
+            {
+                var triangle = Triangles[index];
+                result[index] = new(Vertices[triangle.VertexIndices[0]], Vertices[triangle.VertexIndices[1]],
+                    Vertices[triangle.VertexIndices[2]]);
+            }
+            return result;
+        }
+
+        private readonly struct VerticalProjection
+        {
+            internal readonly Vector3 First, Normal;
+            internal readonly double AbX, AbY, AcX, AcY, Determinant;
+
+            internal VerticalProjection(Vector3 first, Vector3 second, Vector3 third)
+            {
+                First = first;
+                AbX = (double)second.X - first.X; AbY = (double)second.Y - first.Y;
+                AcX = (double)third.X - first.X; AcY = (double)third.Y - first.Y;
+                Determinant = AbX * AcY - AbY * AcX;
+                Normal = (second - first).Cross(third - first);
+            }
+        }
+
+        internal Vector3? VerticalTrianglePoint(int triangleIndex, Vector3 point)
+        {
+            ref readonly var projection = ref _verticalProjections.Value[triangleIndex];
+            var apX = (double)point.X - projection.First.X; var apY = (double)point.Y - projection.First.Y;
+            if (projection.Determinant == 0) return null;
+            var u = (apX * projection.AcY - apY * projection.AcX) / projection.Determinant;
+            var v = (projection.AbX * apY - projection.AbY * apX) / projection.Determinant;
+            return u >= 0 && v >= 0 && u + v <= 1 ? VerticalPlanePoint(triangleIndex, point) : null;
+        }
+
         internal Vector3? VerticalPlanePoint(int triangleIndex, Vector3 point)
         {
-            var triangle = Triangles[triangleIndex];
-            var first = Vertices[triangle.VertexIndices[0]];
-            var second = Vertices[triangle.VertexIndices[1]];
-            var third = Vertices[triangle.VertexIndices[2]];
-            var normal = (second - first).Cross(third - first);
+            ref readonly var projection = ref _verticalProjections.Value[triangleIndex];
+            var first = projection.First;
+            var normal = projection.Normal;
             if (normal.Z == 0) return null;
             var height = first.Z - ((double)normal.X * (point.X - first.X) + (double)normal.Y * (point.Y - first.Y)) / normal.Z;
             return double.IsFinite(height) ? new(point.X, point.Y, (float)height) : null;

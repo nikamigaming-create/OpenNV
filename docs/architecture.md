@@ -10,10 +10,11 @@ derivatives are packaged. There is no OpenMW dependency.
 
 RuntimeCoordinator and its launcher select an installation, profile and mode.
 RuntimeLiveContentSource reads installed resources directly. Official-content
-selection excludes custom activation lists and native extensions. Mod profiles
-remain a later explicit capability. Loose resources physically installed in the
-selected directory still follow resource precedence; official ESM selection does
-not assert that an installation is pristine.
+selection excludes custom activation lists. Explicit installed selection reads
+the selected plugin stack and content roots, including installed ESM/ESP mods.
+Native extensions remain disabled in the current recovery build. Loose resources
+follow resource precedence; official ESM selection does not assert that an
+installation is pristine.
 
 RuntimeCoordinator.NativeOwned constructs source-authored cells and references.
 RuntimeNativeQuestScripts advances the authoritative script runtime.

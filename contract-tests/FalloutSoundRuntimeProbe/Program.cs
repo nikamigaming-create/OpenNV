@@ -14,6 +14,7 @@ try
         Record("TES4", 0, []),
         Record("SOUN", 0x10, Sound("BaseSound", "fx\\base.wav", Data36(2, 3, 0x0040, -600))),
         Record("SOUN", 0x11, LegacySound()),
+        Record("SOUN", 0x18, Sound("MissingWaveRequest", "fx\\fallback.wav", Data36(2, 3, 0x0040, 0))),
         Record("SOUN", 0x12, Sound("Exact3D", "fx\\exact3d.wav",
             Data36(2, 3, 0, -200, reverb: 100, loopStart: 0, loopEnd: 0))),
         Record("SOUN", 0x13, Sound("ExactEnvironment3D", "fx\\environment3d.wav",
@@ -34,6 +35,57 @@ try
         Record("SOUN", 0x10, Sound("WinningSound", "fx\\winner.ogg", Data36(4, 9, 0x0050, -125)))));
 
     using var stack = FalloutPluginStack.Load(fixtureRoot, ["Master.esm", "Patch.esp"]);
+    // First-party opaque payloads exercise source selection/identity only;
+    // the decoder is deliberately outside this pure record/runtime probe.
+    File.WriteAllBytes(Path.Combine(fixtureRoot, "FalloutNV.esm"), Record("TES4", 0, []));
+    var sourceDirectory = Path.Combine(fixtureRoot, "sound", "fx"); Directory.CreateDirectory(sourceDirectory);
+    var alternatePath = Path.Combine(sourceDirectory, "fallback.ogg");
+    var exactPath = Path.Combine(sourceDirectory, "fallback.wav");
+    byte[] alternateBytes = [3, 17, 29, 41]; File.WriteAllBytes(alternatePath, alternateBytes);
+    var archiveIni = Path.Combine(fixtureRoot, "fixture.ini");
+    var bootstrapArchive = Path.Combine(fixtureRoot, "Fixture.bsa");
+    WriteSoundBootstrapArchive(bootstrapArchive);
+    File.WriteAllText(archiveIni, "[Archive]\nsArchiveList=Fixture.bsa\n");
+    using (var content = RuntimeLiveContentSource.Open(fixtureRoot, RuntimeLiveContentSource.FalloutNewVegasGame,
+        activePlugins: ["Master.esm", "Patch.esp"], archiveIniPath: archiveIni, includeImplicitPlugins: false))
+    using (var requests = FalloutPluginStack.Load(content.PluginSources))
+    {
+        Require(content.ArchivePaths.Count == 1 && content.ArchivePaths[0] == bootstrapArchive &&
+            content.TryRead("fixtures/bootstrap.bin", null, out var bootstrap, out var bootstrapIdentity) &&
+            bootstrap.AsSpan().SequenceEqual("OpenNV fixture bootstrap"u8) &&
+            bootstrapIdentity.StartsWith(bootstrapArchive + "::", StringComparison.OrdinalIgnoreCase),
+            "Sound path fixture did not own its isolated first-party archive bootstrap.");
+        var form = new FalloutFormKey("Master.esm", 0x18);
+        var original = requests.GetEffective(form).ReadData();
+        var selected = FalloutSoundRecordReader.Read(requests, form);
+        Require(selected.LogicalPath == "sound\\fx\\fallback.ogg" &&
+            content.TryRead(selected.LogicalPath, null, out var bytes, out var identity) && bytes.AsSpan().SequenceEqual(alternateBytes) &&
+            identity.Contains("fallback.ogg", StringComparison.OrdinalIgnoreCase),
+            "Missing declared WAV did not select and identify the actual owned Ogg resource before playback.");
+        Require(requests.SoundPaths.Read(form).File == "fx\\fallback.wav" &&
+            requests.GetEffective(form).ReadData().AsSpan().SequenceEqual(original) &&
+            FalloutSoundRecordReader.Read(requests.GetEffective(form)).LogicalPath == "sound\\fx\\fallback.wav",
+            "Prepared sound codec fallback mutated its declaration or session path owner.");
+    }
+    // Source indexes describe the selected installation at opening. Each
+    // different fixture file graph therefore needs its own source lifetime.
+    File.WriteAllBytes(exactPath, [7, 19]);
+    using (var content = RuntimeLiveContentSource.Open(fixtureRoot, RuntimeLiveContentSource.FalloutNewVegasGame,
+        activePlugins: ["Master.esm", "Patch.esp"], archiveIniPath: archiveIni, includeImplicitPlugins: false))
+    using (var requests = FalloutPluginStack.Load(content.PluginSources))
+    {
+        Require(FalloutSoundRecordReader.Read(requests, new("Master.esm", 0x18)).LogicalPath == "sound\\fx\\fallback.wav",
+            "Missing-WAV fallback replaced an available exact request without a codec-priority owner.");
+    }
+    File.Delete(exactPath); File.Delete(alternatePath);
+    using (var content = RuntimeLiveContentSource.Open(fixtureRoot, RuntimeLiveContentSource.FalloutNewVegasGame,
+        activePlugins: ["Master.esm", "Patch.esp"], archiveIniPath: archiveIni, includeImplicitPlugins: false))
+    using (var requests = FalloutPluginStack.Load(content.PluginSources))
+    {
+        Require(FalloutSoundRecordReader.Read(requests, new("Master.esm", 0x18)).LogicalPath == "sound\\fx\\fallback.wav",
+            "Absent source media became an invented successful path.");
+    }
+
     Require(FalloutSoundRecordReader.Find(stack, "winningsound").FormKey == new FalloutFormKey("Master.esm", 0x10),
         "The source sound name index ignored the winning override or case-insensitive binding.");
     using (var independent = FalloutPluginStack.Load(fixtureRoot, ["Master.esm"]))
@@ -387,6 +439,21 @@ static byte[] Subrecord(string signature, byte[] data)
 
 static byte[] ZString(string value) => Encoding.GetEncoding(1252).GetBytes(value).Append((byte)0).ToArray();
 static byte[] Combine(params byte[][] values) => values.SelectMany(value => value).ToArray();
+static void WriteSoundBootstrapArchive(string path)
+{
+    // First-party container bootstrap only; no media request resolves here.
+    var folder = System.Text.Encoding.ASCII.GetBytes("fixtures\0");
+    var name = System.Text.Encoding.ASCII.GetBytes("bootstrap.bin\0");
+    byte[] payload = "OpenNV fixture bootstrap"u8.ToArray();
+    using var writer = new BinaryWriter(File.Create(path));
+    writer.Write(0x00415342u); writer.Write(104u); writer.Write(36u); writer.Write(3u);
+    writer.Write(1u); writer.Write(1u); writer.Write((uint)folder.Length); writer.Write((uint)name.Length); writer.Write(0u);
+    writer.Write(0ul); writer.Write(1u); writer.Write((uint)(52 + name.Length));
+    writer.Write((byte)folder.Length); writer.Write(folder);
+    writer.Write(0ul); writer.Write((uint)payload.Length); writer.Write((uint)(52 + 1 + folder.Length + 16 + name.Length));
+    writer.Write(name); writer.Write(payload);
+}
+
 static void Require(bool condition, string message)
 {
     if (!condition) throw new InvalidOperationException(message);

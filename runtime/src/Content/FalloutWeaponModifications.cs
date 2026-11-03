@@ -57,15 +57,64 @@ internal static class FalloutWeaponModifications
 
     internal static FalloutWeaponShot Apply(FalloutPluginStack records, FalloutWeaponShot shot, byte mask)
     {
-        foreach (var mod in Installed(records, shot.Weapon, mask))
+        var installed = Installed(records, shot.Weapon, mask);
+        foreach (var mod in installed)
             shot = mod.Effect switch
             {
                 3 => shot with { MinimumSpread = Math.Max(0, shot.MinimumSpread * (1 - mod.Value)), Spread = Math.Max(0, shot.Spread * (1 - mod.Value)) },
                 9 => shot with { Projectile = shot.Projectile with { Speed = Math.Max(0, shot.Projectile.Speed + mod.Value) } },
-                12 => shot with { Projectiles = checked(shot.Projectiles + (int)mod.Value) },
                 _ => shot
             };
+        if (installed.Any(mod => mod.Effect == 12))
+            shot = shot with { Projectiles = ModifiedProjectileCount(records, shot.Weapon, shot.Projectiles) };
         return shot;
+    }
+
+    internal static int ModifiedClipCapacity(int original, float value)
+    {
+        if (original < 0 || original > byte.MaxValue || !float.IsFinite(value))
+            throw new InvalidDataException("Source clip capacity or modifier is invalid.");
+        var truncated = Math.Truncate((double)value);
+        if (truncated < int.MinValue || truncated > int.MaxValue)
+            throw new NotSupportedException("Source clip modifier integer conversion is unbound.");
+        return original + unchecked((byte)(int)truncated);
+    }
+
+    internal static float FirstAuthoredPrimaryValue(FalloutPluginStack records, FalloutFormKey weapon, uint effect)
+    {
+        var source = records.GetEffective(weapon);
+        if (source.Signature != "WEAP") throw new InvalidDataException("Weapon modification value requires WEAP.");
+        var data = source.ReadSubrecords().Single(field => field.Signature == "DNAM").Data.Span;
+        if (data.Length < 164) throw new NotSupportedException("Weapon modification source fields are absent.");
+        for (var slot = 0; slot < 3; ++slot)
+        {
+            if (BinaryPrimitives.ReadUInt32LittleEndian(data[(140 + slot * 4)..]) != effect) continue;
+            var value = BinaryPrimitives.ReadSingleLittleEndian(data[(152 + slot * 4)..]);
+            return float.IsFinite(value) ? value : throw new InvalidDataException("Weapon modification value is not finite.");
+        }
+        return 0;
+    }
+
+    private static int ModifiedProjectileCount(FalloutPluginStack records, FalloutFormKey weapon, int count)
+    {
+        if (count is < 0 or > byte.MaxValue) throw new InvalidDataException("Base projectile count differs from source byte storage.");
+        // An installed matching effect enables the first authored matching slot's value.
+        var value = FirstAuthoredPrimaryValue(records, weapon, 12);
+        var sum = count + (double)value;
+        if (sum < int.MinValue || sum > int.MaxValue)
+            throw new NotSupportedException("Projectile modification needs its native invalid-conversion owner.");
+        // Every ordinary x87 precision/rounding mode lies between adjacent single-precision bounds.
+        // Compare their exact offsets from this byte count, preserving even sub-double input offsets.
+        var nearest = (float)sum;
+        var offset = (double)nearest - count;
+        var lower = offset > value ? MathF.BitDecrement(nearest) : nearest;
+        var upper = offset < value ? MathF.BitIncrement(nearest) : nearest;
+        var integer = Math.Truncate((double)lower);
+        if (integer != Math.Truncate((double)upper))
+            throw new NotSupportedException("Projectile modification needs its native floating-point addition owner.");
+        if (integer < int.MinValue || integer > int.MaxValue)
+            throw new NotSupportedException("Projectile modification needs its native invalid-conversion owner.");
+        return unchecked((byte)(int)integer);
     }
 
     internal static FalloutWeaponPresentation Apply(FalloutPluginStack records, FalloutWeaponPresentation weapon, byte mask, bool firstPerson)
@@ -88,11 +137,21 @@ internal static class FalloutWeaponModifications
             if (!value.StartsWith("meshes/", StringComparison.OrdinalIgnoreCase)) value = "meshes/" + value;
             if (weapon.Model is { } original) weapon = weapon with { Model = original with { ModelPath = value, AlternateTextures = [] } };
         }
+        if (mods.Any(mod => mod.Effect == 2))
+            weapon = weapon with { ClipSize = ModifiedClipCapacity(weapon.ClipSize, FirstAuthoredPrimaryValue(records, weapon.Form, 2)) };
+        // The process loop timer uses gameplay fireRate times the actual
+        // attack multiplier. Its effect8 gate selects one authored additive
+        // value; animation-authoring shots/sec is a different source field.
+        if (mods.Any(mod => mod.Effect == 8))
+            weapon = weapon with
+            {
+                AttackShotsPerSecond = weapon.SourceFireRate *
+                    (weapon.AttackMultiplier + FirstAuthoredPrimaryValue(records, weapon.Form, 8))
+            };
         foreach (var mod in mods)
             weapon = mod.Effect switch
             {
-                2 => weapon with { ClipSize = checked((byte)Math.Clamp(weapon.ClipSize + (int)mod.Value, 0, byte.MaxValue)) },
-                8 => weapon with { AttackMultiplier = weapon.AttackMultiplier * (1 + mod.Value), AttackShotsPerSecond = weapon.AttackShotsPerSecond * (1 + mod.Value) },
+                8 => weapon with { AttackMultiplier = weapon.AttackMultiplier * (1 + mod.Value) },
                 10 => weapon with { ConditionHealth = checked(weapon.ConditionHealth + (int)mod.Value) },
                 14 => weapon with { SightFieldOfViewDegrees = Math.Clamp(weapon.SightFieldOfViewDegrees - mod.Value, 1, 179) },
                 _ => weapon

@@ -3,10 +3,11 @@ using OpenNV.Runtime.Gameplay.State;
 
 namespace OpenNV.Runtime.Content;
 
-internal sealed record FalloutItemMagazine(FalloutFormKey Ammunition, int Loaded);
+internal sealed record FalloutItemMagazine(FalloutFormKey Ammunition, int Loaded,
+    bool Generated = false, double RechargeSeconds = 0);
 internal sealed record FalloutItemVariant(int Count, float? Condition = null, FalloutFormKey? Owner = null,
     FalloutFormKey? Global = null, int? FactionRank = null, byte WeaponMods = 0, byte? Hotkey = null,
-    Guid? Instance = null, FalloutItemMagazine? Magazine = null)
+    Guid? Instance = null, FalloutItemMagazine? Magazine = null, FalloutInventoryScriptState? ScriptState = null)
 {
     // A shortcut assigns an inventory entry; it does not change the physical
     // item's condition, ownership or installed weapon modifications.

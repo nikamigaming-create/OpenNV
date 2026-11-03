@@ -103,6 +103,7 @@ public partial class NativeRenderedMenuAudit
             RequireFinished(player.Playing && active.GetProperty("audioSha256").GetString() is { Length: 64 } &&
                 FinishedSpeechField<long>(channel, "Generation") == 1 && instance.Read(completedIndex) != completedValue,
                 "Original source selected no actual native audio/generation or failed to commit its source prefix.");
+            RequireFinishedSpeechActionLook(body, records.RuntimeFormKey(0x14), active: true);
             RejectFinished(() => speech.CaptureFinishedState(), "Active voice was admitted as finished history.");
             var inputs = new[] { actor, records.GetEffective(instance.Base), definition.Record, topic.Topic, selected.Record,
                 records.GetEffective(cell.Cell.FormKey) }.ToList();
@@ -129,6 +130,7 @@ public partial class NativeRenderedMenuAudit
             var randomAfterPrefix = JsonSerializer.Serialize(world.ScriptValues.Capture());
             var localsAfterPrefix = new Dictionary<uint, double>(instance.Variables);
             await WaitFinishedSpeech(speech, allowFailure: true);
+            RequireFinishedSpeechActionLook(body, records.RuntimeFormKey(0x14), active: false);
             RequireFinished(lookEffects.Count == 1 && lookEffects[0].Source == actor.FormKey &&
                 lookEffects[0].Argument == records.RuntimeFormKey(0x14),
                 "Original INFO Look result did not reach its real native actor owner exactly once.");
@@ -293,6 +295,7 @@ public partial class NativeRenderedMenuAudit
                 results.Add((info.Record.FormKey, speaker, begin));
             };
             settledSpeech.SayTo(actor.FormKey, playerKey, topic.Topic.FormKey, true);
+            RequireFinishedSpeechActionLook(body, playerKey, active: true);
             var nextVoice = FinishedSpeechVoice(settledSpeech, actor.FormKey);
             RequireFinished(settledSpeech.IsTalking(actor.FormKey) &&
                 FinishedSpeechField<long>(nextVoice, "Generation") == 2 && FinishedSpeechField<AudioStreamPlayer>(nextVoice, "Player").Playing,
@@ -301,6 +304,7 @@ public partial class NativeRenderedMenuAudit
             RejectFinished(() => settledSpeech.RestoreFinishedState(settled), "Restoration replaced an active native voice.");
             settledSpeech.SetProcess(true);
             await WaitFinishedSpeech(settledSpeech, allowFailure: false);
+            RequireFinishedSpeechActionLook(body, playerKey, active: false);
             RequireFinished(lookEffects.Count == 1 && nextLookEffects.Count == 1 && effects.Count == 1 &&
                 nextLookEffects[0].Argument == playerKey,
                 "New native INFO result replayed an old command or lost its fresh Look owner.");
@@ -389,6 +393,16 @@ public partial class NativeRenderedMenuAudit
                 }
             }
         }
+    }
+
+    private static void RequireFinishedSpeechActionLook(RuntimeNativeNpc body, FalloutFormKey listener, bool active)
+    {
+        var head = JsonSerializer.SerializeToElement(body.HeadTrackingState);
+        var slot = head.GetProperty("slots")[1];
+        RequireFinished(slot.GetProperty("enabled").GetBoolean() == active &&
+            (active ? slot.GetProperty("target").GetString() == listener.ToString() :
+                slot.GetProperty("target").ValueKind == JsonValueKind.Null),
+            "Native SayTo lost its actual action-head target or retired another priority.");
     }
 
     private static void ConfigureFinishedSpeechLook(RuntimeNativeNpc body, FalloutPluginStack records,

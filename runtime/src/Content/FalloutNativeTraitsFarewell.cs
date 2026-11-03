@@ -219,7 +219,7 @@ internal static partial class FalloutNativeTraitFarewellResolver
         return new FalloutOpeningInventoryGrant(
             new FalloutCampaignInventory(
                 items.Values.OrderBy(value => value.RuntimeFormId).ToArray(),
-                opening.Inventory.EquippedWeapon),
+                opening.Inventory.EquippedWeapon, opening.Inventory.ScriptOrder, opening.Inventory.ScriptInitializations),
             opening.EquippedRuntimeFormIds);
     }
 

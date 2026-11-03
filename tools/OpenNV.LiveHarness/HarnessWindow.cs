@@ -378,9 +378,22 @@ internal sealed class HarnessWindow : Form
             case "capture":
                 foreach (var engine in Targets(target)) Send(engine, engine == "retail" ? "native.capture" : "{\"op\":\"capture\"}", driver, "capture");
                 break;
+            case "pointer":
+                if (target != "opennv") throw new ArgumentException("Observed pointer input currently requires an explicit OpenNV target.");
+                var pointer = new Dictionary<string, object?>
+                {
+                    ["op"] = "pointer", ["x"] = command.GetProperty("x").GetSingle(), ["y"] = command.GetProperty("y").GetSingle()
+                };
+                if (command.TryGetProperty("button", out var pointerButton)) pointer["button"] = pointerButton.GetString();
+                if (command.TryGetProperty("pressed", out var pointerPressed)) pointer["pressed"] = pointerPressed.GetBoolean();
+                Send(target, JsonSerializer.Serialize(pointer, Program.Json), driver, "pointer");
+                break;
             case "engine.state":
                 if (target != "opennv") throw new ArgumentException("Detailed engine state currently requires an explicit OpenNV target.");
-                Send(target, "{\"op\":\"state\"}", driver, "state");
+                var scope = command.TryGetProperty("scope", out var requestedScope) ? requestedScope.GetString() : "world";
+                if (scope is not ("world" or "player" or "reference")) throw new ArgumentException("Unknown gameplay observation scope.");
+                var observedReference = scope == "reference" ? command.GetProperty("reference").GetString() : null;
+                Send(target, JsonSerializer.Serialize(new { op = "state", scope, reference = observedReference }, Program.Json), driver, "state");
                 break;
             case "bot":
                 if (target != "opennv") throw new ArgumentException("Source-reference bot input requires an explicit OpenNV target.");

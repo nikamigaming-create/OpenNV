@@ -66,7 +66,11 @@ internal sealed record FalloutNativeCampaignState(
     FalloutActorProjectileLaunch? PlayerProjectileLaunch = null,
     FalloutFormListsSnapshot? FormLists = null, FalloutActorBaseFlagsSnapshot? ActorBaseFlags = null,
     FalloutHitKnockback? PlayerHitKnockback = null, FalloutLeveledItemsSnapshot? LeveledItems = null,
-    FalloutPipBoyLightSnapshot? PipBoyLight = null, FalloutPlayerRegionMembership? PlayerRegions = null);
+    FalloutPipBoyLightSnapshot? PipBoyLight = null, FalloutPlayerRegionMembership? PlayerRegions = null,
+    IReadOnlyList<FalloutInventoryScriptOrderEntry>? PlayerInventoryChangeEntries = null,
+    IReadOnlyList<FalloutInventoryScriptInitialization>? PlayerInventoryScriptInitializations = null,
+    FalloutPlayerFatigueKnockout? PlayerFatigueKnockout = null,
+    FalloutRuntimeReferencesSnapshot? RuntimeReferences = null, IReadOnlyList<FalloutDynamicMineSnapshot>? DynamicMines = null);
 
 internal sealed record FalloutNativeCampaignRestore(
     FalloutNativeCampaignState State,
@@ -75,7 +79,14 @@ internal sealed record FalloutNativeCampaignRestore(
 
 internal static class FalloutNativeCampaignSave
 {
-    internal const string ExpectedSchema = "opennv-native-fnv-campaign-save/v65";
+    internal const string ExpectedSchema = "opennv-native-fnv-campaign-save/v72";
+    internal const string BeforeDynamicMineSchema = "opennv-native-fnv-campaign-save/v71";
+    internal const string BeforeMineSchema = "opennv-native-fnv-campaign-save/v70";
+    internal const string BeforeFatigueSchema = "opennv-native-fnv-campaign-save/v69";
+    internal const string BeforeWeaponRechargeSchema = "opennv-native-fnv-campaign-save/v68";
+    internal const string BeforeKarmaSchema = "opennv-native-fnv-campaign-save/v67";
+    internal const string BeforeUnequipNoticeSchema = "opennv-native-fnv-campaign-save/v66";
+    internal const string BeforeInventoryScriptsSchema = "opennv-native-fnv-campaign-save/v65";
     internal const string BeforeCreaturePendingSandboxSchema = "opennv-native-fnv-campaign-save/v64";
     internal const string BeforePackageStartLocationSchema = "opennv-native-fnv-campaign-save/v63";
     internal const string BeforeExecutableNoticeSchema = "opennv-native-fnv-campaign-save/v62";
@@ -194,6 +205,10 @@ internal static class FalloutNativeCampaignSave
         if (tagSkillSlots.Slots.Any(skill => skill is not null && !skillCatalog.Contains(skill)))
             throw new InvalidDataException("Captured player tag slot differs from its winning AVIF identity.");
         ValidateTraits(traitFarewellContract, traits);
+        var hasInventoryScripts = grant.Inventory.Items.Any(item => item.Variants?.Any(value => value.ScriptState is not null) == true) ||
+            grant.Inventory.ScriptOrder is { Count: > 0 } || grant.Inventory.ScriptInitializations is { Count: > 0 };
+        if (hasInventoryScripts && (references is null || playerPackageAudio is null))
+            throw new NotSupportedException("Retained player inventory scripts require the complete current campaign capture owner.");
         var state = new FalloutNativeCampaignState(
             references is not null ? playerPackageAudio is null ? ObjectPcmSchema : ExpectedSchema : skyLighting is not null ? QuestClockSchema : globals is null ? QuestScriptsSchema : GlobalClockSchema,
             saveCompatibilityId,
@@ -231,7 +246,9 @@ internal static class FalloutNativeCampaignSave
             PlayerSkillValues: playerSkillValues, PlayerAbilityScripts: playerAbilityScripts,
             TransientExplosions: transientExplosions,
             FastTravel: references is not null && playerPackageAudio is not null ? fastTravel ?? FalloutFastTravelSnapshot.Initial : null,
-            PlayerSneaking: playerSneaking);
+            PlayerSneaking: playerSneaking,
+            PlayerInventoryChangeEntries: references is not null && playerPackageAudio is not null ? grant.Inventory.ScriptOrder : null,
+            PlayerInventoryScriptInitializations: references is not null && playerPackageAudio is not null ? grant.Inventory.ScriptInitializations : null);
         if (validate) Validate(state, saveCompatibilityId);
         return state;
     }
@@ -327,10 +344,16 @@ internal static class FalloutNativeCampaignSave
         inventory = inventory with
         {
             Items = inventory.Items.Select(item => item with
-            { Variants = savedItems[item.RuntimeFormId].Variants, UnequipLocked = savedItems[item.RuntimeFormId].UnequipLocked }).ToArray()
+            { Variants = savedItems[item.RuntimeFormId].Variants, UnequipLocked = savedItems[item.RuntimeFormId].UnequipLocked }).ToArray(),
+            ScriptOrder = state.PlayerInventoryChangeEntries,
+            ScriptInitializations = state.PlayerInventoryScriptInitializations
         };
         var validatedInventory = new FalloutPlayerInventory();
         validatedInventory.Restore(inventory, state.EquippedRuntimeFormIds.ToArray(), state.InventoryRandomState);
+        FalloutInventoryScriptState.ValidateInventory(stack, inventory.Items.Concat((state.References ?? [])
+            .SelectMany(reference => reference.Inventory is { } contents ? contents.Contents.Inventory.Items : [])));
+        FalloutWeaponRecharge.ValidateSource(stack, inventory.Items.Concat((state.References ?? [])
+            .SelectMany(reference => reference.Inventory is { } contents ? contents.Contents.Inventory.Items : [])));
         if (!inventory.Items.OrderBy(value => value.RuntimeFormId)
                 .Select(value => (value.RuntimeFormId, value.EditorId, value.RecordType, value.Count))
                 .SequenceEqual(state.Inventory.OrderBy(value => value.RuntimeFormId)
@@ -347,8 +370,15 @@ internal static class FalloutNativeCampaignSave
                 .SequenceEqual(expectedGrant!.EquippedRuntimeFormIds.Order())))
             throw new InvalidDataException(
                 "Native campaign save loadout differs from the live farewell/tag-skill contract.");
-        var transientExplosions = new FalloutTransientExplosions(stack);
+        var runtimeReferences = new FalloutRuntimeReferences(stack);
+        runtimeReferences.Restore(state.RuntimeReferences, state.TransientExplosions);
+        var transientExplosions = new FalloutTransientExplosions(stack, runtimeReferences);
         transientExplosions.Restore(state.TransientExplosions);
+        foreach (var mine in state.DynamicMines ?? []) mine.Validate(stack, runtimeReferences);
+        var mineIds = (state.DynamicMines ?? []).Select(mine => mine.RuntimeId).ToArray();
+        if (mineIds.Distinct().Count() != mineIds.Length || !mineIds.ToHashSet().SetEquals(runtimeReferences.Capture().References
+            .Where(reference => reference.Kind == FalloutRuntimeReferenceKind.Projectile).Select(reference => reference.Id)))
+            throw new InvalidDataException("Runtime projectile identity lost or duplicated its persistent state.");
         FalloutQuestState? validatedQuests = null;
         FalloutScriptValueStore? validatedValues = null;
         if (state.Quests is not null)
@@ -396,7 +426,9 @@ internal static class FalloutNativeCampaignSave
             if (state.FormLists is { } formLists) references.FormLists.Restore(formLists);
             if (state.LeveledItems is { } leveledItems) references.LeveledItems.Restore(leveledItems);
             if (state.ActorBaseFlags is { } baseFlags) references.ActorBaseFlags.Restore(baseFlags);
+            references.RuntimeReferences.Restore(state.RuntimeReferences, state.TransientExplosions);
             references.TransientExplosions.Restore(state.TransientExplosions);
+            references.RestoreDynamicMines(state.DynamicMines);
             references.RestoreEncounterZones(state.EncounterZones);
             references.Restore(state.References);
             references.RestoreDetection(state.DetectionEvents);
@@ -517,6 +549,23 @@ internal static class FalloutNativeCampaignSave
             state.PlayerControls[SneakingControlIndex]);
     }
 
+    private static void ValidateInventoryScriptShape(FalloutNativeCampaignState state)
+    {
+        if (state.Schema != ExpectedSchema && (state.PlayerInventoryChangeEntries is not null || state.PlayerInventoryScriptInitializations is not null))
+            throw new InvalidDataException("Earlier campaign schemas cannot own inventory script traversal/calls.");
+        var actual = state.Inventory.SelectMany(item => item.Variants ?? []).Where(value => value.ScriptState is not null)
+            .Select(value => value.ScriptState!.Identity).ToHashSet();
+        if (state.PlayerInventoryChangeEntries is { } order &&
+            (order.Any(entry => entry is null || entry.Item.ObjectId == 0 || entry.Instances is null || entry.BaseContribution is < 0) ||
+             order.Select(entry => entry.Item).Distinct().Count() != order.Count ||
+             order.SelectMany(entry => entry.Instances).Any(identity => identity == Guid.Empty || !actual.Contains(identity)) ||
+             order.SelectMany(entry => entry.Instances).Distinct().Count() != order.Sum(entry => entry.Instances.Count) ||
+             !actual.SetEquals(order.SelectMany(entry => entry.Instances))))
+            throw new InvalidDataException("Saved player inventory script traversal lost or invented an actual event list.");
+        if (state.PlayerInventoryScriptInitializations?.Any(call => call is null || !actual.Contains(call.Identity)) == true)
+            throw new InvalidDataException("Saved player initialization call lost its actual event-list identity.");
+    }
+
     private static void ValidateObjectPhysicsSchema(FalloutNativeCampaignState state)
     {
         if (state.Schema != ExpectedSchema && state.References?.Any(reference => reference.ObjectPhysics is not null) == true)
@@ -580,8 +629,54 @@ internal static class FalloutNativeCampaignSave
             throw new InvalidDataException("Saved Caravan membership has no valid reference world or identity.");
     }
 
+    private static bool HasGeneratedWeaponCharge(FalloutNativeCampaignState state)
+    {
+        static bool Generated(IReadOnlyList<FalloutItemVariant>? variants) => variants?.Any(extra =>
+            extra.Magazine is { } magazine && (magazine.Generated || magazine.RechargeSeconds != 0)) == true;
+        return state.Inventory?.Any(item => Generated(item.Variants)) == true ||
+            state.DroppedItems?.Any(item => Generated([item.Item])) == true ||
+            state.References?.Any(reference => reference.Inventory?.Contents.Inventory.Items.Any(item => Generated(item.Variants)) == true ||
+                reference.Engagement?.WeaponHandling?.Magazines.Any(magazine => magazine.Generated) == true) == true ||
+            state.WeaponHandling?.Magazines.Any(magazine => magazine.Generated) == true;
+    }
+
     internal static FalloutNativeCampaignState AdmitPreviousOwnerSchema(FalloutNativeCampaignState state)
     {
+        if (state.Schema != ExpectedSchema && (state.RuntimeReferences is not null || state.DynamicMines is not null))
+            throw new InvalidDataException("Earlier campaign schemas cannot own persistent runtime projectile identities.");
+        if (state.Schema != ExpectedSchema && state.References?.Any(reference => reference.PackageMotion?.FindFood is not null) == true)
+            throw new InvalidDataException("Earlier campaign schemas cannot own Find Food procedure continuations.");
+        if (state.Schema == BeforeDynamicMineSchema) state = state with { Schema = ExpectedSchema };
+        if (state.Schema != ExpectedSchema && state.References?.Any(reference => reference.Mine is not null) == true)
+            throw new InvalidDataException("Earlier campaign schemas cannot own mine continuations.");
+        if (state.Schema != ExpectedSchema && state.References?.Any(reference => reference.PackageMotion?.EatPackage?.Creature is not null ||
+            reference.CreatureScriptIdle?.Owner == "eat") == true)
+            throw new InvalidDataException("Earlier campaign schemas cannot own Creature Eat producer continuations.");
+        if (state.Schema == BeforeMineSchema) state = state with { Schema = ExpectedSchema };
+        if (state.Schema != ExpectedSchema && (state.PlayerFatigueKnockout is not null ||
+            state.References?.Any(reference => reference.FatigueKnockout is not null) == true))
+            throw new InvalidDataException("Earlier campaign schemas cannot own fatigue physical knockout continuations.");
+        if (state.Schema != ExpectedSchema && (state.PlayerActorValues?.Values.ContainsKey(22) == true ||
+            state.References?.Any(reference => reference.ActorValues?.ContainsKey("fatigue") == true) == true))
+            throw new InvalidDataException("Earlier campaign schemas cannot own fatigue damage/recovery pools.");
+        if (state.Schema == BeforeFatigueSchema) state = state with { Schema = ExpectedSchema };
+        if (state.Schema != ExpectedSchema && HasGeneratedWeaponCharge(state))
+            throw new InvalidDataException("Earlier campaign schemas cannot own generated weapon charge or recharge clocks.");
+        if (state.Schema == BeforeWeaponRechargeSchema) state = state with { Schema = ExpectedSchema };
+        if (state.Schema != ExpectedSchema &&
+            (state.PlayerActorValues?.KarmaSource is not null || state.PlayerActorValues?.Values.ContainsKey(23) == true ||
+             state.Scripts?.Notifications?.Pending?.Any(value => FalloutKarma.IsNotice(value.Event.Kind)) == true ||
+             state.Scripts?.Notifications?.Current is { } karmaNotice && FalloutKarma.IsNotice(karmaNotice.Event.Kind)))
+            throw new InvalidDataException("Earlier campaign schemas cannot own Karma pool receipts or source notices.");
+        if (state.Schema == BeforeKarmaSchema) state = state with { Schema = ExpectedSchema };
+        if (state.Schema != ExpectedSchema &&
+            (state.Scripts?.Notifications?.Pending?.Any(value => value.Event.Kind is FalloutHudEventKind.ItemUnequipped or FalloutHudEventKind.ItemEquipped) == true ||
+             state.Scripts?.Notifications?.Current?.Event.Kind is FalloutHudEventKind.ItemUnequipped or FalloutHudEventKind.ItemEquipped))
+            throw new InvalidDataException("Earlier campaign schemas cannot own source equipment notices.");
+        if (state.Schema == BeforeUnequipNoticeSchema) state = state with { Schema = ExpectedSchema };
+        if (state.Schema != ExpectedSchema && (state.PlayerInventoryChangeEntries is not null || state.PlayerInventoryScriptInitializations is not null))
+            throw new InvalidDataException("Earlier campaign schemas cannot own retained inventory script traversal/calls.");
+        if (state.Schema == BeforeInventoryScriptsSchema) state = state with { Schema = ExpectedSchema };
         if (state.Schema != ExpectedSchema && state.References?.Any(reference => reference.PendingSandboxStart?.SelectionAttempts is not null) == true)
             throw new InvalidDataException("Earlier campaign schemas cannot own a creature pending Sandbox start.");
         if (state.Schema == BeforeCreaturePendingSandboxSchema) state = state with { Schema = ExpectedSchema };
@@ -637,6 +732,9 @@ internal static class FalloutNativeCampaignSave
         string expectedSaveCompatibilityId,
         FalloutPlayerAbilitySaveAdmission? originalAbilityAdmission)
     {
+        if (state.Schema != ExpectedSchema && HasGeneratedWeaponCharge(state))
+            throw new InvalidDataException("Generated weapon charge requires the current campaign schema.");
+        if (state.Schema == BeforeInventoryScriptsSchema) state = state with { Schema = ExpectedSchema };
         ValidatePlayerNotesSchema(state);
         ValidatePlayerCaravanSchema(state);
         ValidatePlayerRegionCache(state);
@@ -867,6 +965,11 @@ internal static class FalloutNativeCampaignSave
         if (state.Ingestibles is { } ingestibles) FalloutPlayerIngestibles.Validate(ingestibles);
         if (state.WeaponHandling is { } handling) FalloutWeaponHandling.Validate(handling);
         FalloutHitKnockback.Validate(state.PlayerHitKnockback);
+        state.PlayerFatigueKnockout?.Validate();
+        if (state.PlayerFatigueKnockout is not null &&
+            (state.Schema != ExpectedSchema || state.Vitals is { HitPoints: <= 0 } ||
+                state.PlayerActorValues?.Values.ContainsKey(22) != true))
+            throw new InvalidDataException("Player fatigue knockout requires a living current-schema player.");
         if (state.PlayerHitKnockback is not null && state.Vitals is { HitPoints: <= 0 })
             throw new InvalidDataException("A defeated player cannot retain hit knockback.");
         if ((state.Schema != ExpectedSchema && state.Schema != RadioSchema && state.Schema != DialoguePackageSchema && state.Schema != EditorTravelSchema && state.Schema != SignedRaceSchema && state.Schema != ReferenceAccessSchema && state.Schema != ReferenceAccessLegacySchema && state.Schema != RaceOverridesSchema && state.Schema != ScriptValuesSchema && state.Schema != ObjectAnimationSchema && state.Schema != DestructionSchema && state.Schema != HitReactionSchema && state.Schema != DeathEventSchema && state.Schema != PatrolSchema && state.Schema != EncounterZoneSchema && state.Schema != ActorOverridesSchema && state.Schema != PackageMotionSchema && state.Schema != IngestiblesSchema && state.Schema != ViewPitchSchema && state.Schema != ReferenceStateSchema && state.Schema != QuestClockSchema && state.Schema != SkyLightingSchema && state.Schema != GlobalClockSchema && state.Schema != QuestScriptsSchema && state.Schema != FeetAnchoredSchema && state.Schema != CapsuleCenteredSchema) ||
@@ -920,6 +1023,7 @@ internal static class FalloutNativeCampaignSave
         if (rotationLengthSquared is < MinimumUnitQuaternionLengthSquared or
             > MaximumUnitQuaternionLengthSquared)
             throw new InvalidDataException("Native campaign save rotation is not normalized.");
+        ValidateInventoryScriptShape(state);
         state.Scripts?.Validate();
         if (state.References is not null) FalloutReferenceSnapshot.Validate(state.References);
     }

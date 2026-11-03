@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using Godot;
+using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Formats.Gamebryo;
 
 namespace OpenNV.Runtime.World.Actors;
@@ -31,7 +32,7 @@ internal sealed partial class RuntimeNativePlayerActor
     {
         if (Weapon is null) throw new InvalidOperationException("Weapon action has no equipped weapon.");
         var baseName = Weapon.AnimationGroup + group;
-        if (group.StartsWith("attack", StringComparison.Ordinal))
+        if (FalloutWeaponPresentation.IsAttackGroup(group))
         {
             var candidates = _content.ActorAnimations.Variants(_directory, baseName);
             if (candidates.Count != 0) return candidates;
@@ -87,7 +88,8 @@ internal sealed partial class RuntimeNativePlayerActor
 
     internal void SetDrawn(bool drawn)
     {
-        if (_drawn == drawn || _weaponAttachment is null || _weaponRoot is null) return;
+        if (_drawn == drawn) return;
+        if (_weaponAttachment is null || _weaponRoot is null) { _drawn = drawn; return; }
         if (drawn)
         {
             _weaponAttachment.BoneName = "Weapon";

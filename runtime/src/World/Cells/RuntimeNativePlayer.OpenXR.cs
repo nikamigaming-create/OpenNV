@@ -124,6 +124,7 @@ internal partial class RuntimeNativePlayer
     }
     public override void _ExitTree()
     {
+        if (_presentationRecords is not null) _hitReferences?.RetireOutgoingWeaponTarget(_presentationRecords.RuntimeFormKey(0x14));
         _stepQueries?.Dispose(); _stepQueries = null;
         ReleaseGrab();
         ReleaseAutoAimShapes();
@@ -143,6 +144,7 @@ internal partial class RuntimeNativePlayer
     }
     internal void XrActivate()
     {
+        if (FatigueKnockoutActive) return;
         if (_modalInput || VatsExecuting || _furniturePhase != 0) return;
         if (!_activationEnabled || ActivationObject() is not { } collider) { RejectActivation(); return; }
         if (ActivateReference?.Invoke(collider) != true) RejectActivation();

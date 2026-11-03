@@ -58,6 +58,7 @@
     <Compile Include="../../runtime/src/Content/FalloutGameSettingStrings.cs" Link="FalloutGameSettingStrings.cs" />
     <Compile Include="../../runtime/src/Content/FalloutGameSettingIntegers.cs" Link="FalloutGameSettingIntegers.cs" />
     <Compile Include="../../runtime/src/Content/FalloutExecutableStringTable.cs" Link="FalloutExecutableStringTable.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutExecutableStringTable.SystemColors.cs" Link="FalloutExecutableStringTable.SystemColors.cs" />
     <Compile Include="../../runtime/src/Content/FalloutExecutableInputControls.cs" Link="FalloutExecutableInputControls.cs" />
     <Compile Include="../../runtime/src/Content/FalloutInputControls.cs" Link="FalloutInputControls.cs" />
     <Compile Include="../../runtime/src/Content/FalloutMessageControlTokens.cs" Link="FalloutMessageControlTokens.cs" />
@@ -80,6 +81,7 @@
     <Compile Include="../../runtime/src/Content/FalloutPluginStack.SharedSource.cs" Link="FalloutPluginStack.SharedSource.cs" />
     <Compile Include="../../runtime/src/Content/FalloutQuestObjectFlags.cs" Link="FalloutQuestObjectFlags.cs" />
     <Compile Include="../../runtime/src/Content/FalloutSoundVoices.cs" Link="FalloutSoundVoices.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutSpatialReferenceId.cs" Link="FalloutSpatialReferenceId.cs" />
     <Compile Include="../../runtime/src/Content/FalloutFiniteSoundVoice.cs" Link="FalloutFiniteSoundVoice.cs" />
     <Compile Include="..\..\runtime\src\Content\FalloutFiniteSoundSaveDrain.cs" Link="FalloutFiniteSoundSaveDrain.cs" />
     <Compile Include="..\..\runtime\src\Content\FalloutSoundLoop.cs" Link="FalloutSoundLoop.cs" />
@@ -99,5 +101,6 @@
     <Compile Include="../../runtime/src/Content/Definitions/FalloutConditionFunction.cs" Link="FalloutConditionFunction.cs" />
     <Compile Include="../../runtime/src/Content/Definitions/FalloutActorValueId.cs" Link="FalloutActorValueId.cs" />
     <Compile Include="../../runtime/src/Content/Definitions/FalloutActorValueNames.cs" Link="FalloutActorValueNames.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutExecutableDiscoveryHud.cs" Link="FalloutExecutableDiscoveryHud.cs" />
   </ItemGroup>
 </Project>

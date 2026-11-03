@@ -54,7 +54,8 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
     FalloutSandboxIdleSelectionSnapshot? SandboxIdleSelection = null,
     FalloutActorLastIdleRequest? LastIdleRequest = null, bool ReferenceEssential = false, FalloutActorEssentialKnockout? EssentialKnockout = null,
     FalloutHitKnockback? HitKnockback = null, FalloutAmbientIdleSnapshot? AmbientIdle = null,
-    bool RegionCellAttached = false, bool RegionImposterRole = false, FalloutSandboxRescanSnapshot? SandboxRescan = null)
+    bool RegionCellAttached = false, bool RegionImposterRole = false, FalloutSandboxRescanSnapshot? SandboxRescan = null,
+    FalloutFatigueKnockout? FatigueKnockout = null, FalloutMineState? Mine = null)
 {
     internal static void Validate(IReadOnlyList<FalloutReferenceSnapshot> snapshots)
     {
@@ -73,6 +74,7 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
                 (snapshot.Script is null ? snapshot.ScriptSha256 is not null || snapshot.Variables.Count != 0 :
                     !ValidKey(snapshot.Script.Value) || snapshot.ScriptSha256 is not { Length: 64 } || !snapshot.ScriptSha256.All(Uri.IsHexDigit)))
                 throw new InvalidDataException("Saved reference state is invalid or duplicated.");
+            snapshot.Mine?.Validate();
             FalloutHitKnockback.Validate(snapshot.HitKnockback);
             foreach (var (name, value) in snapshot.ActorValues ?? new Dictionary<string, FalloutActorValue>())
                 if ((name != "health" && FalloutActorValue.SourceSlot(name) != name) || value is null || !value.IsFinite)
@@ -119,6 +121,8 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
                 throw new InvalidDataException("Saved talking activator actor identity is invalid.");
             snapshot.Placement?.Validate();
             snapshot.Engagement?.Validate();
+            if (snapshot.Engagement?.Target == snapshot.Reference)
+                throw new InvalidDataException("Saved actor combat target cannot be the actor itself.");
             snapshot.AggroWarning?.Validate();
             snapshot.ProjectileLaunch?.Validate();
             if (snapshot.AggroWarning is { } warning && (snapshot.Engagement is not null || warning.Target == snapshot.Reference))
@@ -149,11 +153,15 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
             snapshot.SandboxMotionFailure?.Validate();
             snapshot.AmbientIdle?.Validate();
             snapshot.CreatureScriptIdle?.Validate();
-            if (snapshot.CreatureScriptIdle is { } scriptIdle && (scriptIdle.Owner is not ("script" or "ambient") ||
-                scriptIdle.Transition is null ||
+            if (snapshot.CreatureScriptIdle is { } scriptIdle && (scriptIdle.Owner is not ("script" or "ambient" or "eat") ||
+                scriptIdle.Transition is null && scriptIdle.ScriptPhase is null ||
                 snapshot.Animation is null || snapshot.SoundRandomState is null || snapshot.PackageIdle is not null ||
                 scriptIdle.Owner == "script" && (snapshot.Engagement is not null || snapshot.Ragdoll is not null) || snapshot.Injury?.Dead == true))
                 throw new InvalidDataException("Creature script idle has conflicting or missing continuation owners.");
+            if (snapshot.CreatureScriptIdle is { Owner: "eat" } &&
+                (snapshot.PackageMotion is not { EatPackage.Creature: { Arrived: true, UsedItem: not null } } eatMotion ||
+                 snapshot.PackageAssignment is not { Done: false } eatAssignment || eatAssignment.Package != eatMotion.Package))
+                throw new InvalidDataException("Creature Eat idle has no matching active used-item procedure.");
             if (snapshot.SandboxMotionFailure is not null && (snapshot.Animation is null || snapshot.SoundRandomState is null ||
                 snapshot.SandboxAdmissionFailure is not null || snapshot.PackageBindingFailure is not null ||
                 snapshot.SelectionFailure is not null || snapshot.PendingPackageSelection is not null ||
@@ -207,6 +215,12 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
                 snapshot.HitReactionFaults is { } faults && faults.Reference != snapshot.Reference)
                 throw new InvalidDataException("Saved native event history belongs to a different reference.");
             snapshot.EssentialKnockout?.Validate();
+            snapshot.FatigueKnockout?.Validate();
+            if (snapshot.FatigueKnockout is { } fatigueKnockout &&
+                (!snapshot.KnockedDown || snapshot.Injury is not { Dead: false } || snapshot.EssentialKnockout is not null ||
+                 fatigueKnockout.Phase == FalloutFatigueKnockoutPhase.GettingUp && snapshot.HitReaction is null ||
+                 fatigueKnockout.Phase != FalloutFatigueKnockoutPhase.GettingUp && snapshot.Ragdoll is null))
+                throw new InvalidDataException("Saved fatigue knockout has no matching living physical or recovery owner.");
             if (snapshot.EssentialKnockout is not null && snapshot.Injury is not { Dead: false } ||
                 snapshot.EssentialKnockout is { Unconscious: true } && (!snapshot.KnockedDown || snapshot.Ragdoll is null))
                 throw new InvalidDataException("Saved essential knockout has no matching living physical owner.");
@@ -317,6 +331,8 @@ internal sealed partial class FalloutReferenceInstance
     internal FalloutTerminalHackState? TerminalHackState { get; set; }
     internal bool Unconscious { get; set; }
     internal bool KnockedDown { get; set; }
+    internal FalloutFatigueKnockout? FatigueKnockout { get; set; }
+    internal FalloutMineState? Mine { get; set; }
     internal FalloutHitKnockback? HitKnockback { get; set; }
     internal bool Restrained { get; set; }
     internal bool PlayerTeammate { get; set; }
@@ -409,6 +425,7 @@ internal sealed partial class FalloutReferenceInstance
     internal Func<FalloutActorHeadTrackingSnapshot>? CaptureHeadTracking { get; set; }
     internal FalloutReferencePlacement? Placement { get; set; }
     internal long PlacementRevision { get; set; }
+    internal float? ActorReferenceScale { get; }
     internal FalloutReferenceInventory? Inventory { get; set; }
     internal Dictionary<string, FalloutActorValue> ActorValues { get; } = [];
     internal FalloutReferenceEnableParent? EnableParent { get; }
@@ -484,6 +501,8 @@ internal sealed partial class FalloutReferenceInstance
         if (reference.Signature is not ("REFR" or "ACHR" or "ACRE" or "PGRE" or "PMIS"))
             throw new InvalidDataException($"{reference.FormKey} is not a placed reference.");
         Reference = reference.FormKey;
+        ActorReferenceScale = reference.Signature is "ACHR" or "ACRE"
+            ? FalloutCellSceneReader.ReadReferenceScale(reference) : null;
         _referenceEnabled = referenceEnabled;
         Cell = FalloutCellSceneReader.ParentCell(reference) ??
             throw new InvalidDataException($"Reference {Reference} has no source CELL.");
@@ -491,6 +510,7 @@ internal sealed partial class FalloutReferenceInstance
         Script = script;
         Enabled = (reference.Flags & 0x800) == 0;
         NoFade = (reference.Flags & 0x08000000) != 0;
+        DoorOpen = FalloutReferenceActionFlags.InitialOpen(reference);
         EnableParent = FalloutReferenceEnableParent.Read(reference);
         Variables = script?.Locals.Values.ToDictionary(index => index, _ => 0d) ?? [];
     }
@@ -535,6 +555,10 @@ internal sealed partial class FalloutReferenceInstance
     private FalloutReferenceSnapshot CaptureCore(FalloutActorSelectionFailure? selectionOverride,
         FalloutActorPackageBindingFailure? bindingOverride, bool nonaudioRetirement)
     {
+        if (Mine is { Error: not null } failedMine)
+            throw new NotSupportedException($"Reference {Reference} cannot save its mine continuation: {failedMine.Error}");
+        if (Mine is { Phase: FalloutMinePhase.Detonated } && !Taken)
+            throw new NotSupportedException($"Reference {Reference} cannot save its active mine explosion effects.");
         if (Injury?.Dead == true && !(CanCaptureCorpseEquipment?.Invoke(nonaudioRetirement) ?? CorpseEquipmentCaptureReady))
             throw new NotSupportedException($"Reference {Reference} cannot save its corpse equipment: {CorpseEquipmentCaptureBlocker ?? "native continuation is not ready"}");
         if (HeadTrackingCaptureBlocker is not null || HeadTrackingRequired && CaptureHeadTracking is null && HeadTracking is null)
@@ -596,7 +620,7 @@ internal sealed partial class FalloutReferenceInstance
             SandboxMarker: CaptureSandboxMarker is { } captureMarker ? captureMarker() : SandboxMarker?.Copy(),
             SandboxIdleSelection: SandboxIdleSelection, LastIdleRequest: LastIdleRequest, ReferenceEssential: ReferenceEssential, EssentialKnockout: EssentialKnockout,
             HitKnockback: HitKnockback, AmbientIdle: AmbientIdle?.Capture(),
-            RegionCellAttached: RegionCellAttached, RegionImposterRole: RegionImposterRole);
+            RegionCellAttached: RegionCellAttached, RegionImposterRole: RegionImposterRole, FatigueKnockout: FatigueKnockout, Mine: Mine);
     }
 }
 
@@ -696,7 +720,7 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
     }
 
     private FalloutTransientExplosions? _transientExplosions;
-    internal FalloutTransientExplosions TransientExplosions => _transientExplosions ??= new(records);
+    internal FalloutTransientExplosions TransientExplosions => _transientExplosions ??= new(records, RuntimeReferences);
 
     internal void ValidateValueHandles()
     {
@@ -747,6 +771,7 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
             var remaining = _residentReferences[instance.Reference] - 1;
             if (remaining > 0) { _residentReferences[instance.Reference] = remaining; continue; }
             _residentReferences.Remove(instance.Reference);
+            RetireOutgoingWeaponTarget(instance.Reference);
             if (instance.DeletePending) { instance.Deleted = true; instance.DeletePending = false; }
         }
         _residentSnapshot = null;
@@ -858,7 +883,8 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
         }
     }
     internal int StoppedPackageBindingCount => _instances.Values.Count(instance => instance.PackageBindingFailureCaptureReady);
-    internal int PendingAnimationSoundCaptureCount => _instances.Values.Count(instance => !instance.AnimationSoundsCaptureReady);
+    internal int PendingAnimationSoundCaptureCount => _instances.Values.Count(instance => !instance.AnimationSoundsCaptureReady) +
+        _dynamicMines.Values.Count(mine => !mine.AnimationSoundEvents.CanCapture);
     internal object PendingAnimationSoundCaptures => _instances.Values.Where(instance => !instance.AnimationSoundsCaptureReady)
         .OrderBy(instance => records.RuntimeFormId(instance.Reference)).Select(instance => new
         {
@@ -934,6 +960,7 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
         _transientExplosions?.RequireCapture();
         ObjectDisposedException.ThrowIf(_disposed, this);
         PlayerMoves.RequireSettled();
+        RequireWeaponHitCapture();
         if (PendingHitEventCount != 0)
             throw new NotSupportedException("Saving pending reference hit events requires their continuation state.");
         if (_instances.Values.Any(instance => instance.DeferredPackageContinuation is not null && IsResident(instance.Reference)))
@@ -1005,6 +1032,15 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
                 instance.ScriptStoppedFrame = snapshot.ScriptStoppedFrame?.Copy();
                 instance.CompletedScriptContinuation = snapshot.CompletedScriptContinuation?.Copy();
             }
+            if (snapshot.Mine is { } mine)
+            {
+                var sourceMine = FalloutMineSource.Read(records, instance.Base) ??
+                    throw new InvalidDataException("Saved mine reference is not a winning proximity projectile.");
+                mine.Validate(sourceMine);
+                if (snapshot.Reference != instance.Reference || records.GetEffective(instance.Reference).Signature != "PGRE")
+                    throw new InvalidDataException("Saved mine state has no source projectile reference.");
+                instance.Mine = mine;
+            }
             instance.Enabled = snapshot.Enabled ?? instance.Enabled;
             instance.EnableRequest = snapshot.EnableRequest;
             instance.Opacity = snapshot.Opacity;
@@ -1051,7 +1087,7 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
                 validated.SetBroadcastState(snapshot.Reference, broadcast ? 1 : 0);
             var talkingActivator = snapshot.TalkedToPlayer && records.GetEffective(instance.Base).Signature == "TACT";
             if (talkingActivator) _ = FalloutDialogueSpeaker.Read(records, instance.Base);
-            if (snapshot.Restrained || snapshot.PlayerTeammate || snapshot.ReferenceEssential || snapshot.EssentialKnockout is not null || snapshot.TalkedToPlayer && !talkingActivator || snapshot.PackageMotion is not null ||
+            if (snapshot.Restrained || snapshot.PlayerTeammate || snapshot.ReferenceEssential || snapshot.EssentialKnockout is not null || snapshot.FatigueKnockout is not null || snapshot.TalkedToPlayer && !talkingActivator || snapshot.PackageMotion is not null ||
                 snapshot.HitReaction is not null || snapshot.HitReactionRandomState is not null || snapshot.AttackRandomState is not null)
                 _ = validated.Actor(snapshot.Reference);
             instance.Restrained = snapshot.Restrained;
@@ -1234,6 +1270,10 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
             }
             instance.Ragdoll = snapshot.Ragdoll;
             instance.KnockedDown = snapshot.KnockedDown;
+            instance.FatigueKnockout = snapshot.FatigueKnockout;
+            if (instance.FatigueKnockout is not null &&
+                (!instance.ActorValues.ContainsKey("fatigue") || !FalloutActorKnockdownSource.Allows(records, instance.Base, instance.Templates)))
+                throw new InvalidDataException("Saved fatigue knockout has no source-eligible fatigue pool owner.");
             if (snapshot.HitKnockback is not null)
             {
                 _ = validated.Actor(snapshot.Reference);
@@ -1357,11 +1397,20 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
             if (snapshot.PackageMotion?.Travel is { } travel)
             {
                 if (records.GetEffective(validated.Get(snapshot.Reference).Base).Signature == "NPC_")
-                    FalloutPackageTravelGoal.Read(records, validated, snapshot.Reference,
-                        records.GetEffective(snapshot.PackageMotion.Package), snapshot.PackageMotion.Sleep, snapshot.PackageMotion.EatPackage)
+                {
+                    var goal = FalloutPackageTravelGoal.Read(records, validated, snapshot.Reference,
+                        records.GetEffective(snapshot.PackageMotion.Package), snapshot.PackageMotion.Sleep, snapshot.PackageMotion.EatPackage);
+                    goal.Validate(records, validated, snapshot.Reference, travel);
+                    if (snapshot.PackageMotion.ArrivalTurn is not null && FalloutTravelArrivalHeading.Read(records, validated, goal) is null)
+                        throw new InvalidDataException("Saved arrival heading has no winning source heading marker.");
+                }
+                else
+                {
+                    if (snapshot.PackageMotion.ArrivalTurn is not null)
+                        throw new NotSupportedException("Creature arrival heading has no bound procedure producer.");
+                    FalloutTravelPackage.Read(records.GetEffective(snapshot.PackageMotion.Package))
                         .Validate(records, validated, snapshot.Reference, travel);
-                else FalloutTravelPackage.Read(records.GetEffective(snapshot.PackageMotion.Package))
-                        .Validate(records, validated, snapshot.Reference, travel);
+                }
             }
             if (snapshot.PackageMotion?.Sleep is { } sleep)
             {
@@ -1370,9 +1419,18 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
                     snapshot.FurnitureContinuation.Furniture != sleep.Bed))
                     throw new InvalidDataException("Physical Sleep has no matching furniture continuation.");
             }
+            if (snapshot.PackageMotion?.FindFood is { } finding)
+            {
+                var source = FalloutFindFoodPackage.Read(records.GetEffective(snapshot.PackageMotion.Package));
+                source.Validate(records, validated, snapshot.Reference, finding);
+                if (snapshot.PackageAssignment is { } findingAssignment && findingAssignment.Package == snapshot.PackageMotion.Package &&
+                    findingAssignment.Done != (finding.Phase == FalloutFindFoodPhase.Done))
+                    throw new InvalidDataException("Find Food phase differs from its retained source lifecycle.");
+            }
             if (snapshot.PackageMotion?.EatPackage is { } eating)
             {
-                var source = FalloutEatPackage.Read(records.GetEffective(snapshot.PackageMotion.Package));
+                var source = FalloutEatPackage.Read(records.GetEffective(snapshot.PackageMotion.Package),
+                    creature: records.GetEffective(validated.Get(snapshot.Reference).Base).Signature == "CREA");
                 source.Validate(records, validated, snapshot.Reference, eating);
                 if (eating.Furniture && (snapshot.FurnitureContinuation is not { EatPackage: true } ||
                     snapshot.FurnitureContinuation.Furniture != eating.Seat))
@@ -1414,6 +1472,8 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
     public void Dispose()
     {
         _transientExplosions?.RetirePresentation();
+        foreach (var binding in _dynamicMineSoundBindings.Values) binding.Dispose();
+        _dynamicMineSoundBindings.Clear();
         UnloadedPackages = null;
         _playerCondition = null;
         _beforeActorHit = null;
@@ -1423,6 +1483,7 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
         PlayerMoves.Clear();
         _packageEvents?.Clear();
         _hitEvents?.Clear();
+        _outgoingWeaponTargets.Clear();
         Menus.Publish(true);
         _residentCells.Clear();
         _residentReferences.Clear();

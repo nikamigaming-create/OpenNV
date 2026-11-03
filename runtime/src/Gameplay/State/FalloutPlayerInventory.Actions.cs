@@ -58,7 +58,8 @@ internal sealed partial class FalloutPlayerInventory
 
     internal static FalloutCampaignItem WithWeaponMagazine(FalloutCampaignItem item, Guid instance, FalloutItemMagazine magazine)
     {
-        if (instance == Guid.Empty || magazine.Loaded < 0 || magazine.Ammunition.ObjectId == 0 || item.RecordType != "WEAP")
+        if (instance == Guid.Empty || magazine.Loaded < 0 || magazine.Ammunition.ObjectId == 0 || item.RecordType != "WEAP" ||
+            !double.IsFinite(magazine.RechargeSeconds) || magazine.RechargeSeconds < 0 || !magazine.Generated && magazine.RechargeSeconds != 0)
             throw new InvalidDataException("Weapon magazine identity or contents are invalid.");
         var variants = item.Variants?.ToArray() ?? throw new InvalidDataException("Weapon magazine has no individual inventory owner.");
         var index = Array.FindIndex(variants, extra => extra.Instance == instance);
@@ -68,7 +69,7 @@ internal sealed partial class FalloutPlayerInventory
     }
 
     internal int LoadedInventoryRounds(FalloutFormKey ammunition, Guid? excluding = null) => Items
-        .SelectMany(item => item.Variants ?? []).Where(extra => extra.Instance != excluding && extra.Magazine?.Ammunition == ammunition)
+        .SelectMany(item => item.Variants ?? []).Where(extra => extra.Instance != excluding && extra.Magazine is { Generated: false } magazine && magazine.Ammunition == ammunition)
         .Sum(extra => extra.Magazine!.Loaded);
 
     internal void SelectInstance(FalloutFormKey form, int variant, long revision)
@@ -178,7 +179,7 @@ internal sealed partial class FalloutPlayerInventory
         ApplyRemovalTransaction(null, (staged, _) =>
         {
             staged.ReplaceInstances(form, [(variant, count)], []);
-            if (dropped.Magazine is { Loaded: > 0 } magazine)
+            if (dropped.Magazine is { Loaded: > 0, Generated: false } magazine)
             {
                 if ((staged.Item(magazine.Ammunition)?.Count ?? 0) < magazine.Loaded)
                     throw new InvalidOperationException("Dropped magazine exceeds carried ammunition.");
@@ -216,9 +217,13 @@ internal sealed partial class FalloutPlayerInventory
             nextItems.Add(assigned.Contains(extras[index].Hotkey) ? extras[index] with { Hotkey = null } : extras[index]);
         }
         var next = nextItems.ToArray();
+        if (_equipped.Contains(item.RuntimeFormId) && extras.Any(value => value.ScriptState is { } state &&
+            next.All(after => after.ScriptState?.Identity != state.Identity)))
+            throw new NotSupportedException("Retiring worn scripted equipment needs its native event-list handoff owner.");
         if (worn is not null && next.All(extra => extra.Instance != worn)) _equipped.Remove(item.RuntimeFormId);
         var count = next.Sum(extra => extra.Count);
-        if (count == 0) { _items.Remove(form); _equipped.Remove(item.RuntimeFormId); ++Revision; }
+        if (count != item.Count) MarkScriptTraversalMutation();
+        if (count == 0) { ObserveScriptRemoval(item, null); _items.Remove(form); _equipped.Remove(item.RuntimeFormId); ++Revision; }
         else Publish([item with { Count = count, Variants = next }]);
     }
 }

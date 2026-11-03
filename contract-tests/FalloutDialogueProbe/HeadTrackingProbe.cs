@@ -34,6 +34,23 @@ internal static class HeadTrackingProbe
         Require(state.SelectedTarget == first && state.CachedTarget == first && !state.Slots.ElementAt(4).Enabled,
             "Unloaded target did not release priority/cache ownership.");
         Persistence(state);
+        var action = new FalloutHeadTrackingState(.3f);
+        action.Look(first);
+        action.BeginActionLook(second);
+        Require(action.SelectedTarget == second && action.Slots.ElementAt(1).Target == second &&
+            action.Slots.ElementAt(1).Enabled && !action.Slots.ElementAt(2).Enabled,
+            "SayTo did not clear scripted Look and acquire its source action slot.");
+        action.Look(first);
+        action.StopActionLook();
+        Require(action.SelectedTarget == first && !action.Slots.ElementAt(1).Enabled &&
+            action.Slots.ElementAt(1).Target is null && action.Slots.First().Target == second &&
+            !action.Slots.First().Enabled && action.DefaultHoldSeconds == .3f,
+            "Speech retirement erased a later scripted Look or failed source default-target transfer.");
+        Persistence(action);
+        action.BeginActionLook(first);
+        action.StopActionLook(); action.StopActionLook();
+        Require(action.Slots.First().Target is null && action.DefaultHoldSeconds == .3f,
+            "Reciprocal self-speech retirement did not preserve the source's two action clears.");
         var commands = FalloutLookCommands.Read("; ignored\nactor.Look target 0\nset counter to 1\nactor.StopLook player\nLook target\nStopLook");
         Require(commands.Count == 4 && commands[0] == new FalloutLookCommand(0, "actor", "target") &&
             commands[1] == new FalloutLookCommand(2, "actor", null) && commands[2].Actor is null && commands[3].Target is null,

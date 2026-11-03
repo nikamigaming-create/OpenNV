@@ -29,7 +29,7 @@ internal partial class RuntimeNativeReferencePresentation
         if (managed.Any(controller => controller.HasTextKeys && controller.CaptureObjectState() is not null &&
                 !saved.Any(state => state.Controller == controller.SourceController &&
                     state.Sha256.Equals(controller.SourceSha256, StringComparison.OrdinalIgnoreCase))) &&
-            instance.AnimationSoundEvents.Events.Any(entry => entry.Playback is not null))
+            instance.AnimationSoundEvents.ActiveEvents.Any(entry => entry.Playback is not null))
             throw new InvalidDataException($"Reference {key} has saved audio without its source animation clock.");
         var restored = saved.Select(state =>
         {
@@ -110,6 +110,8 @@ internal partial class RuntimeNativeReferencePresentation
         return matching[0].Playing;
     }
 
+    internal bool DeclaresOpenClose(FalloutFormKey key) => RuntimeNativeDoorMotion.HasOpenClose(ObjectControllers(key));
+
     internal int GetOpenState(FalloutFormKey key)
     {
         var controllers = ObjectControllers(key);
@@ -117,6 +119,6 @@ internal partial class RuntimeNativeReferencePresentation
         if (node.GetChildren().OfType<RuntimeNativeDoorMotion>().SingleOrDefault() is { } motion) return motion.OpenState();
         if (RuntimeNativeDoorMotion.HasOpenClose(controllers))
             throw new NotSupportedException($"Reference {key} declares Open/Close animations without a bound motion owner.");
-        return 0;
+        return _world.LogicalActivatorOpenState(key) ?? 0;
     }
 }

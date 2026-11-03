@@ -62,6 +62,7 @@ internal sealed partial class FalloutPlayerSkills
         if (name.Equals("RadResist", StringComparison.OrdinalIgnoreCase) || name.Equals("RadiationResist", StringComparison.OrdinalIgnoreCase)) return Value(20);
         if (name.Equals("SpeedMult", StringComparison.OrdinalIgnoreCase)) return Value(21);
         if (name.Equals("IgnoreCrippledLimbs", StringComparison.OrdinalIgnoreCase)) return Value(72);
+        if (name.Equals("UnarmedDamage", StringComparison.OrdinalIgnoreCase)) return Value(56);
         var attribute = FalloutNativeVigorResolver.AttributeNames.ToList().FindIndex(value => value.Equals(name, StringComparison.OrdinalIgnoreCase));
         if (attribute >= 0) return Value(attribute + 5);
         var skill = _skills.SingleOrDefault(skill => skill.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
@@ -91,13 +92,15 @@ internal sealed partial class FalloutPlayerSkills
                 }
                 return _carriedWeight;
             }
-            if (value == 13)
+            if (value is 13 or 56)
             {
-                var basis = (float)(Setting("fAVDCarryWeightsBase") + (double)Value(5) * Setting("fAVDCarryWeightMult"));
-                var capacity = (float)((double)basis + Modifiers(13, FalloutActorValuePool.Temporary).Sum(effect => effect.Amount) +
-                    Modifiers(13, FalloutActorValuePool.Permanent).Sum(effect => effect.Amount) +
-                    Modifiers(13, FalloutActorValuePool.Damage).Sum(effect => effect.Amount));
-                return float.IsFinite(capacity) ? capacity : throw new InvalidDataException("Player carry capacity is not finite.");
+                var basis = value == 13
+                    ? (float)(Setting("fAVDCarryWeightsBase") + (double)Value(5) * Setting("fAVDCarryWeightMult"))
+                    : (float)(Setting("fAVDUnarmedDamageBase") + (double)Value(45) * Setting("fAVDUnarmedDamageMult"));
+                var amount = (float)((double)basis + Modifiers(value, FalloutActorValuePool.Temporary).Sum(effect => effect.Amount) +
+                    Modifiers(value, FalloutActorValuePool.Permanent).Sum(effect => effect.Amount) +
+                    Modifiers(value, FalloutActorValuePool.Damage).Sum(effect => effect.Amount));
+                return float.IsFinite(amount) ? amount : throw new InvalidDataException("Player derived value is not finite.");
             }
             float initial;
             if (value is >= 5 and <= 11) initial = _special().Values[value - 5];

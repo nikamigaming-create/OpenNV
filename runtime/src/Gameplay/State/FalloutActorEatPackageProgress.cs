@@ -7,7 +7,7 @@ internal enum FalloutEatContinuationAction { ResumeMeal, SelectFood, HoldOccupie
 // The standalone Eat assignment retains its location/seat intent independently
 // of the shared ingestion/IDLE continuation and accepted movement requests.
 internal sealed record FalloutActorEatPackageProgress(FalloutFormKey Cell, FalloutFormKey? Seat = null,
-    bool Furniture = false, float RetrySeconds = 0, float NoFoodSeconds = 20)
+    bool Furniture = false, float RetrySeconds = 0, float NoFoodSeconds = 20, FalloutCreatureEatProgress? Creature = null)
 {
     internal static FalloutEatContinuationAction NextAction(FalloutFormKey package, FalloutActorPackageMotion? motion,
         bool occupied, Func<bool> hasFood)
@@ -50,10 +50,12 @@ internal sealed record FalloutActorEatPackageProgress(FalloutFormKey Cell, Fallo
 
     internal void Validate()
     {
+        Creature?.Validate();
         static bool Form(FalloutFormKey value) => !string.IsNullOrWhiteSpace(value.OwnerPlugin) &&
             value.ObjectId is > 0 and <= FalloutFormKey.ObjectIdMask;
         if (!Form(Cell) || Seat is { } seat && !Form(seat) || Furniture && Seat is null ||
-            !float.IsFinite(RetrySeconds) || !float.IsFinite(NoFoodSeconds))
+            !float.IsFinite(RetrySeconds) || !float.IsFinite(NoFoodSeconds) ||
+            Creature is not null && (Seat is not null || Furniture || RetrySeconds != 0 || NoFoodSeconds != 20))
             throw new InvalidDataException("Standalone Eat has invalid retained location, seat or timer state.");
     }
 }

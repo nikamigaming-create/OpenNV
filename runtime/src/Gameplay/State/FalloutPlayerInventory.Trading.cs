@@ -43,8 +43,16 @@ internal sealed partial class FalloutPlayerInventory
 
         Validate(thisItems.Values);
         Validate(otherItems.Values);
+        ObserveNativeAddition(transfers.Where(transfer => !transfer.FromThisInventory).Select(transfer => transfer.Form), null);
+        other.ObserveNativeAddition(transfers.Where(transfer => transfer.FromThisInventory).Select(transfer => transfer.Form), null);
         InvalidateTraversalForInsertions(thisItems.Values);
         other.InvalidateTraversalForInsertions(otherItems.Values);
+        foreach (var previous in _items.Values.Where(item => !thisItems.ContainsKey(item.FormKey)))
+            ObserveScriptRemoval(previous, null);
+        ObserveScriptPublication(thisItems.Values);
+        foreach (var previous in other._items.Values.Where(item => !otherItems.ContainsKey(item.FormKey)))
+            other.ObserveScriptRemoval(previous, null);
+        other.ObserveScriptPublication(otherItems.Values);
         _items.Clear();
         foreach (var item in thisItems) _items.Add(item.Key, item.Value);
         other._items.Clear();
@@ -53,6 +61,7 @@ internal sealed partial class FalloutPlayerInventory
         _equipped.UnionWith(thisEquipped);
         other._equipped.Clear();
         other._equipped.UnionWith(otherEquipped);
+        MarkScriptTraversalMutation(); other.MarkScriptTraversalMutation();
         ++Revision;
         ++other.Revision;
 

@@ -13,6 +13,7 @@ internal sealed partial class RuntimeLiveHarness : Node
     private string _directory = "";
     private Func<ulong, ParityTelemetryFrame> _captureState = null!;
     private Func<object> _captureGameplay = null!;
+    private Func<object>? _capturePlayer;
     private Func<object> _captureSummary = null!;
     private Func<object?>? _capturePerformanceContext;
     private Func<(string StateKey, ulong EventOrdinal)> _captureIdentity = null!;
@@ -107,7 +108,8 @@ internal sealed partial class RuntimeLiveHarness : Node
 
     internal void Configure(string directory, Func<ulong, ParityTelemetryFrame> captureState, Func<object> captureGameplay,
         Func<FalloutPluginStack?>? stack = null, Func<object>? captureSummary = null,
-        Func<(string StateKey, ulong EventOrdinal)>? captureIdentity = null, Func<object?>? capturePerformanceContext = null)
+        Func<(string StateKey, ulong EventOrdinal)>? captureIdentity = null, Func<object?>? capturePerformanceContext = null,
+        Func<object>? capturePlayer = null)
     {
         if (!Path.IsPathFullyQualified(directory))
             throw new ArgumentException("--live-harness requires an absolute private command directory.");
@@ -121,6 +123,7 @@ internal sealed partial class RuntimeLiveHarness : Node
         _captureState = captureState;
         _inputSource = stack;
         _captureGameplay = captureGameplay;
+        _capturePlayer = capturePlayer;
         _captureSummary = captureSummary ?? captureGameplay;
         _capturePerformanceContext = capturePerformanceContext;
         _captureIdentity = captureIdentity ?? (() => { var frame = captureState(0); return (frame.StateKey, frame.EventOrdinal); });
@@ -351,7 +354,15 @@ internal sealed partial class RuntimeLiveHarness : Node
                 _pendingCapture = request;
                 break;
             case "state":
-                AtomicWrite(Path.Combine(_directory, $"{request:D10}.state.json"), JsonSerializer.Serialize(_captureGameplay(), Json));
+                var scope = command.TryGetProperty("scope", out var stateScope) ? stateScope.GetString() : "world";
+                var observation = scope switch
+                {
+                    "world" => _captureGameplay(),
+                    "player" => (_capturePlayer ?? throw new NotSupportedException("Player observation has no live owner."))(),
+                    "reference" => CaptureReferenceRender(command.GetProperty("reference").GetString()!),
+                    _ => throw new ArgumentException("Unknown gameplay observation scope.")
+                };
+                AtomicWrite(Path.Combine(_directory, $"{request:D10}.state.json"), JsonSerializer.Serialize(observation, Json));
                 break;
             case "publication.mode":
                 _publicationSelection.SetMode(command.GetProperty("mode").GetString());
@@ -501,6 +512,12 @@ internal sealed partial class RuntimeLiveHarness : Node
             return new
             {
                 path = path.ToString(),
+                instanceId = button.GetInstanceId().ToString(System.Globalization.CultureInfo.InvariantCulture),
+                nodeType = button.GetType().FullName,
+                sourceChoiceKind = button.HasMeta("opennv_source_choice_kind") ? button.GetMeta("opennv_source_choice_kind").AsString() : null,
+                sourceChoiceId = button.HasMeta("opennv_source_choice_id") ? button.GetMeta("opennv_source_choice_id").ToString() : null,
+                sourceChoiceMenu = button.HasMeta("opennv_source_choice_menu") ? button.GetMeta("opennv_source_choice_menu").AsString() : null,
+                sourceChoiceGoodbye = button.HasMeta("opennv_source_choice_goodbye") ? (bool?)button.GetMeta("opennv_source_choice_goodbye").AsBool() : null,
                 text = button is Button labelled ? labelled.Text : button is NativeBitmapMenuButton bitmap ? bitmap.Text : button is NativeOwnedTileTarget owned ? owned.Text : button.Name.ToString(),
                 rect = new[] { rect.Position.X, rect.Position.Y, rect.Size.X, rect.Size.Y }
             };

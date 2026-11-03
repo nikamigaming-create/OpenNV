@@ -23,8 +23,28 @@ internal static class ActorAppearanceContracts
                 Npc(7, 0x401), Npc(0x100, 0x401, script: 0x500), Npc(0x102, 0x402), Npc(0x103, 0x400),
                 Npc(0x104, 0x420), Npc(0x105, 0x440), Npc(0x106, 0x441), Npc(0x107, 0x402), Script(),
                 Record("CELL", 0x800, Field("DATA", [1])), Group(0x800, refs),
-                Record("CELL", 0x801, Field("DATA", [1])), Group(0x801, Reference(0x901, 0x100))));
+                Record("CELL", 0x801, Field("DATA", [1])), Group(0x801, Reference(0x901, 0x100)),
+                Record("WEAP", 0x700, Field("BIPL", BitConverter.GetBytes(0x701u))),
+                Record("FLST", 0x701, Field("LNAM", BitConverter.GetBytes(0x702u)), Field("LNAM", BitConverter.GetBytes(0x703u))),
+                Record("ARMA", 0x702, Field("BMDT", [16, 0, 0, 0, 16, 0, 0, 0]),
+                    Field("MODL", Text("weapons/right.nif")), Field("MOD3", Text("weapons/right-f.nif"))),
+                Record("ARMA", 0x703, Field("BMDT", [8, 0, 0, 0, 16, 0, 0, 0]), Field("MODL", Text("weapons/left.nif")))));
             using var records = FalloutPluginStack.Load(directory, ["Appearance.esm"]);
+            var maleBiped = FalloutWeaponBipedModels.Read(records, Key(0x700), false);
+            var femaleBiped = FalloutWeaponBipedModels.Read(records, Key(0x700), true);
+            Require(maleBiped.Select(part => part.Source).SequenceEqual([Key(0x702), Key(0x703)]) &&
+                maleBiped[0].BipedSlots == 16 && maleBiped[1].BipedSlots == 8 &&
+                maleBiped[0].ModelPath == "meshes/weapons/right.nif" && femaleBiped[0].ModelPath == "meshes/weapons/right-f.nif" &&
+                femaleBiped[1].ModelPath == maleBiped[1].ModelPath,
+                "Weapon BIPL lost source order, hand slots, selected sex or male fallback.");
+            var glove = maleBiped[0] with { Source = Key(0x704), BipedSlots = 0x18 };
+            var body = glove with { Source = Key(0x705), BipedSlots = 4 };
+            var replaced = FalloutWeaponBipedModels.ReplaceModels([glove, glove with { BipedSlots = 64 }, body], maleBiped);
+            Require(replaced.Select(part => part.Source).SequenceEqual([Key(0x705), Key(0x702), Key(0x703)]),
+                "Weapon biped slots overlapped an old hand or retained another alias of the displaced outfit model.");
+            Require(FalloutWeaponBipedModels.ReplaceModels([body], [maleBiped[0], maleBiped[0] with { Source = Key(0x706) }])
+                .Select(part => part.Source).SequenceEqual([Key(0x705), Key(0x706)]),
+                "Weapon biped registration lost last source-list collision priority.");
             using var world = new FalloutReferenceWorld(records);
             world.LoadCell(FalloutCellSceneReader.Read(records, Key(0x800)));
             var player = records.RuntimeFormKey(0x14);

@@ -112,6 +112,8 @@ internal static class FalloutCellSceneReader
     private static readonly HashSet<string> ReferenceTypes =
         ["REFR", "ACHR", "ACRE", "PGRE", "PMIS"];
 
+    internal static bool IsReferenceType(string signature) => ReferenceTypes.Contains(signature);
+
     internal static FalloutCellScene Read(FalloutPluginStack stack, FalloutFormKey cellKey)
     {
         ArgumentNullException.ThrowIfNull(stack);
@@ -171,13 +173,7 @@ internal static class FalloutCellSceneReader
                 position[index] = ReadFiniteSingle(transform, index * sizeof(float), record, "position");
                 rotation[index] = ReadFiniteSingle(transform, (index + 3) * sizeof(float), record, "rotation");
             }
-            var scaleBytes = OptionalSingle(values, "XSCL", record);
-            var scale = scaleBytes is null ? 1.0f :
-                scaleBytes.Length == sizeof(float)
-                    ? ReadFiniteSingle(scaleBytes, 0, record, "scale")
-                    : throw Error(record, "XSCL must contain one float");
-            if (scale <= 0.0f)
-                throw Error(record, "XSCL must be positive");
+            var scale = ReadReferenceScale(record, values);
             var enableBytes = OptionalSingle(values, "XESP", record);
             if (enableBytes is not null && enableBytes.Length != EnableParentBytes)
                 throw Error(record, "XESP must contain a FormID and flags");
@@ -319,6 +315,19 @@ internal static class FalloutCellSceneReader
                 BinaryPrimitives.ReadInt32LittleEndian(coordinates.AsSpan(sizeof(int)))),
             ParentWorldspace(record),
             null);
+    }
+
+    internal static float ReadReferenceScale(FalloutPluginRecord record) => ReadReferenceScale(record, Values(record));
+
+    private static float ReadReferenceScale(FalloutPluginRecord record, Dictionary<string, List<byte[]>> values)
+    {
+        var scaleBytes = OptionalSingle(values, "XSCL", record);
+        var scale = scaleBytes is null ? 1.0f :
+            scaleBytes.Length == sizeof(float)
+                ? ReadFiniteSingle(scaleBytes, 0, record, "scale")
+                : throw Error(record, "XSCL must contain one float");
+        if (scale <= 0.0f) throw Error(record, "XSCL must be positive");
+        return scale;
     }
 
     internal static bool IsInitiallyDisabled(FalloutPlacedReference reference) =>

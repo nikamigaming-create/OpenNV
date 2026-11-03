@@ -89,7 +89,7 @@ internal static class OwnedFarewellProbe
                 timerRunning = quests.IsRunning(timer), controls.PipBoy, items = inventory.Items.Select(item => item.EditorId).ToArray() }));
         if (!questScripts.TryTakeMessage(out var message) || message!.Request!.Caller != hardcore)
             throw new InvalidDataException("Hardcore activation did not own its message result.");
-        questScripts.MessageResults.Select(message.Request, 1);
+        questScripts.SelectMessage(message.Request, 1);
         var hardcoreResult = scripts.Dispatch(hardcore, "GameMode", elapsedSeconds: 1d / 60);
         if (hardcoreResult.Error is not null || !questScripts.Session.Hardcore || !world.Get(hardcore).DeletePending)
             throw new InvalidDataException("Hardcore answer did not execute and retain its source tombstone.");

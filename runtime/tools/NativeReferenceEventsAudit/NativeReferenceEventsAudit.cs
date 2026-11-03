@@ -215,7 +215,7 @@ public partial class NativeReferenceEventsAudit : Node
             _ = perkReader.Perk(Key(0x705));
             var speaking = false;
             var events = new RuntimeNativeReferenceEvents { ReportDivergence = reported.Add };
-            events.Configure(records, world, quests, cell, root, new((_, _) => false, effects.Add, IsTalking: _ => speaking),
+            events.Configure(records, world, quests, cell, root, new((_, _) => false, effects.Add, IsTalking: _ => speaking, PlayerLevel: () => 1),
                 _ => Transform3D.Identity, 1, 1);
             root.AddChild(events);
             var area = root.GetChildren().OfType<Area3D>().Single();
@@ -287,7 +287,8 @@ public partial class NativeReferenceEventsAudit : Node
                 "A stopped native activation replayed its perk mutation.");
             Require(reported.Count == 2 && reported[0].EndsWith("OnTriggerEnter: audit capability was unavailable.", StringComparison.Ordinal) &&
                 reported[1].EndsWith("OnActivate: audit capability was unavailable.", StringComparison.Ordinal),
-                "Native fault reporting lost the expected divergence or reported an unexpected one.");
+                "Native fault reporting lost the expected divergence or reported an unexpected one: " +
+                System.Text.Json.JsonSerializer.Serialize(reported));
             world.DamageActor(Key(0x902), Key(0x14), 0, 100, 1, 1);
             events._Process(.75);
             var dead = world.Get(Key(0x902));
@@ -431,7 +432,10 @@ public partial class NativeReferenceEventsAudit : Node
         byte[] Function(uint id, string body, bool key = false) => Record("SCPT", id,
             Field("SCHR", new byte[20]), Field("SCRO", BitConverter.GetBytes(0x901u)), key ? Local(1, "key") : [],
             Field("SCTX", Encoding.ASCII.GetBytes((key ? "int key\n" : "") + "begin Function {" + (key ? "key" : "") + "}\n" + body + "\nend")));
-        return Record("TES4", 0, Field("HEDR", header)).Concat(script)
+        var playerStats = new byte[24]; BinaryPrimitives.WriteInt16LittleEndian(playerStats.AsSpan(8), 1);
+        var playerSource = Record("NPC_", 7, Field("ACBS", playerStats),
+            Field("DATA", [100, 0, 0, 0, 5, 5, 5, 5, 5, 5, 5]));
+        return Record("TES4", 0, Field("HEDR", header)).Concat(playerSource).Concat(script)
             .Concat(Function(0x520, "AuditRef.frames += 1"))
             .Concat(Function(0x521, "AuditRef.keyDown += key\nAr_Append AuditRef.shared key", true))
             .Concat(Function(0x522, "AuditRef.keyUp += key", true))

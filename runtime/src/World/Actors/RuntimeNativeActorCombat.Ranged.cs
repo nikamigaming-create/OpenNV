@@ -26,10 +26,12 @@ internal sealed partial class RuntimeNativeActorCombat
         var ammo = _enemyWeaponHandling!.Ammunition(weapon);
         if (_enemyShot is null || _enemyShot.Ammunition != ammo)
         {
-            _enemyShot = FalloutWeaponShot.Read(_records, weapon.Form, ammo, weapon.HasAmmunitionSource);
-            _enemyShot = FalloutWeaponModifications.Apply(_records, _enemyShot,
+            _enemyShot = null;
+            var prepared = FalloutWeaponShot.Read(_records, weapon.Form, ammo, weapon.HasAmmunitionSource);
+            prepared = FalloutWeaponModifications.Apply(_records, prepared,
                 _world.Inventory(_state.Reference, _context!.Level(), _context.Globals).Contents.WeaponModMask(weapon.Form));
-            _enemyShot.RequireRuntimeAttackOwner();
+            prepared.RequireRuntimeAttackOwner();
+            _enemyShot = prepared;
             try
             {
                 if (_enemyShot.Projectile.HasMuzzleFlash || _enemyShot.Projectile.MuzzleLight is not null)
@@ -83,6 +85,9 @@ internal sealed partial class RuntimeNativeActorCombat
             }
         }
         var resolvedDamage = _enemyDamage!.Resolve(_enemyShot);
+        FalloutWeaponDamage? explosionDamage = _enemyShot.Projectile.IsInstantRayAttack && _enemyShot.Projectile.ExplosionSource is { } explosion
+            ? _enemyDamage!.Resolve(_enemyShot, explosion.Damage)
+            : null;
         var launchExtentRadians = ResolveNpcShotSpread(_enemyShot);
         if (FriendlyInsideSpread(player, from, TargetPoint(player), launchExtentRadians))
         {
@@ -178,12 +183,12 @@ internal sealed partial class RuntimeNativeActorCombat
                     }
                 }
                 FalloutActorHit? actorHit = null;
-                var contactHasOwner = playerHit || actorTarget || hasImpact;
+                var contactHasOwner = playerHit || actorTarget || hasImpact || explosionDamage is not null;
                 var impactPending = delay > 0 && contactHasOwner;
                 if (impactPending)
                 {
                     healthBefore = playerHit ? _context!.Vitals().ExactHitPoints : null;
-                    ScheduleHitscanContact(player, _enemyShot, resolvedDamage, collider, part, impactMaterial,
+                    ScheduleHitscanContact(player, _enemyShot, resolvedDamage, explosionDamage, collider, part, impactMaterial,
                         point, normal, pelletDirection, delay);
                     pendingImpacts++;
                     if (playerHit)
@@ -199,7 +204,7 @@ internal sealed partial class RuntimeNativeActorCombat
                 }
                 else if (contactHasOwner)
                 {
-                    var result = CompleteHitscanContact(player, _enemyShot, resolvedDamage, collider, part,
+                    var result = CompleteHitscanContact(player, _enemyShot, resolvedDamage, explosionDamage, collider, part,
                         impactMaterial, point, normal, pelletDirection, delay);
                     healthBefore = result.HealthBefore;
                     healthAfter = result.HealthAfter;
@@ -305,7 +310,7 @@ internal sealed partial class RuntimeNativeActorCombat
     }
 
     private void ScheduleHitscanContact(RuntimeNativePlayer? player, FalloutWeaponShot shot,
-        FalloutWeaponDamage damage, Node collider, byte? part, int? impactMaterial, Vector3 point,
+        FalloutWeaponDamage damage, FalloutWeaponDamage? explosionDamage, Node collider, byte? part, int? impactMaterial, Vector3 point,
         Vector3 normal, Vector3 direction, float delaySeconds)
     {
         var targetPath = collider.GetPath().ToString();
@@ -331,7 +336,7 @@ internal sealed partial class RuntimeNativeActorCombat
                 return;
             }
 
-            var result = CompleteHitscanContact(player, shot, damage, collider, part, impactMaterial,
+            var result = CompleteHitscanContact(player, shot, damage, explosionDamage, collider, part, impactMaterial,
                 point, normal, direction, delaySeconds, targetPath);
             GD.Print($"OPENNV_NPC_HITSCAN_IMPACT reference={_state.Reference} projectile={shot.Projectile.Form} target={targetPath} delay={delaySeconds:R} playerHit={result.PlayerHit} actorHit={result.ActorHit?.Reference} error={result.DamageError ?? result.ImpactError}");
         };
@@ -340,7 +345,7 @@ internal sealed partial class RuntimeNativeActorCombat
     private (float? HealthBefore, float? HealthAfter, bool PlayerHit, FalloutActorHit? ActorHit,
         string? DamageError, string? ImpactError)
         CompleteHitscanContact(RuntimeNativePlayer? player, FalloutWeaponShot shot, FalloutWeaponDamage damage,
-            Node? collider, byte? part, int? impactMaterial, Vector3 point, Vector3 normal, Vector3 direction,
+            FalloutWeaponDamage? explosionDamage, Node? collider, byte? part, int? impactMaterial, Vector3 point, Vector3 normal, Vector3 direction,
             float delaySeconds, string? targetPath = null)
     {
         targetPath ??= collider is { } target && GodotObject.IsInstanceValid(target)
@@ -363,7 +368,9 @@ internal sealed partial class RuntimeNativeActorCombat
             try
             {
                 healthBefore = _context!.Vitals().ExactHitPoints;
+                _world.RecordActorWeaponContact(_records.RuntimeFormKey(0x14), _state.Reference, shot.Weapon, damage.WeaponScriptInstance);
                 _context.DamagePlayer(damage, part!.Value);
+                player!.ReceiveWeaponTouchEffects(_state.Reference, shot.Weapon);
                 healthAfter = _context.Vitals().ExactHitPoints;
                 _hits++;
             }
@@ -427,6 +434,15 @@ internal sealed partial class RuntimeNativeActorCombat
             }
         }
 
+        if (explosionDamage is { } blastDamage)
+        {
+            try { ApplyEnemyProjectileDetonation(player, shot, blastDamage, point); }
+            catch (Exception error)
+            {
+                damageError = error.Message;
+                GD.PushError($"OPENNV_NPC_HITSCAN_EXPLOSION_UNBOUND reference={_state.Reference} projectile={shot.Projectile.Form} {error.Message}");
+            }
+        }
         _lastHitscanImpact = new
         {
             shooter = _state.Reference.ToString(),
@@ -579,7 +595,9 @@ internal sealed partial class RuntimeNativeActorCombat
         {
             part = contact.Collider == player ? (byte)0 : player.CombatHitPart(contact.Collider!);
             healthBefore = _context!.Vitals().ExactHitPoints;
+            _world.RecordActorWeaponContact(_records.RuntimeFormKey(0x14), _state.Reference, shot.Weapon, damage.WeaponScriptInstance);
             _context.DamagePlayer(damage, part.Value);
+            player.ReceiveWeaponTouchEffects(_state.Reference, shot.Weapon);
             healthAfter = _context.Vitals().ExactHitPoints;
             _hits++;
         }
@@ -611,7 +629,7 @@ internal sealed partial class RuntimeNativeActorCombat
         _lastAttack = new
         {
             kind = "source-projectile-flight-contact",
-            weapon = _enemyWeapon!.Form.ToString(),
+            weapon = shot.Weapon.ToString(),
             projectile = shot.Projectile.Form.ToString(),
             collider = contact.Collider?.GetPath().ToString(),
             part,

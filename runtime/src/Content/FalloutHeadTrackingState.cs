@@ -60,11 +60,21 @@ internal sealed class FalloutHeadTrackingState
 
     internal void Look(FalloutFormKey target) => SetTarget(2, target);
 
-    internal void StopLook()
+    internal void BeginActionLook(FalloutFormKey target)
     {
-        var previous = _targets[2];
-        _targets[2] = null;
-        _enabled[2] = false;
+        // SayTo clears a scripted Look before publishing its action target.
+        SetTarget(2, null);
+        SetTarget(1, target);
+    }
+
+    internal void StopLook() => StopLookSlot(2);
+    internal void StopActionLook() => StopLookSlot(1);
+
+    private void StopLookSlot(int slot)
+    {
+        var previous = _targets[slot];
+        _targets[slot] = null;
+        _enabled[slot] = false;
         _targets[0] = previous;
         // Preserve slot zero's enabled flag; copying the reference alone does
         // not acquire the missing automatic/default head-target owner.

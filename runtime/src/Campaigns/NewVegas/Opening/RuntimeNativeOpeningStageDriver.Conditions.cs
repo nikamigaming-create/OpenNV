@@ -42,7 +42,10 @@ internal partial class RuntimeNativeOpeningStageDriver
     private float EvaluatePlayerNativeCondition(FalloutConditionQuery condition) => condition.Kind switch
     {
         Function.GetActorValue => DialogueActorValue(_pluginStack.RuntimeFormKey(0x14), checked((int)condition.Argument1)),
+        Function.GetIsAlignment when condition.Argument2 == 0 =>
+            (uint)FalloutKarma.Alignment(_pluginStack, _playerActorValues.ReadCurrent(23)) == condition.Argument1 ? 1 : 0,
         Function.GetDead => Vitals.HitPoints == 0 ? 1 : 0,
+        Function.GetKnockedState => _player.FatigueKnockedState,
         Function.GetInCell => _scripts.References!.IsInCell(_pluginStack.RuntimeFormKey(0x14), condition.FormArgument1, _activeCell) ? 1 : 0,
         Function.GetIsSex or Function.GetPCIsSex when condition.Argument1 <= 1 && condition.Argument2 == 0 => _character.Female == (condition.Argument1 == 1) ? 1 : 0,
         Function.GetLevel => SourcePlayerLevel,

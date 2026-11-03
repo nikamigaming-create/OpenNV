@@ -187,14 +187,14 @@ internal static class ManualSavePreparationContracts
         using var selected = scoped.Register(voice.Sound, voice.Reference, "transfer-source", () => scopedActive, () => { },
             sourceReference: voice.Reference, finiteWait: () => voice,
             prepareSaveDrain: () => new Lease(voice, () => !scopedActive));
-        using (var drain = scoped.PrepareFiniteSourceDrain(new HashSet<FalloutFormKey> { voice.Reference }))
+        using (var drain = scoped.PrepareFiniteSourceDrain(new HashSet<FalloutFormKey> { voice.Reference.RequireSource() }))
         {
             using var unrelated = scoped.Register(voice.Sound, null, "independent-interface", () => true, () => { });
             Require(drain.ObservePending().Single() == voice, "Independent audio contaminated the selected source handoff.");
             using (scoped.Register(voice.Sound, voice.Reference, "new-source-prefix", () => true, () => { }, sourceReference: voice.Reference)) { }
             Reject(() => drain.ObservePending());
         }
-        using (var drain = scoped.PrepareFiniteSourceDrain(new HashSet<FalloutFormKey> { voice.Reference }))
+        using (var drain = scoped.PrepareFiniteSourceDrain(new HashSet<FalloutFormKey> { voice.Reference.RequireSource() }))
         {
             scopedActive = false; selected.Dispose();
             Require(drain.ObservePending().Count == 0, "Source handoff did not retain its genuine completion.");

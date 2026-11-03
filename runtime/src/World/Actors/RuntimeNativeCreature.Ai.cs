@@ -8,6 +8,7 @@ namespace OpenNV.Runtime.World.Actors;
 
 internal sealed partial class RuntimeNativeCreature
 {
+    private const string CreatureEatCaptureBlocker = "Creature Eat awaits its first native motion observation.";
     private const string DialogueCaptureBlocker = "Dialogue package continuation has no cold restoration owner.";
     private FalloutPluginStack? _aiRecords;
     private FalloutQuestState? _aiQuests;
@@ -31,6 +32,7 @@ internal sealed partial class RuntimeNativeCreature
     private FalloutWanderProgress? _sandboxWander;
     private FalloutDialoguePackage? _dialoguePackage;
     private FalloutPackageEvents? _packageEvents;
+    private FalloutActorDeferredPackageContinuation? _incomingResidentProcedure;
     private bool _dialogueRequested;
     private bool _initialPackageSelected;
     private bool _packageSelectionAttempted;
@@ -62,6 +64,8 @@ internal sealed partial class RuntimeNativeCreature
         dialogueRequested = _dialogueRequested,
         motion = _aiState?.PackageMotion,
         travel = TravelState,
+        eat = _creatureEatPackage is null ? null : new { source = _creatureEatPackage, progress = _creatureEatProgress, retiring = _creatureEatRetiring },
+        findFood = _findFoodPackage is null ? null : new { source = _findFoodPackage, progress = _findFoodProgress },
         guard = _guardPackage is null ? null : new { source = _guardPackage, progress = _guardProgress },
         sandbox = _sandboxPackage is null ? null : new { source = _sandboxPackage, wander = _sandboxWander, dialogue = Combat?.SandboxObservation },
         patrol = PatrolState,
@@ -96,6 +100,9 @@ internal sealed partial class RuntimeNativeCreature
         _aiState.QuerySitting = _sittingQuery = () => _aiState.FurnitureContinuation is null ? 0 :
             throw new NotSupportedException("Creature furniture continuation has no physical sitting owner.");
         _packageEvents = new(DispatchPackageEvent);
+        // BindNative may consume a no-predecessor boundary. Retain its proof
+        // until the first resident procedure admission, never as motion.
+        _incomingResidentProcedure = _aiState.DeferredPackageContinuation;
         if (_aiState.PendingSandboxStart is { } pendingSandbox)
         {
             world.UnloadedPackages?.BindNative(Appearance.Reference!.Value, _packageEvents);
@@ -221,7 +228,10 @@ internal sealed partial class RuntimeNativeCreature
                 _aiState?.Reference ?? throw new NotSupportedException("Dialogue emotion has no placed actor."))
             ? -1 : throw new NotSupportedException("Active creature dialogue emotion requires its response-validity process owner."),
         Function.GetCurrentAIProcedure => Combat?.ScriptCombatProcedure ?? Combat?.ScriptEatProcedure ??
+            (_findFoodPackage is not null ? CurrentFindFoodProcedure : (int?)null) ??
+            (_creatureEatPackage is not null ? _creatureEatProgress?.Creature?.Arrived == true ? 10 : 0 : (int?)null) ??
             (_sandboxPackage is not null ? Combat?.ScriptSandboxProcedure ?? throw new NotSupportedException("Creature Sandbox has no live phase owner.") :
+                _travelPackage is not null ? CurrentTravelProcedure :
                 _aiPackage is null ? 0 : throw new NotSupportedException("Creature current AI procedure requires its admitted package-phase owner.")),
         Function.IsMoving => Combat?.PackageMoving == true ? 1 : 0,
         Function.GetAttacked => Activity.Attacked ? 1 : 0,
@@ -246,6 +256,15 @@ internal sealed partial class RuntimeNativeCreature
             : (_aiWorld ?? throw new NotSupportedException("Creature sitting query has no shared reference world.")).GetSitting(subject);
     }
 
+    private bool IsFirstResidentProcedureAdmission(FalloutPluginRecord record)
+    {
+        var incoming = _incomingResidentProcedure;
+        return incoming is not null && incoming.Reference == Appearance.Reference && incoming.Assignment == _aiState!.PackageAssignment &&
+            incoming.Assignment.Package == record.FormKey && _packageEvents!.Active?.Form == record.FormKey &&
+            !_packageEvents.Done && _packageEvents.Revision == incoming.Revision &&
+            _packageEvents.LastEvent == "POBA" && _packageEvents.LastPackage == record.FormKey;
+    }
+
     private void SelectPackage(bool forced)
     {
         var previousFailure = _failedPackage;
@@ -255,6 +274,8 @@ internal sealed partial class RuntimeNativeCreature
             _aiState.DeferredPackageContinuation?.RetainedAssignment is null;
         var restoreTravel = assignedMotion && retained!.Travel is not null;
         var restoreGuard = assignedMotion && retained!.Guard is not null;
+        var restoreEat = assignedMotion && retained!.EatPackage?.Creature is not null;
+        var restoreFindFood = assignedMotion && retained!.FindFood is not null;
         var restoreSandbox = assignedMotion && (retained!.Wander is not null || retained.Sandbox is not null);
         var restoreAccompany = assignedMotion && retained!.AccompanyPortal is not null;
         var retainedSource = assignedMotion ? _aiRecords!.GetEffective(retained!.Package) : null;
@@ -267,11 +288,16 @@ internal sealed partial class RuntimeNativeCreature
         var deferred = !_initialPackageSelected && _aiState!.DeferredPackageContinuation?.RetainedAssignment is not null
             ? _aiState.DeferredPackageContinuation : null;
         var selected = deferred is not null ? _aiRecords!.GetEffective(deferred.Assignment.Package) :
-            restoreTravel || restoreGuard || restoreAccompany || restoreFollow || restorePatrol || restoreSandbox ? _aiRecords!.GetEffective(retained!.Package) :
+            restoreTravel || restoreGuard || restoreAccompany || restoreFollow || restorePatrol || restoreSandbox || restoreEat || restoreFindFood ? _aiRecords!.GetEffective(retained!.Package) :
             FalloutAiPackages.Select(_aiRecords!, Appearance.Creature, PackageCondition, _aiState!.Templates, _aiClock,
                 evaluateRunOn: true,
                 eligible: package => _aiWorld!.PackageEligible(Appearance.Reference!.Value, package, _aiClock,
                     _aiPackage?.FormKey, _packageEvents?.Done == true));
+        if (_creatureEatPackage is { } activeEat && selected?.FormKey != activeEat.Form)
+        {
+            if (!activeEat.TimedMustCompleteExpired(_aiPackage!, CreatureEatHour(), _creatureEatProgress!.Creature!.StartedHour)) return;
+            if (EatIdleActive) { _creatureEatRetiring = true; _evaluateRequested = true; return; }
+        }
         if (_aiError is not null && selected is not null && previousFailure == selected.FormKey)
         { _failedPackage = previousFailure; return; }
         // A healthy active Sandbox retains its already-consumed package
@@ -297,19 +323,23 @@ internal sealed partial class RuntimeNativeCreature
         var source = selected is null ? null : FalloutScriptPackage.Read(selected);
         FalloutFollowPackage? follow = null;
         FalloutDialoguePackage? dialogue = null;
+        FalloutEatPackage? eat = null;
+        FalloutFindFoodPackage? findFood = null;
         FalloutTravelPackage? travel = null;
         FalloutGuardPackage? guard = null;
         FalloutSandboxPackage? sandbox = null;
         FalloutPatrolRoute? patrol = null;
         if (source is not null)
         {
-            if (source.Procedure == 1) follow = FalloutFollowContinuation.ReadResident(selected!).ResolveTarget(() => _aiWorld!.GetLinkedRef(Appearance.Reference!.Value));
+            if (source.Procedure == 0) findFood = FalloutFindFoodPackage.Read(selected!);
+            else if (source.Procedure == 1) follow = FalloutFollowContinuation.ReadResident(selected!).ResolveTarget(() => _aiWorld!.GetLinkedRef(Appearance.Reference!.Value));
             else if (source.Procedure == 7)
             {
                 follow = FalloutFollowContinuation.ReadResident(selected!).ResolveTarget(() => _aiWorld!.GetLinkedRef(Appearance.Reference!.Value));
                 if (follow.DefensiveCombat && _aiRecords!.RuntimeFormId(follow.Target) == 0x14)
                     throw new NotSupportedException("Defensive Accompany of the player requires its player-hit assistance owner.");
             }
+            else if (source.Procedure == 3) eat = FalloutEatPackage.Read(selected!, creature: true);
             else if (source.Procedure == 6) travel = FalloutTravelPackage.Read(selected!);
             else if (source.Procedure == 14) guard = FalloutGuardPackage.Read(selected!);
             else if (source.Procedure == 12)
@@ -332,6 +362,10 @@ internal sealed partial class RuntimeNativeCreature
                 throw new NotSupportedException("Self-target follower needs its native termination policy.");
         }
         var restoredDialogue = assignedMotion && dialogue?.Type == 1 && retained is { DialogueCompleted: true } motion && motion.Package == source!.Form;
+        if (findFood is not null) BeginFindFood(selected!, findFood, restoreFindFood);
+        else { _findFoodPackage = null; _findFoodProgress = null; }
+        if (eat is not null) BeginCreatureEat(selected!, eat, restoreEat);
+        else { _creatureEatPackage = null; _creatureEatProgress = null; _creatureEatRetiring = false; }
         if (travel is not null) BeginTravel(selected!, restoreTravel);
         else { _travelPackage = null; _travelProgress = null; _travelDestination = null; }
         if (guard is not null)
@@ -361,11 +395,13 @@ internal sealed partial class RuntimeNativeCreature
         if (_sandboxWander is not null) _aiWorld!.ValidatePackageWander(Appearance.Reference!.Value, _sandboxWander);
         if (patrol is not null) BeginPatrol(patrol, restorePatrol);
         else { _patrol = null; _patrolProgress = null; _patrolDestination = null; }
+        _incomingResidentProcedure = null;
         _initialPackageSelected = true;
-        if (restoreTravel || restoreGuard || restoreAccompany || restoreFollow || restorePatrol || restoreSandbox || restoredDialogue)
+        if (restoreTravel || restoreGuard || restoreAccompany || restoreFollow || restorePatrol || restoreSandbox || restoreEat || restoreFindFood || restoredDialogue)
             _packageEvents!.Restore(source!, restoreFollow ? _aiState!.PackageAssignment!.Done :
                 restorePatrol ? _aiState!.PackageAssignment?.Done == true :
-                restoreGuard || restoreAccompany || restoreSandbox ? false : restoreTravel ? _travelProgress!.Complete : true);
+                restoreFindFood ? _findFoodProgress!.Phase == FalloutFindFoodPhase.Done :
+                restoreGuard || restoreAccompany || restoreSandbox || restoreEat ? false : restoreTravel ? _travelProgress!.Complete : true);
         else _packageEvents!.Change(source);
         if (_followPackage is { } retiringFollow) Combat!.RetireFollowCombatPolicy(retiringFollow.Form);
         ClearFollowCaptureBlocker();
@@ -374,6 +410,8 @@ internal sealed partial class RuntimeNativeCreature
         _actorPackagePortal = null; _accompanyPlaybackWait = null;
         if (travel is null && guard is null && patrol is null)
             _aiState!.ProcedureCaptureBlocker = dialogue is not null && !restoredDialogue ? DialogueCaptureBlocker : null;
+        if (eat is not null && !restoreEat) _aiState!.ProcedureCaptureBlocker = CreatureEatCaptureBlocker;
+        if (findFood is not null && !restoreFindFood) _aiState!.ProcedureCaptureBlocker = FindFoodCaptureBlocker;
         if (follow is not null && !restoreFollow)
         {
             _followOwnedBlocker = FollowCaptureBlocker;
@@ -385,7 +423,7 @@ internal sealed partial class RuntimeNativeCreature
             _aiState.PackageMotion = previousMotion with { DialogueCompleted = false };
         if (deferred is not null && _aiState!.ProcedureCaptureBlocker is null)
             _aiState.ProcedureCaptureBlocker = FalloutUnloadedActorPackages.ContinuationBlocker;
-        if (restoreTravel) _evaluateRequested = true;
+        if (restoreTravel || restoreEat || restoreFindFood) _evaluateRequested = true;
         _failedPackage = null;
         GD.Print($"OPENNV_CREATURE_PACKAGE reference={Appearance.Reference} package={source?.Form} procedure={source?.Procedure}");
     }
@@ -425,7 +463,7 @@ internal sealed partial class RuntimeNativeCreature
         using var frameWork = OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Measure(OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Owner.CreaturePackages);
         Combat?.StopPackageMotion();
         _waitingForTarget = null;
-        if (ScriptIdleActive && !AmbientIdleActive) { ObserveScriptIdleInterruption(); return; }
+        if (ScriptIdleActive && !AmbientIdleActive && !EatIdleActive) { ObserveScriptIdleInterruption(); return; }
         if (SandboxMotionError is not null) return;
         if (SandboxAdmissionError is not null || HasDetachedSandboxAdmission || HasDetachedPendingSandboxStart) return;
         if (_aiRecords is null || Combat is null || Combat.OwnsPose && (Combat.FollowCombatError is null || !_evaluateRequested) ||
@@ -461,7 +499,9 @@ internal sealed partial class RuntimeNativeCreature
                 selecting = false;
             }
             if (_aiError is not null || _evaluateRequested || Combat.OwnsPose || Combat.FollowCombatError is not null) return;
-            if (_travelPackage is not null)
+            if (_findFoodPackage is not null) AdvanceFindFood(delta);
+            else if (_creatureEatPackage is not null) AdvanceCreatureEat(delta);
+            else if (_travelPackage is not null)
             {
                 using var scope = OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Measure(OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Owner.CreatureTravel);
                 AdvanceTravel(delta);
@@ -523,6 +563,7 @@ internal sealed partial class RuntimeNativeCreature
             var changed = _aiError != error.Message;
             _aiError = error.Message;
             if (_guardPackage is not null) _guardProgress = Combat.PackageMotion?.Guard ?? _guardProgress;
+            if (_findFoodPackage is not null) _aiState!.ProcedureCaptureBlocker = FindFoodFailureBlocker + error.Message;
             if (_sandboxPackage is not null)
             {
                 _aiState!.PendingSandboxStart = null;

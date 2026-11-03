@@ -68,9 +68,23 @@ internal static partial class SharedConditionContracts
         world.ChangeActorValue(Key(0x200), "Confidence", "setav", 0);
         world.ChangeActorValue(Key(0x200), "Confidence", "forceav", 0);
         Require(!world.ActorThreat(Key(0x200)).Initiates(1), "Confidence mutation did not affect the production AI decision owner.");
+        var attacking = new FalloutActorEngagement(playerReference, "attack", .4, false,
+            "meshes/creatures/synthetic/h2hattackleft.kf", new string('a', 64),
+            WeaponHandling: new(true, []), AttackRandomState: 123);
+        var fleeing = attacking.ForConfidence(world.ActorThreat(Key(0x200)).Confidence);
+        Require(fleeing is { Action: "flee", Seconds: 0, StartPending: true, Animation: null, AnimationHash: null } &&
+            fleeing.Target == attacking.Target && ReferenceEquals(fleeing.WeaponHandling, attacking.WeaponHandling) &&
+            fleeing.AttackRandomState == attacking.AttackRandomState && ReferenceEquals(fleeing, fleeing.ForConfidence(0)),
+            "Live cowardly confidence retained attack pose/events, lost combat resources or restarted an ongoing flee.");
+        var restoredFlee = JsonSerializer.Deserialize<FalloutActorEngagement>(JsonSerializer.Serialize(fleeing))!;
         world.ChangeActorValue(Key(0x200), "Confidence", "forceav", 2);
         Require(world.ActorThreat(Key(0x200)).Initiates(1) && source.Confidence == 1,
             "Live AI decision failed to observe a modifier or modified the cached source declaration.");
+        var retaliating = restoredFlee.ForConfidence(world.ActorThreat(Key(0x200)).Confidence);
+        Require(retaliating is { Action: "pursue", Seconds: 0, StartPending: true, Animation: null } &&
+            retaliating.Target == attacking.Target && retaliating.AttackRandomState == attacking.AttackRandomState &&
+            ReferenceEquals(retaliating, retaliating.ForConfidence(4)) && ReferenceEquals(attacking, attacking.ForConfidence(2)),
+            "Raised live/cold confidence retained the invalid flee action or restarted a non-cowardly combat action.");
         world.RestoreActorValue(Key(0x200), "Mood", 100);
         world.ChangeActorValue(Key(0x200), "Mood", "forceav", 6);
         world.ChangeActorValue(Key(0x200), "Mood", "modav", 2);

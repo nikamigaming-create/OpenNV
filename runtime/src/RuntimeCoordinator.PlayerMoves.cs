@@ -27,6 +27,7 @@ public partial class RuntimeCoordinator
             var destination = _nativePluginStack!.RuntimeFormId(move.Destination) == 0x14 ? active.Cell.FormKey : references.Placement(move.Destination).Cell;
             if (destination != active.Cell.FormKey) await ShowNativeLoadingScreens(destination);
             await RuntimeNativePlayerMoves.ApplyNextAsync(references, player, active.Cell.FormKey, StreamNativePlayerMove);
+            CompleteDiagnosticPlayerMove(references, move, null);
             driver.FastTravel.CompleteRelocation();
             GD.Print($"OPENNV_NATIVE_PLAYER_MOVETO source={move.Source} target={move.Destination} " +
                 $"from={active.Cell.FormKey} to={driver.ActiveCell} owner=queued-source-command parity=unverified");
@@ -34,6 +35,7 @@ public partial class RuntimeCoordinator
         catch (Exception error)
         {
             if (references.PlayerMoves.Error is null) references.PlayerMoves.Fail(move, error);
+            CompleteDiagnosticPlayerMove(references, move, error);
             SetMeta("opennv_player_move_error", error.Message);
             GD.PushError($"OPENNV_NATIVE_PLAYER_MOVETO_FAIL source={move.Source} target={move.Destination} {error}");
         }

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Xml.Linq;
 using Godot;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Gameplay.State;
@@ -60,6 +61,18 @@ public partial class NativePipBoyAudit : Node
             if (args.Length != 2) throw new ArgumentException("Expected owned Data and a native campaign checkpoint.");
             RuntimeLiveContentSource.Configure(args[0], RuntimeLiveContentSource.FalloutNewVegasGame);
             var content = RuntimeLiveContentSource.Current!;
+            var badgeImage = new XElement("image", new XAttribute("name", "badge"));
+            var badgeNumber = new XElement("text", new XAttribute("name", "requirement"));
+            var badgeTree = new NativeOwnedMenuTree(new XElement("menu", badgeImage, badgeNumber));
+            NativeOwnedPipBoyMenu.BindWeaponSkillBadge(badgeTree, badgeImage, badgeNumber,
+                new(41, 25, FalloutWeaponSkillBadge.IconFor(41)));
+            if (badgeTree.Number(badgeImage, "visible") != 1 || badgeTree.String(badgeNumber) != "25")
+                throw new InvalidDataException("Known source weapon skill badge was not admitted.");
+            NativeOwnedPipBoyMenu.BindWeaponSkillBadge(badgeTree, badgeImage, badgeNumber, new(36, 30, null));
+            if (badgeImage.Element("filename")?.Value != "" || badgeTree.Number(badgeImage, "visible") != 0 ||
+                badgeTree.Number(badgeNumber, "visible") != 1 || badgeTree.String(badgeNumber) != "30")
+                throw new InvalidDataException("Native null weapon skill icon retained prior art or hid its independent number.");
+
             var originalMenu = FalloutMenuXml.Read(content, "menus/main/hud_main_menu.xml");
             var expectedMenu = originalMenu.ToString();
             originalMenu.RemoveNodes();
@@ -73,6 +86,11 @@ public partial class NativePipBoyAudit : Node
             if (!ReferenceEquals(NativeBitmapFontAsset.Read(fontSettings, 2), NativeBitmapFontAsset.Read(fontSettings, 2)))
                 throw new InvalidDataException("Repeated UI font rebuilt its native atlas.");
             var childRoot = System.Xml.Linq.XElement.Parse("<menu name='Probe'><image name='divider'><alpha><copy src='child()' trait='alpha'/></alpha><rect name='meter'><alpha>123</alpha></rect></image></menu>");
+            var numericRoot = System.Xml.Linq.XElement.Parse("<menu name='NumericProbe'><user2/><text name='mid'><string><copy src='NumericProbe' trait='user2'/><div>2</div></string></text></menu>");
+            var numericTree = new NativeOwnedMenuTree(numericRoot);
+            numericTree.Bind(numericRoot, "user2", 1001);
+            if (numericTree.String(numericRoot.Element("text")!) != "500" || numericTree.String(numericRoot, "user2") != "1001")
+                throw new InvalidDataException("Numeric string arithmetic/copy lost its actual bound trait or native integer conversion.");
             var childTree = new NativeOwnedMenuTree(childRoot);
             if (childTree.Number(childRoot.Element("image")!, "alpha") != 123)
                 throw new InvalidDataException("Unnamed child reference did not resolve its unique named tile.");
@@ -83,17 +101,36 @@ public partial class NativePipBoyAudit : Node
             var saved = JsonSerializer.Deserialize<FalloutNativeCampaignState>(File.ReadAllText(args[1]))!;
             using var references = new FalloutReferenceWorld(records);
             references.Restore(saved.References!);
+            references.RestoreActorOverrides(saved.ActorOverrides);
             var inventory = new FalloutPlayerInventory();
             var items = FalloutCampaignInventoryResolver.Resolve(records, saved.Inventory.Select(item =>
                 new FalloutCampaignInventoryRequest(item.RuntimeFormId, item.EditorId, item.RecordType, item.Count)).ToArray(), null);
             inventory.Restore(items, saved.EquippedRuntimeFormIds.ToArray(), saved.InventoryRandomState);
             var quests = new FalloutQuestState(records); quests.Restore(saved.Quests!);
             var state = new FalloutPipBoyState(records, inventory); state.SetOpen(true);
+            var values = saved.PlayerActorValues is { } valueSnapshot ? new FalloutPlayerActorValues(records, valueSnapshot) :
+                new FalloutPlayerActorValues(records, legacy: saved.Special);
+            var globals = FalloutGlobalState.Read(records);
+            if (saved.Globals is { } globalSnapshot) globals.Restore(globalSnapshot);
+            var playerSource = FalloutNativeRaceSexResolver.Resolve(records).Player;
+            var skillsOwner = new FalloutPlayerSkills(records, () => values.BaseSpecial,
+                name => saved.TagSkills.Any(skill => FalloutPlayerSkills.SkillName(records, skill).Equals(name, StringComparison.OrdinalIgnoreCase)),
+                () => saved.Traits, globals, inventory, playerSource,
+                () => records.RuntimeFormKey(saved.Character.RaceRuntimeFormId),
+                () => saved.Scripts?.Session?.Hardcore ?? false,
+                () => references.AcquiredPerks(records.RuntimeFormKey(0x14)), values);
+            values.BindConstantModifiers(skillsOwner.Modifiers);
+            skillsOwner.HealthPercentage = () => saved.Vitals!.ExactHitPoints / saved.Vitals!.MaximumHitPoints;
+            var mapSource = FalloutPipBoyMapSource.Resolve(records, references, saved.ActiveCell,
+                new(saved.PlayerPosition[0] / .0142875f, -saved.PlayerPosition[2] / .0142875f, saved.PlayerPosition[1] / .0142875f));
             menu = new NativeOwnedPipBoyMenu(records, state, inventory, quests, references, () => saved.Vitals!, () => saved.Special,
                 saved.PlayerName, FalloutNativeTagSkillResolver.Resolve(records, FalloutOpeningPlayerControlResolver.Resolve(records, ["VCG00", "VCG01"])).Skills, saved.TagSkills, saved.Traits,
-                FalloutCellSceneReader.ParentWorldspace(records.GetEffective(saved.ActiveCell)),
-                new(saved.PlayerPosition[0] / .0142875f, -saved.PlayerPosition[2] / .0142875f, saved.PlayerPosition[1] / .0142875f), 0)
+                mapSource.World, new(mapSource.Position.X, mapSource.Position.Y, mapSource.Position.Z), 0, actorValue: skillsOwner.Value)
             {
+                InventoryHardcore = () => saved.Scripts?.Session?.Hardcore ?? false,
+                InventoryCarryCapacity = () => FalloutPlayerPerkNumericEffects.Apply(22, skillsOwner.Value("CarryWeight"),
+                    skillsOwner.PerkEntries, skillsOwner.AbilityCondition),
+                ActiveEffects = () => saved.Ingestibles ?? new FalloutIngestiblesSnapshot([]),
                 LocalMap = color => new NativeOwnedLocalMap(GetViewport().World3D,
                     new(saved.PlayerPosition[0], saved.PlayerPosition[1], saved.PlayerPosition[2]), color, 0,
                     OpenNV.Runtime.RuntimeCoordinator.ReadNativeLocalMapSource(records, references, saved.ActiveCell,
@@ -116,6 +153,21 @@ public partial class NativePipBoyAudit : Node
                 if (buttons.Any(button => button.Size.X <= 0 || button.Size.Y <= 0)) failures.Add($"{page}/{index}: empty button target");
                 GD.Print($"OPENNV_PIPBOY_PAGE_BOUND {page}/{index} buttons={buttons.Length} refreshMs={JsonSerializer.SerializeToElement(menu.State).GetProperty("refreshMilliseconds").GetDouble():F3}");
             }
+            menu.Select(FalloutPipBoyPage.Stats, 0);
+            foreach (var status in new[] { "RAD" })
+            {
+                menu.GetChildren().OfType<NativeBitmapMenuButton>().Single(button => button.Text == status).EmitSignal(BaseButton.SignalName.Pressed);
+                await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                if (menu.Error is { } statusError) failures.Add($"Stats/{status}: {statusError}");
+            }
+            menu.GetChildren().OfType<NativeBitmapMenuButton>().Single(button => button.Text == "EFF").EmitSignal(BaseButton.SignalName.Pressed);
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            if (menu.Error != "EFF source list completeness requires its ability/equipment/ingestible/poison visibility owner.")
+                failures.Add("Stats/EFF did not retain its explicit source-list completeness boundary.");
+            GD.Print("OPENNV_PIPBOY_EFF_UNBOUND source-list-completeness");
+            menu.GetChildren().OfType<NativeBitmapMenuButton>().Single(button => button.Text == "CND").EmitSignal(BaseButton.SignalName.Pressed);
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            if (menu.Error is { } conditionError) failures.Add("Stats/CND: " + conditionError);
             if (failures.Count != 0) throw new InvalidOperationException(string.Join("\n", failures));
             await ExerciseNavigation(menu, records, inventory);
             await ExerciseNoteRemoval(menu, records, references, state, inventory);

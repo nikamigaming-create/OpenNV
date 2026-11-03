@@ -28,6 +28,12 @@ internal partial class RuntimeNativePlayer
             if (actor is not null && actor.Node.IsInsideTree() && !actor.Node.IsQueuedForDeletion() && actor.Combat.EffectiveEnabled && !actor.Combat.Dead)
                 _vatsActors.Add(actor.Reference, actor);
         }
+        var maximum = FalloutGameSettingFloats.Read(_presentationRecords!, "fVATSMaxEngageDistance");
+        if (!float.IsFinite(maximum) || maximum < 0) throw new InvalidDataException("VATS maximum engage distance is invalid.");
+        _vatsActorChoices = _vatsActors.Values.Where(ActorAvailable)
+            .Where(actor => GlobalPosition.DistanceTo(actor.Node.GlobalPosition) / UnitsToMeters <= maximum)
+            .OrderBy(actor => GlobalPosition.DistanceSquaredTo(actor.Node.GlobalPosition))
+            .Select(actor => actor.Reference).ToArray();
     }
 
     private IReadOnlyList<FalloutVatsSession.Target> VatsTargets() => _vatsTargets ?? [];
@@ -52,7 +58,7 @@ internal partial class RuntimeNativePlayer
         {
             samples?.Dispose();
             if (ReferenceEquals(_vatsVisibility, samples)) _vatsVisibility = null;
-            if (ReferenceEquals(_vats, session))
+            if (generation == _vatsGeneration && ReferenceEquals(_vats, session))
             {
                 _vatsPreparationElapsed = System.Diagnostics.Stopwatch.GetElapsedTime(_vatsPreparationStarted).TotalMilliseconds;
                 _vatsPreparationLastSamples = samples?.State;
@@ -65,10 +71,11 @@ internal partial class RuntimeNativePlayer
     {
         var weapon = RequireVatsWeapon();
         var instance = _presentationInventory!.SelectedWeapon(weapon.Form).Extra.Instance;
+        var selectedActor = _vatsSelectedActor ?? throw new InvalidOperationException("VATS has no selected-view actor.");
         void RequireCurrent()
         {
             if (generation != _vatsGeneration || !ReferenceEquals(session, _vats) || !VatsMenuActive ||
-                session.CurrentPhase != FalloutVatsSession.Phase.Selecting || RequireVatsWeapon().Form != weapon.Form ||
+                session.CurrentPhase != FalloutVatsSession.Phase.Selecting || _vatsSelectedActor != selectedActor || RequireVatsWeapon().Form != weapon.Form ||
                 _presentationInventory.SelectedWeapon(weapon.Form).Extra.Instance != instance)
                 throw new InvalidOperationException("VATS visibility preparation lost its selected session/weapon instance.");
         }
@@ -91,7 +98,7 @@ internal partial class RuntimeNativePlayer
         if (!float.IsFinite(maximumDistance) || maximumDistance < 0) throw new InvalidDataException("VATS maximum engage distance is invalid.");
         var chanceOwner = new FalloutVatsRangedChance(records);
         var targets = new List<FalloutVatsSession.Target>();
-        var candidates = _vatsActors.Values.Where(ActorAvailable)
+        var candidates = _vatsActors.Values.Where(actor => actor.Reference == selectedActor).Where(ActorAvailable)
             .Where(actor => GlobalPosition.DistanceTo(actor.Node.GlobalPosition) / UnitsToMeters <= maximumDistance)
             .OrderBy(actor => GlobalPosition.DistanceSquaredTo(actor.Node.GlobalPosition))
             .Select(actor => (Actor: actor, Parts: world.BodyParts(actor.Reference).Parts)).ToArray();
@@ -110,14 +117,15 @@ internal partial class RuntimeNativePlayer
             };
             var diameter = bound.Radius * 2 / UnitsToMeters;
             var source = records.GetEffective(world.Get(actor.Reference).Base);
-            var fields = source.ReadSubrecords().ToArray();
-            var full = fields.SingleOrDefault(field => field.Signature == "FULL").Data;
-            var name = full.IsEmpty ? FalloutDialogueTopic.Text(fields.Single(field => field.Signature == "EDID").Data.Span) : FalloutDialogueTopic.Text(full.Span);
+            var name = world.ActorDisplayName(actor.Reference);
             foreach (var part in candidate.Parts)
             {
                 RequireCurrent();
                 if (!TryVatsPoint(actor.Reference, part.Type, out _, out var visible)) { ++_vatsPreparationSkipped; continue; }
                 var fraction = await samples.MeasureAsync(actor.Node, part.Type);
+                // An awaited old sampler may finish after cancel/reopen. Check
+                // its actual owner before writing the replacement's telemetry.
+                RequireCurrent();
                 _vatsTargetMeasurements.Add(new
                 {
                     reference = actor.Reference.ToString(),
@@ -183,15 +191,47 @@ internal partial class RuntimeNativePlayer
         return pixel.X >= rect.Position.X && pixel.Y >= rect.Position.Y && pixel.X <= rect.End.X && pixel.Y <= rect.End.Y ? pixel : null;
     }
 
-    private bool TryVatsPoint(FalloutFormKey reference, byte partType, out Vector3 point, out bool visible)
+    private bool TryVatsAimPoint(FalloutFormKey reference, byte partType, out Vector3 point)
     {
-        point = Vector3.Zero; visible = false;
+        point = Vector3.Zero;
         if (!_vatsActors.TryGetValue(reference, out var actor) || !ActorAvailable(actor)) return false;
         var part = _hitReferences!.BodyParts(reference).Parts.SingleOrDefault(part => part.Type == partType);
         if (part is null) return false;
+        if (partType == 14) throw new NotSupportedException("VATS weapon aim requires its current process weapon-node owner.");
         var bone = actor.Skeleton.BoneIndex(string.IsNullOrEmpty(part.Target) ? part.Node : part.Target);
         if (bone < 0) throw new NotSupportedException($"VATS part {reference}/{partType} lacks its authored target bone.");
         point = (actor.Skeleton.Node.GlobalTransform * actor.Skeleton.Node.GetBoneGlobalPose(bone)).Origin;
+        if (!point.IsFinite()) throw new InvalidDataException("VATS source aim point is non-finite.");
+        return true;
+    }
+
+    private bool VatsActorLineOfSight(FalloutFormKey reference)
+    {
+        if (!_vatsActors.TryGetValue(reference, out var actor) || !ActorAvailable(actor))
+            throw new InvalidOperationException("Queued VATS actor retired before its sight outcome.");
+        var offset = actor.Node.GlobalPosition - GlobalPosition;
+        // The native query's near-root admission precedes its view cone/rays.
+        if (offset.Length() < 2 * UnitsToMeters) return true;
+        var cone = FalloutGameSettingFloats.Read(_presentationRecords!, "fDetectionViewCone");
+        if (!FalloutActorSight.InCone(new(offset.X, offset.Y, offset.Z),
+            new(-GlobalBasis.Z.X, -GlobalBasis.Z.Y, -GlobalBasis.Z.Z), cone)) return false;
+        var exclusions = new Godot.Collections.Array<Rid>(CombatCollisionRids);
+        var points = actor.Combat.DetectionSightPoints;
+        return FalloutActorSight.AnyClear(points, point =>
+        {
+            using var query = PhysicsRayQueryParameters3D.Create(DetectionOrigin, new(point.X, point.Y, point.Z),
+                CollisionMask | CollisionLayer, exclusions);
+            using var hit = GetWorld3D().DirectSpaceState.IntersectRay(query);
+            return hit.Count == 0 || hit["collider"].AsGodotObject() is Node collider &&
+                RuntimeNativeActorCombat.Find(collider) == actor.Combat;
+        });
+    }
+
+    private bool TryVatsPoint(FalloutFormKey reference, byte partType, out Vector3 point, out bool visible)
+    {
+        visible = false;
+        if (!TryVatsAimPoint(reference, partType, out point)) return false;
+        var actor = _vatsActors[reference];
         var camera = _xr?.Camera ?? _camera;
         var screen = camera.UnprojectPosition(point);
         if (camera.IsPositionBehind(point) || !camera.GetViewport().GetVisibleRect().HasPoint(screen)) return true;

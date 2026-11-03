@@ -32,6 +32,27 @@ internal sealed record FalloutActorThreat(FalloutFormKey Owner, byte Aggression,
     internal bool Warns(uint relation) => relation > 3 ? throw new ArgumentOutOfRangeException(nameof(relation)) :
         Aggression != 0 && Confidence != 0 && RadiusBehavior && Radius > 0 && relation < 2;
 
+    internal float WarningDistance(float unitsToMetres)
+    {
+        if (!float.IsFinite(unitsToMetres) || unitsToMetres <= 0 || Radius < 0)
+            throw new InvalidDataException("Actor warning radius inputs are invalid.");
+        return RadiusBehavior ? Radius * unitsToMetres : 0;
+    }
+
+    internal (bool Initiates, bool Warns) AcquisitionAt(uint relation, float distanceSquared,
+        float detectionDistance, float unitsToMetres)
+    {
+        if (!float.IsFinite(distanceSquared) || distanceSquared < 0 ||
+            !float.IsFinite(detectionDistance) || detectionDistance <= 0)
+            throw new InvalidDataException("Actor acquisition distance inputs are invalid.");
+        var warningDistance = WarningDistance(unitsToMetres);
+        var hostile = Initiates(relation);
+        // Hostility is evaluated independently of the source warning radius.
+        // Only a non-hostile intruder enters radius-based warning behavior.
+        return (hostile && distanceSquared <= detectionDistance * detectionDistance,
+            !hostile && Warns(relation) && distanceSquared <= warningDistance * warningDistance);
+    }
+
     internal static uint Relation(FalloutPluginStack records, FalloutFormKey actor, FalloutFormKey target,
         FalloutActorTemplateSelection? selection = null, FalloutActorTemplateSelection? targetSelection = null)
     {

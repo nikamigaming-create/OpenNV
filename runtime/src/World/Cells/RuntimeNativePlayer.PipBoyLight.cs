@@ -30,7 +30,7 @@ internal partial class RuntimeNativePlayer
     };
     private bool PipBoyLightAvailable => _presentationInventory is { } inventory &&
         inventory.Equipped.Contains(_presentationRecords!.RuntimeFormId(_pipBoyDevice));
-    private bool CanUsePipBoyButton => !_modalInput && _furniturePhase == 0 && SourceControls.PipBoy &&
+    private bool CanUsePipBoyButton => !FatigueKnockoutActive && !_modalInput && _furniturePhase == 0 && SourceControls.PipBoy &&
         _sourceCamera is null && IsDefeated?.Invoke() != true && PipBoyLightAvailable;
 
     private void ConfigurePipBoyLight(FalloutPluginStack records)

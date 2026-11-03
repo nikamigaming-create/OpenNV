@@ -3,6 +3,7 @@ using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Formats.Gamebryo;
 using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.InputSystem;
+using OpenNV.Runtime.World.Actors;
 
 namespace OpenNV.Runtime.World.Cells;
 
@@ -10,6 +11,24 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
 {
     private RuntimeConfiguration _configuration = null!;
     private Camera3D _camera = null!;
+    private CollisionShape3D _physicalShape = null!;
+    private NativeHumanoidMovementEnvelope? _sourceEnvelope;
+    internal float PhysicalRadius => _sourceEnvelope?.OuterRadius ?? _configuration.Player.CapsuleRadiusMeters;
+    internal float PhysicalHeight => _sourceEnvelope?.OuterHeight ?? _configuration.Player.CapsuleHeightMeters;
+    internal float PhysicalCenterHeight => _sourceEnvelope?.CenterHeight ?? _configuration.Player.SpawnCenterHeightMeters;
+    internal float PhysicalStepHeight => _sourceEnvelope?.StepHeight ?? _configuration.Player.StepHeightMeters;
+    internal float PhysicalShapeScale => _sourceEnvelope is null ? GlobalBasis.X.Length() : 1;
+    internal object? PhysicalShapeObservation => _sourceEnvelope?.Observation;
+
+    internal Shape3D CreatePhysicalQueryShape(out Vector3 offset)
+    {
+        offset = _sourceEnvelope is null ? Vector3.Up * PhysicalCenterHeight : Vector3.Zero;
+        return _sourceEnvelope?.CreateShape(1) ?? (Shape3D)new CapsuleShape3D
+        { Radius = PhysicalRadius, Height = PhysicalHeight };
+    }
+
+    internal float PhysicalSupportLift(Vector3 localNormal) => _sourceEnvelope?.SupportLift(localNormal) ??
+        Math.Max(0, PhysicalRadius * (1 / localNormal.Y - 1));
     private float _pitchRadians;
     private bool _movementEnabled = true;
     private bool _lookingEnabled = true;
@@ -23,8 +42,10 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
     {
         if (_sourceScale == scale && Scale.IsEqualApprox(Vector3.One * scale)) return;
         if (FalloutScriptSession.PlayerScaleValue(scale) != scale) throw new InvalidDataException("Player presentation scale is not source-valid.");
+        var sourceShape = _sourceEnvelope?.CreateShape(scale);
         _sourceScale = scale;
         Scale = Vector3.One * scale;
+        if (sourceShape is not null) _physicalShape.Shape = sourceShape;
     }
     private float _jumpHeightMeters;
     private NativeCharacterStep.QueryResources? _stepQueries;
@@ -77,7 +98,7 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
     }).ToArray();
     internal Func<Vector3, bool>? CanOccupyPosition { get; set; }
     internal Func<bool>? IsDefeated { get; set; }
-    internal float CombatRadius => _configuration.Player.CapsuleRadiusMeters;
+    internal float CombatRadius => PhysicalRadius;
     internal Vector3 CombatTargetPoint => SourceCombatTargetPoint();
 
     internal void ConfigureLocomotion(FalloutPluginStack records, Func<GameplayVitals?> vitals)
@@ -222,9 +243,12 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
 
     internal void Configure(RuntimeConfiguration configuration, Transform3D authoredFloorTransform)
         => Configure(configuration, authoredFloorTransform,
-            FalloutCameraProjection.Read(FalloutInstallationSettings.Read(RuntimeLiveContentSource.Current!)));
+            FalloutCameraProjection.Read(FalloutInstallationSettings.Read(RuntimeLiveContentSource.Current!)),
+            new NativeHumanoidMovementEnvelope(configuration.World.GameUnitsToMeters));
 
-    internal void Configure(RuntimeConfiguration configuration, Transform3D authoredFloorTransform, FalloutCameraProjection projection)
+    // Explicit projection-only callers retain the source-free configurable capsule.
+    internal void Configure(RuntimeConfiguration configuration, Transform3D authoredFloorTransform, FalloutCameraProjection projection,
+        NativeHumanoidMovementEnvelope? sourceEnvelope = null)
     {
         ArgumentNullException.ThrowIfNull(configuration);
         if (!float.IsFinite(projection.VerticalFovDegrees) || projection.VerticalFovDegrees is <= 0 or >= 180 ||
@@ -235,9 +259,10 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
         MotionMode = MotionModeEnum.Grounded;
         CollisionLayer = configuration.Player.CollisionLayer;
         CollisionMask = configuration.Player.CollisionMask;
-        FloorSnapLength = configuration.Player.CapsuleRadiusMeters;
+        _sourceEnvelope = sourceEnvelope;
+        FloorSnapLength = PhysicalRadius;
         FloorMaxAngle = Mathf.DegToRad(configuration.Player.MaximumWalkableSlopeDegrees);
-        AddChild(new CollisionShape3D
+        _physicalShape = new CollisionShape3D
         {
             Name = "NativePlayerCapsule",
             Position = Vector3.Up * configuration.Player.SpawnCenterHeightMeters,
@@ -246,7 +271,13 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
                 Radius = configuration.Player.CapsuleRadiusMeters,
                 Height = configuration.Player.CapsuleHeightMeters,
             },
-        });
+        };
+        if (_sourceEnvelope is not null)
+        {
+            _physicalShape.Name = "NativePlayerSourceHull";
+            _sourceEnvelope.Publish(_physicalShape, _sourceScale);
+        }
+        AddChild(_physicalShape);
         _camera = new Camera3D
         {
             Name = "NativePlayerCamera",
@@ -316,6 +347,14 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
     public override void _UnhandledInput(InputEvent inputEvent)
     {
         ObserveSaveInput(inputEvent, "unhandled");
+        if (FatigueKnockoutActive && !_modalInput)
+        {
+            if (inputEvent.IsActionPressed(_configuration.Player.DesktopInput.Save.Action)) SaveGame?.Invoke();
+            else if (_inputControls is not null && inputEvent.IsActionPressed(RuntimeNativeInputControls.Action(26), allowEcho: false)) LoadGame?.Invoke();
+            else if (inputEvent.IsActionPressed(_configuration.Player.DesktopInput.Cancel.Action)) OpenPauseMenu?.Invoke();
+            GetViewport().SetInputAsHandled();
+            return;
+        }
         if (VatsInput(inputEvent)) { GetViewport().SetInputAsHandled(); return; }
         if (InventoryHotkeyInput(inputEvent)) { GetViewport().SetInputAsHandled(); return; }
         if (PipBoyButtonInput(inputEvent)) { GetViewport().SetInputAsHandled(); return; }
@@ -422,6 +461,12 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
         AdvancePipBoyButton(delta);
         AdvanceGrab();
         if (_xr is not null && GetTree().Paused) return;
+        if (!GetTree().Paused) AdvanceWeaponRecharge(delta);
+        if (!GetTree().Paused && AdvanceFatigueKnockout(delta))
+        {
+            Velocity = Vector3.Zero; Running = false; Activity.SetMovement(false, Activity.Sneaking);
+            return;
+        }
         AdvanceExplosionExposure(delta);
         if (_furniturePhase != 0) { _ = AdvanceHitKnockback(delta); AdvanceFurniture(delta); return; }
         var input = _configuration.Player.DesktopInput;
@@ -468,7 +513,7 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
         }
         Velocity = velocity;
         var positionBeforeMotion = GlobalPosition;
-        var stepped = NativeCharacterStep.TryStep(this, horizontalMotion, _configuration.Player.StepHeightMeters, out var stepBlocked,
+        var stepped = NativeCharacterStep.TryStep(this, horizontalMotion, PhysicalStepHeight, out var stepBlocked,
             _stepQueries ??= new(this));
         StepBlocked = stepBlocked;
         if (stepped)

@@ -25,6 +25,43 @@ internal static class CaravanSourceContracts
             throw new InvalidDataException("Caravan notice did not retain the bound source declaration.");
         Reject(() => FalloutExecutableStringTable.ReadCaravanMinimumNotice(noticeCode, Literal,
             new Dictionary<uint, string> { [1] = "sCardCountText" }, _ => float.NaN));
+        var unequipCode = new byte[79];
+        byte[] unequipShape = [0xb9,0,0,0,0,0xe8,0,0,0,0,0x50,0x8b,0x55,0xec,0x52,0xe8,0,0,0,0,
+            0x83,0xc4,4,0x50,0x68,0,0,0,0,0x8d,0x45,0xd0,0x50,0xe8,0,0,0,0,0x83,0xc4,0x10,
+            0x6a,0,0x51,0xd9,5,0,0,0,0,0xd9,0x1c,0x24,0x6a,0,0x68,0,0,0,0,0x6a,0,0x8d,0x4d,0xd0,
+            0xe8,0,0,0,0,0x50,0xe8,0,0,0,0,0x83,0xc4,0x18];
+        unequipShape.CopyTo(unequipCode, 0); U32(1).CopyTo(unequipCode,1); U32(2).CopyTo(unequipCode,25);
+        U32(3).CopyTo(unequipCode,46); U32(4).CopyTo(unequipCode,56);
+        var unequip = FalloutExecutableStringTable.ReadUnequipItemNotice(unequipCode,
+            address => address == 2 ? "%s %s." : address == 4 ? "neutral.dds" : null,
+            new Dictionary<uint,string> { [1] = "sUnequipItemOnPlayer" }, address => address == 3 ? 2 : float.NaN);
+        if (unequip.Format != "%s %s." || unequip.Icon != "neutral.dds" || unequip.Seconds != 2)
+            throw new InvalidDataException("Unequip notice lost its source format/icon/lifetime.");
+        var equipCode = (byte[])unequipCode.Clone(); equipCode[12] = 0x4d; equipCode[14] = 0x51;
+        equipCode[30] = 0x55; equipCode[32] = 0x52;
+        var equip = FalloutExecutableStringTable.ReadEquipItemNotice(equipCode,
+            address => address == 2 ? "%s %s." : address == 4 ? "neutral.dds" : null,
+            new Dictionary<uint,string> { [1] = "sEquipItemOnPlayer" }, address => address == 3 ? 2 : float.NaN);
+        if (equip != unequip) throw new InvalidDataException("Equip declaration lost its actual alternate compiler-register binding.");
+        Reject(() => FalloutInventoryCommands.ReadEquipmentFlag(.5, true));
+        if (!FalloutInventoryCommands.ReadEquipmentFlag(2, true) || FalloutInventoryCommands.ReadEquipmentFlag(-1, true) ||
+            !FalloutInventoryCommands.ReadEquipmentFlag(-1, false)) throw new InvalidDataException("Equipment flags lost native signed-integer comparisons.");
+        unequipCode[64] = 0xd4;
+        Reject(() => FalloutExecutableStringTable.ReadUnequipItemNotice(unequipCode, _ => null,
+            new Dictionary<uint,string> { [1] = "sUnequipItemOnPlayer" }, _ => 2));
+        var quickCode = new byte[48];
+        byte[] quickPrefix = [0x6a, 0, 0x51, 0xd9, 5, 0, 0, 0, 0, 0xd9, 0x1c, 0x24, 0x6a, 0, 0x68];
+        quickPrefix.CopyTo(quickCode, 0); U32(2).CopyTo(quickCode, 5); U32(3).CopyTo(quickCode, 15);
+        quickCode[19] = 0x6a; quickCode[21] = 0xb9; U32(1).CopyTo(quickCode, 22);
+        quickCode[26] = 0xe8; quickCode[31] = 0x50; quickCode[32] = 0xe8;
+        quickCode[37] = 0x83; quickCode[38] = 0xc4; quickCode[39] = 0x18;
+        var quickNotice = FalloutExecutableStringTable.ReadQuickSaveNotice(quickCode, Literal,
+            new Dictionary<uint, string> { [1] = "sQuickSaving" }, address => address == 2 ? 2 : float.NaN);
+        if (quickNotice.Setting != "sQuickSaving" || quickNotice.Icon != "icon.dds" || quickNotice.Seconds != 2)
+            throw new InvalidDataException("Quicksave notice lost its actual owned setting/icon/lifetime.");
+        quickCode[1] = 1;
+        Reject(() => FalloutExecutableStringTable.ReadQuickSaveNotice(quickCode, Literal,
+            new Dictionary<uint, string> { [1] = "sQuickSaving" }, _ => 2));
         var menuCode = new byte[512];
         byte[] openingCall = [0x6a, 0, 0x51, 0xd9, 0x45, 0xfc, 0xd9, 0x1c, 0x24,
             0x8b, 0x4d, 0xf8, 0x51, 0x8b, 0x55, 0xec, 0x52, 0x8b, 0x45, 0xf4, 0x50, 0xe8];

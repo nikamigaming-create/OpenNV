@@ -45,6 +45,7 @@ internal partial class RuntimeNativePlayer
         internal FalloutPluginStack Records { get; }
         internal FalloutWeaponShot Shot { get; }
         internal FalloutWeaponDamage? Damage { get; }
+        internal FalloutWeaponDamage? ExplosionDamage { get; }
         internal RuntimeNativeActorCombat? Combat { get; }
         internal FalloutFormKey Attacker { get; }
         internal int? AttackerLevel { get; }
@@ -53,10 +54,10 @@ internal partial class RuntimeNativePlayer
         internal float RemainingSeconds { get; set; }
 
         internal PendingProjectileImpact(FalloutPluginStack records, FalloutWeaponShot shot,
-            FalloutWeaponDamage? damage, RuntimeNativeActorCombat? combat, FalloutFormKey attacker,
+            FalloutWeaponDamage? damage, FalloutWeaponDamage? explosionDamage, RuntimeNativeActorCombat? combat, FalloutFormKey attacker,
             int? attackerLevel, FalloutGlobalState? globals, PlayerProjectileTrace trace)
         {
-            Records = records; Shot = shot; Damage = damage; Combat = combat; Attacker = attacker;
+            Records = records; Shot = shot; Damage = damage; ExplosionDamage = explosionDamage; Combat = combat; Attacker = attacker;
             AttackerLevel = attackerLevel; Globals = globals; Trace = trace;
             RemainingSeconds = trace.DamageDelaySeconds;
         }
@@ -257,7 +258,8 @@ internal partial class RuntimeNativePlayer
         GD.Print($"OPENNV_WEAPON_EXPLOSION weapon={shot.Weapon} explosion={explosion.Form} result={System.Text.Json.JsonSerializer.Serialize(_lastExplosion)}");
     }
 
-    private PlayerProjectileDamageSummary ApplyProjectileTraces(IReadOnlyList<PlayerProjectileTrace> traces)
+    private PlayerProjectileDamageSummary ApplyProjectileTraces(IReadOnlyList<PlayerProjectileTrace> traces, FalloutWeaponShot shot,
+        FalloutWeaponDamage resolvedDamage, FalloutWeaponDamage? explosionDamage)
     {
         _damageError = null;
         var hitCount = 0;
@@ -265,10 +267,7 @@ internal partial class RuntimeNativePlayer
         var pendingActorHits = 0;
         var pendingEvents = 0;
         var impactRequests = 0;
-        var damageResolved = false;
-        FalloutWeaponDamage? resolvedDamage = null;
         FalloutActorHit? lastDamage = null;
-        var shot = _shot ?? throw new InvalidOperationException("Projectile source is absent.");
         var records = _presentationRecords ?? throw new InvalidOperationException("Projectile records are absent.");
         var attacker = records.RuntimeFormKey(0x14);
         var impactSet = shot.ImpactDataSet;
@@ -278,28 +277,13 @@ internal partial class RuntimeNativePlayer
             hitCount++;
             var combat = RuntimeNativeActorCombat.Find(collider);
             var destructible = RuntimeNativeDestructible.Find(collider);
-            if ((combat is not null || destructible is not null) && !damageResolved)
-            {
-                damageResolved = true;
-                try
-                {
-                    resolvedDamage = (_damage ?? throw new InvalidOperationException("Player damage owner is absent."))
-                        .Resolve(shot);
-                }
-                catch (Exception error)
-                {
-                    _damageError = error.Message;
-                    GD.PushError($"OPENNV_ACTOR_DAMAGE_UNBOUND reference={trace.Reference} {error.Message}");
-                }
-            }
-
-            var actorDamage = combat is not null && resolvedDamage is not null;
-            var objectDamage = destructible is not null && resolvedDamage is not null;
+            var actorDamage = combat is not null;
+            var objectDamage = destructible is not null;
             if (impactSet is not null) impactRequests++;
-            if (!actorDamage && !objectDamage && impactSet is null && trace.HitReference is null) continue;
-            int? level = actorDamage ? _combatLevel!() : null;
-            var globals = actorDamage ? _combatGlobals : null;
-            if (actorDamage && globals is null)
+            if (!actorDamage && !objectDamage && explosionDamage is null && impactSet is null && trace.HitReference is null) continue;
+            int? level = actorDamage || explosionDamage is not null ? _combatLevel!() : null;
+            var globals = actorDamage || explosionDamage is not null ? _combatGlobals : null;
+            if ((actorDamage || explosionDamage is not null) && globals is null)
             {
                 _damageError = "Player global combat state is absent.";
                 GD.PushError($"OPENNV_ACTOR_DAMAGE_UNBOUND reference={trace.Reference} {_damageError}");
@@ -309,22 +293,22 @@ internal partial class RuntimeNativePlayer
             if (trace.DamageDelaySeconds > 0)
             {
                 if (trace.VatsOwner is { } owner) trace.VatsPublication = _vatsPublications.Begin(owner.Session);
-                _pendingProjectileImpacts.Add(new(records, shot, actorDamage || objectDamage ? resolvedDamage : null,
-                    actorDamage ? combat : null, attacker, level, globals, trace));
+                _pendingProjectileImpacts.Add(new(records, shot, actorDamage || objectDamage ? resolvedDamage : (FalloutWeaponDamage?)null,
+                    explosionDamage, actorDamage ? combat : null, attacker, level, globals, trace));
                 pendingEvents++;
                 if (actorDamage) pendingActorHits++;
                 continue;
             }
 
             var applied = CompleteProjectileImpact(trace, actorDamage ? combat : null,
-                actorDamage || objectDamage ? resolvedDamage : null, impactSet, records, shot, attacker, level, globals);
+                actorDamage || objectDamage ? resolvedDamage : (FalloutWeaponDamage?)null, explosionDamage, impactSet, records, shot, attacker, level, globals);
             if (applied is { } hit) { lastDamage = hit; actorHitCount++; }
         }
         return new(hitCount, actorHitCount, pendingActorHits, pendingEvents, impactRequests, lastDamage);
     }
 
     private FalloutActorHit? CompleteProjectileImpact(PlayerProjectileTrace trace, RuntimeNativeActorCombat? combat,
-        FalloutWeaponDamage? damage, FalloutFormKey? impactSet, FalloutPluginStack records, FalloutWeaponShot shot,
+        FalloutWeaponDamage? damage, FalloutWeaponDamage? explosionDamage, FalloutFormKey? impactSet, FalloutPluginStack records, FalloutWeaponShot shot,
         FalloutFormKey attacker, int? level, FalloutGlobalState? globals)
     {
         FalloutActorHit? actorHit = null;
@@ -373,6 +357,15 @@ internal partial class RuntimeNativePlayer
             trace.HitEventMarked = MarkWeaponHit(trace.HitReference, attacker, shot.Weapon, FalloutReferenceHitKind.Projectile);
             if (!trace.HitEventMarked && trace.HitReference is not null) _damageError = _hitEventError;
         }
+        if (explosionDamage is { } blastDamage)
+        {
+            try { ApplyProjectileFlightDetonation(shot, blastDamage, trace.Point); }
+            catch (Exception error)
+            {
+                _damageError = error.Message;
+                GD.PushError($"OPENNV_HITSCAN_EXPLOSION_UNBOUND projectile={shot.Projectile.Form} {error.Message}");
+            }
+        }
         RecordVatsImpact(trace.VatsOwner, actorHit);
         return actorHit;
     }
@@ -414,7 +407,7 @@ internal partial class RuntimeNativePlayer
             FalloutActorHit? hit = null;
             try
             {
-                hit = CompleteProjectileImpact(pending.Trace, combat, pending.Damage, pending.Shot.ImpactDataSet,
+                hit = CompleteProjectileImpact(pending.Trace, combat, pending.Damage, pending.ExplosionDamage, pending.Shot.ImpactDataSet,
                     pending.Records, pending.Shot, pending.Attacker, pending.AttackerLevel, pending.Globals);
             }
             catch (Exception error)

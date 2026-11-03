@@ -19,11 +19,13 @@ internal partial class RuntimeNativeNpc
         int level = 1, FalloutGlobalState? globals = null)
     {
         if (AppearanceError is not null) throw new InvalidOperationException(AppearanceError);
-        if (ReferenceEquals(_appearanceWorld, world) && _worldAppearanceRevision == world.AppearanceRevision) return false;
-        if (!ReferenceEquals(_appearanceWorld, world)) _appearanceRevision = -1;
         var reference = Appearance.Reference ?? throw new InvalidOperationException("Actor appearance has no placed reference.");
+        var weapon = world.Get(reference).Inventory?.Contents.EquippedObject(stack, 5);
+        var sameWeapon = Appearance.BipedWeapon == weapon;
+        if (sameWeapon && ReferenceEquals(_appearanceWorld, world) && _worldAppearanceRevision == world.AppearanceRevision) return false;
+        if (!ReferenceEquals(_appearanceWorld, world)) _appearanceRevision = -1;
         var revision = world.ActorAppearanceRevision(reference);
-        if (_appearanceRevision == revision)
+        if (sameWeapon && _appearanceRevision == revision)
         {
             _worldAppearanceRevision = world.AppearanceRevision;
             return false;
@@ -32,7 +34,7 @@ internal partial class RuntimeNativeNpc
         // A newly assembled body can already contain this override. Later
         // revisions still invalidate it even when age-family matching selects
         // the same final race; exact same-race input never creates a revision.
-        if (_appearanceRevision < 0 && FalloutNpcAppearanceResolver.ArmorListsMatch(stack, Appearance, world.FormLists) &&
+        if (sameWeapon && _appearanceRevision < 0 && FalloutNpcAppearanceResolver.ArmorListsMatch(stack, Appearance, world.FormLists) &&
             (state is null && !Appearance.RuntimeFace && Appearance.Race == world.ActorRace(reference) ||
             state is not null && Appearance.RuntimeFace &&
                 (state.Race is null || Appearance.Race == state.Race) &&
@@ -50,6 +52,7 @@ internal partial class RuntimeNativeNpc
         {
             var appearance = FalloutNpcAppearanceResolver.Resolve(stack, Appearance.Npc, reference,
                 world.EquippedArmor(reference, level, globals), state, world.Get(reference).Templates, world.FormLists);
+            appearance = FalloutWeaponBipedModels.Apply(stack, appearance, weapon, world.FormLists);
             if (!Appearance.SkeletonPath.Equals(appearance.SkeletonPath, StringComparison.OrdinalIgnoreCase))
                 throw new NotSupportedException("Appearance refresh changed the source skeleton and needs animation/contact rebinding.");
             var prepared = FalloutNpcPreparedGeometry.Read(appearance, source);

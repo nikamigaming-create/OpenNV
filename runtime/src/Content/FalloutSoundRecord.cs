@@ -238,10 +238,26 @@ internal static class FalloutSoundRecordReader
         FalloutFormKey formKey)
     {
         var record = stack.GetEffective(formKey);
-        return record.Signature == "SOUN" ? Read(record, stack.SoundPaths.Read(formKey).File) : Read(record);
+        var descriptor = record.Signature == "SOUN" ? Read(record, stack.SoundPaths.Read(formKey).File) : Read(record);
+        return stack.OwnedSource is { } content ? ResolveAvailableMedia(descriptor, content) : descriptor;
     }
 
     internal static FalloutSoundRecord Read(FalloutPluginRecord record) => Read(record, null);
+
+    // This changes only the prepared playback request. The mutable FNAM owner
+    // and immutable source record retain the declaration supplied by the game.
+    internal static FalloutSoundRecord ResolveAvailableMedia(FalloutSoundRecord descriptor, RuntimeLiveContentSource content)
+    {
+        if (!descriptor.HasExactFile || !Path.GetExtension(descriptor.LogicalPath).Equals(".wav", StringComparison.OrdinalIgnoreCase) ||
+            content.TryResolve(descriptor.LogicalPath, null, out _)) return descriptor;
+        // The native compressed-file loader substitutes Ogg for a WAV request.
+        // Admit the bounded missing-WAV case; request-flag codec priority when
+        // both files exist and decode-failure retries remain separate owners.
+        var alternate = Path.ChangeExtension(descriptor.LogicalPath, ".ogg");
+        return content.TryResolve(alternate, null, out _)
+            ? descriptor with { LogicalPath = FalloutBsaArchive.CanonicalPath(alternate) } : descriptor;
+    }
+
 
     private static FalloutSoundRecord Read(FalloutPluginRecord record, string? currentFile)
     {

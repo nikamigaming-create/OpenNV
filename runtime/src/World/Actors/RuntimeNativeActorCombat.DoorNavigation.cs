@@ -77,6 +77,24 @@ internal sealed partial class RuntimeNativeActorCombat
             GD.Print($"OPENNV_NATIVE_PORTAL_APPROACH reference={_state.Reference} door={reference} waypoints={_pursuitPath.Length} owner=collision-validated-parent-package-approach");
     }
 
+    private bool RetireStalledPortalApproach(RouteDoor procedure)
+    {
+        // Only a failed, unrequested physical approach is a disposable query.
+        // A source-binding fault or an admitted door event retains its owner.
+        if (!ReferenceEquals(_routeDoor, procedure) || !procedure.Portal || procedure.Requested ||
+            procedure.Error is not null || _routeSearch is not null ||
+            _state.PackageMotion?.Travel is not { Complete: false, PortalDoor: { } door } || door != procedure.Reference)
+            return false;
+        _routeError = "NPC cannot reach the collision-validated portal approach.";
+        _routeFailures = Math.Min(4, _routeFailures + 1);
+        _routeClock = .5 * _routeFailures;
+        _routeDoor = null;
+        _pursuitPath = []; _pursuitCursor = 0;
+        _routeStall = 0; _waypointDistance = float.PositiveInfinity;
+        InvalidatePackageRouteReceipt();
+        return true;
+    }
+
     // Returns ownership while approaching, awaiting the source event/motion,
     // or retaining a refusal. A request is never interpreted as open collision.
     private bool AdvanceDoorNavigation(double delta)
@@ -90,8 +108,11 @@ internal sealed partial class RuntimeNativeActorCombat
             if (procedure.Error is not null) { _routeError = procedure.Error; _pursuitPath = []; return true; }
             if (_pursuitCursor < _pursuitPath.Length && _routeStall >= .75)
             {
-                procedure.Error = _routeError = "NPC cannot reach the collision-validated portal approach.";
-                _pursuitPath = [];
+                if (!RetireStalledPortalApproach(procedure))
+                {
+                    procedure.Error = _routeError = "NPC cannot reach the collision-validated portal approach.";
+                    _pursuitPath = [];
+                }
             }
             // Walk only the capsule-validated prefix up to the portal contact.
             // Its owning Travel/Eat/Sleep procedure checks actual interaction

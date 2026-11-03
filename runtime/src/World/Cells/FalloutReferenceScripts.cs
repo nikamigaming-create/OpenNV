@@ -41,7 +41,7 @@ internal sealed record FalloutReferenceScriptHost(Func<FalloutFormKey, FalloutFo
     Func<FalloutFormKey, float>? HealthPercentage = null,
     Func<string, int>? MiscStatistic = null, Func<FalloutFormKey, bool>? IsSneaking = null,
     Func<FalloutFormKey, FalloutFormKey?>? InventoryContainer = null,
-    Action<FalloutFormKey, FalloutFormKey?>? RemoveInventoryInstance = null);
+    Action<FalloutFormKey, FalloutFormKey?>? RemoveInventoryInstance = null, Action<double>? RewardKarma = null);
 internal sealed record FalloutReferenceScriptEventResult(FalloutFormKey Reference, string Event, int Blocks, string? Error,
     string? RecoveredError = null);
 internal sealed record FalloutReferenceScriptEvent(string Name, FalloutFormKey? ActionReference = null,
@@ -350,7 +350,8 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
     private IEnumerable<bool> Steps(FalloutFormKey source, FalloutScriptBindings bindings, FalloutGameModeProgram program,
         FalloutFormKey? actor, double seconds, FalloutUserFunctionFrame? frame = null, FalloutScriptExecutionBudget? budget = null,
         Action<Func<string, FalloutScriptFunction?>>? inspectFunctions = null,
-        Action<FalloutScriptInspectionContext>? inspectProgram = null, FalloutScriptEffectLocals? effectLocals = null)
+        Action<FalloutScriptInspectionContext>? inspectProgram = null, FalloutScriptEffectLocals? effectLocals = null,
+        FalloutInventoryScriptContext? inventoryContext = null)
     {
         budget ??= new();
         var valueStore = world.ScriptValues;
@@ -538,11 +539,29 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                 })
                 { ReadOnly = true };
             FalloutFormKey Target() => suppliedTarget ?? (parts.Length == 1 ? source : Reference(parts[0]));
+            if (parts.Length <= 2 && operation == "getownerlasttarget")
+                return FalloutScriptFunction.Typed([], _ =>
+                {
+                    var container = parts.Length == 1 && inventoryContext is { } item ? item.Container : Target();
+                    var target = world.OwnerLastTarget(container);
+                    return FalloutScriptValue.Form(target is { } actual ? records.RuntimeFormId(actual) : 0);
+                }, readOnly: true);
+            if (parts.Length <= 2 && operation == "getiscreaturetype")
+                return new([FalloutScriptArgumentKind.Number], arguments =>
+                {
+                    var value = arguments[0].Number;
+                    if (!double.IsFinite(value) || value != Math.Truncate(value) || value < int.MinValue || value > int.MaxValue)
+                        throw new InvalidDataException("Creature type query requires an integer classification.");
+                    return world.IsCreatureType(Target(), (int)value) ? 1 : 0;
+                })
+                { ReadOnly = true };
             if (parts.Length <= 2 && Conditions.ScriptFunction(operation, records.GetEffective(bindings.Source), Target,
                 name => bindings.Form(name).FormKey, bindings.Variable, parts.Length == 2 || caller is not null) is { } shared) return shared;
             if (parts.Length <= 2 && FalloutScriptActorValues.Function(operation, Target, records.RuntimeFormKey(0x14), () => world,
                 (actor, value, kind) => host.ReadActorValue is { } read ? read(actor, value, kind) : world.ActorValue(actor, value, kind),
                 referenceWrite: host.ChangeActorValue) is { } actorValueFunction) return actorValueFunction;
+            if (parts.Length == 1 && operation == "getcontainer" && inventoryContext is { } itemContext)
+                return FalloutScriptFunction.Typed([], _ => FalloutScriptValue.Form(itemContext.Container is { } itemContainer ? records.RuntimeFormId(itemContainer) : 0), readOnly: true);
             if (parts.Length <= 2 && operation == "getcontainer")
                 return FalloutScriptFunction.Typed([], _ => FalloutScriptValue.Form(
                     (host.InventoryContainer ?? throw new NotSupportedException("GetContainer has no inventory-instance owner."))(Target()) is { } container
@@ -714,7 +733,8 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                 "getbuttonpressed" => new([], _ => (host.GetButtonPressed ??
                     throw new NotSupportedException("GetButtonPressed has no message result owner."))(
                         CallingReference() is { } caller && records.RuntimeFormId(caller) != 0x14 ? caller : bindings.Source)),
-                "getsecondspassed" => new([], _ => seconds),
+                "getsecondspassed" => new([], _ => inventoryContext is { ElapsedTimeOwned: false }
+                    ? throw new NotSupportedException("Inventory initialization/menu event has no admitted script elapsed-time producer.") : seconds),
                 "isplayertagskill" => new([FalloutScriptArgumentKind.Identifier], arguments =>
                     (host.TagSkills?.IsTagged(arguments[0].Identifier!) ??
                         (host.IsPlayerTagSkill ?? throw new NotSupportedException("Player tag skills have no owner."))(arguments[0].Identifier!)) ? 1 : 0)
@@ -754,6 +774,12 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
             var target = parts.Length == 1 ? source : parts.Length == 2 ?
                 operation is "addnote" or "removenote" ? bindings.Reference(parts[0]) : Reference(parts[0]) :
                 throw new NotSupportedException("Script command target path is unbound.");
+            if (operation == "detonateplacedexplosives")
+            {
+                if (arguments.Count != 0) throw new InvalidDataException("DetonatePlacedExplosives has no arguments.");
+                world.DetonatePlacedExplosives(target);
+                return;
+            }
             if (operation == "forcesave")
             {
                 if (parts.Length != 1 || arguments.Count != 0)
@@ -790,6 +816,14 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
             {
                 if (arguments.Count != 1) throw new InvalidDataException("RewardXP requires one signed integer.");
                 (host.RewardXp ?? throw new NotSupportedException("RewardXP has no shared player XP owner."))(Number(arguments[0]));
+                return;
+            }
+            if (operation == "rewardkarma")
+            {
+                if (parts.Length > 2 || arguments.Count != 1) throw new InvalidDataException("RewardKarma requires one signed integer.");
+                if (parts.Length == 2) _ = Reference(parts[0]);
+                (host.RewardKarma ?? throw new NotSupportedException("RewardKarma has no shared player Karma owner."))
+                    (FalloutActorValueCommands.Integer(Number(arguments[0])));
                 return;
             }
             if (parts.Length == 1 && operation == "setplayertagskill")
@@ -1089,7 +1123,8 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                     else world.MoveTo(target, moveDestination, moveX, moveY, moveZ);
                     break;
                 case "short" or "int" or "long" or "float" or "ref" when parts.Length == 1 && arguments.Count == 1:
-                    if (frame?.Contains(arguments[0]) != true) _ = bindings.Variable(arguments[0]);
+                    if (effectLocals?.Contains(arguments[0]) != true && frame?.Contains(arguments[0]) != true)
+                        _ = bindings.Variable(arguments[0]);
                     break;
                 case "startquest" or "stopquest" when parts.Length == 1 && arguments.Count == 1:
                     quests.SetRunning(Quest(arguments[0]), operation == "startquest");
@@ -1176,8 +1211,8 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                     break;
                 case "equipitem" or "equipobject" when arguments.Count is >= 1 and <= 3:
                     var equipItem = bindings.Form(arguments[0]).FormKey;
-                    var noUnequip = arguments.Count >= 2 && Boolean(arguments[1]);
-                    var hideEquip = arguments.Count < 3 || Boolean(arguments[2]);
+                    var noUnequip = arguments.Count >= 2 && FalloutInventoryCommands.ReadEquipmentFlag(Number(arguments[1]), true);
+                    var hideEquip = arguments.Count >= 3 && FalloutInventoryCommands.ReadEquipmentFlag(Number(arguments[2]), false);
                     if (host.Inventory is { } equipment)
                         equipment.Execute(new(FalloutInventoryCommandKind.Equip, target, Item: equipItem, NoUnequip: noUnequip, Silent: hideEquip));
                     else if (arguments.Count == 1)
@@ -1187,7 +1222,7 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                 case "unequipitem" when arguments.Count is >= 1 and <= 3:
                     (host.Inventory ?? throw new NotSupportedException("UnequipItem has no shared inventory owner."))
                         .Execute(new(FalloutInventoryCommandKind.Unequip, target, Item: bindings.Form(arguments[0]).FormKey,
-                            NoEquip: arguments.Count >= 2 && Boolean(arguments[1]), Silent: arguments.Count >= 3 && Boolean(arguments[2])));
+                            NoEquip: arguments.Count >= 2 && FalloutInventoryCommands.ReadEquipmentFlag(Number(arguments[1]), true), Silent: arguments.Count >= 3 && FalloutInventoryCommands.ReadEquipmentFlag(Number(arguments[2]), false)));
                     break;
                 case "removeallitems" when arguments.Count <= 3:
                     var destination = arguments.Count == 0 || arguments[0] == "0" ? (FalloutFormKey?)null : Reference(arguments[0]);
@@ -1329,6 +1364,9 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                     // delivery and RemoveMe are separate owners.
                     world.PlayerCaravanCards.Add(world.Get(target).Base);
                     break;
+                case "removeme" when parts.Length == 1 && inventoryContext is not null && arguments.Count == 0:
+                    inventoryContext.Remove();
+                    break;
                 case "removeme" when arguments.Count <= 1:
                     var removeMeDestination = arguments.Count == 0 || arguments[0] == "0" ? (FalloutFormKey?)null : Reference(arguments[0]);
                     (host.RemoveInventoryInstance ?? throw new NotSupportedException("RemoveMe has no inventory-instance owner."))
@@ -1356,7 +1394,7 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
         if (inspectFunctions is not null) { inspectFunctions(Function); return []; }
         if (inspectProgram is not null) { inspectProgram(new(values, Function, UserFunction)); return []; }
         return world.ScriptManualSaves.Execute(source, records.GetEffective(bindings.Source), program,
-            program.Steps(Read, Write, Call, Function, UserFunction, budget, values));
+            program.Steps(Read, Write, Call, Function, UserFunction, budget, values), inventoryContext?.Caller);
     }
 
     private static string StringArgument(string token) => token.Length >= 2 && token[0] == '"' && token[^1] == '"' &&

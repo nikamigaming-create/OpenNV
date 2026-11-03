@@ -45,10 +45,10 @@ public partial class NativeReferenceEventsAudit
             Require(expected is { Count: > 0 } && expected.Count == voices.Count && voices.All(NativeFinitePlaying),
                 "Paused-save fixture lacks original observed playing source/native generations.");
             var proven = expected ?? throw new InvalidDataException("Missing proven native finite set.");
-            var history = proven.Select(proof => world.Get(proof.Reference).AnimationSoundEvents.Events
+            var history = proven.Select(proof => world.Get(proof.Reference.RequireSource()).AnimationSoundEvents.Events
                 .Single(entry => entry.Generation == proof.Generation).Copy()).ToArray();
             var random = proven.DistinctBy(proof => proof.Reference).ToDictionary(proof => proof.Reference,
-                proof => world.Get(proof.Reference).SoundRandom.State);
+                proof => world.Get(proof.Reference.RequireSource()).SoundRandom.State);
             var clock = new NativeSaveProducerAuditClock { ProcessMode = ProcessModeEnum.Always }; producer = clock; AddChild(clock);
             var childClock = new NativeSaveProducerAuditClock { ProcessMode = ProcessModeEnum.Always }; clock.AddChild(childClock);
             var sourceEvents = new FalloutScriptEvents();
@@ -131,7 +131,7 @@ public partial class NativeReferenceEventsAudit
                     childClock.ProcessTicks == priorChildProcess && childClock.PhysicsTicks == priorChildPhysics &&
                     sourceInvocations == priorSourceInvocations && JsonSerializer.Serialize(sourceEvents.State) == priorSourceState &&
                     world.PendingAnimationSoundCaptureCount == 0 && proven.All(proof =>
-                        world.Get(proof.Reference).AnimationSoundEvents.Events.Single(entry => entry.Generation == proof.Generation)
+                        world.Get(proof.Reference.RequireSource()).AnimationSoundEvents.Events.Single(entry => entry.Generation == proof.Generation)
                             .End == FalloutAnimationSoundEnd.NativeFinished),
                     "Writer ran before genuine Finished or replayed paused source/world producers.");
                 var snapshot = world.Capture();
@@ -294,12 +294,12 @@ public partial class NativeReferenceEventsAudit
                 Require(writes == 1 && finishedWhilePaused == voices.Count &&
                     catalog.ReadSlots().Count == (orderedSource ? 2 : 1) &&
                     catalog.ReadSlots().Any(slot => slot.Id == requests.Receipt!.Slot.ToString("N")) &&
-                    random.All(pair => world.Get(pair.Key).SoundRandom.State == pair.Value) &&
+                    random.All(pair => world.Get(pair.Key.RequireSource()).SoundRandom.State == pair.Value) &&
                     records.SoundVoices.ActiveVoices == 0, "Paused native save did not commit exactly one cold-capable slot from its genuine Finished set.");
                 for (var index = 0; index < proven.Count; index++)
                 {
                     var proof = proven[index];
-                    var ended = world.Get(proof.Reference).AnimationSoundEvents.Events.Single(entry => entry.Generation == proof.Generation);
+                    var ended = world.Get(proof.Reference.RequireSource()).AnimationSoundEvents.Events.Single(entry => entry.Generation == proof.Generation);
                     Require(JsonSerializer.Serialize(ended with { End = FalloutAnimationSoundEnd.Active }) == JsonSerializer.Serialize(history[index]),
                         "Save preparation changed original source/media/hash/generation/random history.");
                 }

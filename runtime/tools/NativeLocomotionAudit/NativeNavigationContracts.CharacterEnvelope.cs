@@ -1,4 +1,6 @@
 using Godot;
+using OpenNV.Runtime;
+using OpenNV.Runtime.Content;
 using OpenNV.Runtime.World.Actors;
 using OpenNV.Runtime.World.Cells;
 
@@ -72,6 +74,39 @@ internal static partial class NativeNavigationContracts
             }
         }
         finally { humanoidShape.Free(); }
+        var configured = RuntimeConfiguration.Load();
+        var sourcePlayer = new RuntimeNativePlayer();
+        var genericPlayer = new RuntimeNativePlayer();
+        try
+        {
+            var projection = new FalloutCameraProjection(60, 5);
+            sourcePlayer.Configure(configured, Transform3D.Identity, projection, humanoid);
+            genericPlayer.Configure(configured, Transform3D.Identity, projection);
+            var sourceCollision = sourcePlayer.GetChildren().OfType<CollisionShape3D>().Single();
+            var genericCollision = genericPlayer.GetChildren().OfType<CollisionShape3D>().Single();
+            if (sourceCollision.Shape is not ConvexPolygonShape3D || genericCollision.Shape is not CapsuleShape3D ||
+                sourceCollision.Position != Vector3.Zero ||
+                sourcePlayer.PhysicalRadius != humanoid.OuterRadius || sourcePlayer.PhysicalHeight != humanoid.OuterHeight ||
+                sourcePlayer.PhysicalCenterHeight != humanoid.CenterHeight || sourcePlayer.PhysicalStepHeight != humanoid.StepHeight ||
+                sourcePlayer.FloorSnapLength != humanoid.OuterRadius)
+                throw new InvalidOperationException("Player source hull retained stale configurable capsule dimensions or changed generic construction.");
+            var before = ((ConvexPolygonShape3D)sourceCollision.Shape).Points;
+            sourcePlayer.ApplySourceScale(2);
+            var after = ((ConvexPolygonShape3D)sourceCollision.Shape).Points;
+            if (sourcePlayer.PhysicalShapeScale != 1 || before.Length != after.Length ||
+                before.Where((point, index) => point.DistanceTo(after[index] * 2) > .000001f).Any())
+                throw new InvalidOperationException("Player visual scale changed its fixed world controller hull.");
+            using var query = sourcePlayer.CreatePhysicalQueryShape(out var offset);
+            if (offset != Vector3.Zero || query is not ConvexPolygonShape3D actual ||
+                actual.Points.Where((point, index) => point.DistanceTo(before[index]) > .000001f).Any())
+                throw new InvalidOperationException("Player world clearance shape differs from its actual controller.");
+            var sloped = new Vector3(.6f, .8f, 0);
+            var lift = humanoid.SupportLift(sloped);
+            if (Math.Abs(humanoid.CorePoints.Min(point => sloped.Dot(point + Vector3.Up * lift)) - humanoid.Margin) > .000001f ||
+                Math.Abs(lift - humanoid.Radius * (1 / sloped.Y - 1)) < .01f)
+                throw new InvalidOperationException("Player hull clearance reused a capsule slope support formula.");
+        }
+        finally { sourcePlayer.Free(); genericPlayer.Free(); }
         var basis = NativeCapsuleNavigation.PlanningBasis(Basis.Identity.Scaled(new(2, 2, 2)), Vector3.Zero, Vector3.Right);
         if ((basis * Vector3.Forward).Normalized().Dot(Vector3.Right) < .99999f ||
             basis.Scale.DistanceTo(new(2, 2, 2)) > .000001f)

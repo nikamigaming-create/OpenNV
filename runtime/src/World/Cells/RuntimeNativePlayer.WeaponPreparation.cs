@@ -13,13 +13,18 @@ internal partial class RuntimeNativePlayer
         string? error = null;
         try
         {
-            _shot = FalloutWeaponShot.Read(_presentationRecords!, weapon.Form,
-                _weaponHandling!.Ammunition(weapon), weapon.HasAmmunitionSource);
-            _shot = FalloutWeaponModifications.Apply(_presentationRecords!, _shot, _presentationInventory!.WeaponModMask(weapon.Form));
-            _shot.RequireRuntimeAttackOwner();
-            PrepareAutoAimShapes(_shot);
+            _shot = null;
+            if (!weapon.IsNonDischargeAction)
+            {
+                var prepared = FalloutWeaponShot.Read(_presentationRecords!, weapon.Form,
+                    _weaponHandling!.Ammunition(weapon), weapon.HasAmmunitionSource);
+                prepared = FalloutWeaponModifications.Apply(_presentationRecords!, prepared, _presentationInventory!.WeaponModMask(weapon.Form));
+                prepared.RequireRuntimeAttackOwner();
+                _shot = prepared;
+                PrepareAutoAimShapes(_shot);
+                PrepareWeaponMuzzle(_shot.Projectile);
+            }
             _ = PrepareAttackVariants(weapon, weapon.AttackGroup);
-            PrepareWeaponMuzzle(_shot.Projectile);
             // Visual-only fixtures may omit the campaign audio owner. Firing
             // still requires it; preparation never invents another one.
             if (_weaponSoundOwner is not null)
@@ -27,7 +32,7 @@ internal partial class RuntimeNativePlayer
                 EnsureWeaponSounds();
                 _shotEffects ??= new(_presentationRecords!, RuntimeLiveContentSource.Current!, UnitsToMeters, this, CollisionMask, _weaponSounds);
                 if (!_shotEffects.IsInsideTree()) AddChild(_shotEffects);
-                _shotEffects.PrepareShell(weapon);
+                if (!weapon.IsNonDischargeAction) _shotEffects.PrepareShell(weapon);
                 foreach (var sound in weapon.Sounds.Values.Distinct()) _weaponSounds!.PrepareSound(sound);
             }
         }

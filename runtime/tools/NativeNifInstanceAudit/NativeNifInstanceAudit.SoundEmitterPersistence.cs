@@ -269,7 +269,7 @@ public partial class NativeNifInstanceAudit
         wav.SetMeta("opennv_owned_media_path", path); wav.SetMeta("opennv_owned_media_sha256", Convert.ToHexString(SHA256.HashData(samples)));
         return wav;
     }
-    private static byte[] BoneEmitterPlugin()
+    private static byte[] BoneEmitterPlugin(bool positioned = false)
     {
         static byte[] Join(params byte[][] values) => values.SelectMany(value => value).ToArray();
         static byte[] Field(string name, byte[] payload) => Bytes(writer =>
@@ -280,17 +280,23 @@ public partial class NativeNifInstanceAudit
             writer.Write(0U); writer.Write(id); writer.Write(0UL); writer.Write(payload);
         });
         var data = new byte[36]; data[0] = 1; data[1] = 2;
-        BinaryPrimitives.WriteUInt32LittleEndian(data.AsSpan(4), (uint)(FalloutSoundFlags.TwoDimensional | FalloutSoundFlags.Loop));
+        BinaryPrimitives.WriteUInt32LittleEndian(data.AsSpan(4), (uint)((positioned ? 0 : FalloutSoundFlags.TwoDimensional) | FalloutSoundFlags.Loop));
         for (var index = 0; index < 5; index++) BinaryPrimitives.WriteInt16LittleEndian(data.AsSpan(12 + index * 2), 100);
         BinaryPrimitives.WriteInt16LittleEndian(data.AsSpan(22), 100);
         BinaryPrimitives.WriteUInt32LittleEndian(data.AsSpan(28), 23); BinaryPrimitives.WriteUInt32LittleEndian(data.AsSpan(32), 117);
+        var finite = (byte[])data.Clone();
+        BinaryPrimitives.WriteUInt32LittleEndian(finite.AsSpan(4), positioned ? 0U : (uint)FalloutSoundFlags.TwoDimensional);
+        Array.Clear(finite, 28, 8);
         var references = Join(Record("ACHR", 2, Field("NAME", BitConverter.GetBytes(3U)), Field("DATA", new byte[24]),
             Field("XESP", [4, 0, 0, 0, 0, 0xa5, 0x5a, 0xff])),
-            Record("REFR", 4, Field("NAME", BitConverter.GetBytes(5U)), Field("DATA", new byte[24])));
+            Record("REFR", 4, Field("NAME", BitConverter.GetBytes(5U)), Field("DATA", new byte[24])),
+            Record("REFR", 6, Field("NAME", BitConverter.GetBytes(1U)), Field("DATA",
+                Join(BitConverter.GetBytes(300f), BitConverter.GetBytes(400f), BitConverter.GetBytes(200f), new byte[12]))));
         var group = Bytes(writer =>
         { writer.Write("GRUP"u8); writer.Write(24 + references.Length); writer.Write(20U); writer.Write(6U); writer.Write(0UL); writer.Write(references); });
         return Join(Record("TES4", 0), Record("NPC_", 3), Record("STAT", 5),
             Record("SOUN", 1, Field("EDID", "EmitterLoop\0"u8.ToArray()), Field("FNAM", "fx\\bone.wav\0"u8.ToArray()), Field("SNDD", data)),
+            Record("SOUN", 7, Field("EDID", "EmitterFinite\0"u8.ToArray()), Field("FNAM", "fx\\bone.wav\0"u8.ToArray()), Field("SNDD", finite)),
             Record("CELL", 20, Field("DATA", [1])), group);
     }
 }

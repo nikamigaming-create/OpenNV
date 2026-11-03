@@ -82,7 +82,7 @@ internal sealed class NativeActorMuzzle(FalloutPluginStack records, RuntimeLiveC
     internal void Flash()
     {
         _playback?.Start();
-        if (_light is not null) _light.Visible = _playback is { Remaining: > 0 };
+        if (_light is not null) _light.Visible = _playback is { Active: true, Remaining: > 0 };
     }
 
     internal Node3D AddonSoundEmitter(NodePath path) => _root?.GetNodeOrNull<Node3D>(path) is { } node &&
@@ -91,9 +91,17 @@ internal sealed class NativeActorMuzzle(FalloutPluginStack records, RuntimeLiveC
 
     internal void RetireSounds() => _playback?.RetireSounds();
 
+    internal void Retire()
+    {
+        RetireSounds();
+        _light?.Free(); _light = null;
+        _root?.Free(); _root = null;
+        _playback = null; _path = null; _lightForm = null; _audioOwner = null;
+    }
+
     internal void Advance(double delta)
     {
         _playback?.Advance(delta);
-        if (_light is not null) _light.Visible = _playback is { Remaining: > 0 };
+        if (_light is not null) _light.Visible = _playback is { Active: true, Remaining: > 0 };
     }
 }

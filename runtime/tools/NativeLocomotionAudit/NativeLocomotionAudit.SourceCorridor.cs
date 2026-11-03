@@ -134,10 +134,14 @@ public partial class NativeLocomotionAudit
 
     private async Task SettleCorridorBody(CharacterBody3D body)
     {
-        for (var frame = 0; frame < 8; frame++)
+        // Rounded riser contacts can remain airborne while ordinary gravity
+        // slides the capsule onto the adjacent floor. Observe bounded actual
+        // floor contact instead of treating eight elapsed frames as settlement.
+        for (var frame = 0; frame < 60; frame++)
         {
             await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
             body.Velocity = Vector3.Down; body.MoveAndSlide();
+            if (frame >= 7 && body.IsOnFloor()) break;
         }
     }
 

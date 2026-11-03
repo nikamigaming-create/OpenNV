@@ -69,6 +69,7 @@ internal partial class RuntimeNativePlayer
     // body, weight limit, force adapter and script events as desktop grab.
     internal void XrToggleGrab()
     {
+        if (FatigueKnockoutActive) return;
         if (_grabbedBody is not null) { ReleaseGrab(); return; }
         if (!_modalInput && _activationEnabled && _furniturePhase == 0 && _sourceCamera is null && IsDefeated?.Invoke() != true)
             TryGrab();

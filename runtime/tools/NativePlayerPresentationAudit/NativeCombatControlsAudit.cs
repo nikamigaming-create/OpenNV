@@ -2,6 +2,7 @@ using System.Text.Json;
 using Godot;
 using OpenNV.Runtime;
 using OpenNV.Runtime.Content;
+using OpenNV.Runtime.Content.Definitions;
 using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.Presentation.Ui;
 using OpenNV.Runtime.World.Cells;
@@ -52,6 +53,27 @@ public partial class NativePlayerPresentationAudit
                 equippedArmor: saved.EquippedRuntimeFormIds.Select(records.RuntimeFormKey).Where(key => records.GetEffective(key).Signature == "ARMO").ToArray(),
                 appearanceState: FalloutNativeCharacterCreation.ActorState(records, playerForm, saved.Character));
             player.ConfigurePresentation(records, inventory, () => appearance, () => Colors.White);
+            var soundEmitter = new Node3D();
+            soundEmitter.SetMeta("opennv_reference_form_key", records.RuntimeFormKey(FalloutEngineForms.PlayerReference).ToString());
+            player.AddChild(soundEmitter);
+            Require(NativeOwnedSoundVoice.Reference(records, soundEmitter) == records.RuntimeFormKey(FalloutEngineForms.PlayerReference),
+                "Player child sound emitter required a nonexistent placed ACHR record.");
+            soundEmitter.Free();
+            foreach (var signature in new[] { "PGRE", "PMIS" })
+            {
+                var source = records.EffectiveRecords(signature).FirstOrDefault(record => !record.IsDeleted);
+                if (source is null) continue;
+                var referenceRoot = new Node3D();
+                var projectileEmitter = new Node3D();
+                try
+                {
+                    referenceRoot.SetMeta("opennv_reference_form_key", source.FormKey.ToString());
+                    referenceRoot.AddChild(projectileEmitter);
+                    Require(NativeOwnedSoundVoice.Reference(records, projectileEmitter) == source.FormKey,
+                        $"Source {signature} child sound emitter was rejected or lost its real projectile identity.");
+                }
+                finally { referenceRoot.Free(); }
+            }
             player.ConfigureLocomotion(records, () => vitals.State);
             player.ConfigureCombat(records, FalloutGlobalState.Read(records), () => 1, value => value switch { 13 => 250, 21 => 100, 46 or 72 => 0, < 32 => 5, _ => 100 }, () => [], _ => 0, (_, _) => { });
             player.ConfigureExplosionExposure(() => saved.ActiveCell, amount => vitals.Publish(vitals.State with { RadiationRads = vitals.State.RadiationRads + amount }), new());
@@ -81,6 +103,7 @@ public partial class NativePlayerPresentationAudit
                 "Grenade emission clock skipped a source burst.");
             await AuditNuclearDestruction(records, content, saved, player, inventory, vitals);
             await AuditAutomaticControls(records, player, inventory);
+            await AuditIncrementalReloadControls(records, player, inventory);
             await AuditBeamAndDynamiteControls(records, player, inventory);
             GD.Print("OPENNV_GRENADE_CONTROL_PASS hold=true release=true flight=true fuse=true explosion=true consumption=true fixture=true");
         }

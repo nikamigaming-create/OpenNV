@@ -42,7 +42,7 @@ internal sealed class RuntimeNativePlayerPackage
         _stack = stack; _player = player; _session = session; _world = world; _cell = cell;
         // The engine player reference exists independently of placed ACHR
         // records. Its audio history outlives every individual package.
-        _soundEvents = new(stack.RuntimeFormKey(0x14));
+        _soundEvents = new(stack.RuntimeFormKey(0x14), () => world.IsEnabled(stack.RuntimeFormKey(0x14)));
         if (session.PlayerPackage is { } saved) Restore(saved);
         if (audio is not null)
         {
@@ -469,9 +469,9 @@ internal sealed class RuntimeNativePlayerPackage
         if (_sounds is not null) return _sounds;
         _soundRandom ??= new(BitConverter.ToUInt64(System.Security.Cryptography.RandomNumberGenerator.GetBytes(sizeof(ulong))));
         _sounds = new(_stack, RuntimeLiveContentSource.Current!, _player, _player.UnitsToMeters,
-            _soundRandom, _soundEvents);
+            _soundRandom, _soundEvents, sourceScenes: _player.ResolveSoundSourceScene, sourcePoseBoundary: true);
         _player.AddChild(_sounds);
-        _sounds.RequirePcmRestored();
+        _player.BindSoundPoseOwner(_sounds);
         return _sounds;
     }
 }

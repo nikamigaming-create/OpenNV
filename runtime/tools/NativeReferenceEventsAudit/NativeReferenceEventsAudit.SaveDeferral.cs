@@ -56,6 +56,8 @@ public partial class NativeReferenceEventsAudit
         var scripts = new FalloutQuestScripts(records, new(records), new HashSet<FalloutFormKey>(), inventory,
             defaultProcessingDelay: .1f, references: world);
         var driver = new NativeSaveDeferralDriverFixture();
+        player.GetParent().AddChild(driver);
+        driver.SetProcess(false);
         const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
         var owner = typeof(RuntimeNativeOpeningStageDriver);
         void Bind(string field, object value) => owner.GetField(field, flags)!.SetValue(driver, value);
@@ -63,6 +65,7 @@ public partial class NativeReferenceEventsAudit
         try
         {
             Bind("_player", player); Bind("_scripts", scripts);
+            Bind("_playerActorValues", new FalloutPlayerActorValues(records, legacy: new(5, 5, 5, 5, 5, 5, 5)));
             var vitals = new FalloutPlayerVitals(records, Key(7), new(5, 5, 5, 5, 5, 5, 5));
             Bind("_vitals", vitals);
             var abilities = new FalloutPlayerAbilityScripts(records, () => [],

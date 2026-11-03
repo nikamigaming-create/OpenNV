@@ -85,6 +85,7 @@ public partial class RuntimeCoordinator
             _nativeReferenceEvents = existing;
             existing.Player = _nativePlayer;
             if (_nativePlayer is { } player) player.BindGrabEvents = BindNativePlayerGrab;
+            existing.SetResidency(cell, root);
             existing.ActivateHitCallbacks();
             existing.SetProcess(true);
             return;

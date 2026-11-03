@@ -24,10 +24,10 @@ public partial class NativeReferenceEventsAudit
         Require(Engine.GetProcessFrames() > requests.Receipt!.RequestedPhase &&
             voices.All(voice => GodotObject.IsInstanceValid(voice) && voice.IsInsideTree() && NativeFinitePlaying(voice)),
             "Finite native playback did not reach an observable later playing phase.");
-        var history = expected.Select(proof => world.Get(proof.Reference).AnimationSoundEvents.Events
+        var history = expected.Select(proof => world.Get(proof.Reference.RequireSource()).AnimationSoundEvents.Events
             .Single(entry => entry.Generation == proof.Generation).Copy()).ToArray();
         var random = expected.DistinctBy(proof => proof.Reference).ToDictionary(proof => proof.Reference,
-            proof => world.Get(proof.Reference).SoundRandom.State);
+            proof => world.Get(proof.Reference.RequireSource()).SoundRandom.State);
 
         // Keep the main thread before Finished while the real mixer reaches EOS.
         // The timer only refuses this isolated component; it supplies no event.
@@ -35,7 +35,7 @@ public partial class NativeReferenceEventsAudit
         while (voices.All(NativeFinitePlaying) && timer.Elapsed.TotalSeconds < 30)
             Thread.Sleep(1);
         Require(voices.Any(voice => !NativeFinitePlaying(voice)) &&
-            JsonSerializer.Serialize(expected.Select(proof => world.Get(proof.Reference).AnimationSoundEvents.Events
+            JsonSerializer.Serialize(expected.Select(proof => world.Get(proof.Reference.RequireSource()).AnimationSoundEvents.Events
                 .Single(entry => entry.Generation == proof.Generation))) == JsonSerializer.Serialize(history),
             "Actual native inactivity was not observed before its matching source Finished.");
         var pending = world.PendingAnimationSoundFiniteVoiceWait();
@@ -54,17 +54,17 @@ public partial class NativeReferenceEventsAudit
         while (world.PendingAnimationSoundCaptureCount != 0 && timer.Elapsed.TotalSeconds < 90)
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         Require(world.PendingAnimationSoundCaptureCount == 0 &&
-            expected.All(proof => world.Get(proof.Reference).AnimationSoundEvents.Events
+            expected.All(proof => world.Get(proof.Reference.RequireSource()).AnimationSoundEvents.Events
                 .Single(entry => entry.Generation == proof.Generation).End == FalloutAnimationSoundEnd.NativeFinished),
             "Original finite native playback did not deliver genuine Finished after the observed window.");
         for (var index = 0; index < expected.Length; index++)
         {
             var proof = expected[index];
-            var ended = world.Get(proof.Reference).AnimationSoundEvents.Events.Single(entry => entry.Generation == proof.Generation);
+            var ended = world.Get(proof.Reference.RequireSource()).AnimationSoundEvents.Events.Single(entry => entry.Generation == proof.Generation);
             Require(JsonSerializer.Serialize(ended with { End = FalloutAnimationSoundEnd.Active }) == JsonSerializer.Serialize(history[index]),
                 "Native Finished changed original source, media, generation or partial history.");
         }
-        Require(random.All(pair => world.Get(pair.Key).SoundRandom.State == pair.Value) && records.SoundVoices.ActiveVoices == 0,
+        Require(random.All(pair => world.Get(pair.Key.RequireSource()).SoundRandom.State == pair.Value) && records.SoundVoices.ActiveVoices == 0,
             "Native completion wait replayed selection or retained a transient native registration.");
         var snapshot = JsonSerializer.Serialize(world.Capture());
         using var cold = new FalloutReferenceWorld(records);

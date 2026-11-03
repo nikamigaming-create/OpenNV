@@ -11,6 +11,10 @@ internal sealed partial class NativeVatsMenu : Control
     private readonly FalloutVatsSession _session;
     private readonly Func<IReadOnlyList<FalloutVatsSession.Target>> _targets;
     private readonly Func<bool> _preparing;
+    private readonly Func<IReadOnlyList<FalloutFormKey>> _actors;
+    private readonly Action<FalloutFormKey> _selectActor;
+    private readonly Action<FalloutVatsSession.Target> _selectPart;
+    internal FalloutFormKey? SelectedActor => _selectedActor;
     private readonly Func<FalloutVatsSession.Target, Vector2?> _project;
     private readonly Action<FalloutVatsSession.Target> _queue;
     private readonly Action _execute, _cancel;
@@ -30,11 +34,12 @@ internal sealed partial class NativeVatsMenu : Control
         Func<bool> preparing, Action<FalloutVatsSession.Target> queue, Action execute, Action cancel,
         Func<FalloutVatsSession.Target, Vector2?> project, FalloutPluginStack records,
         Func<GameplayVitals> vitals, Func<NativeHudAmmo?> ammunition, Func<FalloutPlayerControlState> controls,
-        Action<Exception> failed)
+        Action<Exception> failed, Func<IReadOnlyList<FalloutFormKey>> actors,
+        Action<FalloutFormKey> selectActor, Action<FalloutVatsSession.Target> selectPart)
     {
         _session = session; _targets = targets; _preparing = preparing; _queue = queue;
         _execute = execute; _cancel = cancel; _project = project;
-        _failed = failed;
+        _failed = failed; _actors = actors; _selectActor = selectActor; _selectPart = selectPart;
         Name = "VatsMenu"; ProcessMode = ProcessModeEnum.Always; MouseFilter = MouseFilterEnum.Stop;
         SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
         var source = FalloutMenuXml.Expand(FalloutMenuXml.Read("menus/vats_menu.xml")).Elements("menu").Single();
@@ -84,8 +89,9 @@ internal sealed partial class NativeVatsMenu : Control
         foreach (var row in _rows) row.Remove();
         _parts.Clear(); _rows.Clear();
         var choices = _targets();
-        if (_selectedActor is null || !choices.Any(value => value.Reference == _selectedActor))
-            _selectedActor = choices.FirstOrDefault()?.Reference;
+        var actors = _actors();
+        if (_selectedActor is null || !actors.Contains(_selectedActor.Value))
+            _selectedActor = actors.Count == 0 ? null : actors[0];
         if (_session.CurrentPhase == FalloutVatsSession.Phase.Selecting)
         {
             // Native construction walks ascending source type slots and prepends.
@@ -108,7 +114,7 @@ internal sealed partial class NativeVatsMenu : Control
                 _parts.Add((target, tile, text));
             }
         }
-        if (!_parts.Any(value => value.Target.Part == _selectedPart)) _selectedPart = _parts.FirstOrDefault().Target?.Part;
+        if (!_preparing() && !_parts.Any(value => value.Target.Part == _selectedPart)) _selectedPart = _parts.FirstOrDefault().Target?.Part;
         var queue = _session.Queue;
         foreach (var attack in queue)
         {
@@ -178,22 +184,32 @@ internal sealed partial class NativeVatsMenu : Control
         else Cancel();
     }
     private void Cancel() { if (_closed) return; _closed = true; _cancel(); }
+    private bool PublishViewSelection(Action selection)
+    {
+        try { selection(); return true; }
+        catch (Exception error)
+        {
+            _faulted = true; _failed(error); return false;
+        }
+    }
     private void MoveTarget(int delta)
     {
-        var actors = _targets().Select(value => value.Reference).Distinct().ToArray();
+        var actors = _actors().ToArray();
         if (actors.Length == 0) return;
         var index = Array.FindIndex(actors, value => value == _selectedActor);
         _selectedActor = actors[(Math.Max(index, 0) + delta + actors.Length) % actors.Length];
-        _selectedPart = null; Refresh();
+        _selectedPart = null;
+        if (PublishViewSelection(() => _selectActor(_selectedActor.Value))) Refresh();
     }
     private void MovePart(int delta)
     {
         if (_parts.Count == 0) return;
         var index = _parts.FindIndex(value => value.Target.Part == _selectedPart);
         _selectedPart = _parts[(Math.Max(index, 0) + delta + _parts.Count) % _parts.Count].Target.Part;
+        if (Selected is { } selected && !PublishViewSelection(() => _selectPart(selected))) return;
         Notice(SelectionText()); PositionParts(); QueueRedraw();
     }
-    private void QueueSelected() { if (Selected is { } target) Run(() => _queue(target)); }
+    private void QueueSelected() { if (!_preparing() && Selected is { } target) Run(() => _queue(target)); }
     private XElement? CommandAt(Vector2 position) => _glow.Elements().FirstOrDefault(tile =>
         (string?)tile.Attribute("name") is "accept_button" or "return_button" or "left_arrow" or "right_arrow" &&
         _tiles.Number(tile, "visible") != 0 &&
@@ -209,9 +225,9 @@ internal sealed partial class NativeVatsMenu : Control
         { Cancel(); GetViewport().SetInputAsHandled(); return; }
         if (_faulted) return;
         var handled = false;
-        if (_session.CurrentPhase == FalloutVatsSession.Phase.Selecting && input is InputEventMouseMotion &&
-            PartAt(GetLocalMousePosition()) is { } hovered)
-        { _selectedPart = hovered.Part; Notice(SelectionText()); PositionParts(); QueueRedraw(); }
+        if (_session.CurrentPhase == FalloutVatsSession.Phase.Selecting && input is InputEventMouseMotion motion &&
+            PartAt(GetGlobalTransformWithCanvas().AffineInverse() * motion.Position) is { } hovered)
+        { _selectedPart = hovered.Part; if (!PublishViewSelection(() => _selectPart(hovered))) return; Notice(SelectionText()); PositionParts(); QueueRedraw(); }
         if (input is InputEventKey { Pressed: true, Echo: false } key)
         {
             handled = true;
@@ -234,7 +250,7 @@ internal sealed partial class NativeVatsMenu : Control
             else if (mouse.ButtonIndex == MouseButton.WheelDown) { MovePart(1); handled = true; }
             else if (mouse.ButtonIndex == MouseButton.Left)
             {
-                var position = GetLocalMousePosition();
+                var position = GetGlobalTransformWithCanvas().AffineInverse() * mouse.Position;
                 var hit = PartAt(position);
                 if (hit is not null) { _selectedPart = hit.Part; QueueSelected(); handled = true; }
                 else if (CommandAt(position) is { } command)

@@ -1,7 +1,6 @@
 using System.Buffers.Binary;
 using Godot;
 using OpenNV.Runtime.Content;
-using OpenNV.Runtime.Formats.Gamebryo;
 using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.World.Actors;
 
@@ -29,11 +28,10 @@ internal partial class RuntimeNativePlayer
         if (baseDamage < 0) throw new InvalidDataException("Melee WEAP damage is negative.");
         _ = (_damage ?? throw new InvalidOperationException("Player damage owner is absent.")).Resolve(weapon.Form, baseDamage);
 
-        var clip = _firstPerson!.PrepareAction(weapon.AttackGroup);
-        var hitEvents = clip.TextKeys
-            .SelectMany(key => key.Value.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries))
-            .Count(FalloutWeaponAnimationTimeline.DischargesWeapon);
-        if (hitEvents == 0) throw new NotSupportedException("Melee attack has no source Hit event.");
+        // Admit every actual paired-view candidate before the shared action
+        // owner selects its one retained variant. A singular PrepareAction
+        // cannot preflight a legitimate multi-variant melee source group.
+        _ = PrepareAttackVariants(weapon, weapon.AttackGroup);
         _shot = null;
         _firePreparationError = null;
         RequestWeaponAction(weapon.AttackGroup);
@@ -48,8 +46,14 @@ internal partial class RuntimeNativePlayer
         var dnam = fields.Single(field => field.Signature == "DNAM").Data.Span;
         var itemData = fields.Single(field => field.Signature == "DATA").Data.Span;
         if (dnam.Length < 12 || itemData.Length != 15) throw new NotSupportedException("Melee WEAP layout is unbound.");
-        var reach = FalloutProjectile.Number(dnam, 8);
-        var range = reach * FalloutGameSettingFloats.Read(_presentationRecords, "fCombatDistance") * UnitsToMeters + CombatRadius;
+        var objectReach = weapon.WeaponAnimationType switch
+        {
+            0 => "fObjectHitH2HReach",
+            1 => "fObjectHitOneHandReach",
+            2 => "fObjectHitTwoHandReach",
+            _ => "fObjectHitWeaponReach"
+        };
+        var range = FalloutGameSettingFloats.Read(_presentationRecords, objectReach) * UnitsToMeters;
         if (!float.IsFinite(range) || range <= 0) throw new InvalidDataException("Melee source reach is invalid.");
 
         Transform3D aim;
@@ -58,81 +62,27 @@ internal partial class RuntimeNativePlayer
             if (!xr.RightAim.GetHasTrackingData()) return;
             aim = xr.RightAim.GlobalTransform;
         }
-        else aim = _camera.GlobalTransform;
+        // PublishThirdPersonCamera has already published the player-eye frame
+        // used by world audio this tick. Camera pullback must never move the
+        // attack origin backwards or consume the weapon's physical reach.
+        else aim = _sourceAudioFramePublished ? _sourceFirstPersonAudioFrame :
+            throw new InvalidOperationException("Melee has no published player-eye frame.");
         var origin = aim.Origin;
         var direction = -aim.Basis.Z.Normalized();
         var end = origin + direction * range;
         if (!origin.IsFinite() || !direction.IsFinite() || direction.LengthSquared() < .99f || !end.IsFinite())
             throw new InvalidDataException("Melee attack transform is invalid.");
-        var collision = CastShotRay(origin, end);
+        var selectedActor = SelectPlayerMeleeActor(weapon, aim);
+        using var collision = selectedActor is null ? CastShotRay(origin, end) : new Godot.Collections.Dictionary();
         var collider = collision.TryGetValue("collider", out var value) ? value.AsGodotObject() as Node : null;
         var point = collision.TryGetValue("position", out var position) ? position.AsVector3() : end;
         var normal = collision.TryGetValue("normal", out var colNorm) ? colNorm.AsVector3() : -direction;
 
-        if (collider is null || RuntimeNativeActorCombat.Find(collider) is null)
+        if (selectedActor is { } selected)
         {
-            var coneAngle = FalloutGameSettingFloats.Read(_presentationRecords, "fCombatHitConeAngle");
-            var halfAngleRad = Mathf.DegToRad(Math.Clamp(coneAngle, 1f, 89f));
-            const int sides = 16;
-            var radius = range * MathF.Tan(halfAngleRad) / MathF.Cos(MathF.PI / sides);
-            using var cone = new ConvexPolygonShape3D
-            {
-                Points = Enumerable.Range(0, sides).Select(index => new Vector3(
-                    radius * MathF.Cos(index * MathF.Tau / sides), radius * MathF.Sin(index * MathF.Tau / sides), -range))
-                    .Prepend(Vector3.Zero).ToArray()
-            };
-            var up = MathF.Abs(direction.Dot(Vector3.Up)) < .99f ? Vector3.Up : Vector3.Right;
-            using var query = new PhysicsShapeQueryParameters3D
-            {
-                Shape = cone,
-                Transform = new(Basis.LookingAt(direction, up), origin),
-                CollisionMask = CollisionLayer,
-                CollideWithAreas = true,
-                Exclude = SelfQueryBodies
-            };
-            var contacts = GetWorld3D().DirectSpaceState.IntersectShape(query, 32);
-            Node? bestCollider = null;
-            var bestPoint = end;
-            var bestNormal = normal;
-            var bestScore = float.NegativeInfinity;
-            foreach (var hitDict in contacts)
-            {
-                if (hitDict.TryGetValue("collider", out var hitObj) && hitObj.AsGodotObject() is Node candidateCollider)
-                {
-                    if (RuntimeNativeActorCombat.Find(candidateCollider) is not { Dead: false } targetCombat) continue;
-                    var candidatePos = candidateCollider is Node3D node3D ? node3D.GlobalPosition : origin;
-                    var toCandidate = candidatePos - origin;
-                    var candidateDist = toCandidate.Length();
-                    if (candidateDist <= 0.001f || candidateDist > range) continue;
-                    var candidateDir = toCandidate / candidateDist;
-                    var dot = direction.Dot(candidateDir);
-                    if (dot < MathF.Cos(halfAngleRad)) continue;
-                    var sightCheck = CastShotRay(origin, candidatePos);
-                    if (sightCheck.TryGetValue("collider", out var sightObj) && sightObj.AsGodotObject() is Node sightCollider)
-                    {
-                        var sightCombat = RuntimeNativeActorCombat.Find(sightCollider);
-                        if (sightCombat != targetCombat && sightCombat is null)
-                        {
-                            if (sightCheck.TryGetValue("position", out var sightPos) && origin.DistanceTo(sightPos.AsVector3()) < candidateDist - 0.05f)
-                                continue;
-                        }
-                    }
-                    var score = dot * 10f - candidateDist;
-                    if (score > bestScore)
-                    {
-                        bestScore = score;
-                        bestCollider = candidateCollider;
-                        bestPoint = candidatePos;
-                        bestNormal = (origin - candidatePos).Normalized();
-                    }
-                }
-            }
-            if (bestCollider is not null)
-            {
-                collider = bestCollider;
-                point = bestPoint;
-                normal = bestNormal;
-            }
+            collider = selected.Collider;
+            point = selected.Point;
+            normal = selected.Normal;
         }
 
         var reference = ShotReference(collider);

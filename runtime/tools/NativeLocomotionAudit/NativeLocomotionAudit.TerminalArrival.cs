@@ -42,6 +42,7 @@ public partial class NativeLocomotionAudit
             if (!body.IsOnFloor() || body.GlobalPosition.DistanceTo(portal) > .01f)
                 throw new InvalidOperationException("Ordinary movement did not reach the required source portal.");
             var pose = body.GlobalTransform;
+            CheckCombatRegionGoalEdge(body, goal, radius);
             var tail = NativeCapsuleNavigation.Intent(pose.Origin, [goal], goal, radius);
             if (!tail.ReferenceApproach || tail.ArrivalRadius != radius || tail.Target != goal || tail.Corridor.Count != 0)
                 throw new InvalidOperationException("Replanning at the source portal discarded the existing long terminal region.");

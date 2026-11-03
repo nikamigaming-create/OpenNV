@@ -20,7 +20,7 @@ internal sealed partial class RuntimeNativeActorRagdoll : Node3D
     private MeshInstance3D[] _partMeshes = [];
     private MeshInstance3D[] _skinMeshes = [];
     private RuntimeNativeNifSkeleton _skeleton = null!;
-    private FalloutReferenceInstance _state = null!;
+    private RuntimeNativeRagdollStateOwner _state = null!;
     private string _sourceHash = "";
     private readonly Dictionary<int, Body> _bySource = [];
     private bool _active;
@@ -44,6 +44,21 @@ internal sealed partial class RuntimeNativeActorRagdoll : Node3D
         }
     }
 
+    internal (bool FacingUp, bool LeftUp) RecoveryOrientation
+    {
+        get
+        {
+            PublishCurrentPose();
+            var spine = _skeleton.TryBoneIndex("Bip01 Spine", out var bone);
+            var leftUp = !spine || (_skeleton.Node.GlobalTransform * _skeleton.Node.GetBoneGlobalPose(bone)).Basis.Y.Dot(Vector3.Up) > 0;
+            var facingBone = spine || _skeleton.TryBoneIndex("Bip01 Spine01", out bone);
+            var facingUp = !facingBone || (-(_skeleton.Node.GlobalTransform * _skeleton.Node.GetBoneGlobalPose(bone)).Basis.Z).Dot(Vector3.Up) > 0;
+            // These source condition queries explicitly succeed without their
+            // named spine node; FacingUp alone has the alternate spine lookup.
+            return (facingUp, leftUp);
+        }
+    }
+
     internal void ApplyBlast(Vector3 center, float impulse)
     {
         if (!_active || !float.IsFinite(impulse) || impulse < 0) throw new InvalidOperationException("Blast requires an active source ragdoll.");
@@ -58,7 +73,7 @@ internal sealed partial class RuntimeNativeActorRagdoll : Node3D
 
     internal void EndLivingSimulation()
     {
-        if (_state.Injury?.Dead == true) throw new InvalidOperationException("A dead actor cannot recover from knockdown.");
+        if (_state.Dead) throw new InvalidOperationException("A dead actor cannot recover from knockdown.");
         _active = false; _state.CaptureRagdoll = null; _state.Ragdoll = null;
         foreach (var body in _bodies) { body.Node.Freeze = true; body.Node.CollisionLayer = 0; body.Node.CollisionMask = 0; }
     }
@@ -82,6 +97,11 @@ internal sealed partial class RuntimeNativeActorRagdoll : Node3D
 
     internal static RuntimeNativeActorRagdoll Prepare(Node3D actor, RuntimeNativeNifSkeleton skeleton,
         FalloutReferenceInstance state, RuntimeLiveContentSource content, string path, uint layer, uint mask,
+        IReadOnlyList<FalloutBodyPart> parts, FalloutAuthoredRagdoll? authored = null)
+        => Prepare(actor, skeleton, new RuntimeNativeRagdollStateOwner.Placed(state), content, path, layer, mask, parts, authored);
+
+    internal static RuntimeNativeActorRagdoll Prepare(Node3D actor, RuntimeNativeNifSkeleton skeleton,
+        RuntimeNativeRagdollStateOwner state, RuntimeLiveContentSource content, string path, uint layer, uint mask,
         IReadOnlyList<FalloutBodyPart> parts, FalloutAuthoredRagdoll? authored = null)
     {
         if (!content.TryRead(path, null, out var bytes, out _)) throw new FileNotFoundException("Ragdoll skeleton is absent: " + path);
@@ -238,7 +258,7 @@ internal sealed partial class RuntimeNativeActorRagdoll : Node3D
     internal void Activate()
     {
         if (_active) return;
-        if (_state.Injury?.Dead != true && !_state.KnockedDown) throw new InvalidOperationException("A living actor needs a knockdown owner to activate a ragdoll.");
+        if (!_state.Dead && !_state.KnockedDown) throw new InvalidOperationException("A living actor needs a knockdown owner to activate a ragdoll.");
         var saved = _state.Ragdoll;
         ValidateSavedSource();
         foreach (var body in _bodies)
@@ -268,7 +288,7 @@ internal sealed partial class RuntimeNativeActorRagdoll : Node3D
             if (saved.SkeletonSha256 != _sourceHash || !saved.Bodies.Select(body => body.SourceBody).Order().SequenceEqual(_bySource.Keys.Order()))
                 throw new InvalidDataException("Saved ragdoll differs from its winning source skeleton.");
         }
-        if (!(saved?.Cuts ?? []).Select(cut => cut.Part).Order().SequenceEqual((_state.Injury?.SeveredParts ?? []).Order()))
+        if (!(saved?.Cuts ?? []).Select(cut => cut.Part).Order().SequenceEqual(_state.SeveredParts.Order()))
             throw new InvalidDataException("Saved limb separation lacks its cut-time skin pose.");
     }
 
@@ -327,6 +347,7 @@ internal sealed partial class RuntimeNativeActorRagdoll : Node3D
     }
 
     public override void _Process(double delta) { if (_active) Publish(); }
+    internal void PublishCurrentPose() { if (_active) Publish(); }
 
     private void Publish()
     {

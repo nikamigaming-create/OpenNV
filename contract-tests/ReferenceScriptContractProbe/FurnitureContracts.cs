@@ -17,6 +17,7 @@ internal static partial class FurnitureContracts
                 Record("NPC_", 0x700, Field("EDID", Text("SeatActorBase")), Field("ACBS", new byte[24]),
                     Field("SNAM", Join(BitConverter.GetBytes(0x730u), new byte[] { 3, 0, 0, 0 }))),
                 Record("NPC_", 0x701, Field("ACBS", new byte[24])), Record("FACT", 0x730),
+                ProjectileBase(0x718, 2), ProjectileBase(0x719, 1),
                 Record("DOOR", 0x717), Record("STAT", 0x3b), Record("IDLE", 0x712), Record("FURN", 0x710, Field("MNAM", BitConverter.GetBytes(0x40000001u))),
                 Record("FURN", 0x711, Field("MNAM", BitConverter.GetBytes(0x80000001u))),
                 Record("FURN", 0x714, Field("MNAM", BitConverter.GetBytes(0x40000003u))),
@@ -26,9 +27,17 @@ internal static partial class FurnitureContracts
                 Record("GMST", 0x723, Field("EDID", Text("fFurnitureMarker14HeadingDelta")), Field("DATA", BitConverter.GetBytes(.125f))),
                 Record("ALCH", 0x713, Field("ENIT", new byte[3])),
                 Record("ALCH", 0x715, Field("ENIT", FoodHeader())), Record("ALCH", 0x716, Field("ENIT", FoodHeader())),
+                Record("DOBJ", 0x742, Field("DATA", CreatureFoodDefaults(0x740))),
+                Record("FLST", 0x740, Field("LNAM", BitConverter.GetBytes(0x715u)), Field("LNAM", BitConverter.GetBytes(0x716u))),
                 Record("CELL", 0x800, Field("DATA", [1])), References()));
             var sittingCondition = new byte[28]; BinaryPrimitives.WriteUInt16LittleEndian(sittingCondition.AsSpan(8), 159);
             File.WriteAllBytes(Path.Combine(directory, "Find.esp"), Join(Header("Seats.esm"),
+                Record("PGRE", 0x01000920, Field("NAME", BitConverter.GetBytes(0x718u)), Field("DATA", new byte[24]),
+                    Field("XLKR", BitConverter.GetBytes(0x921u))),
+                Record("PGRE", 0x01000921, Field("NAME", BitConverter.GetBytes(0x718u)), Field("DATA", new byte[24]),
+                    Field("XLKR", new byte[3])),
+                Record("PMIS", 0x01000922, Field("NAME", BitConverter.GetBytes(0x719u)), Field("DATA", new byte[24]),
+                    Field("XLKR", BitConverter.GetBytes(0x01000400u))),
                 Package(0x01000400, 2, 11), Package(0x01000401, 0, 0x901), Package(0x01000402, 1, 0x710),
                 Package(0x01000403, 2, 12), Package(0x01000404, 2, 11, count: 1), Package(0x01000405, 2, 11, flags: 0x9006),
                 SleepFixture(0x01000406, 1, 0x800), SleepFixture(0x01000407, 0, 0x905, 5),
@@ -38,6 +47,10 @@ internal static partial class FurnitureContracts
                 EatFixture(0x0100040e, foodType: 0, food: 0x901), EatFixture(0x0100040f, count: 1),
                 EatFixture(0x01000410, location: 4), SleepFixture(0x01000411, 1, 0x800, flags: 0x88),
                 SleepFixture(0x01000412, 1, 0x800, flags: 0x20),
+                CreatureEatFixture(0x01000413, secondary: true), CreatureEatFixture(0x01000414, flags: 0x82002),
+                CreatureEatFixture(0x01000415, flags: 0x82006, hour: -1, duration: 3),
+                CreatureEatFixture(0x01000416, secondary: true, conflictingSecondary: true),
+                Record("FLST", 0x740, Field("LNAM", BitConverter.GetBytes(0x716u)), Field("LNAM", BitConverter.GetBytes(0x715u))),
                 Record("SCPT", 0x01000500, Field("SCRO", BitConverter.GetBytes(0x900u)),
                     Field("SCRO", BitConverter.GetBytes(0x90au)),
                     Field("SCRO", BitConverter.GetBytes(0x901u)), Field("SCRO", BitConverter.GetBytes(0x14u))),
@@ -197,6 +210,13 @@ internal static partial class FurnitureContracts
     {
         Require(world.GetLinkedRef(actor) == otherActor && world.GetLinkedRef(chair) is null,
             "Linked reference lost its source master or invented an absent link.");
+        var grenade = new FalloutFormKey("Seats.esm", 0x920);
+        var missile = new FalloutFormKey("Seats.esm", 0x921);
+        Require(world.GetLinkedRef(grenade) is null && world.GetLinkedRef(missile) == grenade &&
+            world.GetLinkedRef(new("Find.esp", 0x920)) == missile,
+            "Projectile references lost absent XLKR, linked projectile targets or declaring-plugin master adjustment.");
+        Reject(() => world.GetLinkedRef(new("Find.esp", 0x921)));
+        Reject(() => world.GetLinkedRef(new("Find.esp", 0x922)));
         Reject(() => world.GetLinkedRef(new("Find.esp", 0x400)));
         var effects = 0;
         var scripts = new FalloutReferenceScripts(records, world, new(records), new((_, _) => false, _ => effects++));
@@ -275,7 +295,8 @@ internal static partial class FurnitureContracts
             return Record("REFR", id, Field("NAME", BitConverter.GetBytes(0x717u)),
                 Field("DATA", new byte[24]), Field("XTEL", teleport));
         }
-        var body = Join(Door(0x90c, 0x90d), Door(0x90d, 0x90c), Ref("ACHR", 0x900, 0x700, 0, name: "SeatActor", linked: 0x90a), Ref("ACHR", 0x90a, 0x701, 0, name: "OtherActor"),
+        var body = Join(Ref("PGRE", 0x920, 0x718, 0), Ref("PMIS", 0x921, 0x719, 0, linked: 0x920),
+            Door(0x90c, 0x90d), Door(0x90d, 0x90c), Ref("ACHR", 0x900, 0x700, 0, name: "SeatActor", linked: 0x90a), Ref("ACHR", 0x90a, 0x701, 0, name: "OtherActor"),
             Ref("REFR", 0x901, 0x710, 1), Ref("REFR", 0x902, 0x710, 5), Ref("REFR", 0x903, 0x710, 3, 0x700),
             Ref("REFR", 0x904, 0x710, 4, 0x701), Ref("REFR", 0x905, 0x3b, 0), Ref("REFR", 0x907, 0x710, 6),
             Ref("REFR", 0x908, 0x711, 1), Ref("REFR", 0x909, 0x710, 2, 0x730), Ref("REFR", 0x90b, 0x713, 1));
@@ -315,6 +336,12 @@ internal static partial class FurnitureContracts
     }
     private static byte[] Header(string? master = null) => Record("TES4", 0, Field("HEDR", new byte[12]),
         master is null ? [] : Join(Field("MAST", Text(master)), Field("DATA", new byte[8])));
+    private static byte[] ProjectileBase(uint id, byte type)
+    {
+        var data = new byte[84]; data[2] = type;
+        BitConverter.GetBytes(400f).CopyTo(data, 8); BitConverter.GetBytes(1000f).CopyTo(data, 12);
+        return Record("PROJ", id, Field("DATA", data));
+    }
     private static byte[] Text(string value) => Encoding.ASCII.GetBytes(value + '\0');
     private static byte[] Field(string name, byte[] data)
     {

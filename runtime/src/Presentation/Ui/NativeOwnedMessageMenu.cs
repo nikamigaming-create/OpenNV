@@ -208,18 +208,26 @@ internal sealed class NativeOwnedMenuTree
     {
         if (trait == "string" && Text.TryGetValue(tile, out var text)) return text;
         if (_textValues.TryGetValue((tile, trait), out var boundText)) return boundText;
+        if (_values.ContainsKey((tile, trait))) return FalloutMenuXml.NumericText(Number(tile, trait));
         var property = tile.Element(trait);
         if (property is null) return "";
         if (!property.HasElements)
         {
             var literal = property.Value.Trim();
-            return literal.StartsWith("entity_-", StringComparison.Ordinal)
-                ? (_stringSetting ?? throw new NotSupportedException("Owned string setting has no record owner."))(literal[8..]) : literal;
+            if (literal.StartsWith("entity_-", StringComparison.Ordinal))
+                return (_stringSetting ?? throw new NotSupportedException("Owned string setting has no record owner."))(literal[8..]);
+            return trait != "string" && float.TryParse(literal, NumberStyles.Float, CultureInfo.InvariantCulture, out var numeric)
+                ? FalloutMenuXml.NumericText(numeric) : literal;
         }
         var operations = property.Elements().ToArray();
         var copy = operations.LastOrDefault();
-        if (copy?.Name != "copy" || copy.Attribute("src") is not { } source || copy.Attribute("trait") is not { } key)
-            throw new NotSupportedException("Owned text expression has an unbound operation.");
+        if (copy?.Name != "copy" || copy.Attribute("src") is not { } source || copy.Attribute("trait") is not { } key ||
+            operations.Length > 1 && !key.Value.EndsWith('_'))
+        {
+            if (!_evaluatingText.Add((tile, trait))) throw new InvalidDataException("Owned text expression contains a cycle.");
+            try { return FalloutMenuXml.NumericText(FalloutMenuXml.Number(property, (owner, name) => Number(Owner(tile, owner), name))); }
+            finally { _evaluatingText.Remove((tile, trait)); }
+        }
         if (!_evaluatingText.Add((tile, trait))) throw new InvalidDataException("Owned text expression contains a cycle.");
         try
         {
@@ -246,8 +254,9 @@ internal sealed class NativeOwnedMenuTree
         "me()" => tile,
         "parent()" => tile.Parent!,
         "grandparent()" => tile.Parent?.Parent ?? throw new InvalidDataException("Owned tile has no grandparent."),
-        "child()" => tile.Elements().Where(value => value.Attribute("name") is not null).SingleOrDefault()
-            ?? throw new NotSupportedException("Owned child() reference has no unique child tile."),
+        "child()" => FalloutMenuXml.TileChildren(tile).LastOrDefault()
+            ?? throw new NotSupportedException("Owned child() reference has no actual child tile."),
+        "sibling()" => FalloutMenuXml.UnnamedSibling(tile),
         "io()" => Root,
         "globals()" => _globals,
         _ when string.Equals(source, (string?)Root.Attribute("name"), StringComparison.OrdinalIgnoreCase) => Root,
@@ -299,6 +308,7 @@ internal sealed class NativeOwnedMenuTree
         }
         if (bindings && _values.TryGetValue((tile, trait), out var bound)) return bound;
         if (trait is "string" or "_PCButtonText") return String(tile, trait).Length == 0 ? 0 : 1;
+        if (trait == "childcount") return FalloutMenuXml.TileChildren(tile).Count();
         if (trait is "filewidth" or "fileheight")
         {
             var art = Art(tile);

@@ -100,7 +100,7 @@ internal sealed partial class FalloutReferenceWorld
     // The hit resolver supplies damage after weapon/armor rules. Reference state
     // owns modifier pools and the death transition, never the rendered actor.
     internal FalloutActorHit DamageActor(FalloutFormKey reference, FalloutFormKey attacker, byte partType,
-        float damage, float limbMultiplier, int level, FalloutGlobalState? globals = null)
+        float damage, float limbMultiplier, int level, FalloutGlobalState? globals = null, bool healthOnly = false)
     {
         if (!float.IsFinite(damage) || damage < 0 || !float.IsFinite(limbMultiplier) || limbMultiplier < 0)
             throw new ArgumentOutOfRangeException(nameof(damage));
@@ -110,12 +110,12 @@ internal sealed partial class FalloutReferenceWorld
         var actor = Actor(reference);
         var health = Health(reference);
         var injury = actor.Injury!;
-        var healthDamage = source.Invulnerable || injury.Dead ? 0 : damage * part.DamageMultiplier;
-        var limbDamage = source.Invulnerable ? 0 : damage * limbMultiplier;
+        var healthDamage = source.Invulnerable || injury.Dead ? 0 : damage * (healthOnly ? 1 : part.DamageMultiplier);
+        var limbDamage = source.Invulnerable || healthOnly ? 0 : damage * limbMultiplier;
         var changed = health with { Damage = health.Damage - healthDamage };
         var limbs = new Dictionary<byte, float>(injury.LimbDamage);
-        limbs[partType] = limbs.GetValueOrDefault(partType) + limbDamage;
-        if (!changed.IsFinite || !float.IsFinite(limbs[partType])) throw new InvalidDataException("Actor damage exceeds finite storage.");
+        if (!healthOnly) limbs[partType] = limbs.GetValueOrDefault(partType) + limbDamage;
+        if (!changed.IsFinite || !float.IsFinite(limbs.GetValueOrDefault(partType))) throw new InvalidDataException("Actor damage exceeds finite storage.");
         var died = !injury.Dead && changed.Current <= 0;
         injury = injury with { LimbDamage = limbs };
         if (died && EssentialProtection(reference))
@@ -166,6 +166,7 @@ internal sealed partial class FalloutReferenceWorld
         actor.DeathCount = deathCount;
         actor.EssentialKnockout = null;
         actor.KnockedDown = false;
+        actor.FatigueKnockout = null;
         actor.HitReaction = null;
         actor.HitKnockback = null;
         if (actor.CreatureScriptIdle?.Owner == "ambient") actor.CreatureScriptIdle = null;

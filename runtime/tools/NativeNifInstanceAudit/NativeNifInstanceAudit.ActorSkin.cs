@@ -13,6 +13,9 @@ public partial class NativeNifInstanceAudit
         {
             AddChild(skeleton.Node);
             var source = FalloutNifFile.Read(ActorSkinFixture("EquipmentRoot", true));
+            if (!FalloutNifGeometryOrder.HasSkinnedGeometry(source) ||
+                FalloutNifGeometryOrder.HasSkinnedGeometry(FalloutNifFile.Read(ActorSkinFixture("ActorRoot", false))))
+                throw new InvalidDataException("Inventory model admission lost the source skinned-geometry distinction.");
             var scene = NativeNifMeshBuilder.AddActorPart(source, skeleton, materialOverride: (_, _) => material);
             var mesh = scene.Root.FindChildren("*", "MeshInstance3D", true, false).Cast<MeshInstance3D>().Single();
             var vertices = mesh.Mesh.SurfaceGetArrays(0)[(int)Mesh.ArrayType.Vertex].AsVector3Array();
@@ -24,6 +27,8 @@ public partial class NativeNifInstanceAudit
             if (transformed.DistanceTo(new Vector3(0, 0, -1)) > .0001f)
                 throw new InvalidDataException("Equipment root naming changed animated skin placement.");
             var nestedSource = FalloutNifFile.Read(ActorSkinFixture("ActorRoot", true, nestedRoot: true));
+            if (!FalloutNifGeometryOrder.HasSkinnedGeometry(nestedSource))
+                throw new InvalidDataException("Inventory model admission failed to inspect nested source skin.");
             var nestedScene = NativeNifMeshBuilder.AddActorPart(nestedSource, skeleton, materialOverride: (_, _) => material);
             var nestedMesh = nestedScene.Root.FindChildren("*", "MeshInstance3D", true, false).Cast<MeshInstance3D>().Single();
             var nestedVertices = nestedMesh.Mesh.SurfaceGetArrays(0)[(int)Mesh.ArrayType.Vertex].AsVector3Array();

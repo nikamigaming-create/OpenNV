@@ -82,6 +82,8 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
         radio = _radio?.State,
         error = Error,
         actionError = ActionError,
+        inventoryStatCard = _state.Page == FalloutPipBoyPage.Items ? _inventoryStatCard : null,
+        inventoryHeadline = _state.Page == FalloutPipBoyPage.Items ? _inventoryHeadline : null,
         listOffset = _offset,
         refreshMilliseconds = _lastRefreshMilliseconds,
         maximumRefreshMilliseconds = _maximumRefreshMilliseconds,
@@ -187,7 +189,7 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
         Error = error.Message; GD.PushError($"OPENNV_PIPBOY_UNBOUND {Error}");
         SetMeta("opennv_pipboy_error", Error);
     }
-    private void Target(XElement tile, string label, Action action, Action? hovered = null)
+    private BaseButton Target(XElement tile, string label, Action action, Action? hovered = null)
     {
         var font = _tiles.Font(tile.DescendantsAndSelf("text").FirstOrDefault() ?? tile);
         var button = new NativeBitmapMenuButton(font.Font, font.Atlas, _tiles.TileColor(tile)) { Text = label, DrawText = false };
@@ -196,6 +198,7 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
         button.MouseExited += () => { _tiles.Bind(tile, "mouseover", 0); QueueRedraw(); };
         AddChild(button); _buttons.Add((tile, button));
         BindSourceActionShortcut(tile, button, action);
+        return button;
     }
     private void Tabs(string parentName, string[] labels)
     {
@@ -225,7 +228,7 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
         }
     }
     private IReadOnlyList<XElement> ListRows(XElement list, string template, IReadOnlyList<(string Label, Action Action, bool Equipped)> items,
-        Action<int>? hovered = null)
+        Action<int>? hovered = null, Action<int, BaseButton>? rowCreated = null)
     {
         var rows = new List<XElement>();
         _tiles.Bind(list, "_highlight_y", -100); _tiles.Bind(list, "_selected_height", 48);
@@ -255,7 +258,8 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
             foreach (var marker in tile.Descendants().Where(marker => ((string?)marker.Attribute("name"))?.EndsWith("ItemMarker", StringComparison.Ordinal) == true))
                 _tiles.Bind(marker, "visible", item.Equipped ? 1 : 0);
             var sourceIndex = _offset + index;
-            Target(tile, item.Label, item.Action, hovered is null ? null : () => hovered(sourceIndex));
+            var button = Target(tile, item.Label, item.Action, hovered is null ? null : () => hovered(sourceIndex));
+            rowCreated?.Invoke(sourceIndex, button);
             rows.Add(tile);
         }
         BindListNavigation(list, items.Count, rows.Count);
@@ -264,7 +268,7 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
     private string NameOf(FalloutFormKey form)
     {
         var record = _records.GetEffective(form);
-        return FalloutDialogueTopic.Text(record.ReadSubrecords().Single(field => field.Signature == "FULL").Data.Span);
+        return FalloutRecordDisplayName.Read(record);
     }
     private void BuildStats()
     {
@@ -329,15 +333,8 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
                     _statusMode = button == "CND" ? 0 : button == "RAD" ? 1 : 2;
                     Refresh();
                 });
-            if (_statusMode == 1)
-                AddText($"Radiation: {vitals.RadiationRads:0} RADS\nResistance: {_actorValue?.Invoke("RadResist"):0}%", new(120, 240), new(640, 160));
-            else if (_statusMode == 2)
-            {
-                var effects = ActiveEffects?.Invoke().Effects ?? [];
-                AddText(effects.Count == 0 ? "No active effects." : string.Join("\n", effects.Skip(_offset).Take(8)
-                    .Select(effect => $"{NameOf(effect.Item)}  {effect.Magnitude:+0.##;-0.##;0}  {Math.Ceiling(effect.Duration - effect.Elapsed):0}s")),
-                    new(120, 240), new(680, 350));
-            }
+            if (_statusMode == 1) BindRadiationPanel(vitals);
+            else if (_statusMode == 2) BindEffectsPanel();
         }
         else if (_state.Selection is 2 or 3)
         {
@@ -444,14 +441,13 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
     }
     private void BuildItems()
     {
+        _inventoryStatCard = null;
         Tabs("IM_Tabline", ["Weapons", "Apparel", "Aid", "Misc", "Ammo"]);
         Hide("IM_HotKeyWheel", "IM_ItemInfoRect", "IM_EquipItemMarker", "IM_CancelButton");
         var vitals = _vitals();
         _tiles.BindText(Tile("IM_Headline_PlayerHPInfo"), "_Value", $"{vitals.HitPoints}/{vitals.MaximumHitPoints}");
         _displayedHealth = (vitals.HitPoints, vitals.MaximumHitPoints);
-        _tiles.BindText(Tile("IM_Headline_PlayerWGInfo"), "_Value", $"{_state.Items.Sum(item => _inventory.Instances(item.FormKey).Sum(instance =>
-            (item.RecordType == "WEAP" ? FalloutWeaponModifications.Weight(_records, item.FormKey, instance.Extra.WeaponMods, item.Weight ?? 0) : item.Weight ?? 0) * instance.Extra.Count)):0.0}");
-        Text("IM_Headline_PlayerDRInfo", ""); Text("IM_Headline_PlayerDTInfo", "");
+        BindInventoryHeadline();
         var caps = _state.Items.Where(item => item.EditorId.Equals("Caps001", StringComparison.OrdinalIgnoreCase)).Sum(item => item.Count);
         _tiles.BindText(Tile("IM_Headline_PlayerCapsInfo"), "_Value", caps.ToString(CultureInfo.InvariantCulture));
         if (BuildInventoryActionList()) return;
@@ -467,30 +463,32 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
                 4 => item.RecordType == "AMMO",
                 _ => item.RecordType is not ("WEAP" or "ARMO" or "ALCH" or "AMMO")
             })
-            .OrderBy(item => NameOf(item.FormKey), StringComparer.CurrentCultureIgnoreCase).ToArray();
+            .OrderBy(item => FalloutRecordDisplayName.ReadOrMissing(_records, _records.GetEffective(item.FormKey)), StringComparer.CurrentCultureIgnoreCase).ToArray();
         _selectedItem = items.FirstOrDefault(item => item.FormKey == _selectedItem?.FormKey) ?? items.FirstOrDefault();
         if (_selectedItem is { } chosen) _selectedVariant = Math.Clamp(_selectedVariant, 0, _inventory.Instances(chosen.FormKey).Count - 1);
         var instances = items.SelectMany(item => _inventory.Instances(item.FormKey).Select(instance => (Item: item, instance.Variant))).ToArray();
+        var inventoryRevision = _inventory.Revision.ToString(CultureInfo.InvariantCulture);
         ListRows(Tile("IM_InventoryList"), "IM_InventoryListTemplate", instances.Select(entry =>
             (InventoryInstanceLabel(entry.Item, _inventory.Instances(entry.Item.FormKey)[entry.Variant].Extra), (Action)(() =>
             {
                 ActivateInventoryInstance(entry.Item, entry.Variant);
             }),
                 _inventory.Equipped.Contains(entry.Item.RuntimeFormId) && entry.Variant == 0)).ToArray(),
-            index => SelectInventoryInstance(instances[index].Item, instances[index].Variant));
+            index => SelectInventoryInstance(instances[index].Item, instances[index].Variant),
+            (index, button) =>
+            {
+                var entry = instances[index];
+                button.SetMeta("opennv_source_choice_kind", "inventory-item");
+                button.SetMeta("opennv_source_choice_id", $"{entry.Item.FormKey}:variant:{entry.Variant.ToString(CultureInfo.InvariantCulture)}");
+                button.SetMeta("opennv_source_choice_menu", $"InventoryMenu:revision:{inventoryRevision}");
+            });
         var equip = Tile("IM_EquipButton");
         if (_selectedItem is { } selected)
         {
             var fields = _records.GetEffective(selected.FormKey).ReadSubrecords().ToArray();
             var icon = fields.SingleOrDefault(field => field.Signature == "ICON").Data;
             if (!icon.IsEmpty) { _tiles.SetFilename(Tile("IM_ItemIcon"), FalloutDialogueTopic.Text(icon.Span)); Bind("IM_ItemIcon", "visible", 1); }
-            var condition = selected.RecordType is "ARMO" or "WEAP"
-                ? $"\nCND {ConditionSummary(selected)}"
-                : "";
-            AddText($"{NameOf(selected.FormKey)}\nWG {selected.Weight:0.0}   VAL {selected.Value}{condition}",
-                new(470, 440), new(400, 160));
-            if (_records.QuestObjects.IsQuestObject(selected.FormKey))
-                AddText("Quest item", new(470, 605), new(400, 40));
+            BindInventoryStatCard(selected, _inventory.Instances(selected.FormKey)[_selectedVariant].Extra);
             var equipped = _inventory.Equipped.Contains(selected.RuntimeFormId) && _selectedVariant == 0;
             var aid = selected.RecordType is "ALCH" or "INGR";
             var canActivate = aid || selected.RecordType is "WEAP" or "ARMO";
@@ -504,30 +502,6 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
             _buttons[^1].Button.Disabled = !canActivate;
             BindInventoryActions(selected);
         }
-    }
-
-    private static string ConditionSummary(FalloutCampaignItem item)
-    {
-        var variants = item.Variants ?? [new FalloutItemVariant(item.Count)];
-        if (variants.Any(variant => variant.Count <= 0) || variants.Sum(variant => variant.Count) != item.Count)
-            throw new InvalidDataException("Inventory item condition stacks differ from its count.");
-        var groups = variants
-            .GroupBy(variant => variant.Condition ?? 1)
-            .OrderBy(group => group.Key)
-            .ToArray();
-        if (groups.Length == 0 || groups.Any(group => !float.IsFinite(group.Key) || group.Key is < 0 or > 1))
-            throw new InvalidDataException("Inventory item condition is outside 0..1.");
-
-        static string Percent(float condition) =>
-            (condition * 100).ToString("0", CultureInfo.InvariantCulture) + "%";
-
-        if (groups.Length == 1)
-            return groups[0].Key == 0 ? "0%  BROKEN" : Percent(groups[0].Key);
-        var summary = groups.Length > 3
-            ? $"{Percent(groups[0].Key)}–{Percent(groups[^1].Key)} across {groups.Length} stacks"
-            : string.Join(" / ", groups.Select(group =>
-                $"{Percent(group.Key)}{(group.Key == 0 ? " BROKEN" : "")} ×{group.Sum(variant => variant.Count)}"));
-        return groups[0].Key == 0 && groups.Length > 3 ? summary + " (includes broken)" : summary;
     }
 
     private void ToggleEquipment(FalloutCampaignItem item)

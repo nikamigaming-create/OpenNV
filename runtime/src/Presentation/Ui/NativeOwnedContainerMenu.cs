@@ -15,6 +15,7 @@ internal partial class NativeOwnedContainerMenu : Control
     private readonly FalloutPlayerInventory[] _inventories;
     private readonly FalloutPluginStack _records;
     private readonly Action _close, _changed;
+    private readonly Action<int, IReadOnlyList<FalloutInventoryTransfer>>? _transferWithEvents;
     private readonly List<(XElement Tile, NativeBitmapMenuButton Button)> _targets = [];
     private readonly List<(XElement Tile, NativeBitmapMenuButton Button)> _rows = [];
     private readonly int[] _offsets = [0, 0];
@@ -39,9 +40,10 @@ internal partial class NativeOwnedContainerMenu : Control
     internal NativeOwnedContainerMenu(FalloutPluginStack records, FalloutPlayerInventory player, FalloutPlayerInventory container,
         string containerName, Action close, Action changed,
         Func<(float Weight, float Capacity)> burden,
-        Func<FalloutCampaignItem, IReadOnlyList<FalloutInventoryInstance>, ContainerItemCard?>? itemCard = null)
+        Func<FalloutCampaignItem, IReadOnlyList<FalloutInventoryInstance>, ContainerItemCard?>? itemCard = null,
+        Action<int, IReadOnlyList<FalloutInventoryTransfer>>? transferWithEvents = null)
         : this(records, player, container, containerName, close, changed,
-            burden ?? throw new ArgumentNullException(nameof(burden)), itemCard, componentFixture: false)
+            burden ?? throw new ArgumentNullException(nameof(burden)), itemCard, componentFixture: false, transferWithEvents: transferWithEvents)
     { }
 
     internal static NativeOwnedContainerMenu CreateComponentFixture(FalloutPluginStack records,
@@ -50,11 +52,12 @@ internal partial class NativeOwnedContainerMenu : Control
 
     private NativeOwnedContainerMenu(FalloutPluginStack records, FalloutPlayerInventory player, FalloutPlayerInventory container,
         string containerName, Action close, Action changed, Func<(float Weight, float Capacity)>? burden,
-        Func<FalloutCampaignItem, IReadOnlyList<FalloutInventoryInstance>, ContainerItemCard?>? itemCard, bool componentFixture)
+        Func<FalloutCampaignItem, IReadOnlyList<FalloutInventoryInstance>, ContainerItemCard?>? itemCard, bool componentFixture,
+        Action<int, IReadOnlyList<FalloutInventoryTransfer>>? transferWithEvents = null)
     {
         Name = "OwnedContainerMenu"; ProcessMode = ProcessModeEnum.Always;
         _records = records; _inventories = [player, container]; _close = close; _changed = changed;
-        _burden = burden; _itemCard = itemCard;
+        _burden = burden; _itemCard = itemCard; _transferWithEvents = transferWithEvents;
         if (componentFixture)
         {
             SetMeta("opennv_component_fixture", true);
@@ -128,6 +131,10 @@ internal partial class NativeOwnedContainerMenu : Control
         if ((_inventories[side].Item(form)?.Count ?? 0) < count) { Refresh(); return; }
         ApplyTransfer(() =>
         {
+            if (_transferWithEvents is { } transfer)
+            {
+                transfer(side, [new(form, count)]); return;
+            }
             FalloutReferenceWorld.RequirePlayerItemAcquisition(_records, _records.GetEffective(form),
                 side == 1 ? _records.RuntimeFormKey(0x14) : null);
             var notice = new FalloutHudEvent(side == 1 ? FalloutHudEventKind.ItemAdded : FalloutHudEventKind.ItemRemoved, form, count);
@@ -142,6 +149,10 @@ internal partial class NativeOwnedContainerMenu : Control
         ApplyTransfer(() =>
         {
             var items = TransferableItems(1);
+            if (_transferWithEvents is { } transfer)
+            {
+                transfer(1, items.Select(item => new FalloutInventoryTransfer(item.FormKey, item.Count)).ToArray()); return;
+            }
             foreach (var item in items) FalloutReferenceWorld.RequirePlayerItemAcquisition(_records, _records.GetEffective(item.FormKey), _records.RuntimeFormKey(0x14));
             var notices = items.Select(item => new FalloutHudEvent(FalloutHudEventKind.ItemAdded, item.FormKey, item.Count)).ToArray();
             _inventories[0].Notifications.RequirePublish(notices);
@@ -166,8 +177,15 @@ internal partial class NativeOwnedContainerMenu : Control
         TransferError = null; _transferStatus.Visible = false;
         _changed(); Refresh();
     }
-    private FalloutCampaignItem[] TransferableItems(int side) => _inventories[side].Items
-        .Where(item => FalloutInventoryAccess.CanTransfer(_records, _records.GetEffective(item.FormKey), side == 0)).ToArray();
+    private FalloutCampaignItem[] TransferableItems(int side) => FalloutSourceMenuTextOrder.Order(_inventories[side].Items
+        .Where(item => FalloutInventoryAccess.TryDisplayName(_records.GetEffective(item.FormKey), out _) &&
+            FalloutInventoryAccess.CanTransfer(_records, _records.GetEffective(item.FormKey), side == 0)), InventoryLabel);
+    private string InventoryLabel(FalloutCampaignItem item)
+    {
+        if (!FalloutInventoryAccess.TryDisplayName(_records.GetEffective(item.FormKey), out var name))
+            throw new InvalidOperationException("Container row has no actual source display name.");
+        return item.Count == 1 ? name : name + " (" + item.Count.ToString(CultureInfo.InvariantCulture) + ")";
+    }
     private XElement Tile(string name) => _tiles.Root.DescendantsAndSelf()
         .Single(tile => (string?)tile.Attribute("name") == name);
 
@@ -198,10 +216,7 @@ internal partial class NativeOwnedContainerMenu : Control
                 var tile = new XElement(_template); tile.SetAttributeValue("name", $"Item_{side}_{index}"); list.Add(tile);
                 _tiles.Bind(tile, "listindex", index);
                 var text = tile.Descendants("text").Single(value => (string?)value.Attribute("name") == "ListItemText");
-                var record = _records.GetEffective(item.FormKey);
-                var full = record.ReadSubrecords().SingleOrDefault(field => field.Signature == "FULL").Data;
-                var name = full.IsEmpty ? item.EditorId : FalloutDialogueTopic.Text(full.Span);
-                var label = item.Count == 1 ? name : $"{name} ({item.Count})";
+                var label = InventoryLabel(item);
                 _tiles.Text[text] = label;
                 var height = _tiles.Number(text, "height") + _tiles.Number(tile, "_VerticalSpacing");
                 if (!float.IsFinite(height) || height <= 0 || height > viewport)

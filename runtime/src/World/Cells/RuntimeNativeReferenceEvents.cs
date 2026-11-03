@@ -1,5 +1,6 @@
 using Godot;
 using OpenNV.Runtime.Content;
+using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.World.Actors;
 
 namespace OpenNV.Runtime.World.Cells;
@@ -51,6 +52,8 @@ internal partial class RuntimeNativeReferenceEvents : Node
     internal object State => new
     {
         frames = _frames,
+        inventoryScriptBlocks = _inventoryScriptBlocks,
+        inventoryScriptErrors = _inventoryScriptErrors.Select(value => new { container = value.Key.ToString(), error = value.Value }).ToArray(),
         executedBlocks = _executedBlocks,
         completedEventBlocks = _completedEventBlocks.Select(pair => new { name = pair.Key, blocks = pair.Value }).ToArray(),
         recoveredReadFaults = _recoveredReadFaults,
@@ -85,9 +88,12 @@ internal partial class RuntimeNativeReferenceEvents : Node
         _quests = quests;
         _host = host with { Sitting = host.Sitting ?? GetSitting };
         _scripts = new(records, world, quests, _host);
+        _continueInventoryGameMode = () => IsProcessing() && !GetTree().Paused;
+        _continueInventoryMenuEvents = () => IsProcessing() && GetTree().Paused;
         _transform = transform; _unitsToMeters = unitsToMeters; _collisionMask = collisionMask;
         SetResidency(cell, root);
         ActivateHitCallbacks();
+        AddChild(new RuntimeNativeInventoryEventDriver(this));
     }
 
     internal void ActivateHitCallbacks()
@@ -155,6 +161,10 @@ internal partial class RuntimeNativeReferenceEvents : Node
             _presentation = presentation;
             if (_presentation is not null) _presentation.Materialized += BindMaterialized;
         }
+        // All selected references now own their real persistent instance/VM
+        // binding, whether or not their independently imported 3D is available.
+        if (world.RegionPublicationPending)
+            world.CompleteRegionActivation(cell.Cell.FormKey, _bindings.Keys.ToHashSet());
     }
 
     private static IReadOnlyDictionary<FalloutFormKey, Node3D> IndexUnownedNodes(FalloutCellScene cell, Node3D root)
@@ -231,6 +241,7 @@ internal partial class RuntimeNativeReferenceEvents : Node
         {
             if (!_nodeReferences.TryGetValue(node.GetInstanceId(), out var reference)) continue;
             if (!_bindings.ContainsKey(reference) || !_world.CanActivate(reference)) return null;
+            if (RuntimeNativePlacedMine.Find(collider) is { State.Phase: not FalloutMinePhase.Disabled }) return null;
             // Capture the campaign owner, rather than this cell controller.
             // Release can retire the hold while a cell is being replaced.
             var world = _world;
@@ -243,7 +254,8 @@ internal partial class RuntimeNativeReferenceEvents : Node
     {
         for (Node? node = collider; node is not null; node = node.GetParent())
             if (_nodeReferences.TryGetValue(node.GetInstanceId(), out var reference) && _bindings.TryGetValue(reference, out var binding) &&
-                _world.CanActivate(reference) && (binding.Instance.Script is not null || binding.Signature is "NPC_" or "CREA" or "TACT" or "DOOR" or "CONT" or "TERM" or "FURN" or "ACTI" || FalloutReferenceWorld.IsInventoryItem(binding.Signature)))
+                _world.CanActivate(reference) && (RuntimeNativePlacedMine.Find(collider) is { CanInteract: true } ||
+                binding.Instance.Script is not null || binding.Signature is "NPC_" or "CREA" or "TACT" or "DOOR" or "CONT" or "TERM" or "FURN" or "ACTI" || FalloutReferenceWorld.IsInventoryItem(binding.Signature)))
                 return binding.Reference;
         return null;
     }
@@ -274,7 +286,8 @@ internal partial class RuntimeNativeReferenceEvents : Node
         }
         _world.ArmActivationChildren(reference, actor);
         QueueActivationRelays(0);
-        if (binding.Signature is "DOOR" or "CONT" or "TERM" || FalloutReferenceWorld.IsInventoryItem(binding.Signature) ||
+        if (binding.Signature == "PROJ" && binding.Node is not null && RuntimeNativePlacedMine.Find(binding.Node) is { CanInteract: true } ||
+            binding.Signature is "DOOR" or "CONT" or "TERM" || FalloutReferenceWorld.IsInventoryItem(binding.Signature) ||
             binding.Signature is "NPC_" or "CREA" && _world.IsDead(reference))
         {
             (Interact ?? throw new InvalidOperationException("Reference interaction owner is absent."))(binding.Reference, binding.Node, binding.Signature, actor);
@@ -359,6 +372,8 @@ internal partial class RuntimeNativeReferenceEvents : Node
         ++_frames;
         var tree = GetTree();
         if (!IsProcessing() || tree.Paused) return;
+        AdvancePlayerInventoryScripts(delta, true);
+        if (!IsProcessing() || tree.Paused) return;
         QueueActivationRelays((float)delta);
         foreach (var binding in _bindings.Values)
         {
@@ -376,6 +391,9 @@ internal partial class RuntimeNativeReferenceEvents : Node
 
     private void ProcessBinding(Binding binding, SceneTree tree, double delta)
     {
+        if (binding.Instance.Inventory is not null && _world.IsEnabled(binding.Reference.FormKey))
+            AdvanceInventoryScripts(binding.Reference.FormKey, delta, true);
+        if (!IsProcessing() || tree.Paused) return;
         var grabBatch = binding.Instance.GrabEvents is { HasPending: true } grabEvents ? grabEvents : null;
         var hasGrabEvents = grabBatch is not null;
         var packageBatch = binding.Signature is "NPC_" or "CREA" &&

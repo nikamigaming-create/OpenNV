@@ -77,7 +77,9 @@ internal sealed record PlayerConfiguration(
     public float StepHeightMeters { get; init; } = 0.4f;
     // OpenNV controller policy, not a measured retail slope limit. Authored
     // walkways exceed Godot's implicit 45-degree default.
-    internal const float DefaultMaximumWalkableSlopeDegrees = 50;
+    // Owned FNV character-controller construction uses a fixed 47-degree
+    // support limit; the actual controller's retained cosine confirms it.
+    internal const float DefaultMaximumWalkableSlopeDegrees = 47;
     public float MaximumWalkableSlopeDegrees { get; init; } = DefaultMaximumWalkableSlopeDegrees;
 }
 

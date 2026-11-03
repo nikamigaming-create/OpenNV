@@ -48,6 +48,7 @@ internal sealed partial class FalloutReferenceWorld
         if (!float.IsFinite(duration) || duration < 0)
             throw new InvalidDataException("Essential knockout duration must be finite and nonnegative.");
         var restored = RestoreEssentialDamage(actor, health, ref injury);
+        actor.FatigueKnockout = null;
         actor.EssentialKnockout = new(duration);
         return restored;
     }
@@ -110,5 +111,5 @@ internal sealed partial class FalloutReferenceWorld
     // The public query is the process unconscious predicate, not the raw actor
     // life state or the ordinary explosion-ragdoll flag. Get-up is separate.
     internal int GetKnockedState(FalloutFormKey reference) =>
-        Actor(reference).EssentialKnockout is { Unconscious: true } ? 1 : 0;
+        Actor(reference).EssentialKnockout is { Unconscious: true } || Actor(reference).FatigueKnockout is { Unconscious: true } ? 1 : 0;
 }

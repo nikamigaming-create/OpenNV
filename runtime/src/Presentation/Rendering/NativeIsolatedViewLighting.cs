@@ -54,17 +54,28 @@ internal sealed partial class NativeIsolatedViewLighting : Node
     private void Added(Node node)
     {
         if (node is Light3D light) _lights.Add(light);
-        if (node is MeshInstance3D && _boundModel?.IsAncestorOf(node) == true) _meshDirty = true;
+        // The view outlives equipment/appearance models. A SceneTree callback
+        // must not dereference a retired model while its replacement is added.
+        if (_boundModel is not { } model) return;
+        if (!IsInstanceValid(model)) { ClearModelBinding(); return; }
+        if (node is MeshInstance3D && model.IsAncestorOf(node)) _meshDirty = true;
     }
     private void Removed(Node node)
     {
         if (node is Light3D light) _lights.Remove(light);
-        if (node is MeshInstance3D) _meshDirty = true;
+        if (ReferenceEquals(node, _boundModel)) ClearModelBinding();
+        else if (node is MeshInstance3D) _meshDirty = true;
     }
     public override void _ExitTree()
     {
         if (_tree is not null) { _tree.NodeAdded -= Added; _tree.NodeRemoved -= Removed; }
-        _tree = null; _lights.Clear(); _meshes = [];
+        _tree = null; _lights.Clear(); ClearModelBinding();
+    }
+
+    private void ClearModelBinding()
+    {
+        _boundModel = null; _meshes = []; _meshDirty = true;
+        _points = _directional = _maximumPerMaterial = _localLights = _unboundedSkins = 0;
     }
 
     public override void _Process(double delta)
@@ -80,7 +91,8 @@ internal sealed partial class NativeIsolatedViewLighting : Node
     private void Publish()
     {
         var model = _model();
-        if (model is null || !IsInstanceValid(model) || !model.IsInsideTree()) return;
+        if (model is null || !IsInstanceValid(model) || !model.IsInsideTree())
+        { ClearModelBinding(); return; }
         if (_boundModel != model || _meshDirty)
         {
             _boundModel = model; _meshDirty = false;

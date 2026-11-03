@@ -47,18 +47,87 @@ internal sealed class RuntimeNativeNifMaterialChannels
 
     internal Action<float>? Bind(FalloutNifFile source, FalloutNifControllerLink link)
     {
-        var apply = BindCurrent(source, link);
-        if (apply is null) return null;
+        var absent = HasAbsentSourceController(link);
+        var apply = absent ? null : BindCurrent(source, link);
+        if (apply is null && !absent) return null;
+        if (absent && link.Interpolator < -1)
+            throw new InvalidDataException("Unused external KF slot has an invalid interpolator link.");
+        if (absent && link.Interpolator >= 0 &&
+            !source.ReadObject(link.Interpolator).Block.TypeName.EndsWith("Interpolator", StringComparison.Ordinal))
+            throw new InvalidDataException("Unused external KF slot does not declare an interpolator.");
+        var everBound = apply is not null;
         var revision = _revision;
         return time =>
         {
             if (revision != _revision)
             {
-                apply = BindCurrent(source, link) ?? throw new NotSupportedException("An active material channel lost its source target after body replacement.");
+                absent = HasAbsentSourceController(link);
+                if (absent && everBound)
+                    throw new NotSupportedException("Active external KF controller retarget requires its retained-controller owner after source replacement.");
+                apply = absent ? null : BindCurrent(source, link);
+                everBound |= apply is not null;
+                if (apply is null && !absent)
+                    throw new NotSupportedException("An active material channel lost its source target after body replacement.");
                 revision = _revision;
             }
-            apply(time);
+            apply?.Invoke(time);
         };
+    }
+
+    // A named source property does not imply that a shared KF's controller
+    // exists on it. The native selector leaves that blend slot null when both
+    // the exact property controller and the KF's retained controller are absent.
+    // Transform channels have a separate controller producer and are excluded.
+    internal bool HasAbsentSourceController(FalloutNifControllerLink link)
+    {
+        if (link.PropertyType.Length == 0 || link.ControllerType is "NiTransformController" or "BSTreadTransfController" || link.Controller != -1 ||
+            !_targets.TryGetValue((link.NodeName, link.PropertyType), out var targets) || targets.Count != 1)
+            return false;
+        var target = targets[0];
+        var cursor = target.Property switch
+        {
+            FalloutNifMaterialProperty value => value.Controller,
+            FalloutNifTexturingProperty value => value.Controller,
+            FalloutNifShaderProperty value => value.Controller,
+            FalloutNifNoLightingProperty value => value.Controller,
+            FalloutNifTileShaderProperty value => value.Controller,
+            _ => throw new NotSupportedException("External KF property has no complete source controller-chain owner.")
+        };
+        var visited = new HashSet<int>();
+        while (cursor >= 0)
+        {
+            if (!visited.Add(cursor)) throw new InvalidDataException("External KF source property controller chain has a cycle.");
+            var controller = target.Source.ReadObject(cursor);
+            var time = FalloutNifNodeControllerChain.Time(controller);
+            if (time.Target != target.Property.Block.Index || time.UnknownInteger != 0)
+                throw new InvalidDataException("External KF source property controller has a foreign or unknown target.");
+            if (MatchesSourceController(controller, link)) return false;
+            cursor = time.NextController;
+        }
+        if (cursor != -1) throw new InvalidDataException("External KF source property controller link is invalid.");
+        return true;
+    }
+
+    private static bool MatchesSourceController(FalloutNifObject controller, FalloutNifControllerLink link)
+    {
+        if (controller.Block.TypeName != link.ControllerType) return false;
+        // Shared weapon clips address individual channels on the same property.
+        // A UV-V or emissive controller cannot supply the UV-U or specular slot.
+        // Keep unknown IDs on the strict binding path instead of declaring them absent.
+        return (controller, link.Variable1) switch
+        {
+            (FalloutNifTextureTransformController texture, "0-0-TT_TRANSLATE_U") => Texture(0),
+            (FalloutNifTextureTransformController texture, "0-0-TT_TRANSLATE_V") => Texture(1),
+            (FalloutNifTextureTransformController texture, "0-0-TT_ROTATE") => Texture(2),
+            (FalloutNifTextureTransformController texture, "0-0-TT_SCALE_U") => Texture(3),
+            (FalloutNifTextureTransformController texture, "0-0-TT_SCALE_V") => Texture(4),
+            (FalloutNifMaterialColorController color, "SPEC") => color.TargetColor == 2,
+            (FalloutNifMaterialColorController color, "SELF_ILLUM") => color.TargetColor == 3,
+            _ => true
+        };
+
+        bool Texture(uint operation) => controller is FalloutNifTextureTransformController value &&
+            !value.ShaderMap && value.TextureSlot == 0 && value.Operation == operation;
     }
 
     private Action<float>? BindCurrent(FalloutNifFile source, FalloutNifControllerLink link)

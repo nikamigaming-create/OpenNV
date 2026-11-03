@@ -9,10 +9,29 @@ internal sealed partial class NativeNifBillboard : Node
     internal const string ShaderSource = """
         uniform int source_billboard_mode = -1;
         uniform mat4 source_billboard_local = mat4(1.0);
+        vec3 owned_billboard_minimal(vec3 value, vec3 from, vec3 to, vec3 opposite_axis) {
+            float cosine = clamp(dot(from, to), -1.0, 1.0);
+            if (cosine < -0.999999)
+                return 2.0 * opposite_axis * dot(opposite_axis, value) - value;
+            vec3 axis = cross(from, to);
+            return value + cross(axis, value) + cross(axis, cross(axis, value)) / (1.0 + cosine);
+        }
         mat4 owned_billboard(mat4 model, mat4 camera) {
             if (source_billboard_mode < 0) return model;
             mat4 root = model * inverse(source_billboard_local);
-            vec3 normal = source_billboard_mode == 4 ? normalize(camera[3].xyz - root[3].xyz) : normalize(camera[2].xyz);
+            vec3 normal = (source_billboard_mode == 3 || source_billboard_mode == 4) ? normalize(camera[3].xyz - root[3].xyz) : normalize(camera[2].xyz);
+            if (source_billboard_mode == 0 || source_billboard_mode == 3) {
+                // The minimized modes use the shortest rotation of the authored
+                // frame, preserving its roll rather than imposing camera up.
+                vec3 from = normalize(root[1].xyz);
+                vec3 authored_right = normalize(root[0].xyz);
+                vec3 right = owned_billboard_minimal(authored_right, from, normal, authored_right);
+                vec3 up = owned_billboard_minimal(normalize(-root[2].xyz), from, normal, authored_right);
+                mat4 facing = mat4(vec4(right * length(root[0].xyz), 0.0),
+                    vec4(normal * length(root[1].xyz), 0.0),
+                    vec4(-up * length(root[2].xyz), 0.0), root[3]);
+                return facing * source_billboard_local;
+            }
             vec3 up = source_billboard_mode == 1 ? normalize(-root[2].xyz) : normalize(camera[1].xyz);
             vec3 right = cross(up, normal);
             if (dot(right, right) < 0.000001) return model;
@@ -35,7 +54,7 @@ internal sealed partial class NativeNifBillboard : Node
     internal void Configure(Node3D root, ushort mode)
     {
         mode &= 7;
-        if (mode is not (1 or 2 or 4)) throw new NotSupportedException($"NIF billboard mode {mode} is unbound.");
+        if (mode is not (0 or 1 or 2 or 3 or 4)) throw new NotSupportedException($"NIF billboard mode {mode} is unbound.");
         _root = root; Name = "SourceBillboard"; ProcessPriority = 2;
         foreach (var mesh in root.FindChildren("*", "MeshInstance3D", true, false).OfType<MeshInstance3D>())
             for (var surface = 0; surface < mesh.Mesh.GetSurfaceCount(); surface++)

@@ -1,5 +1,6 @@
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Content.Definitions;
+using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.World.Actors;
 using System.Buffers.Binary;
 
@@ -27,6 +28,8 @@ internal sealed partial class FalloutReferenceWorld
             return BodyParts(reference).LimbCondition(limb, Health(reference).Base, actor.Injury?.LimbDamage);
         }
         var slot = FalloutActorValue.SourceSlot(name);
+        if (slot == "fatigue" && actor.ActorValues.TryGetValue(slot, out var fatigue))
+            actor.ActorValues[slot] = fatigue with { Base = SourceActorValue(actor, slot) };
         return Select(actor.ActorValues.GetValueOrDefault(slot, new(SourceActorValue(actor, slot))), read);
     }
 
@@ -43,7 +46,10 @@ internal sealed partial class FalloutReferenceWorld
         var index = FalloutActorValue.SourceIndex(slot);
         if (FalloutActorAiData.Contains((FalloutActorValueId)index))
             return FalloutActorAiData.Read(records, actor.Base, actor.Templates).Value((FalloutActorValueId)index);
+        if (index == 23) return FalloutKarmaSource.Read(records, actor.Base, actor.Templates).Initial;
         if (index == 54) return 0; // Accumulated radiation starts in an empty engine value pool.
+        if (index == 22) return FalloutActorFatigueSource.Actor(records, actor.Base, actor.Templates,
+            ActorValue(actor.Reference, "endurance", FalloutActorValueRead.Permanent));
         if (index < 0) return 0; // Declared user slots have zero initial pools.
         var source = FalloutActorTemplateOwner.Resolve(records, records.GetEffective(actor.Base), 2, actor.Templates);
         if (index == (int)FalloutActorValueId.SpeedMult)
@@ -124,6 +130,7 @@ internal sealed partial class FalloutReferenceWorld
         {
             var slot = FalloutActorValue.SourceSlot(name);
             var previous = actor.ActorValues.GetValueOrDefault(slot, new(SourceActorValue(actor, slot)));
+            if (slot == "fatigue") previous = previous with { Base = SourceActorValue(actor, slot) };
             actor.ActorValues[slot] = FalloutActorValueCommands.Apply(previous,
                 FalloutActorValueOperation.Restore, value, previous.Current);
         }
@@ -139,6 +146,9 @@ internal sealed partial class FalloutReferenceWorld
         var instance = Actor(reference);
         var value = (float)FalloutActorValueCommands.Argument(operation, argument);
         var kind = FalloutActorValueCommands.Operation(operation) ?? throw new NotSupportedException($"Actor value operation {operation} is unbound.");
+        if (name.Equals("karma", StringComparison.OrdinalIgnoreCase)) return;
+        if (name.Equals("fatigue", StringComparison.OrdinalIgnoreCase) && kind == FalloutActorValueOperation.SetBase)
+            throw new NotSupportedException("Fatigue BASE writes require their derived-value override owner.");
         if (kind == FalloutActorValueOperation.Restore)
         {
             RestoreActorValue(reference, name, value);
@@ -159,9 +169,44 @@ internal sealed partial class FalloutReferenceWorld
             throw new NotSupportedException("Script health base/permanent mutation requires its derived-health contract.");
         FalloutActorValue previous = slot == "health" ? Health(reference) :
             instance.ActorValues.TryGetValue(slot, out var retained) ? retained : new(SourceActorValue(instance, slot));
-        var changed = FalloutActorValueCommands.Apply(previous, kind, value, previous.Current);
+        if (slot == "fatigue") previous = previous with { Base = SourceActorValue(instance, slot) };
+        var changed = slot == "fatigue" && kind == FalloutActorValueOperation.Damage
+            ? FalloutFatigue.Damage(records, previous, value)
+            : FalloutActorValueCommands.Apply(previous, kind, value, previous.Current);
         if (slot == "health" && (instance.Injury?.Dead == true || changed.Current <= 0))
             throw new NotSupportedException("Script lethal/dead health mutation requires its death-event and killer contract.");
         instance.ActorValues[slot] = changed;
+    }
+
+    internal void AdvanceActorFatigue(double seconds)
+    {
+        foreach (var actor in _instances.Values)
+        {
+            if (actor.Injury?.Dead == true || !actor.ActorValues.TryGetValue("fatigue", out var previous)) continue;
+            previous = previous with { Base = SourceActorValue(actor, "fatigue") };
+            actor.ActorValues["fatigue"] = FalloutFatigue.Advance(records, previous, seconds);
+        }
+    }
+
+    internal Action PrepareActorTouchEnchantment(FalloutFormKey reference, FalloutIngestible source,
+        Func<FalloutCondition, float> condition, bool areaDelivered = false)
+    {
+        var actor = Actor(reference);
+        if (!IsEnabled(reference) || IsDead(reference)) throw new InvalidOperationException("Enchantment target is not a living enabled actor.");
+        var before = new Dictionary<string, FalloutActorValue?>();
+        var after = FalloutInstantTouchEffects.Prepare(records, source, value =>
+        {
+            var slot = FalloutActorValue.SourceSlot(value);
+            before.TryAdd(slot, actor.ActorValues.GetValueOrDefault(slot));
+            var basis = SourceActorValue(actor, slot);
+            return actor.ActorValues.GetValueOrDefault(slot, new(basis)) with { Base = basis };
+        }, condition, areaDelivered: areaDelivered);
+        return () =>
+        {
+            if (IsDead(reference) || !IsEnabled(reference)) return;
+            if (before.Any(pair => actor.ActorValues.GetValueOrDefault(pair.Key) != pair.Value))
+                throw new InvalidOperationException("Delivered actor enchantment has a stale value baseline.");
+            foreach (var (value, pool) in after) actor.ActorValues[FalloutActorValue.SourceSlot(value)] = pool;
+        };
     }
 }

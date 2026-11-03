@@ -91,6 +91,13 @@ internal static class CombatAlarmContracts
         initiatedCold.Restore(JsonSerializer.Deserialize<FalloutReferenceSnapshot[]>(JsonSerializer.Serialize(initiated.Capture()))!);
         if (initiatedCold.Get(first.Reference).Engagement?.Target != player)
             throw new InvalidDataException("Scripted combat target did not survive cold restoration.");
+        var selfEngagement = initiated.Get(first.Reference).Capture() with { Engagement = new(first.Reference) };
+        using var invalidCold = new FalloutReferenceWorld(records);
+        try { invalidCold.Restore([selfEngagement]); throw new InvalidOperationException("Restored self combat was accepted."); }
+        catch (InvalidDataException) { }
+        invalidCold.Restore(JsonSerializer.Deserialize<FalloutReferenceSnapshot[]>(JsonSerializer.Serialize(initiated.Capture()))!);
+        if (invalidCold.Get(first.Reference).Engagement?.Target != player)
+            throw new InvalidDataException("Refused self combat prevented fresh valid restoration.");
         Console.WriteLine("OPENNV_COMBAT_ALARM_CONTRACT_PASS player=true implicit=true compiledActor=true aliases=true distinctTargets=true onceOnlyRetirement=true cold=true invalidActorAtomic=true completionRetarget=true attackRandomRetiredCold=true invalidAttackRandom=true");
     }
 }

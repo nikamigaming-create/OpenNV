@@ -17,7 +17,8 @@ internal partial class RuntimeNativeReferenceEvents
         // These are the existing DefaultActivate branches with a native
         // interaction callback. Other authored/default capabilities retain
         // their prior fault guards until their independent owner is proven.
-        return binding.Signature is "DOOR" or "CONT" or "TERM" ||
+        return binding.Signature == "PROJ" && RuntimeNativePlacedMine.Find(node) is { CanInteract: true } ||
+            binding.Signature is "DOOR" or "CONT" or "TERM" ||
             FalloutReferenceWorld.IsInventoryItem(binding.Signature) ||
             binding.Signature is "NPC_" or "CREA" && _world.IsDead(reference);
     }

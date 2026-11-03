@@ -33,6 +33,8 @@ internal sealed partial class FalloutPlayerInventory
             throw new NotSupportedException("Partial transfer of an equipped stack needs item-instance selection.");
         var wornInstance = source.RecordType == "WEAP" && _equipped.Contains(source.RuntimeFormId)
             ? (source.Variants ?? [new(source.Count)])[0].Instance : null;
+        // The same removal owner applies before a transaction moves event-list
+        // identity to another real inventory; unknown pending handoffs refuse.
         var remaining = (source.Variants ?? [new(source.Count)]).ToList();
         var selected = new List<FalloutItemVariant>();
         var toMove = count;
@@ -71,7 +73,14 @@ internal sealed partial class FalloutPlayerInventory
         };
         // Validate all additions before either side changes. Transfers preserve
         // instance condition/ownership and never reroll a leveled source list.
+        var sourceAfter = count == source.Count ? null : source with
+        { Count = source.Count - count, Variants = remaining.Where(value => value.Count != 0).ToArray() };
+        var sourceEntry = _scriptOrder?.SingleOrDefault(entry => entry.Item == form);
+        var provenance = sourceEntry is null && _scriptOrder is not null ? false : sourceEntry?.LeveledItem;
+        ObserveScriptRemoval(source, sourceAfter);
+        target.ObserveNativeAddition([form], provenance);
         target.Publish([addition]);
+        MarkScriptTraversalMutation(); target.MarkScriptTraversalMutation();
         if (count == source.Count) { _items.Remove(form); _equipped.Remove(source.RuntimeFormId); }
         else _items[form] = source with { Count = source.Count - count, Variants = remaining.Where(value => value.Count != 0).ToArray() };
         if (wornInstance is not null && selected.Any(extra => extra.Instance == wornInstance)) _equipped.Remove(source.RuntimeFormId);
@@ -82,7 +91,7 @@ internal sealed partial class FalloutPlayerInventory
     internal void Remove(FalloutFormKey form, int count, bool silent)
     {
         if (count <= 0) throw new ArgumentOutOfRangeException(nameof(count));
-        if (Item(form) is not { } item) return;
+        if (Item(form) is not { } item) { MarkScriptTraversalMutation(); return; }
         var events = silent ? Array.Empty<FalloutHudEvent>() :
             new[] { new FalloutHudEvent(FalloutHudEventKind.ItemRemoved, form, Math.Min(count, item.Count)) };
         Notifications.RequirePublish(events);
@@ -116,8 +125,10 @@ internal sealed partial class FalloutPlayerInventory
             throw new InvalidOperationException("Selected item variant changed before removal.");
         if (_equipped.Contains(item.RuntimeFormId) && count != item.Count)
             throw new NotSupportedException("Partial removal of equipped items needs the worn instance owner.");
+        MarkScriptTraversalMutation();
         if (count == item.Count)
         {
+            ObserveScriptRemoval(item, null);
             _items.Remove(form); _equipped.Remove(item.RuntimeFormId); ++Revision;
             return;
         }
@@ -129,9 +140,10 @@ internal sealed partial class FalloutPlayerInventory
     private void RemoveCore(FalloutFormKey form, int count, bool silent)
     {
         if (count <= 0) throw new ArgumentOutOfRangeException(nameof(count));
+        MarkScriptTraversalMutation();
         if (Item(form) is not { } previous) return;
         var removed = Math.Min(count, previous.Count);
-        if (removed == previous.Count) { _items.Remove(form); _equipped.Remove(previous.RuntimeFormId); ++Revision; }
+        if (removed == previous.Count) { ObserveScriptRemoval(previous, null); _items.Remove(form); _equipped.Remove(previous.RuntimeFormId); ++Revision; }
         else
         {
             var remainingCount = previous.Count - removed;
@@ -156,12 +168,32 @@ internal sealed partial class FalloutPlayerInventory
     }
     internal IReadOnlyList<FalloutItemAddition> Add(FalloutPluginStack records, FalloutFormKey form, int count, int level, bool silent,
         FalloutGlobalState? globals = null, FalloutItemVariant? extra = null, Action<FalloutFormKey>? validateAddition = null,
-        bool nativeContainerOrder = false, IFalloutLeveledItemChanges? leveledItems = null)
+        bool nativeContainerOrder = false, IFalloutLeveledItemChanges? leveledItems = null,
+        Func<FalloutItemAddition, FalloutItemAddition>? prepareAddition = null)
     {
         RequireNoChangeInProgress();
         var random = new FalloutSoundRandomState(_random.State);
         var additions = FalloutLeveledItems.Resolve(records, form, count, level, random.NextBounded, globals is null ? null : globals.Get, extra,
             nativeContainerOrder, leveledItems ?? _leveledItems);
+        if (prepareAddition is not null)
+            additions = additions.Select(addition =>
+            {
+                var prepared = prepareAddition(addition);
+                if (prepared.Form != addition.Form || prepared.Variant.Count != addition.Variant.Count)
+                    throw new InvalidDataException("Prepared addition changed its resolved source identity or count.");
+                return prepared;
+            }).ToArray();
+        if (!nativeContainerOrder)
+        {
+            var leveledOrigin = records.GetEffective(form).Signature == "LVLI";
+            additions = additions.Select(addition =>
+            {
+                var state = FalloutInventoryScriptState.Prepare(records, records.GetEffective(addition.Form), addition.Variant);
+                if (state is not null && state.LeveledItem is null && !leveledOrigin)
+                    state = state with { LeveledItem = false };
+                return addition with { Variant = addition.Variant with { ScriptState = state } };
+            }).ToArray();
+        }
         // Leveled sources can resolve to a different set of forms. Check the
         // selected winners before publishing inventory or the random state.
         if (validateAddition is not null)
@@ -189,12 +221,23 @@ internal sealed partial class FalloutPlayerInventory
         // Validate the complete HUD publication before committing inventory and
         // random state; a refused notice must not partially apply the pickup.
         Notifications.RequirePublish(notices);
-        Publish(replacements); _random = random;
+        var previousOrder = _scriptOrder;
+        try
+        {
+            if (!nativeContainerOrder)
+                ObserveNativeAddition(replacements.Select(item => item.FormKey), records.GetEffective(form).Signature == "LVLI" ? null : false);
+            Publish(replacements); _random = random;
+        }
+        catch { _scriptOrder = previousOrder; throw; }
+        if (!nativeContainerOrder && additions.Count != 0) MarkScriptTraversalMutation();
         Notifications.Publish(notices);
         return additions;
     }
 
-    internal void Equip(FalloutPluginStack records, FalloutFormKey form, bool? noUnequip = null)
+    internal void Equip(FalloutPluginStack records, FalloutFormKey form, bool? noUnequip = null) =>
+        ApplyRemovalTransaction(null, (staged, _) => staged.EquipCore(records, form, noUnequip));
+
+    private void EquipCore(FalloutPluginStack records, FalloutFormKey form, bool? noUnequip)
     {
         RequireNoChangeInProgress();
         var item = Item(form) ?? throw new InvalidOperationException("Cannot equip an item absent from inventory.");
@@ -218,16 +261,44 @@ internal sealed partial class FalloutPlayerInventory
                 displaced.Add(equipped);
             }
         }
-        foreach (var equipped in displaced) _equipped.Remove(equipped);
+        var wasEquipped = _equipped.Contains(item.RuntimeFormId);
+        var playerAmmoSelection = _playerProcessEquipment && item.RecordType == "WEAP" && !wasEquipped;
+        var previousAmmunition = playerAmmoSelection ? displaced.Select(records.RuntimeFormKey)
+            .Where(key => Item(key)?.RecordType == "WEAP").Select(key => SelectedWeapon(key).Extra.Magazine?.Ammunition)
+            .SingleOrDefault() : null;
+        var affected = displaced.Select(records.RuntimeFormKey).Append(form).ToHashSet();
+        ObserveNativeAddition(affected, false);
+        PrepareInventoryScripts(records, affected);
+        foreach (var changed in affected) RequireEquipmentScriptOwner(changed);
+        foreach (var equipped in displaced)
+        {
+            if (equipped != item.RuntimeFormId) AdmitInventoryEquipment(records.RuntimeFormKey(equipped), 8);
+            _equipped.Remove(equipped);
+        }
         _equipped.Add(item.RuntimeFormId);
+        if (playerAmmoSelection)
+            MaterializeEquippedPlayerMagazine(FalloutWeaponPresentation.Read(records, form,
+                weaponMods: SelectedWeapon(form).Extra.WeaponMods, formLists: _playerAmmoLists), previousAmmunition);
+        if (!wasEquipped) AdmitInventoryEquipment(form, 2);
         if (noUnequip is { } locked) _items[form] = _items[form] with { UnequipLocked = locked };
         ++Revision;
     }
     internal bool Unequip(FalloutPluginStack records, FalloutFormKey form, bool force = false)
     {
+        var changed = false;
+        ApplyRemovalTransaction(null, (staged, _) => changed = staged.UnequipCore(records, form, force));
+        return changed;
+    }
+
+    private bool UnequipCore(FalloutPluginStack records, FalloutFormKey form, bool force)
+    {
         RequireNoChangeInProgress();
         if (Item(form)?.UnequipLocked == true && !force) return false;
-        if (!_equipped.Remove(records.RuntimeFormId(form))) return false;
+        if (!_equipped.Contains(records.RuntimeFormId(form))) return false;
+        PrepareInventoryScripts(records, new HashSet<FalloutFormKey> { form });
+        RequireEquipmentScriptOwner(form);
+        AdmitInventoryEquipment(form, 8);
+        _equipped.Remove(records.RuntimeFormId(form));
         if (Item(form) is { UnequipLocked: true } item) _items[form] = item with { UnequipLocked = false };
         ++Revision;
         return true;
@@ -243,6 +314,7 @@ internal sealed partial class FalloutPlayerInventory
             throw new InvalidDataException("Player inventory transaction contains invalid or duplicate items.");
         ValidateWeaponInstances(_items.Values.Where(item => replacements.All(value => value.FormKey != item.FormKey)).Concat(replacements));
         InvalidateTraversalForInsertions(replacements);
+        ObserveScriptPublication(replacements);
         foreach (var item in replacements) _items[item.FormKey] = item;
         if (replacements.Count != 0) ++Revision;
     }
@@ -276,9 +348,10 @@ internal sealed partial class FalloutPlayerInventory
                 .GroupBy(extra => extra.Hotkey).Any(group => group.Count() > 1))
             throw new InvalidDataException("Restored inventory repeats a hotkey or installs weapon mods on another item type.");
         Publish(inventory.Items.ToArray());
+        RestoreScriptOrder(inventory);
         ValidateMagazineAmmunition();
         _equipped.UnionWith(equipped);
         if (randomState is { } state) _random = new(state);
     }
-    internal FalloutOpeningInventoryGrant Capture() => new(new(Items, null), Equipped, _random.State);
+    internal FalloutOpeningInventoryGrant Capture() => new(new(Items, null, CopyScriptOrder(_scriptOrder), _scriptInitializations.ToArray()), Equipped, _random.State);
 }

@@ -6,6 +6,7 @@ internal static partial class HudDeclarationsProbe
 {
     internal static void Run()
     {
+        DiscoveryDeclarations();
         var tile = FalloutMenuXml.Parse(Encoding.UTF8.GetBytes("<image name=\"synthetic\"><systemcolor</systemcolor><width>11</width></image>"));
         Require(tile.Element("image")!.Element("systemcolor")!.Value == "" && tile.Element("image")!.Element("width")!.Value == "11",
             "Admitted empty source property changed adjacent content.");

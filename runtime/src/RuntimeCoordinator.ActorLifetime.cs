@@ -25,6 +25,9 @@ public partial class RuntimeCoordinator
             try { retire(); }
             catch (Exception error) { failure ??= error; }
         }
+        // Model-less placed SOUNs also own real native descendants. Their
+        // source-unload receipt must precede tree teardown at this same boundary.
+        Retire(() => NativeOwnedPlacedSound.RetireSubtree(root));
         foreach (var combat in SceneGraph.NodeTraversal.SelfAndDescendants<RuntimeNativeActorCombat>(root))
             Retire(combat.RetireSourceBindings);
         foreach (var npc in SceneGraph.NodeTraversal.SelfAndDescendants<RuntimeNativeNpc>(root))

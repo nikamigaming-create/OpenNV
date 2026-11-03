@@ -79,6 +79,14 @@ internal sealed partial class FalloutPlayerInventory
         copy.Restore(snapshot.Inventory, snapshot.EquippedRuntimeFormIds.ToArray(), snapshot.InventoryRandomState);
         copy._traversal = _traversal;
         copy._leveledItems = _leveledItems;
+        copy._scriptIterationActive = _scriptIterationActive;
+        copy._scriptTraversalOwned = _scriptTraversalOwned;
+        copy._runningInventoryScript = _runningInventoryScript;
+        copy._scriptMutationRevision = _scriptMutationRevision;
+        copy._scriptContainer = _scriptContainer;
+        copy._scriptBaseCount = _scriptBaseCount;
+        copy._scriptContainerIsActor = _scriptContainerIsActor;
+        copy._playerProcessEquipment = _playerProcessEquipment; copy._playerAmmoLists = _playerAmmoLists;
         return copy;
     }
 
@@ -90,6 +98,9 @@ internal sealed partial class FalloutPlayerInventory
         _items.Clear(); foreach (var pair in validated._items) _items.Add(pair.Key, pair.Value);
         _equipped.Clear(); _equipped.UnionWith(validated._equipped);
         _random = validated._random;
+        _scriptOrder = CopyScriptOrder(validated._scriptOrder);
+        _scriptInitializations = validated._scriptInitializations.ToArray();
+        MarkScriptTraversalMutation();
         _traversal = null;
         ++Revision;
     }

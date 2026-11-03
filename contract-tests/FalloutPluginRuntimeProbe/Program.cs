@@ -392,7 +392,9 @@ try
         GlobalStage(0x01000085, "set SyntheticGlobal to 9", referenceCount: 2),
         Record("MESG", 0x01000079, 0, Combine(Subrecord("EDID", ZString("SyntheticMessage")),
             Subrecord("FULL", ZString("Synthetic title")), Subrecord("DESC", ZString("Synthetic body")),
-            Subrecord("DNAM", UInt32(1)), Subrecord("INAM", UInt32(0)), Subrecord("ITXT", ZString("Synthetic choice"))))));
+            Subrecord("DNAM", UInt32(1)), Subrecord("INAM", UInt32(0)), Subrecord("ITXT", ZString("Synthetic choice")))),
+        Record("MESG", 0x01000086, 0, Combine(Subrecord("EDID", ZString("SyntheticHudMessage")),
+            Subrecord("DESC", ZString("Synthetic HUD body")), Subrecord("DNAM", UInt32(2)), Subrecord("INAM", UInt32(0))))));
     using (var scriptStack = FalloutPluginStack.Load(fixtureRoot, ["Master.esm", "Scripts.esp"]))
     {
         var stageGlobals = FalloutGlobalState.Read(scriptStack);
@@ -428,30 +430,95 @@ try
             "Global script writes did not retain the executed prefix.");
         Require(scriptRuntime.TryTakeMessage(out var message) && message is { Title: "Synthetic title", Text: "Synthetic body" } &&
             message.Buttons.SequenceEqual(["Synthetic choice"]), "Source message identity differs.");
+        var firstMessage = message ?? throw new InvalidDataException("FIFO source message is absent.");
+        var firstRequest = firstMessage.Request ?? throw new InvalidDataException("FIFO source request is absent.");
         Require(!scriptRuntime.TryTakeMessage(out _) &&
-            message!.Request?.Caller == new FalloutFormKey("Scripts.esp", 0x73) &&
-            scriptRuntime.MessageResults.Select(message.Request, 0) &&
-            scriptRuntime.MessageResults.Take(new("Scripts.esp", 0x74)) == -1 && scriptRuntime.MessageResults.Take(new("Scripts.esp", 0x73)) == 0 &&
+            firstRequest.Caller == new FalloutFormKey("Scripts.esp", 0x74) &&
+            !scriptRuntime.MessageResults.IsPending(firstRequest) && scriptRuntime.SelectMessage(firstRequest, 0) &&
+            scriptRuntime.MessageResults.Take(new("Scripts.esp", 0x74)) == -1 &&
+            scriptRuntime.MessageResults.Take(new("Scripts.esp", 0x73)) == 0 &&
             scriptRuntime.MessageResults.Take(new("Scripts.esp", 0x73)) == -1,
-            "Message presentation exposed an obsolete prompt or lost its SCPT caller/consumptive result.");
+            "FIFO display was confused with the latest caller's single consumptive result slot.");
+        Require(scriptRuntime.TryTakeMessage(out var secondMessage) && secondMessage!.Request!.Caller == new FalloutFormKey("Scripts.esp", 0x73) &&
+            !scriptRuntime.SelectMessage(firstRequest, 0) && scriptRuntime.SelectMessage(secondMessage.Request!, 0) &&
+            !scriptRuntime.TryTakeMessage(out _) && scriptRuntime.Capture(secondMessage).Messages.Count == 0 &&
+            scriptRuntime.MessageResults.Take(new("Scripts.esp", 0x73)) == -1,
+            "Earlier UI callback replaced the current modal or invented a second per-message caller result.");
         var pendingScripts = new FalloutQuestScripts(scriptStack, questState, new HashSet<FalloutFormKey>(),
             new FalloutPlayerInventory(), globals, defaultProcessingDelay: 5);
-        pendingScripts.ShowMessage(message!.Form, script: new("Scripts.esp", 0x74));
+        pendingScripts.ShowMessage(firstMessage.Form, script: new("Scripts.esp", 0x74));
         Require(pendingScripts.TryTakeMessage(out var displayedMessage), "Synthetic modal was not queued.");
-        pendingScripts.ShowMessage(message.Form, script: new("Scripts.esp", 0x73));
+        pendingScripts.ShowMessage(firstMessage.Form, script: new("Scripts.esp", 0x73));
         var pending = pendingScripts.Capture(displayedMessage);
-        Require(pending.Messages.Count == 1 && !pendingScripts.MessageResults.IsPending(displayedMessage!.Request!),
-            "A replaced visible prompt remained actionable or was saved as pending.");
+        Require(pending.Messages.Count == 2 && pending.Messages[0] == displayedMessage!.Request &&
+            !pendingScripts.MessageResults.IsPending(displayedMessage!.Request!),
+            "A later result owner discarded the visible/queued source FIFO during capture.");
         var pendingCold = new FalloutQuestScripts(scriptStack, questState, new HashSet<FalloutFormKey>(),
             new FalloutPlayerInventory(), globals, defaultProcessingDelay: 5);
-        // Older saves can contain the superseded visible request as well.
-        pendingCold.Restore(pending with { Messages = [displayedMessage!.Request!, .. pending.Messages] });
+        pendingCold.Restore(pending);
         Require(pendingCold.TryTakeMessage(out var currentMessage) && !pendingCold.TryTakeMessage(out _) &&
-            currentMessage!.Request == pending.Messages.Single() && pendingCold.MessageResults.Select(currentMessage.Request!, 0) &&
-            pendingCold.Capture(currentMessage).Messages.Count == 0 &&
-            pendingCold.MessageResults.Take(new("Scripts.esp", 0x73)) == 0,
-            "Cold modal presentation revived an obsolete prompt or discarded its current result.");
-        Console.WriteLine("OPENNV_MESSAGE_PRESENTATION_PASS latestRequest=true replacementSave=true legacyQueue=true selectedNotReopened=true");
+            currentMessage!.Request == pending.Messages[0], "Cold modal FIFO lost its actual visible first request.");
+        pendingCold.ReturnMessagePresentation(currentMessage!.Request!);
+        Require(pendingCold.TryTakeMessage(out currentMessage) && currentMessage!.Request == pending.Messages[0] &&
+            pendingCold.SelectMessage(currentMessage.Request!, 0) && pendingCold.MessageResults.Take(new("Scripts.esp", 0x73)) == 0 &&
+            pendingCold.TryTakeMessage(out currentMessage) && currentMessage!.Request == pending.Messages[1] &&
+            pendingCold.SelectMessage(currentMessage.Request!, 0) && pendingCold.Capture(currentMessage).Messages.Count == 0,
+            "Presenter retirement/cold FIFO lost a request or assigned results independently per queued prompt.");
+        var batchOwner = new FalloutQuestScripts(scriptStack, questState, new HashSet<FalloutFormKey>(),
+            new FalloutPlayerInventory(), globals, defaultProcessingDelay: 5);
+        var modal = firstMessage.Form;
+        var hudMessage = new FalloutFormKey("Scripts.esp", 0x86);
+        batchOwner.ShowMessage(modal, script: new("Scripts.esp", 0x73));
+        var beforeBatch = batchOwner.Capture();
+        var nonreferenceCallerRefused = false;
+        try { _ = batchOwner.PrepareMessageBatch([new(modal, Caller: modal)]); }
+        catch (InvalidDataException) { nonreferenceCallerRefused = true; }
+        Require(nonreferenceCallerRefused && batchOwner.MessageResults.Capture() == beforeBatch.MessageResults &&
+            batchOwner.Capture().Messages.SequenceEqual(beforeBatch.Messages),
+            "Message preparation accepted a nonreference caller or changed state on refusal.");
+        var batch = batchOwner.PrepareMessageBatch([
+            new(modal, new("Scripts.esp", 0x74)), new(hudMessage, new("Scripts.esp", 0x73)), new(modal, new("Scripts.esp", 0x73))]);
+        Require(batchOwner.Capture().Messages.SequenceEqual(beforeBatch.Messages) &&
+            batchOwner.MessageResults.Capture() == beforeBatch.MessageResults && batch.HudEvents.Count == 1 &&
+            batch.HudEvents[0].Kind == FalloutHudEventKind.Message && batch.HudEvents[0].Source == hudMessage &&
+            batch.HudEvents[0].Script == new FalloutFormKey("Scripts.esp", 0x73),
+            "Message preparation published state or lost the separate real nonmodal notification intent.");
+        batch.RequireCurrent(); batch.Commit();
+        var committedBatch = batchOwner.Capture();
+        Require(committedBatch.Messages.Select(value => value.Sequence).SequenceEqual(new ulong[] { 1, 2, 4 }) &&
+            committedBatch.MessageResults is { Sequence: 4, OwnerSequence: 4 },
+            "Prepared mixed message commands changed source order, omitted nonmodal slot reset or made a HUD notice modal.");
+        batchOwner.ShowMessage(modal, script: new("Scripts.esp", 0x74));
+        batch.Rollback(); batch.Rollback();
+        Require(batchOwner.Capture().Messages.Select(value => value.Sequence).SequenceEqual(new ulong[] { 1, 5 }) &&
+            batchOwner.MessageResults.Capture() is { Sequence: 5, OwnerSequence: 5 } &&
+            batchOwner.MessageResults.Capture().Caller == new FalloutFormKey("Scripts.esp", 0x74),
+            "Message compensation removed an unrelated request or restored over its later result owner.");
+        var rollback = batchOwner.PrepareMessageBatch([new(modal, new("Scripts.esp", 0x73))]);
+        rollback.Commit(); rollback.Rollback();
+        Require(batchOwner.MessageResults.Capture() is { Sequence: 6, OwnerSequence: 5 } &&
+            batchOwner.MessageResults.Capture().Caller == new FalloutFormKey("Scripts.esp", 0x74) &&
+            batchOwner.Capture().Messages.Select(value => value.Sequence).SequenceEqual(new ulong[] { 1, 5 }),
+            "Owned rollback reused request identities or failed to restore its prior slot independently of high water.");
+        var rollbackCold = new FalloutMessageResults(); rollbackCold.Restore(batchOwner.MessageResults.Capture());
+        Require(rollbackCold.Capture() == batchOwner.MessageResults.Capture(), "Cold result state lost the restored owner generation.");
+        var staleBatch = batchOwner.PrepareMessageBatch([new(modal, new("Scripts.esp", 0x73))]);
+        batchOwner.ShowMessage(modal, script: new("Scripts.esp", 0x74));
+        var staleRefused = false;
+        try { staleBatch.Commit(); } catch (InvalidOperationException) { staleRefused = true; }
+        Require(staleRefused && batchOwner.Capture().Messages.Count == 3, "Stale prepared messages partially published.");
+        staleBatch.Rollback();
+        var exposedOwner = new FalloutQuestScripts(scriptStack, questState, new HashSet<FalloutFormKey>(),
+            new FalloutPlayerInventory(), globals, defaultProcessingDelay: 5);
+        var exposed = exposedOwner.PrepareMessageBatch([new(modal, new("Scripts.esp", 0x73))]);
+        exposed.Commit();
+        Require(exposedOwner.TryTakeMessage(out var exposedMessage), "Prepared modal was not actually exposed.");
+        exposedOwner.ReturnMessagePresentation(exposedMessage!.Request!);
+        var exposedRefused = false;
+        try { exposed.Rollback(); } catch (InvalidOperationException) { exposedRefused = true; }
+        Require(exposedRefused && exposedOwner.Capture().Messages.Count == 1,
+            "Presenter retirement erased the receipt that makes an already exposed modal irreversible.");
+        Console.WriteLine("OPENNV_MESSAGE_PRESENTATION_PASS fifo=true globalLatestCaller=true currentCallback=true coldQueue=true mixedBatch=true rollbackIsolation=true stalePrepared=true");
         var beforeMenu = scriptRuntime.Capture();
         Require(beforeMenu.Instances.Single(instance => instance.Quest.ObjectId == 0x76).Clock is
         { Remaining: 0.125f, Invocations: 1 } && questState.Variable(new("Scripts.esp", 0x76), 1) == 1,
@@ -804,7 +871,10 @@ try
             Subrecord("DATA", armorData))),
         Record("ARMO", 0x11a, 0, Combine(
             Subrecord("EDID", ZString("SyntheticFarewellWeapon")),
-            Subrecord("DATA", armorData))),
+            Subrecord("DATA", armorData), Subrecord("SCRI", UInt32(0x7fff50)))),
+        Record("SCPT", 0x7fff50, 0, Combine(Subrecord("SCHR", new byte[20]), Subrecord("SCDA", []),
+            Subrecord("SCTX", ZString("short SavedCounter\nbegin GameMode\nend")),
+            Subrecord("SLSD", Combine(UInt32(1), new byte[12], [1], new byte[7])), Subrecord("SCVR", ZString("SavedCounter")))),
         Record("NPC_", 7, 0, Combine(
             Subrecord("EDID", ZString("Player")),
             Subrecord("ACBS", playerStats),
@@ -1509,7 +1579,7 @@ try
     playerValues.AddModifier(5, OpenNV.Runtime.World.Actors.FalloutActorValuePool.Permanent, .5f);
     playerValues.AddModifier(5, OpenNV.Runtime.World.Actors.FalloutActorValuePool.Temporary, -2);
     playerValues.AddModifier(5, OpenNV.Runtime.World.Actors.FalloutActorValuePool.Damage, -1);
-    var pooledCampaign = syntheticCampaignState with { Special = playerValues.BaseSpecial, PlayerActorValues = playerValues.Capture() };
+    var pooledCampaign = syntheticCampaignState with { Special = playerValues.BaseSpecial, PlayerActorValues = playerValues.Capture() with { Schema = FalloutPlayerActorValues.BeforeKarmaSchema } };
     FalloutNativeCampaignSave.Write(syntheticSavePath, pooledCampaign);
     var pooledRestore = FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,
         cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);
@@ -1518,12 +1588,12 @@ try
     Require(coldPlayerValues.ReadBase(5) == 14 && coldPlayerValues.ReadPermanent(5) == 10 && coldPlayerValues.ReadCurrent(5) == 11.5f,
         "Campaign restore conflated player modifier pools or imposed the Vigor menu's allocation budget on runtime values.");
     FalloutNativeCampaignSave.Write(syntheticSavePath, pooledCampaign with
-    { PlayerActorValues = playerValues.Capture() with { PlayerSha256 = new string('0', 64) } });
+    { PlayerActorValues = playerValues.Capture() with { Schema = FalloutPlayerActorValues.BeforeKarmaSchema, PlayerSha256 = new string('0', 64) } });
     ExpectFailure(() => FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,
         cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell), "winning source identity");
     ExpectFailure(() => FalloutNativeCampaignSave.Write(syntheticSavePath, pooledCampaign with { Special = syntheticSpecial }), "BASE pools");
     playerValues.WriteBaseInteger(5, int.MaxValue);
-    var boundaryCampaign = pooledCampaign with { Special = playerValues.BaseSpecial, PlayerActorValues = playerValues.Capture() };
+    var boundaryCampaign = pooledCampaign with { Special = playerValues.BaseSpecial, PlayerActorValues = playerValues.Capture() with { Schema = FalloutPlayerActorValues.BeforeKarmaSchema } };
     FalloutNativeCampaignSave.Write(syntheticSavePath, boundaryCampaign);
     var boundaryRestore = FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,
         cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);
@@ -1578,6 +1648,48 @@ try
     Require(JsonSerializer.Serialize(playerAudioRestore.State.PlayerPackageAudio) == JsonSerializer.Serialize(playerAudioSave.PlayerPackageAudio),
         "Ended player package lost its persistent sound fault or RNG state cold.");
     Require(playerAudioRestore.State.FastTravel == FalloutFastTravelSnapshot.Initial, "Current campaign lost travel policy.");
+    var inventoryScript = cellStack.GetEffective(cellStack.RuntimeFormKey(0x7fff50));
+    var itemLocals = new FalloutScriptEffectLocals(inventoryScript); itemLocals.Write("SavedCounter", 37);
+    var itemIdentity = Guid.NewGuid();
+    var itemState = new FalloutInventoryScriptState(itemIdentity, inventoryScript.FormKey,
+        FalloutInventoryScriptState.Hash(inventoryScript), itemLocals.Capture()).Admit(cellStack.RuntimeFormKey(0x14), 2);
+    var scriptedForm = cellStack.RuntimeFormKey(0x11a);
+    var scriptedGrant = syntheticCompletedGrant with
+    {
+        Inventory = syntheticCompletedGrant.Inventory with
+        {
+            Items = syntheticCompletedGrant.Inventory.Items.Select(item => item.FormKey == scriptedForm
+                ? item with { Variants = [new FalloutItemVariant(1, ScriptState: itemState)] } : item).ToArray(),
+            ScriptOrder = [new(cellStack.RuntimeFormKey(0x118), [], 0, false), new(scriptedForm, [itemIdentity], 0, false)],
+            ScriptInitializations = [new(itemIdentity, true), new(itemIdentity, true)],
+        },
+    };
+    var inventoryCampaign = FalloutNativeCampaignSave.Capture(syntheticSaveCompatibilityId,
+        syntheticCellForVigor.Cell.FormKey, scriptedGrant, "Synthetic Courier", syntheticRaceSex.Female,
+        syntheticVigor, syntheticSpecial, syntheticTagSkills, syntheticTags, syntheticTraitFarewell,
+        syntheticTraits, stageMachine.ControlState, [1f, 2f, 3f], [0f, 0f, 0f, 1f],
+        globals: campaignGlobals.Capture(), gameTime: campaignTime.Capture(), skyLighting: campaignSky.Capture(),
+        references: [], questStageResults: [], terminalResults: [], playerPackageAudio: playerAudioSave.PlayerPackageAudio,
+        playerSkillValues: sourcePlayerSkills.CaptureValues(), playerAbilityScripts: sourcePlayerEffects.Capture(),
+        transientExplosions: playerAudioSave.TransientExplosions, fastTravel: playerAudioSave.FastTravel);
+    Require(inventoryCampaign.PlayerInventoryChangeEntries?.Count == 2 &&
+        inventoryCampaign.PlayerInventoryScriptInitializations?.Count == 2,
+        "Actual campaign capture flattened away inventory traversal or repeated initialization receipts.");
+    FalloutNativeCampaignSave.Write(syntheticSavePath, inventoryCampaign);
+    var inventoryCampaignCold = FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,
+        cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);
+    var itemCold = new FalloutPlayerInventory(); itemCold.Restore(inventoryCampaignCold.Inventory,
+        inventoryCampaignCold.State.EquippedRuntimeFormIds.ToArray(), inventoryCampaignCold.State.InventoryRandomState);
+    Require(JsonSerializer.Serialize(itemCold.Capture().Inventory.ScriptOrder) == JsonSerializer.Serialize(scriptedGrant.Inventory.ScriptOrder) &&
+        JsonSerializer.Serialize(itemCold.ScriptInitializations) == JsonSerializer.Serialize(scriptedGrant.Inventory.ScriptInitializations) &&
+        itemCold.Item(scriptedForm)!.Variants!.Single().ScriptState!.Resolve(inventoryScript).Read("SavedCounter").Number == 37 &&
+        itemCold.Item(scriptedForm)!.Variants!.Single().ScriptState!.Events!.Single().Mask == 2,
+        "Actual native campaign cold path lost item locals, pending mask, empty outer position or repeated init order.");
+    ExpectFailure(() => FalloutNativeCampaignSave.Write(syntheticSavePath, inventoryCampaign with
+    {
+        PlayerInventoryChangeEntries = [new(scriptedForm, [itemIdentity, Guid.NewGuid()], 0, false)],
+    }), "inventory script traversal");
+    FalloutNativeCampaignSave.Write(syntheticSavePath, playerAudioSave);
     var beforeTerminalState = playerAudioSave with { Schema = FalloutNativeCampaignSave.BeforeTerminalHackStateSchema };
     File.WriteAllText(syntheticSavePath, JsonSerializer.Serialize(beforeTerminalState));
     var terminalStateMigration = FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,

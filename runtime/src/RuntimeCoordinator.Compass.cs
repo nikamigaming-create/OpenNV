@@ -42,13 +42,10 @@ public partial class RuntimeCoordinator
                 }
             }
             if (!actors.TryGetValue(reference, out var target)) return null;
-            if (target.GetParent() is not RuntimeNativeNpc npcTarget)
-                throw new NotSupportedException("Creature detection requires its source bounds-height owner.");
             // Player LOS admits any clear candidate. Its third candidate is
             // always the source bounds quarter-height, even when cached bone
             // nodes replace the first two. One clear exact candidate suffices.
-            var quarter = npcTarget.GlobalPosition + Vector3.Up *
-                (npcTarget.SourceHeight * npcTarget.GlobalBasis.Scale.Y * player.UnitsToMeters / 4);
+            var quarter = target.DetectionQuarterHeightPoint;
             var exclusions = new Godot.Collections.Array<Rid>(player.CombatCollisionRids);
             using var query = PhysicsRayQueryParameters3D.Create(player.DetectionOrigin, quarter,
                 player.CollisionMask | player.CollisionLayer, exclusions);

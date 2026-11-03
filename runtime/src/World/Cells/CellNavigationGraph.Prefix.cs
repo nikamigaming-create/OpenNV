@@ -7,7 +7,8 @@ internal sealed partial class CellNavigationGraph
     // Portal midpoints guide a route; the destination triangle owns its actual
     // crossing width. This is a source-floor region, never collision clearance.
     private static Func<Vector3, bool> PrefixRegion(Vector3 start, IReadOnlyList<Vector3> path,
-        IReadOnlyList<NavigationNode> triangles, Vector3 target, int resume, float horizontalTolerance, float heightTolerance)
+        IReadOnlyList<NavigationNode> triangles, Vector3 target, int resume, float horizontalTolerance, float heightTolerance,
+        bool actorHeightProjection)
     {
         if (!target.IsFinite() || resume < 0 || resume >= triangles.Count ||
             !float.IsFinite(horizontalTolerance) || horizontalTolerance < 0 ||
@@ -23,13 +24,13 @@ internal sealed partial class CellNavigationGraph
             // past its cut plane. Later prefixes require the next triangle.
             if (resume == 0 && new Vector2(point.X - target.X, point.Y - target.Y).Dot(direction) < -horizontalTolerance)
                 return false;
-            return OnTriangleFloor(triangle, point, horizontalTolerance, heightTolerance);
+            return OnTriangleFloor(triangle, point, horizontalTolerance, heightTolerance, actorHeightProjection);
         };
     }
 
     private Func<Vector3, bool> ReachableCorridorFloor(NavigationNode start, IReadOnlyList<NavigationNode> path,
         Func<Vector3, bool>? permittedPortal,
-        float horizontalTolerance, float heightTolerance)
+        float horizontalTolerance, float heightTolerance, bool actorHeightProjection)
     {
         if (!float.IsFinite(horizontalTolerance) || horizontalTolerance < 0 ||
             !float.IsFinite(heightTolerance) || heightTolerance <= 0)
@@ -58,18 +59,19 @@ internal sealed partial class CellNavigationGraph
         return point =>
         {
             if (!point.IsFinite()) return false;
-            var floor = NearestNode(point).Node;
-            return Reachable(floor) && OnTriangleFloor(floor, point, horizontalTolerance, heightTolerance);
+            var floor = (actorHeightProjection ? NearestActorNode(point) : NearestNode(point)).Node;
+            return Reachable(floor) && OnTriangleFloor(floor, point, horizontalTolerance, heightTolerance, actorHeightProjection);
         };
     }
 
     private static bool OnTriangleFloor(NavigationNode triangle, Vector3 point,
-        float horizontalTolerance, float heightTolerance)
+        float horizontalTolerance, float heightTolerance, bool actorHeightProjection)
     {
         var plane = triangle.NavMesh.VerticalPlanePoint(triangle.TriangleIndex, point);
         if (plane is null) return false;
         var projected = triangle.NavMesh.ClosestPoint(triangle.TriangleIndex, plane.Value);
         return new Vector2(point.X - projected.X, point.Y - projected.Y).LengthSquared() <= horizontalTolerance * horizontalTolerance &&
-            MathF.Abs(point.Z - projected.Z) < heightTolerance;
+            (actorHeightProjection ? NativeActorNavigationHeight.Admits(point.Z, projected.Z) :
+                MathF.Abs(point.Z - projected.Z) < heightTolerance);
     }
 }

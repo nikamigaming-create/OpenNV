@@ -9,6 +9,19 @@ namespace OpenNV.Runtime.World.Actors;
 internal sealed record NativeActorMovementEnvelope(float Radius, float AuthoredHeight, string Kind,
     IReadOnlyList<NativeActorMovementCapsule> Capsules)
 {
+    internal object Observation => new
+    {
+        radius = Radius,
+        authoredHeight = AuthoredHeight,
+        kind = Kind,
+        capsules = Capsules.Select(capsule => new
+        {
+            radius = capsule.Radius,
+            one = new[] { capsule.One.X, capsule.One.Y, capsule.One.Z },
+            two = new[] { capsule.Two.X, capsule.Two.Y, capsule.Two.Z }
+        }).ToArray()
+    };
+
     internal float RootContactOffset => Math.Max(0, Capsules.Min(capsule =>
         Math.Min(capsule.One.Y, capsule.Two.Y) - capsule.Radius));
 

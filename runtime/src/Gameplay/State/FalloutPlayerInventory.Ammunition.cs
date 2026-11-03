@@ -48,8 +48,12 @@ internal sealed partial class FalloutPlayerInventory
             throw new InvalidDataException("Weapon shot inventory transaction contains invalid item variants.");
 
         InvalidateTraversalForInsertions(staged.Values);
+        foreach (var previous in _items.Values.Where(item => !staged.ContainsKey(item.FormKey)))
+            ObserveScriptRemoval(previous, null);
+        ObserveScriptPublication(staged.Values);
         _items.Clear();
         foreach (var item in staged) _items.Add(item.Key, item.Value);
+        MarkScriptTraversalMutation();
         NormalizeMagazineAmmunition();
         ++Revision;
     }

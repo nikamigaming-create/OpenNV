@@ -202,7 +202,7 @@ internal sealed class FalloutActorRetirementCandidate
     {
         if (nativeOwner == 0 || !state.AnimationSoundEvents.CanAwaitNativeCompletion ||
             records.SoundVoices.PendingFiniteSourceVoices(state.Reference) is not { Count: > 0 } voices) return null;
-        var active = state.AnimationSoundEvents.Events.Where(entry => entry.End == FalloutAnimationSoundEnd.Active)
+        var active = state.AnimationSoundEvents.ActiveEvents
             .ToDictionary(entry => entry.Generation);
         if (voices.Count != active.Count) return null;
         foreach (var voice in voices)

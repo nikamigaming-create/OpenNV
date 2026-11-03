@@ -25,11 +25,12 @@ internal sealed partial class RuntimeNativeActorCombat
         var target = warning.Target == _records.RuntimeFormKey(0x14) ? player :
             CombatActors.SingleOrDefault(actor => actor._state.Reference == warning.Target)?._actor;
         if (target is null) { ClearRadiusWarning(); return; }
+        var warningDistance = _threat!.WarningDistance(_skeleton.UnitsToMetres);
         var distance = _actor.GlobalPosition.DistanceSquaredTo(target.GlobalPosition);
-        if (distance > _detectRange * _detectRange) { ClearRadiusWarning(); return; }
+        if (warningDistance <= 0 || distance > warningDistance * warningDistance) { ClearRadiusWarning(); return; }
         var maximum = checked((int)FalloutGameSettingIntegers.Read(_records, "iGuardWarnings"));
         var (next, attack) = warning.Advance(delta, WarningInterval, maximum);
-        if (attack || distance <= _detectRange * _detectRange / 4)
+        if (attack || distance <= warningDistance * warningDistance / 4)
         {
             _state.AggroWarning = null;
             _state.Engagement = new(warning.Target);

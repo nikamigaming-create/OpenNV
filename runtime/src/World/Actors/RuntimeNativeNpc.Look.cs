@@ -150,6 +150,34 @@ internal partial class RuntimeNativeNpc
         if ((_headReferenceState ?? _aiReferenceState) is { } state) state.HeadTrackingRequired = true;
     }
 
+    private object? _speechActionLookOwner;
+
+    internal void RequireSpeechActionLook(object owner, FalloutFormKey target)
+    {
+        if (_speechActionLookOwner is not null && !ReferenceEquals(_speechActionLookOwner, owner))
+            throw new NotSupportedException("Competing speech action head targets require their shared-slot arbitration owner.");
+        if (_headTargets is null || _headTargetPoint is null || _headError is not null)
+            throw new NotSupportedException(_headError ?? "Speech action look has no head-tracking process owner.");
+        if (_headTargetPoint(target) is null)
+            throw new NotSupportedException($"Speech look target {target} has no actual resident target-point owner.");
+    }
+
+    internal void BeginSpeechActionLook(object owner, FalloutFormKey target)
+    {
+        RequireSpeechActionLook(owner, target);
+        _speechActionLookOwner = owner;
+        _headTargets!.BeginActionLook(target);
+        if ((_headReferenceState ?? _aiReferenceState) is { } state) state.HeadTrackingRequired = true;
+    }
+
+    internal void EndSpeechActionLook(object owner, bool reciprocalSelf = false)
+    {
+        if (!ReferenceEquals(_speechActionLookOwner, owner)) return;
+        _headTargets!.StopActionLook();
+        if (reciprocalSelf) _headTargets.StopActionLook();
+        _speechActionLookOwner = null;
+    }
+
     private void RestoreAuthoredHeadPose() => _headPose?.RestoreAuthoredPose();
 
     private void AdvanceHeadTracking(float delta)

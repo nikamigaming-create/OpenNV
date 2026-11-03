@@ -186,7 +186,7 @@ public partial class RuntimeCoordinator
             ? current.Ammunition : source.Ammunition.Where(value => (_nativeInventory.Item(value)?.Count ?? 0) > 0)
                 .Select(value => (FalloutFormKey?)value).FirstOrDefault();
         var loaded = magazine is not null && ammo == magazine.Ammunition
-            ? Math.Min(magazine.Loaded, _nativeInventory.Item(magazine.Ammunition)?.Count ?? 0) : 0;
+            ? magazine.UsesInventoryAmmo ? Math.Min(magazine.Loaded, _nativeInventory.Item(magazine.Ammunition)?.Count ?? 0) : magazine.Loaded : 0;
         var total = ammo is { } ammunition ? _nativeInventory.Item(ammunition)?.Count ?? 0 : 0;
         var range = source.MaximumRange * _configuration.World.GameUnitsToMeters;
         string? limit = null;

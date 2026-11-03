@@ -12,11 +12,13 @@ internal partial class RuntimeNativePlayer
     private NativeOwnedAnimationSoundPlayer? _weaponSounds;
     private Func<NativeOwnedAnimationSoundPlayer>? _weaponSoundOwner;
     private string? _weaponAction, _weaponActionError;
+    private string? _weaponRechargeError;
     private RuntimeNativeNifAnimation? _weaponActionClip;
     private FalloutWeaponAnimationTimeline? _weaponActionKeys;
     private bool _weaponActionLooping, _weaponActionStartPending;
     private double _weaponActionSeconds, _reloadHeld;
     private int _weaponActionHitCount;
+    private long _weaponActionShotsAtStart;
     private int? _weaponActionVariant;
     private bool _reloadPressed, _holdHandled;
     private bool _weaponTriggerHeld, _automaticFireStopped;
@@ -46,7 +48,8 @@ internal partial class RuntimeNativePlayer
                 !weapon.HasAmmunitionSource) return null;
             var ammo = _weaponHandling.Ammunition(weapon);
             var loaded = _weaponHandling.Loaded(weapon.Form);
-            return new(loaded, ammo is { } form ? Math.Max(0, (_presentationInventory!.Item(form)?.Count ?? 0) - _presentationInventory.LoadedInventoryRounds(form)) : 0);
+            return new(loaded, weapon.AmmoRegenerationSeconds > 0 ? weapon.ClipSize :
+                ammo is { } form ? Math.Max(0, (_presentationInventory!.Item(form)?.Count ?? 0) - _presentationInventory.LoadedInventoryRounds(form)) : 0);
         }
     }
     internal string? WeaponActionNotice => _weaponActionError is null ? null :
@@ -58,15 +61,32 @@ internal partial class RuntimeNativePlayer
         seconds = _weaponActionSeconds,
         firstPerson = _firstPerson?.ActionSelection,
         thirdPerson = _thirdPerson?.ActionSelection,
-        error = _weaponActionError,
+        incrementalReload = _incrementalReload is { } reload ? new { phase = reload.Phase.ToString(), weapon = reload.Weapon.ToString(), reload.Instance, ammunition = reload.Ammunition.ToString() } : null,
+        error = _weaponActionError ?? _weaponRechargeError,
         sounds = _weaponSounds?.State,
         firing = FiringState,
         unboundEvents = _weaponUnboundEvents.ToArray(),
-        unbound = "reload-speed-modifiers,incremental-reload,hold-threshold-retail-match,action-cold-continuation"
+        unbound = "reload-weapon-condition-groups,source-action-transition-blending,hold-threshold-retail-match,action-cold-continuation"
     };
+
+    private void AdvanceWeaponRecharge(double seconds)
+    {
+        try
+        {
+            if (_firstPerson?.Weapon is { AmmoRegenerationSeconds: > 0 } weapon)
+                _weaponHandling!.AdvanceRecharge(weapon, seconds);
+            _weaponRechargeError = null;
+        }
+        catch (Exception error)
+        {
+            if (_weaponRechargeError != error.Message) GD.PushError("OPENNV_WEAPON_RECHARGE_UNBOUND " + error.Message);
+            _weaponRechargeError = error.Message;
+        }
+    }
 
     private bool WeaponInput(InputEvent input)
     {
+        if (FatigueKnockoutActive) return true;
         if (!GetMeta("opennv_source_fighting_enabled", true).AsBool() || _firstPerson?.Weapon is null || _weaponHandling is null) return false;
         var bindings = _configuration.Player.DesktopInput;
         if (input.IsActionPressed(bindings.Reload.Action, allowEcho: false) || input.IsActionReleased(bindings.Reload.Action))
@@ -91,6 +111,7 @@ internal partial class RuntimeNativePlayer
             _automaticFireStopped = false;
             if (pressed)
             {
+                if (InterruptIncrementalReloadForFire(_firstPerson.Weapon)) return true;
                 if (!_weaponHandling.Drawn) RequestWeaponAction("equip");
                 else RequestWeaponFire();
             }
@@ -101,16 +122,27 @@ internal partial class RuntimeNativePlayer
 
     private void RequestWeaponAction(string group)
     {
-        if (_weaponAction is not null || _firstPerson?.Weapon is not { } weapon) return;
+        if (_firstPerson?.Weapon is not { } weapon) return;
+        if (_weaponAction is not null)
+        {
+            if (_incrementalReload?.Phase != IncrementalReloadPhase.Closing) return;
+            if (group.StartsWith("reload", StringComparison.Ordinal) && !_weaponHandling!.CanReload(weapon)) return;
+            CancelWeaponAction();
+        }
         _weaponActionError = null;
         try
         {
             if (group.StartsWith("reload", StringComparison.Ordinal))
             {
-                if (weapon.ReloadAnimation >= 19) throw new NotSupportedException("Incremental/special reload state is unbound.");
                 if (!_weaponHandling!.CanReload(weapon)) return;
+                if (weapon.ReloadAnimation is >= 19 and <= 22)
+                {
+                    BeginIncrementalReload(weapon);
+                    return;
+                }
+                if (weapon.ReloadAnimation >= 23) throw new NotSupportedException("Source reload animation is unbound.");
             }
-            var attack = group.StartsWith("attack", StringComparison.Ordinal);
+            var attack = FalloutWeaponPresentation.IsAttackGroup(group);
             int? variant = null;
             if (attack)
             {
@@ -122,6 +154,7 @@ internal partial class RuntimeNativePlayer
             _weaponActionKeys = ActionTimeline(clip, weapon, attack);
             _weaponActionHitCount = attack ? _weaponActionKeys.Discharges : 0;
             _weaponAction = group; _weaponActionClip = clip; _weaponActionSeconds = 0;
+            _weaponActionShotsAtStart = _shotsFired;
             _weaponActionVariant = variant;
             _firstPerson.SetAction(group, 0, variant); _thirdPerson?.SetAction(group, 0, variant);
             _weaponActionStartPending = true; _weaponActionLooping = false;
@@ -135,7 +168,7 @@ internal partial class RuntimeNativePlayer
         catch (Exception error) { _weaponActionError = error.Message; GD.PushError("OPENNV_WEAPON_ACTION_UNBOUND " + error.Message); }
     }
 
-    private static FalloutWeaponAnimationTimeline ActionTimeline(RuntimeNativeNifAnimation clip, FalloutWeaponPresentation weapon, bool attack)
+    internal static FalloutWeaponAnimationTimeline ActionTimeline(RuntimeNativeNifAnimation clip, FalloutWeaponPresentation weapon, bool attack)
     {
         var sequence = clip.Sequence;
         var timeline = new FalloutWeaponAnimationTimeline(clip.TextKeys, sequence.StartTime, sequence.StopTime, sequence.Frequency,
@@ -174,7 +207,7 @@ internal partial class RuntimeNativePlayer
         {
             EnsureWeaponSounds();
             var weapon = _firstPerson!.Weapon!;
-            var attack = _weaponAction.StartsWith("attack", StringComparison.Ordinal);
+            var attack = FalloutWeaponPresentation.IsAttackGroup(_weaponAction);
             var looping = attack && weapon.Automatic && _weaponTriggerHeld && !_automaticFireStopped;
             if (_weaponActionLooping && !looping) _weaponActionSeconds = _weaponActionKeys!.SampleSeconds(_weaponActionSeconds, true);
             _weaponActionLooping = looping;
@@ -188,7 +221,8 @@ internal partial class RuntimeNativePlayer
                     throw new InvalidDataException("Automatic weapon cadence is invalid.");
                 _weaponActionSeconds += delta * _weaponActionKeys!.Period * weapon.AttackShotsPerSecond / _weaponActionKeys.Discharges;
             }
-            else _weaponActionSeconds += delta * weapon.AnimationMultiplier * (attack ? weapon.AttackMultiplier : 1);
+            else _weaponActionSeconds += delta * weapon.AnimationMultiplier * (attack ? weapon.AttackMultiplier :
+                _weaponAction.StartsWith("reload", StringComparison.Ordinal) ? PlayerReloadSpeed() : 1);
             if (attack && weapon.IsThrownWeapon && _weaponTriggerHeld && _weaponActionKeys!.Hold is { } hold && previous <= hold)
                 _weaponActionSeconds = Math.Min(_weaponActionSeconds, hold);
             foreach (var key in _weaponActionKeys!.Crossed(previous, _weaponActionSeconds, _weaponActionStartPending, looping))
@@ -197,13 +231,16 @@ internal partial class RuntimeNativePlayer
                     if (FalloutWeaponAnimationTimeline.DischargesWeapon(text) && attack &&
                         (!weapon.Automatic || _weaponTriggerHeld && !_automaticFireStopped || VatsBurstActive && !_automaticFireStopped))
                         _pendingShotCount++;
+                    else if (_incrementalReload is not null && text.Equals("Hit", StringComparison.OrdinalIgnoreCase))
+                        CommitIncrementalReloadInsert(weapon);
                     else if (text.StartsWith("Sound:", StringComparison.OrdinalIgnoreCase)) _weaponSounds!.Dispatch(key with { Text = text });
                     else if (text.StartsWith("Enum:", StringComparison.OrdinalIgnoreCase) &&
                         weapon.Sounds.TryGetValue(text[5..].Trim().ToLowerInvariant(), out var sound)) _weaponSounds!.DispatchSound(sound);
                     else if (!text.Equals("start", StringComparison.OrdinalIgnoreCase) && !text.Equals("end", StringComparison.OrdinalIgnoreCase) &&
                         !text.StartsWith("Blend:", StringComparison.OrdinalIgnoreCase) && !text.StartsWith("prn:", StringComparison.OrdinalIgnoreCase) &&
                         !text.Equals("Attach", StringComparison.OrdinalIgnoreCase) && !text.Equals("Detach", StringComparison.OrdinalIgnoreCase) &&
-                        !text.Equals("Hold", StringComparison.OrdinalIgnoreCase) && !text.Equals("Loop", StringComparison.OrdinalIgnoreCase))
+                        !text.Equals("Hold", StringComparison.OrdinalIgnoreCase) && !text.Equals("Loop", StringComparison.OrdinalIgnoreCase) &&
+                        !_weaponActionKeys.IsRefireMarker(text))
                         _weaponUnboundEvents.Add(text);
                 }
             _weaponActionStartPending = false;
@@ -211,9 +248,10 @@ internal partial class RuntimeNativePlayer
             var sourceClock = _weaponActionSeconds * sequence.Frequency;
             var sourceDuration = sequence.StopTime - sequence.StartTime;
             var reachedEnd = !looping && sourceClock >= sourceDuration;
+            if (AdvanceIncrementalReloadBoundary(weapon, reachedEnd)) return;
             if (reachedEnd)
             {
-                if (_weaponAction.StartsWith("reload", StringComparison.Ordinal)) _weaponHandling!.CompleteReload(weapon);
+                if (_weaponAction.StartsWith("reload", StringComparison.Ordinal) && !_weaponActionReloadMaterialized) _weaponHandling!.CompleteReload(weapon);
                 else if (_weaponAction == "unequip")
                 {
                     _thirdPerson?.SetDrawn(false); _firstPerson.SetDrawn(false); _weaponHandling!.SetDrawn(false);
@@ -242,8 +280,9 @@ internal partial class RuntimeNativePlayer
 
     private void CancelWeaponAction()
     {
+        _incrementalReload = null; _weaponActionReloadMaterialized = false;
         _weaponAction = null; _weaponActionClip = null; _weaponActionKeys = null; _weaponActionSeconds = 0; _weaponActionHitCount = 0;
-        _weaponActionVariant = null;
+        _weaponActionVariant = null; _weaponActionShotsAtStart = _shotsFired;
         _firstPerson?.SetAction(null, 0); _thirdPerson?.SetAction(null, 0);
     }
 

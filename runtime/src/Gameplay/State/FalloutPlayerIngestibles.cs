@@ -23,6 +23,17 @@ internal sealed class FalloutPlayerIngestibles(FalloutPluginStack records, Fallo
     internal FalloutIngestiblesSnapshot Capture() => !_executingScript
         ? new(_active.ToArray(), _scriptReceipts.ToArray())
         : throw new NotSupportedException("Ingestible script invocation cannot be captured before its transaction completes.");
+
+    internal void RequireFatigueKnockoutEffects()
+    {
+        if (_executingScript) throw new NotSupportedException("Player knockout cannot qualify an executing ingestible script.");
+        foreach (var active in _active)
+        {
+            var effect = Definition(active.Item).Effects.Single(value => value.Index == active.Index);
+            if (effect.Archetype != 0 || effect.ActorValue == 47)
+                throw new NotSupportedException("Player knockout ingestible requires its active paralysis/effect owner.");
+        }
+    }
     private FalloutIngestible Definition(FalloutFormKey form)
     {
         if (!_definitions.TryGetValue(form, out var value))
