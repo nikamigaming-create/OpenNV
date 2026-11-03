@@ -131,14 +131,16 @@ public partial class NativeNifInstanceAudit
             coldOwner.DispatchSound(finite, finiteEmitter); coldOwner.PublishSourcePose();
             var finiteVoice = (AudioStreamPlayer3D)coldOwner.ActiveNativeVoices.Single();
             Require(finiteEmitter.GetViewport() != cold.GetViewport() && finiteVoice.GetViewport() == cold.GetViewport() &&
-                finiteVoice.GetParent() is NativeOwnedFiniteSoundHost,
+                finiteVoice.GetParent() is NativeOwnedFiniteSoundHost && coldOwner.HasEmitterVoices(finiteEmitter) &&
+                coldOwner.HasEmitterVoices(coldActor) && !coldOwner.CanRetireEmitter(finiteEmitter),
                 "Finite source voice did not enter the actual world-audio graph lifetime.");
             coldPoseReady = false;
             ((NativeOwnedFiniteSoundHost)finiteVoice.GetParent())._Process(0);
             Require(coldOwner.ActiveNativeVoices.Count == 1,
                 "Already hosted finite tail acquired a new failed-pose admission dependency.");
             records.SoundVoices.Stop(finite, reference);
-            Require(coldOwner.ActiveNativeVoices.Count == 0, "Source finite stop did not retire its real voice.");
+            Require(coldOwner.ActiveNativeVoices.Count == 0 && !coldOwner.HasEmitterVoices(finiteEmitter),
+                "Source finite stop did not retire its real voice.");
             var worldEmitter = new Node3D { Name = "ActualWorldEffect", Position = new(13, 2, -7) };
             cold.AddChild(worldEmitter);
             string? worldAdmission = null;

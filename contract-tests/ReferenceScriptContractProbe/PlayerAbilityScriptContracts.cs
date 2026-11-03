@@ -24,6 +24,8 @@ internal static class PlayerAbilityScriptContracts
             CheckCompiledExtentMismatch(directory);
             CheckPrefixFailure(directory);
             CheckUnsupportedEvent(directory);
+            CheckDeliveredLifecycle(directory);
+            CheckEffectShaderLayout(directory);
             Console.WriteLine("OPENNV_PLAYER_ABILITY_SCRIPT_START_PASS sourceReader=true unequalHeaderCounts=true compiledExtentRefused=true effectLocals=true genuinePlayer=true independentEffects=true prefixFailure=true cold=true nonStartRefused=true compiledExecution=unverified parity=unverified");
         }
         finally
@@ -186,7 +188,90 @@ internal static class PlayerAbilityScriptContracts
         return effects;
     }
 
-    private static byte[] Fixture(bool duplicate, bool failure = false, bool update = false, uint? declaredCompiledBytes = null, int compiledBytes = 7)
+    private static void CheckDeliveredLifecycle(string directory)
+    {
+        File.WriteAllBytes(Path.Combine(directory, Plugin), Fixture(false, finish: true));
+        using var records = FalloutPluginStack.Load(directory, [Plugin]);
+        var source = FalloutIngestible.ReadWeaponEnchantment(records, Key(0x31));
+        var target = Key(0x14);
+        var events = 0;
+        var order = new List<long>();
+        void Execute(FalloutFormKey actor, FalloutPluginRecord script, FalloutGameModeProgram program,
+            FalloutScriptEffectLocals locals)
+        {
+            Require(actor == target && script.FormKey == Key(0x30) && locals.Script == script.FormKey,
+                "Delivered lifecycle lost its calling actor or script-local scope.");
+            events++;
+        }
+        var owner = new FalloutDeliveredEffects(records, Execute, null);
+        Reject(() => owner.Prepare(target, target, source));
+        var refuseFinish = true;
+        owner.BindPreflight(batch =>
+        {
+            Require(batch.All(call => call.State.Target == target && call.Script.FormKey == Key(0x30)), "Delivered preflight lost source context.");
+            if (refuseFinish && batch.Any(call => call.Phase == FalloutDeliveredEffectPhase.Finish))
+                throw new NotSupportedException("Unowned Finish command.");
+        }, _ => FalloutDeliveredTargetStatus.Resident, _ => throw new InvalidOperationException("Fresh delivery required restore."));
+        Reject(() => owner.Prepare(target, target, source));
+        Require(events == 0 && owner.Capture() is null, "Unowned Finish admitted a Start prefix.");
+        refuseFinish = false;
+        var apply = owner.Prepare(target, target, source with { Effects = source.Effects.Reverse().ToArray() });
+        Require(events == 0, "Preparation invoked Start before contact commit.");
+        apply();
+        Reject(() => owner.Prepare(target, target, source));
+        owner.Advance(1.25);
+        var saved = JsonSerializer.Deserialize<FalloutDeliveredEffectsSnapshot>(JsonSerializer.Serialize(owner.Capture()))!;
+        Require(events == 3 && saved.Active.All(active => active.Elapsed == 1.25) && saved.Active.Select(active => active.Ordinal).SequenceEqual(new[] { 0, 1, 2 }),
+            "Start or source ordinal order differed from the retained activation.");
+        var cold = new FalloutDeliveredEffects(records, Execute, saved);
+        var status = FalloutDeliveredTargetStatus.Unloaded;
+        var restored = false;
+        cold.BindPreflight(batch =>
+        {
+            Require(batch.All(call => call.Phase == FalloutDeliveredEffectPhase.Finish), "Cold restore repeated Start.");
+            order.AddRange(batch.Select(call => call.State.Generation));
+        }, _ => status, active => restored = active.Count == 3);
+        Require(restored && events == 3, "Cold bind failed to revalidate presentation or replayed Start.");
+        order.Clear();
+        status = FalloutDeliveredTargetStatus.Retired;
+        Reject(() => cold.Advance(10));
+        Require(cold.Capture()!.Active.All(active => active.Elapsed == 1.25), "Unqualified target retirement consumed elapsed state.");
+        status = FalloutDeliveredTargetStatus.Unloaded;
+        cold.Advance(10);
+        cold.Advance(10);
+        Require(events == 6 && order.SequenceEqual(new[] { 2L, 3L, 1L }) && cold.Capture()!.Active.Count == 0,
+            "Cold unloaded activation lost Finish chronology, a stable tie or exactly-once dispatch.");
+        Reject(() => new FalloutDeliveredEffects(records, Execute, saved with
+        { Active = [saved.Active[0] with { ScriptHash = new string('0', 64) }] }));
+    }
+
+    private static void CheckEffectShaderLayout(string directory)
+    {
+        var shader = new byte[308]; shader[0] = 1;
+        UInt(shader, 24 * 4, 5); UInt(shader, 27 * 4, 6);
+        UInt(shader, 33 * 4, BitConverter.SingleToUInt32Bits(3.5f));
+        UInt(shader, 47 * 4, 0x00403020); UInt(shader, 50 * 4, BitConverter.SingleToUInt32Bits(.8f));
+        UInt(shader, 61 * 4, 0x42); UInt(shader, 69 * 4, 4); UInt(shader, 70 * 4, 2);
+        UInt(shader, 76 * 4, BitConverter.SingleToUInt32Bits(1.5f));
+        File.WriteAllBytes(Path.Combine(directory, Plugin), Join(Record("TES4", 0, Field("HEDR", new byte[12])),
+            Record("DEBR", 0x42), Record("EFSH", 0x43, Field("DATA", shader), Field("ICO2", Text("Effects/Particle.dds"))),
+            Record("EFSH", 0x44, Field("DATA", shader[..284])), Record("EFSH", 0x45, Field("DATA", shader[..300])),
+            Record("EFSH", 0x46, Field("DATA", shader[..299]))));
+        using var records = FalloutPluginStack.Load(directory, [Plugin]);
+        var full = FalloutEffectShader.Read(records, Key(0x43));
+        Require(!full.HasMembrane && full.HasParticles && full.ParticleTexture == "textures\\effects\\particle.dds" &&
+            full.Particles.Blend.Source == 5 && full.Particles.Blend.Destination == 6 && full.Particles.Lifetime == 3.5f &&
+            full.Particles.ColorKeys[0] == new FalloutEffectShaderColorKey(new(0x20, 0x30, 0x40, 0), .8f, 0) &&
+            full.Addons.Debris == Key(0x42) && full.Addons.ScaleOutTime == 1.5f && full.TextureColumns == 4 && full.TextureRows == 2,
+            "EFSH source flags, particle channels, debris or atlas were decoded at the wrong offsets.");
+        Require(FalloutEffectShader.Read(records, Key(0x44)).Addons.FadeIn is null &&
+            FalloutEffectShader.Read(records, Key(0x45)).Addons.ScaleOutTime is null,
+            "Short EFSH forms invented omitted add-on fields.");
+        Reject(() => FalloutEffectShader.Read(records, Key(0x46)));
+    }
+
+    private static byte[] Fixture(bool duplicate, bool failure = false, bool update = false, uint? declaredCompiledBytes = null,
+        int compiledBytes = 7, bool finish = false)
     {
         var acbs = new byte[24]; acbs[8] = 1;
         var spit = new byte[16]; UInt(spit, 0, 4);
@@ -201,15 +286,25 @@ internal static class PlayerAbilityScriptContracts
         BinaryPrimitives.WriteUInt16LittleEndian(schr.AsSpan(16), 0x100); schr[18] = 1;
         var source = "short count\nbegin ScriptEffectStart\nif count == 0\nset count to 1\nplayer.ModAV Barter 3\n" +
             (failure ? "player.ModAV UnownedActorValue 1\n" : "player.ModAV Science 2\n") + "endif\nend\n" +
-            (update ? "begin ScriptEffectUpdate\nplayer.ModAV Barter 9\nend\n" : "");
+            (update ? "begin ScriptEffectUpdate\nplayer.ModAV Barter 9\nend\n" : "") +
+            (finish ? "begin ScriptEffectFinish\nplayer.ModAV Science 1\nend\n" : "");
         var effect = Join(Field("EFID", BitConverter.GetBytes(0x22u)), Field("EFIT", efit));
+        var enchantment = new byte[16]; UInt(enchantment, 0, 2);
+        var touch = (byte[])efit.Clone(); UInt(touch, 8, 4); UInt(touch, 12, 1);
+        var shorterTouch = (byte[])touch.Clone(); UInt(shorterTouch, 8, 2);
+        var touchMgef = (byte[])mgef.Clone(); UInt(touchMgef, 16, uint.MaxValue);
         var rows = new List<byte[]>
         {
             Record("TES4", 0, Field("HEDR", new byte[12])),
             Record("NPC_", 7, Field("ACBS", acbs), Field("DATA", [100, 0, 0, 0, 5, 5, 5, 5, 5, 5, 5]), Field("SPLO", BitConverter.GetBytes(0x21u))),
             Record("RACE", 10),
             Record("SPEL", 0x21, Field("SPIT", spit), effect, duplicate ? effect : []),
+            Record("ENCH", 0x31, Field("ENIT", enchantment), Field("EFID", BitConverter.GetBytes(0x23u)), Field("EFIT", touch),
+                Field("EFID", BitConverter.GetBytes(0x24u)), Field("EFIT", shorterTouch), Field("EFID", BitConverter.GetBytes(0x25u)), Field("EFIT", shorterTouch)),
             Record("MGEF", 0x22, Field("DATA", mgef)),
+            Record("MGEF", 0x23, Field("DATA", touchMgef)),
+            Record("MGEF", 0x24, Field("DATA", touchMgef)),
+            Record("MGEF", 0x25, Field("DATA", touchMgef)),
             Record("SCPT", 0x30, Field("SCHR", schr), Field("SCDA", compiled), Field("SLSD", local), Field("SCVR", Text("count")),
                 Field("SCRO", BitConverter.GetBytes(0x14u)), Field("SCRO", BitConverter.GetBytes(7u)), Field("SCTX", Text(source))),
             Setting(0x100, "fAVDSkillPrimaryBonusMult", 2), Setting(0x101, "fAVDSkillLuckBonusMult", .5f), Setting(0x102, "fAVDTagSkillBonus", 15),

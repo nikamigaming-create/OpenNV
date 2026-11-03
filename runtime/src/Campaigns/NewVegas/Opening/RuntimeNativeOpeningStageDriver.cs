@@ -356,6 +356,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
             {
                 _playerActorValues.AdvanceFatigue(delta);
                 _scripts.References?.AdvanceActorFatigue(delta);
+                _deliveredEffects.Advance(delta);
             }
             _scripts.References?.AdvanceActorIngestibles(delta);
             _stageResults?.Continue();

@@ -3,13 +3,30 @@ using System.Buffers.Binary;
 namespace OpenNV.Runtime.Content;
 
 internal sealed record FalloutImpact(FalloutFormKey Form, string? Model, float Duration, uint Orientation,
-    float AngleThreshold, float PlacementRadius, uint Flags, FalloutFormKey? TextureSet, FalloutFormKey[] Sounds,
+    float AngleThreshold, float PlacementRadius, uint Flags, FalloutFormKey? TextureSet, IReadOnlyList<FalloutFormKey> Sounds,
     FalloutImpactDecal? Decal = null)
 {
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<FalloutPluginStack,
+        System.Collections.Concurrent.ConcurrentDictionary<(FalloutFormKey Set, int Material), Lazy<FalloutImpact?>>> Sources = new();
+
     internal static FalloutImpact? Resolve(FalloutPluginStack records, FalloutFormKey set, int material)
     {
         if (material is < 0 or > 11) throw new ArgumentOutOfRangeException(nameof(material));
         var source = records.GetEffective(set);
+        source.Plugin.ValidateReadSource();
+        var impact = Sources.GetOrCreateValue(records).GetOrAdd((set, material),
+            _ => new(() => ResolveSource(records, source, material), LazyThreadSafetyMode.ExecutionAndPublication)).Value;
+        if (impact is not null)
+        {
+            records.GetEffective(impact.Form).Plugin.ValidateReadSource();
+            if (impact.Decal is not null && impact.TextureSet is { } texture)
+                records.GetEffective(texture).Plugin.ValidateReadSource();
+        }
+        return impact;
+    }
+
+    private static FalloutImpact? ResolveSource(FalloutPluginStack records, FalloutPluginRecord source, int material)
+    {
         if (source.Signature != "IPDS") throw new InvalidDataException("Weapon impact dataset is not IPDS.");
         var data = source.ReadSubrecords().Single(field => field.Signature == "DATA").Data;
         // Earlier records end after Water. The later material slots are absent,
@@ -38,7 +55,7 @@ internal sealed record FalloutImpact(FalloutFormKey Form, string? Model, float D
         var result = new FalloutImpact(form, FalloutNpcAppearanceResolver.PathField(source, "MODL", "meshes", false, fields),
             FalloutProjectile.Number(data, 0), BinaryPrimitives.ReadUInt32LittleEndian(data[4..]),
             FalloutProjectile.Number(data, 8), FalloutProjectile.Number(data, 12), BinaryPrimitives.ReadUInt32LittleEndian(data[20..]),
-            Form("DNAM"), new[] { Form("SNAM"), Form("NAM1") }.Where(value => value.HasValue).Select(value => value!.Value).ToArray());
+            Form("DNAM"), Array.AsReadOnly(new[] { Form("SNAM"), Form("NAM1") }.Where(value => value.HasValue).Select(value => value!.Value).ToArray()));
         if (result.Duration < 0 || result.Orientation > 2 || result.PlacementRadius < 0 || (result.Flags & ~1u) != 0)
             throw new NotSupportedException("Impact orientation, duration, placement or flags are unbound.");
         return result with

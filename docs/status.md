@@ -23,14 +23,17 @@ gecko pursued and damaged the player. Sessions/harnesses closed normally after
 weapon behavior, every delayed pellet receipt or retail acceptance.
 
 The final follow-up build's unpaused 20-second moving window confirmed native
-3840x2160 at scale 1. Ten samples reported 58–60 FPS; p95 host-draw interval was
+3840x2160 at scale 1. Ten samples reported 58-60 FPS; p95 host-draw interval was
 18.73 ms and maximum 22.50 ms over 1,188 intervals. Paused/menu samples are
 excluded. This is not sustained 4K60 or display-presentation acceptance. Earlier
-RCW timing retained a 166.62 ms spike; the encounter states differ. Synchronous
-beam/impact creation and remaining navigation work still require repair.
+RCW timing retained a 166.62 ms spike; the encounter states differ. The current
+batch shares immutable effect geometry, prepares beam resources on equip and
+reuses completed effects with independent mutable owners and audio lifetimes.
+The complete runtime gate and selected owned geometry/controller/audio audits
+pass. No causal speedup or sustained frame-budget acceptance is claimed.
 The current local Release executable is `tmp/development-runtime/windows/OpenNV.exe`.
 
-The navigation follow-up excludes disabled source triangles from connectivity,
+The merged PR349 navigation follow-up excludes disabled source triangles from connectivity,
 shares the route's floor predicate with combat arrival, and retains an exact
 unfiltered search frontier across floor queries. Immutable weapon-script metadata
 is cached per selected stack; exact firing-item event-list admission remains live.
@@ -44,9 +47,22 @@ script/resistance/presentation effects, critical/sneak rules, broader VATS and
 off-residency remote explosions remain unfinished or unqualified. Navigation
 source setup has a measured synchronous spike requiring repair.
 
-One bounded retail-launch retry produced no command bridge/live state and was
-closed. Fresh paired comparison is unavailable. Command-center/scripted/headless
+Retail startup is restored after a graceful Steam restart corrected its stale
+ActiveProcess registration. The existing isolated launcher then produced fresh
+bridge/state in three seconds and the bounded check was closed. The current
+controlled observer starts with sampling off. A fresh paired RCW/source-gecko
+encounter completed fire and reload, closing both games after 128 seconds with
+recording off. OpenNV spent two rounds and recorded one torso hit for 8.925;
+retail spent one and recorded a different hit location with x2 multiplier for
+17.55. Starting player states also differ, so damage and cadence parity remain
+open. OpenNV still reports an unowned animated muzzle light and synchronous
+last-shot work above a 60 FPS frame budget. Command-center/scripted/headless
 operation is required, without desktop control. No fresh parity claim is made.
+
+Source effect-shader decoding and a persistent, preflighted delivered-script
+Start/Finish lifecycle pass their selected checks. Pulse/fire effect admission
+remains closed until actor-surface emission, shader evaluation, add-ons, recast
+and gore state have qualified owners.
 Unrelated classic import changes remain outside the combat publication.
 
 ## Current gameplay evidence

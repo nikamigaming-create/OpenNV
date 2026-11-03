@@ -16,6 +16,7 @@ public partial class NativeNifInstanceAudit
         var bytes = ManagerControllerChainFixture("");
         var sourceHash = SHA256.HashData(bytes);
         ExerciseManagerControllerInstances(FalloutNifFile.Read(bytes), "synthetic", [6, 13, 7]);
+        ExerciseManagerControllerInstances(FalloutNifFile.Read(bytes), "synthetic-shared-geometry", [6, 13, 7], true);
         if (!SHA256.HashData(bytes).SequenceEqual(sourceHash)) throw new InvalidDataException("Manager construction changed source bytes.");
         foreach (var mode in new[] { "cycle", "foreign-target", "ambiguous", "unowned", "companion-flags", "priority" })
         {
@@ -59,20 +60,45 @@ public partial class NativeNifInstanceAudit
             if (!content.TryRead(model, null, out var owned, out var identity)) throw new FileNotFoundException(model);
             var hash = SHA256.HashData(owned);
             ExerciseManagerControllerInstances(FalloutNifFile.Read(owned), identity, null);
+            ExerciseManagerControllerInstances(FalloutNifFile.Read(owned), identity, null, true);
             if (!content.TryRead(model, null, out var after, out var afterIdentity) || identity != afterIdentity ||
                 !SHA256.HashData(after).SequenceEqual(hash)) throw new InvalidDataException("Owned manager source changed.");
         }
     }
 
-    private void ExerciseManagerControllerInstances(FalloutNifFile source, string identity, int[]? expectedChain)
+    private void ExerciseManagerControllerInstances(FalloutNifFile source, string identity, int[]? expectedChain,
+        bool shareImmutableGeometry = false)
     {
-        var prototype = new RuntimeNativeNifPrototype(source, .02f);
+        var prototype = new RuntimeNativeNifPrototype(source, .02f, shareImmutableGeometry: shareImmutableGeometry);
         Node3D? first = null, second = null;
         try
         {
             first = prototype.Instantiate(); second = prototype.Instantiate();
             first.ProcessMode = second.ProcessMode = ProcessModeEnum.Disabled;
             AddChild(first); AddChild(second);
+            if (shareImmutableGeometry)
+            {
+                var siblings = second.FindChildren("*", "MeshInstance3D", true, false).OfType<MeshInstance3D>()
+                    .Where(mesh => mesh.HasMeta("opennv_nif_geometry_block"))
+                    .ToDictionary(mesh => mesh.GetMeta("opennv_nif_geometry_block").AsInt32());
+                var sharedSurfaces = 0;
+                foreach (var mesh in first.FindChildren("*", "MeshInstance3D", true, false).OfType<MeshInstance3D>()
+                    .Where(mesh => mesh.HasMeta("opennv_nif_geometry_block")))
+                {
+                    var sibling = siblings[mesh.GetMeta("opennv_nif_geometry_block").AsInt32()];
+                    if (mesh.Mesh.GetRid() != sibling.Mesh.GetRid()) continue;
+                    for (var surface = 0; surface < mesh.Mesh.GetSurfaceCount(); surface++)
+                    {
+                        if (mesh.Mesh.SurfaceGetMaterial(surface) is not null ||
+                            mesh.GetActiveMaterial(surface) is not { } material ||
+                            sibling.GetActiveMaterial(surface) is not { } siblingMaterial ||
+                            material.GetRid() == siblingMaterial.GetRid())
+                            throw new InvalidDataException("Shared geometry retained mutable instance material state.");
+                        sharedSurfaces++;
+                    }
+                }
+                if (sharedSurfaces == 0) throw new InvalidDataException("Manager audit exercised no shared immutable surfaces.");
+            }
             var player = first.FindChildren("*", "", true, false).OfType<RuntimeNifControllerPlayer>().Single();
             var cold = second.FindChildren("*", "", true, false).OfType<RuntimeNifControllerPlayer>().Single();
             var original = prototype.Scene.Root.FindChildren("*", "", true, false).OfType<RuntimeNifControllerPlayer>().Single();
@@ -121,14 +147,14 @@ public partial class NativeNifInstanceAudit
             if (!GodotObject.IsInstanceValid(cold) || JsonSerializer.Serialize(cold.CaptureObjectState()) != retainedSiblingClock ||
                 ManagerMaterialState(second) != retainedSiblingMaterials)
                 throw new InvalidDataException("Retiring one manager changed its sibling's clock or material.");
-            GD.Print($"OPENNV_MANAGER_CONTROLLER_INSTANCE_PASS source={identity} sha256={source.Sha256} groups={groups} materialSamples={samples} coldClock=true independentInstances=true visibilityAnimation=unverified ordinaryActivation=unverified pixels=unverified");
+            GD.Print($"OPENNV_MANAGER_CONTROLLER_INSTANCE_PASS source={identity} sha256={source.Sha256} groups={groups} materialSamples={samples} sharedImmutableGeometry={shareImmutableGeometry} coldClock=true independentInstances=true visibilityAnimation=unverified ordinaryActivation=unverified pixels=unverified");
         }
         finally { first?.Free(); second?.Free(); prototype.Scene.Root.Free(); }
     }
 
     private static string ManagerMaterialState(Node3D root) => JsonSerializer.Serialize(
         root.FindChildren("*", "MeshInstance3D", true, false).OfType<MeshInstance3D>()
-            .SelectMany(mesh => Enumerable.Range(0, mesh.Mesh.GetSurfaceCount()).Select(index => mesh.Mesh.SurfaceGetMaterial(index)))
+            .SelectMany(mesh => Enumerable.Range(0, mesh.Mesh.GetSurfaceCount()).Select(mesh.GetActiveMaterial))
             .OfType<ShaderMaterial>().Where(material => material.ResourceName is NativeNifEffectMaterial.ResourceIdentity or NativeNifLightingMaterial.ResourceIdentity)
             .Select(material => new
             {
@@ -149,7 +175,7 @@ public partial class NativeNifInstanceAudit
             var sampler = new FalloutNifFloatAnimation(source, link.Interpolator);
             for (var surface = 0; surface < mesh.Mesh.GetSurfaceCount(); surface++)
             {
-                var material = mesh.Mesh.SurfaceGetMaterial(surface) as ShaderMaterial ?? throw new InvalidDataException("Manager lost its actual shader.");
+                var material = mesh.GetActiveMaterial(surface) as ShaderMaterial ?? throw new InvalidDataException("Manager lost its actual shader.");
                 float actual;
                 if (link.ControllerType == "NiAlphaController")
                     actual = material.GetShaderParameter(material.ResourceName == NativeNifEffectMaterial.ResourceIdentity

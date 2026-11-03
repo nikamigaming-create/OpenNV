@@ -35,6 +35,12 @@ internal sealed record FalloutProjectile(FalloutFormKey Form, ushort Flags, usho
     internal bool IsRemoteMine => Type == 2 && Detonates && ExplosionSource is not null;
     internal bool IsProximityMine => (Flags & 6) == 6 && ExplosionAltTriggerProximity > 0;
 
+    internal void RequireFlightBounceOwner()
+    {
+        if (BouncyMultiplier < 0)
+            throw new NotSupportedException($"Projectile {Form} requires its signed Bouncy Mult flight behavior owner.");
+    }
+
     internal float HitscanImpactDelaySeconds(float distanceMeters, float unitsToMeters)
     {
         if (!Hitscan) return 0;
@@ -83,7 +89,7 @@ internal sealed record FalloutProjectile(FalloutFormKey Form, ushort Flags, usho
                 explosion ?? throw new InvalidDataException("Explosive projectile has no EXPL reference.")) : null,
         };
         if (result.Range <= 0 || result.Speed < 0 || result.Gravity < 0 || result.TracerChance is < 0 or > 1 ||
-            result.MuzzleSeconds < 0 || result.FadeSeconds < 0 || result.BouncyMultiplier < 0 || result.ExplosionAltTriggerProximity < 0 ||
+            result.MuzzleSeconds < 0 || result.FadeSeconds < 0 || result.ExplosionAltTriggerProximity < 0 ||
             result.ExplosionAltTriggerTimer < 0)
             throw new InvalidDataException("Projectile motion/appearance values are invalid.");
         return result;

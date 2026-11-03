@@ -8,6 +8,8 @@ internal sealed partial class RuntimeNativeShotEffects
 {
     private RuntimeNativeNifPrototype? _beamPrototype;
     private string? _beamPath;
+    private Vector3 _beamSourceEnd;
+    private int _beamSurfaces;
     private long _beams;
     private object? _lastBeam;
 
@@ -21,22 +23,15 @@ internal sealed partial class RuntimeNativeShotEffects
             throw new InvalidDataException($"Beam {source.Form} has invalid endpoints or no source lifetime.");
         var distance = origin.DistanceTo(endpoint);
         if (distance < .0001f) return;
-        var path = source.Model ?? throw new NotSupportedException($"Beam {source.Form} has no source model.");
-        if (_beamPath != path)
-        {
-            var prototype = new RuntimeNativeNifPrototype(ReadModel(path), _units);
-            _beamPrototype?.Scene.Root.Free();
-            _beamPrototype = prototype; _beamPath = path;
-        }
-        var root = _beamPrototype!.Instantiate();
+        var path = PrepareBeamSource(source);
+        var key = new EffectKey(true, source.Form);
+        var effect = TakeCompletedEffect(key);
+        var reused = effect is not null;
+        effect ??= BuildBeamEffect(source, key);
+        var root = effect.Root;
+        var sourceEnd = _beamSourceEnd;
         try
         {
-            var markers = root.FindChildren("*", "", true, false).OfType<Node3D>()
-                .Where(node => node.HasMeta("opennv_nif_source_name") && node.GetMeta("opennv_nif_source_name").AsString() == "BeamEnd").ToArray();
-            if (markers.Length > 1) throw new NotSupportedException($"Beam {source.Form} has ambiguous authored BeamEnd markers.");
-            var sourceEnd = markers.Length == 1
-                ? BeamLocalTransform(markers[0], root).Origin
-                : BeamGeometryEnd(root);
             var length = sourceEnd.Length();
             if (!float.IsFinite(length) || length < .0001f)
                 throw new InvalidDataException($"Beam {source.Form} has a degenerate source extent.");
@@ -47,10 +42,12 @@ internal sealed partial class RuntimeNativeShotEffects
             var sourceFrame = Basis.LookingAt(sourceAxis, Mathf.Abs(sourceAxis.Dot(Vector3.Up)) > .99f ? Vector3.Right : Vector3.Up);
             var targetFrame = Basis.LookingAt(targetAxis, Mathf.Abs(targetAxis.Dot(Vector3.Up)) > .99f ? Vector3.Right : Vector3.Up);
             root.Transform = new(targetFrame * Basis.FromScale(new(1, 1, distance / length)) * sourceFrame.Inverse(), origin);
-            AddChild(root);
-            var playback = new NativeNifEffectPlayback(root, source.FadeSeconds, encoded: false, _sounds);
-            playback.Start();
-            _effects.Add(new(root, source.FadeSeconds, playback));
+            if (!root.IsInsideTree()) AddChild(root);
+            if (reused && effect.WasPlayed) effect.Playback!.RestartCompleted();
+            else effect.Playback!.Start();
+            effect.WasPlayed = true;
+            effect.Remaining = source.FadeSeconds;
+            _effects.Add(effect);
             _lastBeam = new
             {
                 ordinal = ++_beams,
@@ -62,10 +59,63 @@ internal sealed partial class RuntimeNativeShotEffects
                 distanceMeters = distance,
                 sourceLengthMeters = length,
                 lifetimeSeconds = source.FadeSeconds,
-                surfaces = root.FindChildren("*", "MeshInstance3D", true, false).Count,
+                surfaces = _beamSurfaces,
+                reused,
                 owner = "source-beam-model-and-ray-contact",
                 unbound = "retail-fade-curve-and-pixel-parity"
             };
+        }
+        catch { root.Free(); throw; }
+    }
+
+    internal void PrepareBeam(FalloutProjectile source)
+    {
+        if (source.Type != 4) return;
+        _ = PrepareBeamSource(source);
+        var key = new EffectKey(true, source.Form);
+        if (_completedEffects.Any(effect => effect.Reusable == key)) return;
+        var effect = BuildBeamEffect(source, key);
+        if (effect.Reusable is not null) RetainCompletedEffect(effect);
+        else effect.Root.Free();
+    }
+
+    private string PrepareBeamSource(FalloutProjectile source)
+    {
+        if (source.FadeSeconds <= 0)
+            throw new InvalidDataException($"Beam {source.Form} has no source lifetime.");
+        var path = source.Model ?? throw new NotSupportedException($"Beam {source.Form} has no source model.");
+        if (_beamPath == path) return path;
+        var prototype = new RuntimeNativeNifPrototype(ReadModel(path), _units,
+            shareImmutableGeometry: true, contentSource: _content);
+        var root = prototype.Scene.Root;
+        try
+        {
+            var markers = root.FindChildren("*", "", true, false).OfType<Node3D>()
+                .Where(node => node.HasMeta("opennv_nif_source_name") && node.GetMeta("opennv_nif_source_name").AsString() == "BeamEnd").ToArray();
+            if (markers.Length > 1) throw new NotSupportedException($"Beam {source.Form} has ambiguous authored BeamEnd markers.");
+            var end = markers.Length == 1 ? BeamLocalTransform(markers[0], root).Origin : BeamGeometryEnd(root);
+            if (!end.IsFinite() || end.Length() < .0001f)
+                throw new InvalidDataException($"Beam {source.Form} has a degenerate source extent.");
+            _beamSurfaces = root.FindChildren("*", "MeshInstance3D", true, false).Count;
+            _beamSourceEnd = end;
+            _beamPrototype?.Scene.Root.Free();
+            _beamPrototype = prototype;
+            _beamPath = path;
+            return path;
+        }
+        catch { root.Free(); throw; }
+    }
+
+    private Effect BuildBeamEffect(FalloutProjectile source, EffectKey key)
+    {
+        // Preserve the authored default loop selection. Playback takes over
+        // processing before this detached instance enters the scene tree.
+        var root = _beamPrototype!.Instantiate();
+        try
+        {
+            var playback = new NativeNifEffectPlayback(root, source.FadeSeconds, encoded: false, _sounds);
+            var recyclable = !root.FindChildren("*", "", true, false).Any(node => node is CollisionObject3D);
+            return new(root, source.FadeSeconds, playback, recyclable ? key : null);
         }
         catch { root.Free(); throw; }
     }

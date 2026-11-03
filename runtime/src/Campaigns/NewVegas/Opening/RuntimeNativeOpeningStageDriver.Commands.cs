@@ -287,6 +287,7 @@ internal partial class RuntimeNativeOpeningStageDriver
             PlayerHitKnockback = _player.CaptureHitKnockback(),
             PlayerFatigueKnockout = _player.CaptureFatigueKnockout(),
             Ingestibles = _ingestibles.Capture(),
+            DeliveredEffects = _deliveredEffects.Capture(),
             ActorOverrides = _scripts.References!.CaptureActorOverrides(),
             FactionRelations = _scripts.References.CaptureFactionRelations(),
             Reputations = _scripts.References.CaptureReputations(),

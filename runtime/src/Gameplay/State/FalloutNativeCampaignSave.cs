@@ -70,7 +70,8 @@ internal sealed record FalloutNativeCampaignState(
     IReadOnlyList<FalloutInventoryScriptOrderEntry>? PlayerInventoryChangeEntries = null,
     IReadOnlyList<FalloutInventoryScriptInitialization>? PlayerInventoryScriptInitializations = null,
     FalloutPlayerFatigueKnockout? PlayerFatigueKnockout = null,
-    FalloutRuntimeReferencesSnapshot? RuntimeReferences = null, IReadOnlyList<FalloutDynamicMineSnapshot>? DynamicMines = null);
+    FalloutRuntimeReferencesSnapshot? RuntimeReferences = null, IReadOnlyList<FalloutDynamicMineSnapshot>? DynamicMines = null,
+    FalloutDeliveredEffectsSnapshot? DeliveredEffects = null);
 
 internal sealed record FalloutNativeCampaignRestore(
     FalloutNativeCampaignState State,
@@ -963,6 +964,7 @@ internal static class FalloutNativeCampaignSave
         if (state.Schema is ExpectedSchema or RadioSchema or DialoguePackageSchema or EditorTravelSchema or SignedRaceSchema or ReferenceAccessSchema or ReferenceAccessLegacySchema or RaceOverridesSchema or ScriptValuesSchema or ObjectAnimationSchema or DestructionSchema or HitReactionSchema or DeathEventSchema or PatrolSchema or EncounterZoneSchema && state.EncounterZones is null)
             throw new InvalidDataException("Saved campaign is missing encounter-zone state.");
         if (state.Ingestibles is { } ingestibles) FalloutPlayerIngestibles.Validate(ingestibles);
+        if (state.DeliveredEffects is { } deliveredEffects) FalloutDeliveredEffects.Validate(deliveredEffects);
         if (state.WeaponHandling is { } handling) FalloutWeaponHandling.Validate(handling);
         FalloutHitKnockback.Validate(state.PlayerHitKnockback);
         state.PlayerFatigueKnockout?.Validate();
