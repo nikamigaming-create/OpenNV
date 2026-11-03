@@ -81,7 +81,8 @@ All five prior local feature branches and four remote feature branches were
 already merged and are now removed. Only main and the active task branch remain.
 Historical recovery stashes/tags are preserved. The apparent classic import changes
 were confirmed byte-identical to HEAD; no content needs inclusion or discard.
-Use one checked PR for the integrated work, merge after required checks, verify
-local main equals origin/main and remove the merged task branch. No game was
-running at inspection. Keep the PR in draft while candidate gameplay verification
-is blocked. Private assets, saves and captures remain private.
+The integrated work is published in draft PR352 on the one task branch. Keep it
+in draft while candidate gameplay verification is blocked. After the route work
+and required checks, merge it, verify local main equals origin/main and remove
+the merged task branch. No game is running. Private assets, saves and captures
+remain private.
