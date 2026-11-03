@@ -12,14 +12,18 @@ internal sealed partial class NativeOwnedQuantityMenu : Control
     private readonly List<(XElement Tile, Control Control)> _targets = [];
     private readonly Action<int?> _complete;
     private readonly int _maximum, _minimum;
+    private readonly string? _choiceMenu, _choiceIdentity;
     private bool _closed;
     private NativeViewportLayout? _viewportLayout;
     internal int Quantity { get; private set; }
     internal string? Error { get; private set; }
 
-    internal NativeOwnedQuantityMenu(FalloutPluginStack records, int maximum, Action<int?> complete, int minimum = 1)
+    internal NativeOwnedQuantityMenu(FalloutPluginStack records, int maximum, Action<int?> complete, int minimum = 1,
+        string? choiceMenu = null, string? choiceIdentity = null)
     {
         if (maximum < 1 || minimum < 0 || minimum > maximum) throw new ArgumentOutOfRangeException(nameof(maximum));
+        if ((choiceMenu is null) != (choiceIdentity is null)) throw new ArgumentException("Quantity choices require both source menu and item identity.");
+        _choiceMenu = choiceMenu; _choiceIdentity = choiceIdentity;
         Name = "OwnedQuantityMenu"; TopLevel = true; ZIndex = 100;
         ProcessMode = ProcessModeEnum.Always; MouseFilter = MouseFilterEnum.Stop;
         _maximum = maximum; _minimum = minimum; _complete = complete; Quantity = maximum;
@@ -59,6 +63,22 @@ internal sealed partial class NativeOwnedQuantityMenu : Control
         _tiles.Bind(_meter, "user0", _maximum); _tiles.Bind(_meter, "user2", Quantity);
         _tiles.Bind(_meter, "_Value", Quantity / (float)_maximum);
         _tiles.Text[_amount] = Quantity.ToString(CultureInfo.InvariantCulture);
+        foreach (var (tile, control) in _targets)
+        {
+            if (_choiceMenu is null || control is not BaseButton) continue;
+            var kind = (string?)tile.Attribute("name") switch
+            {
+                "QM_DecreaseArrow" when Quantity > 1 => "recipe-quantity-decrease",
+                "QM_OKButton" when Quantity == 1 => "recipe-quantity-confirm",
+                "QM_CancelButton" => "recipe-quantity-cancel",
+                _ => null
+            };
+            if (kind is null) { control.RemoveMeta("opennv_source_choice_kind"); continue; }
+            control.SetMeta("opennv_source_choice_kind", kind);
+            control.SetMeta("opennv_source_choice_id", $"{_choiceIdentity}:{Quantity}:{(string?)tile.Attribute("name")}");
+            control.SetMeta("opennv_source_choice_menu", _choiceMenu);
+            control.SetMeta("opennv_source_choice_goodbye", kind == "recipe-quantity-cancel");
+        }
         QueueRedraw();
     }
 

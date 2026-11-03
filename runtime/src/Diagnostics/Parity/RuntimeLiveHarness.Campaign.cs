@@ -55,7 +55,8 @@ internal sealed partial class RuntimeLiveHarness
             button.HasMeta("opennv_source_choice_kind") ? button.GetMeta("opennv_source_choice_kind").AsString() : null,
             button.HasMeta("opennv_source_choice_id") ? button.GetMeta("opennv_source_choice_id").ToString() : null,
             button.HasMeta("opennv_source_choice_menu") ? button.GetMeta("opennv_source_choice_menu").AsString() : null,
-            button.HasMeta("opennv_source_choice_goodbye") && button.GetMeta("opennv_source_choice_goodbye").AsBool());
+            button.HasMeta("opennv_source_choice_goodbye") && button.GetMeta("opennv_source_choice_goodbye").AsBool(),
+            button.HasMeta("opennv_source_choice_names") ? button.GetMeta("opennv_source_choice_names").AsStringArray() : null);
         })
         .ToArray();
 

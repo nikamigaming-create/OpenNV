@@ -1,12 +1,12 @@
 namespace OpenNV.Runtime.Gameplay.Bots;
 
 internal sealed record BotCampaignGoal(string Identity, string Quest, uint Objective, string Target,
-    string Reference, string Mode, int Priority, string? Error = null);
+    string Reference, string Mode, int Priority, string? Error = null, string? ObjectiveText = null);
 
 internal sealed record BotCampaignChoice(string Identity, string Path, string Text, string Kind,
-    string Menu, bool Goodbye = false);
+    string Menu, bool Goodbye = false, IReadOnlyList<string>? SourceNames = null);
 internal sealed record BotCampaignControl(string Path, string Text, string Name, string? Kind = null,
-    string? Identity = null, string? Menu = null, bool Goodbye = false);
+    string? Identity = null, string? Menu = null, bool Goodbye = false, IReadOnlyList<string>? SourceNames = null);
 
 internal sealed record BotCampaignSave(ulong Generation, string Disposition, string? Slot, string? Error);
 
@@ -30,6 +30,9 @@ internal sealed class ReactiveCampaignBot
     private readonly Dictionary<(string Quest, uint Objective, string Target), long> _failedActivations = [];
     private readonly HashSet<string> _choices = new(StringComparer.Ordinal);
     private readonly HashSet<(long Progress, string Topic)> _dialogueChoices = [];
+    private readonly HashSet<string> _recipeAttempts = new(StringComparer.Ordinal);
+    private string? _recipeMenu;
+    private float _quantityElapsed;
     private BotSkillBinding? _binding;
     private BotCampaignGoal? _goal;
     private string? _pendingChoice, _choiceBefore;
@@ -71,7 +74,8 @@ internal sealed class ReactiveCampaignBot
     internal void Start()
     {
         if (Active) throw new InvalidOperationException("Campaign input already has an owner.");
-        _attemptedGoals.Clear(); _failedActivations.Clear(); _choices.Clear(); _dialogueChoices.Clear();
+        _attemptedGoals.Clear(); _failedActivations.Clear(); _choices.Clear(); _dialogueChoices.Clear(); _recipeAttempts.Clear();
+        _recipeMenu = null; _quantityElapsed = 0;
         _binding = null; _goal = null; _pendingChoice = _choiceBefore = _scene = _savedScene = _saveScene = null;
         _sample = _progress = _savedProgress = _saveProgress = -1;
         _saving = false; _saveBefore = 0; _idle = _stale = 0;
@@ -130,6 +134,14 @@ internal sealed class ReactiveCampaignBot
             return _stale > 2 ? Fail("observation-loss", "Campaign observations stopped advancing.") : new(BotCampaignCommandKind.None);
         }
         _sample = observation.Sample; _stale = 0;
+        if (observation.Choices.Any(choice => IsRecipeQuantity(choice.Kind)))
+        {
+            if (_recipeMenu is null || observation.Choices.Any(choice => choice.Menu != _recipeMenu || !IsRecipeQuantity(choice.Kind)))
+                return Fail("input-owner", "Recipe quantity input has no matching campaign-owned recipe selection.", false);
+            _quantityElapsed += seconds;
+            if (_quantityElapsed > ProgressLimitSeconds)
+                return Fail("bot-policy", "Recipe quantity input exceeded its execution bound.", false);
+        }
         if (_scene != observation.Scene) { _scene = observation.Scene; _idle = 0; }
         if (_progress < 0) { _savedProgress = observation.Progress; _savedScene = observation.Scene; }
         if (_progress != observation.Progress)
@@ -226,10 +238,37 @@ internal sealed class ReactiveCampaignBot
         }
         if (observation.Choices.Count != 0)
         {
-            var choice = observation.Choices.Where(value => value.Kind == "dialogue"
+            var available = observation.Choices.Where(value => value.Kind == "dialogue"
                     ? !_dialogueChoices.Contains((observation.Progress, value.Identity))
-                    : !_choices.Contains(menu + "\n" + value.Identity))
-                .OrderBy(value => value.Goodbye || EndsTutorial(value.Text)).FirstOrDefault();
+                    : !_choices.Contains(menu + "\n" + value.Identity));
+            BotCampaignChoice? choice;
+            if (observation.Choices.Any(value => IsRecipeQuantity(value.Kind)))
+                choice = available.FirstOrDefault(value => value.Kind is "recipe-quantity-decrease" or "recipe-quantity-confirm");
+            else if (observation.Choices.Any(value => IsRecipeMenu(value.Kind)))
+            {
+                var owner = observation.Choices[0].Menu;
+                if (observation.Choices.Any(value => value.Menu != owner || !IsRecipeMenu(value.Kind)))
+                    return Fail("observation-loss", "Recipe input mixes different source menus.", false);
+                // One ordinary crafting attempt per opened menu. Source quest
+                // state, never a click or inventory revision, owns progress.
+                if (_recipeAttempts.Contains(owner)) choice = available.FirstOrDefault(value => value.Kind == "recipe-back");
+                else if (_goal is { } sourceGoal)
+                {
+                    var matches = available.Where(value => (value.Kind is "recipe-accept" or "recipe-row") &&
+                            value.SourceNames?.Any(name => ObjectiveNamesRecipe(sourceGoal.ObjectiveText, name)) == true)
+                        .GroupBy(value => value.Identity, StringComparer.Ordinal).ToArray();
+                    if (matches.Length != 1)
+                        return Fail("bot-policy", "Source objective does not name exactly one offered craftable recipe; manual recipe selection is required.", false);
+                    choice = matches[0].FirstOrDefault(value => value.Kind == "recipe-accept") ?? matches[0].First();
+                }
+                else choice = available.FirstOrDefault(value => value.Kind == "recipe-accept") ??
+                    available.FirstOrDefault(value => value.Kind == "recipe-row") ?? available.FirstOrDefault(value => value.Kind == "recipe-back");
+                if (choice?.Kind is "recipe-accept" or "recipe-row")
+                {
+                    _recipeAttempts.Add(owner); _recipeMenu = owner; _quantityElapsed = 0;
+                }
+            }
+            else choice = available.OrderBy(value => value.Goodbye || EndsTutorial(value.Text)).FirstOrDefault();
             if (choice is null)
                 return Fail("bot-policy", "All currently offered source menu choices were attempted without new observable state.");
             if (choice.Kind == "dialogue") _dialogueChoices.Add((observation.Progress, choice.Identity));
@@ -267,9 +306,43 @@ internal sealed class ReactiveCampaignBot
 
     private static float GoalDistance(string mode) => mode == "travel" ? .5f : mode is "shoot" or "combat" ? 6f : 1.5f;
 
+    private static bool IsRecipeMenu(string? kind) => kind is "recipe-row" or "recipe-accept" or "recipe-back";
+    private static bool IsRecipeQuantity(string? kind) => kind is "recipe-quantity-decrease" or "recipe-quantity-confirm" or "recipe-quantity-cancel";
+
+    private static bool ObjectiveNamesRecipe(string? objective, string name)
+    {
+        if (string.IsNullOrWhiteSpace(objective) || string.IsNullOrWhiteSpace(name)) return false;
+        for (var start = 0; start < objective.Length;)
+        {
+            var index = objective.IndexOf(name, start, StringComparison.OrdinalIgnoreCase);
+            if (index < 0) return false;
+            var end = index + name.Length;
+            if ((index == 0 || !WordCharacter(objective[index - 1])) &&
+                (end == objective.Length || !WordCharacter(objective[end]))) return true;
+            start = index + 1;
+        }
+        return false;
+    }
+
+    private static bool WordCharacter(char value) => char.IsLetterOrDigit(value) || value == '_';
+
     internal static IEnumerable<BotCampaignControl> ActiveMenuControls(IReadOnlyList<BotCampaignControl> controls) =>
-        controls.Any(control => control.Kind == "barter-back")
-            ? controls.Where(control => control.Kind == "barter-back") : controls;
+        controls.Any(control => IsRecipeMenu(control.Kind) || IsRecipeQuantity(control.Kind)) && controls.Any(control => control.Kind == "message")
+            ? controls.Where(control => control.Kind == "message") :
+        controls.Any(control => IsRecipeQuantity(control.Kind)) ? controls.Where(control => IsRecipeQuantity(control.Kind)) :
+        controls.Any(control => IsRecipeMenu(control.Kind)) ? controls.Where(control => IsRecipeMenu(control.Kind)) :
+        controls.Any(control => control.Kind == "barter-back") ? controls.Where(control => control.Kind == "barter-back") : controls;
+
+    internal static IEnumerable<BotCampaignChoice> SourceMenuChoices(IReadOnlyList<BotCampaignControl> controls)
+    {
+        foreach (var control in ActiveMenuControls(controls))
+            if (control.Kind is "dialogue" or "terminal" or "terminal-back" or "barter-back" or "message" or "chargen" or "special" ||
+                IsRecipeMenu(control.Kind) || IsRecipeQuantity(control.Kind))
+                yield return new(control.Identity ?? throw new InvalidDataException("Source choice has no identity."),
+                    control.Path, control.Text, control.Kind!,
+                    control.Menu ?? throw new InvalidDataException("Source choice has no owning menu."),
+                    control.Goodbye || control.Kind == "terminal-back", control.SourceNames);
+    }
 
     // This is a diagnostic input policy using the player's displayed objective,
     // not a quest transition. Unknown wording keeps the existing behavior.

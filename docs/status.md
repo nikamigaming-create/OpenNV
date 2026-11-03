@@ -1,5 +1,20 @@
 # Product status
 
+The active November 3 milestone is ordinary New Game through all Goodsprings
+tutorials and the first local quest resolution, then out of town; and standalone
+Fallout 3 through Vault 101 to populated, interactive Megaton. Neither complete
+route is accepted. The implementation plan prioritizes those routes and the
+shared gameplay/bot capabilities they require. Broad combat/performance batches
+and tooling expansion are deferred. Work is consolidated on one task branch for
+checked PR publication and merge into main.
+
+The November 3 opening-route candidate passes the complete required runtime gate
+and Release export. Its shared palette decoder passes the rendered owned FO3/FNV
+system-color audit; recipe/quantity controls and retired-session failure behavior
+pass the existing owned native UI audit. Candidate gameplay launch was rejected
+by the execution environment, so live crafting, FO3 New Game and actor retirement
+continuation remain unverified. The PR stays draft pending gameplay verification.
+
 OpenNV is in active gameplay repair, not whole-game acceptance. The target is
 native 3840x2160 at sustained 60 FPS, with retail behavior, presentation and
 persistent gameplay. Flat and XR share authoritative state; physical XR still

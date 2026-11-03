@@ -80,7 +80,7 @@ public partial class RuntimeCoordinator
 
     internal RuntimeSaveSlotMetadata CreateNativeCheckpoint(Guid id)
     {
-        if (_nativeSessionTransitioning || _nativeDoorLoading || _nativePlayer is null ||
+        if (_nativeSessionTransitioning || _retiringNativeSession || _nativeDoorLoading || _nativePlayer is null ||
             _nativeActiveCell is null || _nativeOpeningStageDriver is null)
             throw new InvalidOperationException("A checkpoint requires a settled native campaign session.");
         var slot = NativeSaveSlots().Create(id, () => _nativeOpeningStageDriver.PersistWorldState(_nativeActiveCell.Cell.FormKey),
@@ -91,7 +91,7 @@ public partial class RuntimeCoordinator
 
     private RuntimeManualSaveWork CreateNativeCheckpointBackground(Guid id)
     {
-        if (_nativeSessionTransitioning || _nativeDoorLoading || _nativePlayer is null ||
+        if (_nativeSessionTransitioning || _retiringNativeSession || _nativeDoorLoading || _nativePlayer is null ||
             _nativeActiveCell is null || _nativeOpeningStageDriver is null)
             throw new InvalidOperationException("A checkpoint requires a settled native campaign session.");
         var driver = _nativeOpeningStageDriver;
@@ -206,8 +206,7 @@ public partial class RuntimeCoordinator
 
     private void CloseNativeSessionMenu()
     {
-        if (_nativeSessionTransitioning) return;
-        if (_nativeDeathPresented && !_retiringNativeSession) return;
+        if (_nativeSessionTransitioning || _retiringNativeSession || _nativeDeathPresented) return;
         CancelNativeManualSave("Session menu closed before the pending manual save committed.");
         _nativeSessionLayer?.QueueFree(); _nativeSessionLayer = null; _nativeSessionMenu = null;
         _nativePlayer?.SetModalInput(false); GetTree().Paused = _sessionWasPaused; Input.MouseMode = _sessionMouseMode;
@@ -279,6 +278,7 @@ public partial class RuntimeCoordinator
             _retiringNativeSession = true;
             _nativeQuestScripts?.Scripts.Events.EnterMainMenu();
             _nativeScriptStorage?.Controls?.Flush();
+            RetireNativeSessionBindings();
             GetTree().Paused = false;
             var error = GetTree().ReloadCurrentScene();
             if (error != Error.Ok) throw new InvalidOperationException($"Session reload failed: {error}.");
@@ -290,13 +290,25 @@ public partial class RuntimeCoordinator
             _nextSessionCheckpoint = null;
             _nextSessionActivation = null;
             var failure = RejectNativePendingLoad(error);
-            _retiringNativeSession = false;
             _nativeSessionTransitioning = false;
             GD.PushError($"OPENNV_NATIVE_SESSION_RELOAD_FAILURE {error}");
             DismissLoadingScreen();
             GetTree().Paused = true;
-            _nativeSessionMenu?.ShowFailure(failure);
+            ShowNativeSessionTransitionFailure(failure);
         }
+    }
+
+    private void ShowNativeSessionTransitionFailure(string message)
+    {
+        if (_retiringNativeSession)
+        {
+            // Source callbacks have been retired irreversibly. Only a fresh
+            // scene or application exit may leave this failure screen.
+            GetTree().Paused = true;
+            OpenNativeSessionMenu(showSaves: false);
+            _nativeSessionMenu?.ShowRetiredFailure(message);
+        }
+        else _nativeSessionMenu?.ShowFailure(message);
     }
 
     private async Task DrainNativeSourceReaders()
@@ -324,6 +336,21 @@ public partial class RuntimeCoordinator
 
     private void OnNativeCloseRequested() => QuitNativeSession();
 
+    private void RetireNativeSessionBindings()
+    {
+        if (_nativeCurrentCellRoot is not { } sourceRoot) return;
+        // Retain actor continuations before descendant ExitTree callbacks retire
+        // their sound, physical and pose owners. The same boundary applies to
+        // quitting and replacing the entire session during a load/menu return.
+        try { RetireNativeActorBindings(sourceRoot); }
+        catch (Exception error) { GD.PushError($"OPENNV_NATIVE_SESSION_ACTOR_RETIRE_FAILURE {error}"); }
+        if (sourceRoot.GetChildren().OfType<RuntimeNativeReferencePresentation>().SingleOrDefault() is { } presentation)
+        {
+            try { presentation.RetireBindings(); }
+            catch (Exception error) { GD.PushError($"OPENNV_NATIVE_SESSION_RETIRE_FAILURE {error}"); }
+        }
+    }
+
     private async void QuitNativeSession()
     {
         if (_nativeSessionTransitioning) return;
@@ -338,16 +365,7 @@ public partial class RuntimeCoordinator
             if (_pendingSaveActivation is not null) RejectNativePendingLoad(new OperationCanceledException("Selected load was cancelled by quitting."));
             _nativeScriptStorage?.Controls?.Flush();
             _retiringNativeSession = true;
-            if (_nativeCurrentCellRoot?.GetChildren().OfType<RuntimeNativeReferencePresentation>().SingleOrDefault() is { } presentation)
-            {
-                try { presentation.RetireBindings(); }
-                catch (Exception error) { GD.PushError($"OPENNV_NATIVE_SESSION_RETIRE_FAILURE {error.Message}"); }
-            }
-            if (_nativeCurrentCellRoot is { } sourceRoot)
-            {
-                try { NativeOwnedPlacedSound.RetireSubtree(sourceRoot); }
-                catch (Exception error) { GD.PushError($"OPENNV_NATIVE_SESSION_SOUND_RETIRE_FAILURE {error.Message}"); }
-            }
+            RetireNativeSessionBindings();
             PrepareNativeOpenXrExit();
             GD.Print($"OPENNV_NATIVE_SESSION_QUIT prototypes={_nativeNifPrototypes.Count} sourceReaders=drained");
             GetTree().Quit();
@@ -357,7 +375,7 @@ public partial class RuntimeCoordinator
         {
             _nativeSessionTransitioning = false;
             GD.PushError($"OPENNV_NATIVE_SESSION_QUIT_FAILURE {error}");
-            _nativeSessionMenu?.ShowFailure(error.Message);
+            ShowNativeSessionTransitionFailure(error.Message);
         }
     }
 }

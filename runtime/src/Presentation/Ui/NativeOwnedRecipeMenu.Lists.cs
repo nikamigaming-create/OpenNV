@@ -6,7 +6,8 @@ namespace OpenNV.Runtime.Presentation.Ui;
 
 internal sealed partial class NativeOwnedRecipeMenu
 {
-    private sealed record SourceRow(string Label, int Alpha, Action Focus, Action Activate, FalloutFormKey Form);
+    private sealed record SourceRow(string Label, int Alpha, Action Focus, Action Activate, FalloutFormKey Form, bool CanCraft = false,
+        string[]? ChoiceNames = null);
     private sealed record RenderedRow(XElement Tile, NativeOwnedTileTarget Control, SourceRow Source, float Top, float Height);
     private sealed class SourceList(XElement tile, XElement bar, float step)
     {
@@ -97,6 +98,7 @@ internal sealed partial class NativeOwnedRecipeMenu
             if (!float.IsFinite(height) || height <= 0) throw new InvalidDataException("Recipe source row has no positive measured height.");
             _tiles.Bind(source, "height", height);
             var button = new NativeOwnedTileTarget { Name = "Recipe_" + index, Text = model.Label, FocusMode = FocusModeEnum.All };
+            if (tile == _recipeList && model.CanCraft) BindChoice(button, "recipe-row", model.Form.ToString(), sourceNames: model.ChoiceNames);
             var row = new RenderedRow(source, button, model, view.Height, height); view.Rows.Add(row); AddChild(button);
             button.MouseEntered += () => Try(() => Focus(view, row, false));
             button.FocusEntered += () => Try(() => Focus(view, row, true));

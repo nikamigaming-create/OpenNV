@@ -7,6 +7,7 @@ internal static class UiSystemColorContracts
     internal static void Run()
     {
         HardPaletteDeclarations();
+        InlineHardPaletteDeclarations();
         static FalloutInstallationSettings Source(params FalloutInstallationSetting[] rows) =>
             FalloutInstallationSettings.ReadLayers([], rows, new Dictionary<string, uint>(StringComparer.OrdinalIgnoreCase)
             { ["HUDAlt"] = 0xff432aff, ["MainMenu"] = 0xffb642ff, ["AuthoredPalette"] = 0x020304ff });
@@ -98,7 +99,113 @@ internal static class UiSystemColorContracts
         Reject(() => FalloutExecutableStringTable.ReadHardSystemColors(code, codeBase, Name,
             _ => ".?AVSoftSystemColor@SystemColorManager@@"));
         Array.Copy(code, 0, code, 96, cursor); Call(96 + registrationCall, 256);
+        Require(FalloutExecutableStringTable.ReadHardSystemColors(code, codeBase, Name, HardType).Count == 1,
+            "Equivalent repeated hard-palette construction was treated as contradictory source data.");
+        code[97] = 3;
         Reject(() => FalloutExecutableStringTable.ReadHardSystemColors(code, codeBase, Name, HardType));
+    }
+
+    private static void InlineHardPaletteDeclarations()
+    {
+        // A synthetic optimized constructor: independent registers, names,
+        // slots and relocations exercise operand relationships rather than a
+        // captured executable body or a game's palette catalog.
+        var code = new byte[1024];
+        const uint codeBase = 0x5000;
+        const int factory = 256, red = 2, green = 1, blue = 0, owner = 3;
+        var at = 0;
+        void Emit(params byte[] bytes) { bytes.CopyTo(code, at); at += bytes.Length; }
+        void Word(uint value) { BinaryPrimitives.WriteUInt32LittleEndian(code.AsSpan(at), value); at += 4; }
+        void Push(uint value) { Emit(0x68); Word(value); }
+        void Call(int target) { Emit(0xe8); Word(unchecked((uint)(target - at - 4))); }
+        void Argument(int register, byte offset, bool byteValue = false)
+        {
+            if (byteValue) Emit(0x0f, 0xb6); else Emit(0x8b);
+            Emit((byte)(0x45 | register << 3), offset);
+        }
+        void Memory(byte opcode, int register, int basis, byte offset, bool extended = false)
+        {
+            if (extended) Emit(0x0f);
+            Emit(opcode, (byte)(0x40 | register << 3 | basis), offset);
+        }
+        void Constant(int basis, byte offset, uint value)
+        {
+            Emit(0xc7, (byte)(basis | (offset == 0 ? 0 : 0x40)));
+            if (offset != 0) Emit(offset);
+            Word(value);
+        }
+        void Shift(int register) => Emit(0xc1, (byte)(0xe0 + register), 8);
+        void Binary(byte opcode, int destination, int source) => Emit(opcode, (byte)(0xc0 | destination << 3 | source));
+        void Registration(byte receiver)
+        {
+            Emit(0x6a, 0xff); Push(0x1ff); Push(0x122); Push(0x134); Push(0x2000);
+            Emit(0x8b, receiver); Call(factory);
+        }
+        Registration(0xce);
+        var firstLength = at;
+        at = 64; Registration(0xcf);
+        at = factory; Emit(0x55, 0x8b, 0xec);
+        at += 24;
+        Argument(red, 12); Argument(green, 16, true); Argument(blue, 20, true);
+        var shift = at; Shift(red); Binary(0x0b, green, red); Constant(owner, 0, 0x3000);
+        Shift(green); Binary(0x33, red, red); Binary(0x0b, green, blue); Constant(owner, 4, 0);
+        Shift(green); Memory(0x8d, blue, owner, 4);
+        var alpha = at + 2; Emit(0x81, (byte)(0xc8 + green)); Word(255);
+        Memory(0x89, red, blue, 4); Memory(0x89, green, 5, 24); Memory(0xff, 6, 5, 8);
+        Emit(0xc6, 0x45, 0xf8, 1); Push(0x2020); Emit((byte)(0x50 + blue)); var nameCall = at; Call(800);
+        Memory(0x8b, red, owner, 4); Emit(0x83, 0xc4, 12); Binary(0x85, red, red);
+        Emit(0x74, 18); Memory(0xb7, blue, owner, 8, true);
+        Emit((byte)(0x40 + blue), (byte)(0x50 + blue), (byte)(0x50 + red)); var internCall = at; Call(800);
+        Memory(0x8b, red, owner, 4); Emit(0x83, 0xc4, 8);
+        Emit(0x56, (byte)(0x50 + red)); var slotCall = at; Call(800);
+        var packedLoad = at; Argument(blue, 24); Emit(0x83, 0xc4, 8); Constant(owner, 0, 0x4000);
+        var store = at; Memory(0x89, blue, owner, 12);
+        Emit(0x8b, 0xe5, 0x5d, 0xc2, 20, 0);
+        var end = at;
+        string? Name(uint value) => value switch { 0x2000 => "SyntheticHard", 0x2020 => "&%s;", _ => null };
+        string? Type(uint value) => value switch
+        {
+            0x3000 => ".?AVSystemColor@SystemColorManager@@",
+            0x4000 => ".?AVHardSystemColor@SystemColorManager@@",
+            _ => null,
+        };
+        IReadOnlyDictionary<string, uint> Read() => FalloutExecutableStringTable.ReadHardSystemColors(code, codeBase, Name, Type);
+        Require(Read().Count == 1 && Read()["synthetichard"] == 0x3422ffff,
+            "Inline channel packing, byte truncation, register receivers or equivalent declarations changed the owned palette.");
+        BinaryPrimitives.WriteUInt32LittleEndian(code.AsSpan(3), uint.MaxValue);
+        BinaryPrimitives.WriteUInt32LittleEndian(code.AsSpan(67), uint.MaxValue);
+        Require(Read()["SyntheticHard"] == 0x3422ffff, "A negative channel changed optimized byte packing.");
+        BinaryPrimitives.WriteUInt32LittleEndian(code.AsSpan(3), 0x1ff);
+        BinaryPrimitives.WriteUInt32LittleEndian(code.AsSpan(67), 0x1ff);
+        var earlyReturn = factory + 8;
+        new byte[] { 0x8b, 0xe5, 0x5d, 0xc3 }.CopyTo(code, earlyReturn);
+        Reject(() => Read());
+        new byte[] { 0x8b, 0xe5, 0x5d, 0xc2, 16, 0 }.CopyTo(code, earlyReturn);
+        Reject(() => Read());
+        Array.Clear(code, earlyReturn, 6);
+        code[shift + 2] = 7; Reject(() => Read()); code[shift + 2] = 8;
+        code[alpha] = 254; Reject(() => Read()); code[alpha] = 255;
+        code[store + 2] = 8; Reject(() => Read()); code[store + 2] = 12;
+        foreach (var alias in new[] { owner, 4, 5 })
+        {
+            code[packedLoad + 1] = (byte)(0x45 | alias << 3);
+            code[store + 1] = (byte)(0x40 | alias << 3 | owner);
+            Reject(() => Read());
+        }
+        code[packedLoad + 1] = (byte)(0x45 | blue << 3);
+        code[store + 1] = (byte)(0x40 | blue << 3 | owner);
+        Reject(() => FalloutExecutableStringTable.ReadHardSystemColors(code[..(end - 1)], codeBase, Name, Type));
+        Reject(() => FalloutExecutableStringTable.ReadHardSystemColors(code, codeBase, Name,
+            pointer => pointer == 0x4000 ? ".?AVSoftSystemColor@SystemColorManager@@" : Type(pointer)));
+        Reject(() => FalloutExecutableStringTable.ReadHardSystemColors(code, codeBase,
+            pointer => pointer == 0x2020 ? "%s%s" : Name(pointer), Type));
+        code[65] = 1; Reject(() => Read()); code[65] = 255;
+        code[67] = 0; Reject(() => Read()); code[67] = 255;
+        // An otherwise identical second constructor is still another owner.
+        Array.Copy(code, factory, code, 600, end - factory);
+        foreach (var call in new[] { nameCall, internCall, slotCall }) { at = call + 600 - factory; Call(800); }
+        at = 64 + firstLength - 5; Call(600);
+        Reject(() => Read());
     }
 
     private static void Require(bool valid, string message) { if (!valid) throw new InvalidDataException(message); }
