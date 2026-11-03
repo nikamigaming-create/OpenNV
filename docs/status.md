@@ -5,7 +5,8 @@ native 3840x2160 at sustained 60 FPS, with retail behavior, presentation and
 persistent gameplay. Flat and XR share authoritative state; physical XR still
 requires separate acceptance. The user's physical FNV VR playtest remains failed.
 
-The November 3 integrated combat repair batch passes the complete required
+PR348 merged the November 3 integrated combat repair batch with all five hosted
+checks passing. The batch passes the complete required
 runtime gate: Release/Debug, formatting/analyzers, contract probes, launcher and
 native Godot checks. It includes source unarmed equipment, firing/reload and
 inventory script events, persistent mines and remote actions, fatigue recovery,
@@ -14,12 +15,27 @@ damage, exact delayed-hit item identity and material-controller channel binding.
 The existing owned weapon audit completed 496 records with findings on 67; this
 is assembly coverage, not complete weapon support.
 
-Recording remains off. Two bounded source-area sessions closed normally after
-234 and 114 seconds. Hunting Shotgun fired/reloaded in both views; impacts hit
-intervening tree/terrain. Laser RCW equipped/readied, but approach timed out.
-Neither supplied a damaging encounter. Exit-only timing sampled menu-scale
-state, so it supplies no new gameplay 4K60 result. The current local Release
-executable is `tmp/development-runtime/windows/OpenNV.exe`.
+Recording remains off and gameplay sessions are bounded. Selected source-gecko
+encounters used guarded player MoveTo, then ordinary Laser RCW and Hunting Shotgun
+fire. Target health changed from 40 to 31.075 and 40 to 19.3 respectively; the
+gecko pursued and damaged the player. Sessions/harnesses closed normally after
+121 and 119 seconds. These selected observations do not establish complete
+weapon behavior, every delayed pellet receipt or retail acceptance.
+
+The final follow-up build's unpaused 20-second moving window confirmed native
+3840x2160 at scale 1. Ten samples reported 58–60 FPS; p95 host-draw interval was
+18.73 ms and maximum 22.50 ms over 1,188 intervals. Paused/menu samples are
+excluded. This is not sustained 4K60 or display-presentation acceptance. Earlier
+RCW timing retained a 166.62 ms spike; the encounter states differ. Synchronous
+beam/impact creation and remaining navigation work still require repair.
+The current local Release executable is `tmp/development-runtime/windows/OpenNV.exe`.
+
+The navigation follow-up excludes disabled source triangles from connectivity,
+shares the route's floor predicate with combat arrival, and retains an exact
+unfiltered search frontier across floor queries. Immutable weapon-script metadata
+is cached per selected stack; exact firing-item event-list admission remains live.
+The complete required runtime gate passes, as does the existing 41-waypoint owned
+Mojave source route across 4,037 NAVMs. This is not whole-world traversal support.
 
 Earlier selected encounters cover source gecko retaliation, boxing-glove
 knockout/get-up, unarmed/brass contact, Powder Charge save/load/disarm/pickup and

@@ -15,7 +15,7 @@ internal sealed partial class FalloutReferenceWorld
         if (!FalloutReferenceHitEvents.IsActor(records, target)) return;
         _outgoingWeaponTargets[attacker] = target;
         if (sourceWeapon is not { } weapon ||
-            FalloutScriptLocals.AttachedScript(records, records.GetEffective(weapon)) is null) return;
+            FalloutScriptLocals.AttachedWeaponScript(records, weapon) is null) return;
         var inventory = attacker == records.RuntimeFormKey(0x14) ? _playerInventory :
             _instances.TryGetValue(attacker, out var actor) ? actor.Inventory : null;
         if (inventory is null)

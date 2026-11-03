@@ -37,6 +37,7 @@ internal sealed partial class CellNavigationGraph
             throw new InvalidDataException("Source corridor requires finite authored floor tolerances.");
         var anchors = path.GroupBy(node => node.NavMesh).ToDictionary(group => group.Key, group => group.ToArray());
         HashSet<NavigationNode>? reached = null;
+        Queue<NavigationNode>? unfilteredPending = null;
         bool Reachable(NavigationNode target)
         {
             // Reuse the source mesh's existing exact internal reachability
@@ -45,8 +46,26 @@ internal sealed partial class CellNavigationGraph
             // directed graph traversal already used by source arrival regions.
             if (permittedPortal is null && anchors.TryGetValue(target.NavMesh, out var entries) &&
                 entries.Any(entry => entry.NavMesh.CanReach(entry.TriangleIndex, target.TriangleIndex))) return true;
+            if (permittedPortal is null)
+            {
+                // This graph is immutable. A discovered node is already
+                // reachable, even while its outgoing edges remain pending.
+                // Finish the current node before stopping so later membership
+                // queries retain every branch and the exact directed frontier.
+                if (reached is null)
+                {
+                    reached = [start];
+                    unfilteredPending = new(); unfilteredPending.Enqueue(start);
+                }
+                while (!reached.Contains(target) && unfilteredPending!.TryDequeue(out var current))
+                    foreach (var next in Neighbors(current))
+                        if (reached.Add(next)) unfilteredPending.Enqueue(next);
+                return reached.Contains(target);
+            }
             if (reached is null)
             {
+                // Callback-backed portal scopes retain their existing full
+                // snapshot evaluation and callback order on the first query.
                 reached = [];
                 var pending = new Queue<NavigationNode>(); pending.Enqueue(start);
                 while (pending.TryDequeue(out var current))

@@ -7,25 +7,34 @@ internal sealed partial class CellNavigationGraph
     // Source destination radius is a region on the reachable authored floor.
     // Native support is still mandatory; this predicate cannot create it.
     internal Func<Vector3, bool> ArrivalRegion(Vector3 start, Vector3 requested, Vector3 selected,
-        float radius, float horizontalTolerance, float heightTolerance, bool actorHeightProjection = false)
-        => ArrivalRegion(start, requested, selected, radius, horizontalTolerance, heightTolerance, out _, actorHeightProjection);
+        float radius, float horizontalTolerance, float heightTolerance, bool actorHeightProjection = false,
+        Func<Vector3, bool>? reachableFloor = null)
+        => ArrivalRegion(start, requested, selected, radius, horizontalTolerance, heightTolerance, out _, actorHeightProjection, reachableFloor);
 
     internal Func<Vector3, bool> ArrivalRegion(Vector3 start, Vector3 requested, Vector3 selected,
         float radius, float horizontalTolerance, float heightTolerance, out Func<Vector3, bool> sourceFloor,
-        bool actorHeightProjection = false)
+        bool actorHeightProjection = false, Func<Vector3, bool>? reachableFloor = null)
     {
         if (!start.IsFinite() || !requested.IsFinite() || !selected.IsFinite() ||
             !float.IsFinite(radius) || radius <= 0 || !float.IsFinite(horizontalTolerance) || horizontalTolerance < 0 ||
             !float.IsFinite(heightTolerance) || heightTolerance <= 0)
             throw new InvalidDataException("Source arrival region requires finite source floor/radius ownership.");
-        var reached = new HashSet<NavigationNode>();
-        var queue = new Queue<NavigationNode>(); queue.Enqueue((actorHeightProjection ? NearestActorNode(start) : NearestNode(start)).Node);
-        while (queue.TryDequeue(out var current))
-            if (reached.Add(current)) foreach (var neighbor in Neighbors(current)) queue.Enqueue(neighbor);
+        // Native callers reuse the exact source-path floor predicate already
+        // captured by FindPath, including its start, directed edges and portal
+        // scope. Do not expand the same component again for arrival. Standalone
+        // callers retain the independent full source reachability contract.
+        HashSet<NavigationNode>? reached = null;
+        if (reachableFloor is null)
+        {
+            reached = [];
+            var queue = new Queue<NavigationNode>(); queue.Enqueue((actorHeightProjection ? NearestActorNode(start) : NearestNode(start)).Node);
+            while (queue.TryDequeue(out var current))
+                if (reached.Add(current)) foreach (var neighbor in Neighbors(current)) queue.Enqueue(neighbor);
+        }
         var selectedFloor = actorHeightProjection ? NearestActorNode(selected) : NearestNode(selected);
         var offset = selected - requested;
         var selectedDistance = actorHeightProjection ? new Vector2(offset.X, offset.Y).LengthSquared() : offset.LengthSquared();
-        if (!reached.Contains(selectedFloor.Node) || selectedDistance > radius * radius ||
+        if (!(reachableFloor?.Invoke(selected) ?? reached!.Contains(selectedFloor.Node)) || selectedDistance > radius * radius ||
             actorHeightProjection && !NativeActorNavigationHeight.Admits(requested.Z, selected.Z))
             throw new InvalidDataException("Selected source endpoint lies outside its reachable requested region.");
         bool SameFloor(Vector3 point)
@@ -40,7 +49,8 @@ internal sealed partial class CellNavigationGraph
             if (plane is null || selectedPlane is null) return false;
             var projected = floor.Node.NavMesh.ClosestPoint(floor.Node.TriangleIndex, plane.Value);
             var horizontal = new Vector2(point.X - projected.X, point.Y - projected.Y);
-            return reached.Contains(floor.Node) && horizontal.LengthSquared() <= horizontalTolerance * horizontalTolerance &&
+            return (reachableFloor?.Invoke(point) ?? reached!.Contains(floor.Node)) &&
+                horizontal.LengthSquared() <= horizontalTolerance * horizontalTolerance &&
                 (actorHeightProjection ? NativeActorNavigationHeight.Admits(point.Z, projected.Z) :
                     MathF.Abs(point.Z - projected.Z) < heightTolerance) &&
                 MathF.Abs(projected.Z - selectedPlane.Value.Z) < heightTolerance;

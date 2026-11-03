@@ -5,6 +5,22 @@ namespace OpenNV.Runtime.Content;
 
 internal static class FalloutScriptLocals
 {
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<FalloutPluginStack,
+        System.Collections.Concurrent.ConcurrentDictionary<FalloutFormKey, Lazy<FalloutPluginRecord?>>> WeaponScripts = new();
+
+    // Only immutable winning SCRI metadata is retained. The firing instance's
+    // event list and its continued membership in inventory are resolved live.
+    internal static FalloutPluginRecord? AttachedWeaponScript(FalloutPluginStack records, FalloutFormKey weapon)
+    {
+        var source = records.GetEffective(weapon);
+        if (source.Signature != "WEAP") throw new InvalidDataException("Weapon script metadata requires a winning WEAP.");
+        // Cached metadata must not outlive the source reader or hide a changed
+        // source extent; retain the same read guard as ordinary field reads.
+        source.Plugin.ValidateReadSource();
+        return WeaponScripts.GetOrCreateValue(records).GetOrAdd(weapon,
+            _ => new(() => AttachedScript(records, source), LazyThreadSafetyMode.ExecutionAndPublication)).Value;
+    }
+
     internal static FalloutPluginRecord? AttachedScript(FalloutPluginStack records, FalloutPluginRecord owner)
     {
         var record = owner.Signature is "REFR" or "ACHR" or "ACRE" ?
