@@ -5,6 +5,40 @@ using OpenNV.Runtime.World.Cells;
 
 internal static class OwnedInventoryProbe
 {
+    internal static void RunWeaponTransfer(string root, string game)
+    {
+        RuntimeLiveContentSource.Configure(root, game);
+        using var content = RuntimeLiveContentSource.Current!;
+        using var records = FalloutPluginStack.Load(content.PluginSources);
+        var definition = FalloutDialogueTopic.Find(records, "WEAP", "Weap10mmPistol");
+        var weapon = FalloutWeaponPresentation.Read(records, definition.FormKey);
+        var ammunition = weapon.Ammunition.First();
+        if (weapon.ClipSize <= 0 || weapon.AmmoUse <= 0 || weapon.AmmoRegenerationSeconds != 0)
+            throw new InvalidDataException("Owned transfer fixture requires an ordinary ammunition magazine.");
+        var source = new FalloutPlayerInventory(123);
+        source.BindScriptContainer(records.RuntimeFormKey(0x14), _ => 0);
+        source.Add(records, weapon.Form, 1, 1, true);
+        source.Add(records, ammunition, checked(weapon.ClipSize + 5), 1, true);
+        source.Equip(records, weapon.Form);
+        new FalloutWeaponHandling(source).CompleteReload(weapon);
+        var original = source.SelectedWeapon(weapon.Form).Extra;
+        if (original.Magazine?.Loaded != weapon.ClipSize)
+            throw new InvalidDataException("Owned weapon did not load its source magazine capacity.");
+        var target = new FalloutPlayerInventory(456);
+        source.Exchange(target, [new(weapon.Form, 1, true)]);
+        if (source.Item(weapon.Form) is not null || source.Item(ammunition)?.Count != 5 ||
+            target.Item(ammunition)?.Count != weapon.ClipSize || target.SelectedWeapon(weapon.Form).Extra != original ||
+            !target.NativeScriptEntries.Select(entry => entry.Item).SequenceEqual([weapon.Form, ammunition]))
+            throw new InvalidDataException("Owned loaded-weapon trade lost items, magazine identity or implicit ammunition entry history.");
+        var saved = target.Capture();
+        var cold = new FalloutPlayerInventory();
+        cold.Restore(saved.Inventory, saved.EquippedRuntimeFormIds.ToArray(), saved.InventoryRandomState);
+        if (JsonSerializer.Serialize(cold.Capture()) != JsonSerializer.Serialize(saved))
+            throw new InvalidDataException("Owned loaded-weapon trade did not retain exact cold inventory state.");
+        Console.WriteLine($"OPENNV_OWNED_WEAPON_MAGAZINE_TRANSFER_PASS game={game} weapon={weapon.Form} " +
+            $"ammunition={ammunition} loaded={weapon.ClipSize} implicitEntryHistory=true cold=true gameplay=false");
+    }
+
     internal static void Run(string root)
     {
         RuntimeLiveContentSource.Configure(root, RuntimeLiveContentSource.FalloutNewVegasGame);

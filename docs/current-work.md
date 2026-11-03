@@ -2,87 +2,74 @@
 
 ## Owner and objective
 
-The November 3 user direction is two playable opening routes on one integrated
-branch. Root owns integration, builds, ordinary game input and publication.
+The November 3 user direction is offline-first FO3/FNV implementation and tests
+across the complete game systems. Root owns integration and publication.
+Do not launch a campaign during this block. Recording stays off.
+The full system checklist and acceptance boundaries are in implementation-plan.md.
 
-- **New Vegas:** normal New Game, Doc Mitchell and character creation, all
-  Goodsprings tutorials, the first local quest resolution, then walk out of town.
-- **Fallout 3:** normal New Game, complete Vault 101 childhood/tutorials and
-  escape, then walk into Megaton. Its source residents must appear, run their
-  behavior, and offer appropriate dialogue and interactions.
+The first later gameplay acceptance routes remain ordinary FNV New Game through
+Goodsprings and departure, and standalone FO3 through Vault 101 to populated,
+interactive Megaton. Neither route nor either complete campaign is accepted.
+Flat and XR share authoritative gameplay and saves; physical XR remains open.
 
-Both routes require working quests, inventory, combat and fresh-process save
-continuation. Bots use the same controls as players. They may read objectives
-and state; they may not force stages, spawn residents, teleport past the route
-or edit saves. An empty destination or source actor count is not completion.
+## Verified state
 
-Only shared gameplay repairs needed by these routes are immediate work. Broad
-weapon/mob sweeps, unrelated regions, benchmark campaigns, capture projects and
-new harness infrastructure are deferred. Reuse existing bots and input tooling.
-Recording stays off. Close bounded gameplay sessions before editing/building.
+The integrated offline batch is published through PR352 from
+codex/playable-opening-routes, based on main
+adacd1a8f18f550e94083e58d4116b06d29d49aa.
+The earlier palette decoder, recipe/quantity controls and actor retirement
+repairs remain integrated. Their component checks passed; gameplay is unverified.
 
-## Verified baseline and current blockers
+The offline repair batch fixes three concrete shared-owner defects:
 
-The baseline is merged PR351 at adacd1a8f18f550e94083e58d4116b06d29d49aa;
-local main and origin/main matched at inspection with no open PR. Existing
-runtime-gate and selected owned resource/combat results are in status.md. They
-do not establish either route. The current candidate has been exported to
-`tmp/development-runtime/windows/OpenNV.exe`.
+- Expression arguments and values now admit complete digit-leading source IDs
+  while preserving numeric literals, inactive evaluation and existing identifiers.
+- Local declaration admission reads the exact compiled variable name despite
+  trailing editor-text punctuation; missing slots and conflicting kinds refuse.
+- Barter records actual weapon/ammunition transfer order, including ammunition
+  carried by a loaded gun without an explicit ammunition trade row.
 
-Fresh PR351 FNV New Game completed name, appearance, SPECIAL, questionnaire,
-tag/trait choices and Doc's stage-200 handoff through ordinary bot input. A cold
-Continue from its genuine stage-80 save resumed that progression. The bot then
-activated the actual house exit into the Mojave. Ordinary F5 completed outside;
-the active save is `local/opening-routes-active/fnv/courier-v1.json`. The second
-session closed through Quit with exit zero, but actor teardown logged a retained
-idle failure. The first bounded session required forced cleanup inside dialogue.
-Recording stayed off. Sunny's tutorials and departure remain unverified here.
+Focused script and reference contracts pass. Eight barter cases cover both
+directions, implicit/explicit/split ammo, rollback and cold state. Owned FO3 and
+FNV 10mm-pistol reload/trade checks pass with source magazine capacity, exact
+ammunition conservation, instance identity, script-entry history and cold restore.
 
-The candidate adds source recipe/quantity controls and unique objective-to-recipe
-matching to the existing bot. Focused policy and owned native UI checks pass,
-including quantity-one confirmation through the existing callbacks. Integrated
-gameplay remains pending; a click is not tutorial completion.
+Complete selected-stack quest audits read 628,471 winning FNV records and
+930,306 FO3 records. The FNV selection includes the installed diagnostic weapon
+comparison plugin; it is not a pristine official-only selection. Source stack
+identities are unchanged across the comparison, all raw program fields remain
+accounted for, and both audits instantiate zero world references.
 
-Standalone FO3's current PR351 export exits before the opening menu: the owned
-executable's hard system-color registrations are not admitted by the decoder.
-The bounded November 3 run closed after five seconds with recording off. The
-candidate admits the owned optimized hard-color factory through the shared
-declaration reader. Synthetic corruption checks and the existing rendered owned
-palette audit pass for both FO3 and FNV, with unchanged source bytes and no
-retained frames. This does not prove New Game. Older birth CG00:22, Vault and TTW
-observations do not certify this build. Vault exit, Megaton arrival and population
-remain unaccepted. Use the normal owned launcher path; do not extend the old
-birth-preview implementation.
+Unbound expression statements fall from 1,308 to 1,294 in FNV and 844 to 808 in
+FO3. FO3 local-declaration failures fall from one to zero. FNV retains 12
+source-parser and three compiled-extent findings; FO3 retains ten source-parser
+and one compiled-extent finding. Empty-program stale metadata findings are
+distinct from missing executable behavior. Statement dispatch remains uninspected
+for 51,518 FNV and 28,988 FO3 statements. Neither audit establishes their effects.
 
-Session replacement and quit now retire source actor bindings while the graph is
-intact. Failures after retirement cannot resume or save that scene; Main Menu and
-Quit remain available. The existing native menu component check passes. Actual
-scene retirement and cold continuation still need the candidate executable.
+Both broad readiness audits intentionally exit one: complete runtime readiness
+is false. SCDA instruction execution, remaining source failures, all quest
+branches, dialogue/combat/effects, housing CELL ownership and complete cold
+continuation remain open. Passing selected tests is not whole-game acceptance.
 
-The legacy combat checkpoint lacks inventory-script history. Do not backfill it.
-Use normal New Game and keep current-build checkpoints reached through play.
-Flat/XR share gameplay and saves; physical-headset acceptance remains separate.
+## Next owner and publication
 
-## Next action and publication
+The complete required runtime gate passes: Release/Debug, formatting/analyzers,
+contract probes, native plugin domains, launcher and headless Godot components.
+Diff review and Release export pass. The local executable is
+tmp/development-runtime/windows/OpenNV.exe; export did not launch a campaign.
+Root owns checked PR352 publication, merge and local/origin main equality.
+The latest user instruction makes offline verification the publication scope;
+do not imply that merge accepts either opening route or whole-game parity.
 
-One branch: `codex/playable-opening-routes`, based on the baseline above. Root
-integrates recipe/quantity input, the FO3 palette reader and actor retirement
-ordering. Owned component checks, Release export and the complete required
-runtime gate pass, including Release/Debug, formatting/analyzers, contract probes,
-launcher and native Godot checks. Candidate gameplay launches were rejected by the
-execution environment, including a bounded attempt with cleanup; no new game
-process was started. Restore permitted gameplay execution before claiming either
-repair works in the opening route. Then resume FNV from its fresh exterior save
-toward Sunny and rerun standalone FO3 New Game through the repaired menu to its
-next actual blocker. Full finish criteria are in implementation-plan.md. Neither
-complete opening route is accepted.
+Private current audit rows are under local/offline-capabilities-current-20261103.
+Keep only the compact baseline comparison and the active current diagnostics,
+not duplicate audit trees. No owned files, saves, binaries or derivatives belong
+in the PR. No campaign has been launched during this block.
 
-All five prior local feature branches and four remote feature branches were
-already merged and are now removed. Only main and the active task branch remain.
-Historical recovery stashes/tags are preserved. The apparent classic import changes
-were confirmed byte-identical to HEAD; no content needs inclusion or discard.
-The integrated work is published in draft PR352 on the one task branch. Keep it
-in draft while candidate gameplay verification is blocked. After the route work
-and required checks, merge it, verify local main equals origin/main and remove
-the merged task branch. No game is running. Private assets, saves and captures
-remain private.
+After checked publication, the next implementation owner is the compiled-script
+and remaining source-admission gap, using the retained exact failures. FO3-specific
+weapon damage/repair rules, broader effects and housing access remain visible
+additional gaps. Actual ordinary-input opening-route and fresh-process save
+continuation follow the offline block; matched retail evidence is additionally
+required before parity claims.

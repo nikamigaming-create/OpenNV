@@ -56,7 +56,58 @@ internal static class ScriptExpressionProbe
         Require(result == 19, "The declared menu event did not execute.");
         Execute(FalloutGameModeProgram.Read(source, "MenuMode", 4321));
         Require(result == 19, "An unrelated menu event executed.");
+        DigitLeadingForms();
         Console.WriteLine("OPENNV_SCRIPT_EXPRESSION_PASS functions=true arguments=true precedence=true inactiveCalls=false events=true");
+    }
+
+    private static void DigitLeadingForms()
+    {
+        var reads = 0;
+        var calls = 0;
+        var names = new HashSet<string>(["1EActor", "2ERoom", "3CReference.GetValue"], StringComparer.OrdinalIgnoreCase);
+        var values = new FalloutScriptValueContext(name =>
+        {
+            ++reads;
+            return names.Contains(name) ? 17 : throw new InvalidDataException("Unbound fixture identity.");
+        }, (_, _) => throw new InvalidOperationException("Unexpected write."));
+        FalloutScriptFunction? Function(string name) => name == "SameForm"
+            ? new([FalloutScriptArgumentKind.Identifier], arguments =>
+            {
+                ++calls;
+                return names.Contains(arguments[0].Identifier!) || arguments[0].Identifier is "NaN" or "Infinity"
+                    ? 17 : throw new InvalidDataException("Wrong form argument.");
+            }) : null;
+        foreach (var name in names)
+        {
+            var tokens = FalloutGameModeProgram.Tokens(name + " == 17 && SameForm " + name + " == 17");
+            Require(tokens[0] == name, "Digit-leading editor ID was split into numeric tokens.");
+            var inspected = new List<string>();
+            var beforeReads = reads;
+            var beforeCalls = calls;
+            FalloutNvseNumericExpression.Inspect(tokens, values, Function, null, inspected.Add);
+            Require(inspected.SequenceEqual([name]) && reads == beforeReads && calls == beforeCalls,
+                "Digit-leading form inspection invoked gameplay or lost its identity.");
+            Require(FalloutNvseNumericExpression.EvaluateValue(tokens, values, Function).Number == 1 &&
+                reads == beforeReads + 1 && calls == beforeCalls + 1,
+                "Typed expression refused a complete digit-leading source identity.");
+            Require(FalloutGameModeProgram.Evaluate(tokens, operand => values.Read(operand).Number, Function) == 1,
+                "Legacy identifier argument disagrees with typed source identity.");
+        }
+        var literal = FalloutGameModeProgram.Tokens("1e3 + 2E-2 + 0x10 + 0b10");
+        Require(FalloutNvseNumericExpression.EvaluateValue(literal, values).Number == 1018.02,
+            "Editor ID admission changed scientific or based numeric literal semantics.");
+        foreach (var numeric in new[] { "17", "1e3", "0x10", "0b10" })
+            Reject(() => FalloutNvseNumericExpression.EvaluateValue(["SameForm", numeric], values, Function));
+        Reject(() => FalloutGameModeProgram.Evaluate(["SameForm", "1e3"], _ => 0, Function));
+        Reject(() => FalloutNvseNumericExpression.EvaluateValue(["0xWrong"], values));
+        foreach (var name in new[] { "NaN", "Infinity" })
+            Require(FalloutNvseNumericExpression.EvaluateValue(["SameForm", name], values, Function).Number == 17 &&
+                FalloutGameModeProgram.Evaluate(["SameForm", name], _ => 0, Function) == 17,
+                "Digit-leading disambiguation changed existing letter-leading identifier arguments.");
+        var savedReads = reads;
+        Require(FalloutNvseNumericExpression.EvaluateValue(["0", "&&", "1EActor"], values).Number == 0 && reads == savedReads,
+            "Inactive digit-leading operand read gameplay state.");
+        Console.WriteLine("OPENNV_DIGIT_LEADING_SCRIPT_FORMS_PASS typed=true legacy=true inspection=true literalsUnchanged=true inactiveReads=false");
     }
     private static void Require(bool condition, string message) { if (!condition) throw new InvalidOperationException(message); }
     private static void Reject(Action action)

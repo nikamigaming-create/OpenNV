@@ -31,6 +31,7 @@ internal sealed partial class FalloutPlayerInventory
         var otherItems = new Dictionary<FalloutFormKey, FalloutCampaignItem>(other._items);
         var thisEquipped = new HashSet<uint>(_equipped);
         var otherEquipped = new HashSet<uint>(other._equipped);
+        var moved = new List<FalloutTradeTransfer>();
         foreach (var transfer in PlanLoadedRoundBatch(other, transfers))
         {
             if (transfer is null || transfer.Form.ObjectId == 0 || transfer.Count <= 0)
@@ -38,13 +39,16 @@ internal sealed partial class FalloutPlayerInventory
             var sourceItems = transfer.FromThisInventory ? thisItems : otherItems;
             var targetItems = transfer.FromThisInventory ? otherItems : thisItems;
             var sourceEquipped = transfer.FromThisInventory ? thisEquipped : otherEquipped;
-            Move(sourceItems, targetItems, sourceEquipped, transfer);
+            Move(sourceItems, targetItems, sourceEquipped, transfer, moved);
         }
 
         Validate(thisItems.Values);
         Validate(otherItems.Values);
-        ObserveNativeAddition(transfers.Where(transfer => !transfer.FromThisInventory).Select(transfer => transfer.Form), null);
-        other.ObserveNativeAddition(transfers.Where(transfer => transfer.FromThisInventory).Select(transfer => transfer.Form), null);
+        // Loaded rounds are actual transfers even when the trade menu has no
+        // separate ammunition row. Retain the executed order, including those
+        // recursive transfers, rather than reconstructing it from menu rows.
+        ObserveNativeAddition(moved.Where(transfer => !transfer.FromThisInventory).Select(transfer => transfer.Form), null);
+        other.ObserveNativeAddition(moved.Where(transfer => transfer.FromThisInventory).Select(transfer => transfer.Form), null);
         InvalidateTraversalForInsertions(thisItems.Values);
         other.InvalidateTraversalForInsertions(otherItems.Values);
         foreach (var previous in _items.Values.Where(item => !thisItems.ContainsKey(item.FormKey)))
@@ -69,7 +73,7 @@ internal sealed partial class FalloutPlayerInventory
 
     private static void Move(Dictionary<FalloutFormKey, FalloutCampaignItem> sourceItems,
         Dictionary<FalloutFormKey, FalloutCampaignItem> targetItems, HashSet<uint> sourceEquipped,
-        FalloutTradeTransfer transfer)
+        FalloutTradeTransfer transfer, List<FalloutTradeTransfer> movedEntries)
     {
         if (!sourceItems.TryGetValue(transfer.Form, out var source) || transfer.Count > source.Count)
             throw new InvalidOperationException($"Trade item quantity is no longer available: {transfer.Form}.");
@@ -123,8 +127,9 @@ internal sealed partial class FalloutPlayerInventory
             // equipped-instance lock. The source's lock was refused above.
             UnequipLocked = previous?.UnequipLocked ?? false
         };
+        movedEntries.Add(transfer);
         foreach (var rounds in LoadedRoundTransfers(selected))
-            Move(sourceItems, targetItems, sourceEquipped, new(rounds.Ammunition, rounds.Loaded, transfer.FromThisInventory));
+            Move(sourceItems, targetItems, sourceEquipped, new(rounds.Ammunition, rounds.Loaded, transfer.FromThisInventory), movedEntries);
     }
 
     private static void Validate(IEnumerable<FalloutCampaignItem> items)

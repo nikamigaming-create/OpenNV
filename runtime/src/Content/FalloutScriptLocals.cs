@@ -113,9 +113,10 @@ internal static class FalloutScriptLocals
             };
             if (kind is not { } localKind) continue;
             // Retail source contains digit-leading local names and trailing
-            // author notes without comment delimiters. SLSD/SCVR owns the
-            // slot; only its declared value kind is needed at admission.
-            var declaration = Regex.Match(line, @"^[A-Za-z_][A-Za-z0-9_]*\s+([A-Za-z0-9_]+)(?=\s|$)", RegexOptions.CultureInvariant);
+            // punctuation/author notes without comment delimiters. Read the
+            // maximal identifier token; SLSD/SCVR must still supply that exact
+            // slot. This metadata join does not admit trailing text to execution.
+            var declaration = Regex.Match(line, @"^[A-Za-z_][A-Za-z0-9_]*\s+([A-Za-z0-9_]+)", RegexOptions.CultureInvariant);
             var name = declaration.Groups[1].Value;
             if (!declaration.Success || result.TryGetValue(name, out var previous) && previous != localKind)
                 throw new InvalidDataException($"Script {script.FormKey} source variable declaration is ambiguous: {line}");
