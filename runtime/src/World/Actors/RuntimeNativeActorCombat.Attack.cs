@@ -9,12 +9,20 @@ namespace OpenNV.Runtime.World.Actors;
 
 internal sealed partial class RuntimeNativeActorCombat
 {
+    private readonly record struct AttackDecision(FalloutFormKey Target, string PriorAction,
+        double PriorActionSeconds, float DistanceMeters, float PlanarDistanceSquared, float VerticalOffsetMeters,
+        float ReachMeters, float AttackRangeMeters, float ActorRadiusMeters, float TargetRadiusUsedMeters,
+        float ActorMeleeExtentMeters, float TargetMeleeExtentMeters, float ActorSafeMarginMeters, bool Visible, bool? Facing, float? FacingDot,
+        string? RequestedAction, string SelectedAction, string? PursuitIdleReason);
+    private AttackDecision? _attackDecision;
+
     private FalloutWeaponPresentation? _enemyWeapon;
     private FalloutWeaponHandling? _enemyWeaponHandling;
     private NativeActorWeaponAttachment? _enemyObject;
     private FalloutWeaponDamageResolver? _enemyDamage;
     private byte[]? _enemySkillValues;
     private float _naturalDamage, _attackRange, _baseWeaponDamage;
+    private (float Base, float Multiplier)? _npcUnarmedDamageSettings;
     private NativeOwnedAnimationSoundPlayer? _enemySounds;
     private readonly Dictionary<string, NativeActorCombatAnimation> _combatClips = new(StringComparer.OrdinalIgnoreCase);
     private NativeActorCombatAnimation? _combatIdle, _combatAim, _combatGrip;
@@ -26,8 +34,13 @@ internal sealed partial class RuntimeNativeActorCombat
 
     private void PrepareEngagement()
     {
+        _creatureReachGameUnits = null;
         PrepareMovement();
-        _enemySounds = new(_records, _content, _actor, _skeleton.UnitsToMetres, _state.SoundRandom, _state.AnimationSoundEvents); _actor.AddChild(_enemySounds);
+        if (_enemySounds is null)
+        {
+            _enemySounds = new(_records, _content, _actor, _skeleton.UnitsToMetres, _state.SoundRandom, _state.AnimationSoundEvents);
+            _actor.AddChild(_enemySounds);
+        }
         var directory = _skeletonPath[.._skeletonPath.LastIndexOf('/')];
         var stats = FalloutActorTemplateOwner.Resolve(_records, _records.GetEffective(_state.Base), 2, _state.Templates);
         var statsData = stats.ReadSubrecords().Single(field => field.Signature == "DATA").Data;
@@ -38,8 +51,10 @@ internal sealed partial class RuntimeNativeActorCombat
             var skills = stats.ReadSubrecords().Single(field => field.Signature == "DNAM").Data;
             if (statsData.Length != 11 || skills.Length != 28)
                 throw new NotSupportedException("NPC unarmed stat/skill extent is unbound.");
-            _naturalDamage = FalloutGameSettingFloats.ReadRetained(_records, "fAVDUnarmedDamageBase", nameof(RuntimeNativeActorCombat)) +
-                FalloutGameSettingFloats.ReadRetained(_records, "fAVDUnarmedDamageMult", nameof(RuntimeNativeActorCombat)) * skills.Span[45 - 32];
+            _npcUnarmedDamageSettings ??= (
+                FalloutGameSettingFloats.ReadRetained(_records, "fAVDUnarmedDamageBase", nameof(RuntimeNativeActorCombat)),
+                FalloutGameSettingFloats.ReadRetained(_records, "fAVDUnarmedDamageMult", nameof(RuntimeNativeActorCombat)));
+            _naturalDamage = NaturalAttackDamage();
             _attackRange = FalloutGameSettingFloats.ReadRetained(_records, "fCombatDistance", nameof(RuntimeNativeActorCombat)) * _skeleton.UnitsToMetres;
             var gender = _actor is RuntimeNativeNpc npc && npc.Appearance.Female ? "female" : "male";
             _movementPath = SelectPath(directory, "locomotion/h2hfastforward", "locomotion/h2hforward",
@@ -55,12 +70,12 @@ internal sealed partial class RuntimeNativeActorCombat
             var model = FalloutActorTemplateOwner.Resolve(_records, _records.GetEffective(_state.Base), 64, _state.Templates);
             var reach = model.ReadSubrecords().Single(field => field.Signature == "RNAM").Data.Span;
             if (reach.Length != 1) throw new InvalidDataException("Creature reach extent is invalid.");
-            _attackRange = reach[0] * _skeleton.UnitsToMetres * _skeleton.Node.Scale.X;
+            _creatureReachGameUnits = reach[0];
             _movementPath = SelectPath(directory, "locomotion/mtfastforward", "locomotion/mtforward", "mtforward");
             _attackPaths = SelectAttackPaths(directory, "h2hattackleft", "h2hattackright");
             _combatIdle = Clip(SelectPath(directory, "mtidle", "locomotion/mtidle"), true);
         }
-        if (!float.IsFinite(_attackRange) || !float.IsFinite(_naturalDamage) || _attackRange <= 0 || _naturalDamage < 0)
+        if (!float.IsFinite(CurrentAttackRange) || !float.IsFinite(_naturalDamage) || CurrentAttackRange <= 0 || _naturalDamage < 0)
             throw new InvalidDataException("Actor attack range/damage is invalid.");
         foreach (var path in _attackPaths)
             if (Clip(path, _enemyWeapon?.Automatic == true).Events.Discharges == 0)
@@ -100,33 +115,65 @@ internal sealed partial class RuntimeNativeActorCombat
     private void AdvanceEngagement(RuntimeNativePlayer? player, double delta)
     {
         var state = _state.Engagement!;
+        // A committed finite strike finishes its source animation. Other
+        // decision boundaries may replace a broken, consumed or exhausted
+        // weapon through the same inventory selection used at combat entry.
+        if (_enemyWeapon is { } current &&
+            (state.Action != "attack" || state.StartPending || current.Automatic) &&
+            (!_enemyWeaponHandling!.CanUse(current) ||
+             Ranged && current.AmmoRegenerationSeconds == 0 && !_enemyWeaponHandling.CanFire(current) && !_enemyWeaponHandling.CanReload(current)))
+            state = ReselectCombatWeapon(state);
         var offset = TargetPosition(player) - _actor.GlobalPosition;
         var distance = offset.Length();
-        var reach = _attackRange + (Ranged ? 0 : _radius + TargetRadius(player));
+        var targetRadius = Ranged ? 0 : TargetRadius(player);
+        var meleeExtent = Ranged ? 0 : MeleeSurfaceExtent;
+        var targetMeleeExtent = Ranged ? 0 : TargetMeleeExtent(player);
+        var reach = CurrentAttackRange + meleeExtent + targetMeleeExtent;
+        var priorAction = state.Action;
+        var priorSeconds = state.Seconds;
+        bool? decisionFacing = null;
+        float? decisionFacingDot = null;
+        string? requestedAction = null, pursuitIdleReason = null;
         var visible = CanSeeTarget(player);
         Vector3? destination = null;
         var requestedPursuit = false;
-        if (state.Action is "pursue" or "idle")
+        // Finite swings and reloads retain their committed animation. An
+        // automatic attack has no end boundary, so it must reconsider the
+        // target or it can remain firing/holding behind cover forever instead
+        // of returning control to pursuit.
+        if (state.Action is "pursue" or "idle" || state.Action == "attack" && _enemyWeapon?.Automatic == true)
         {
             var direction = offset; direction.Y = 0;
-            var facing = direction.IsZeroApprox() || (-_actor.GlobalBasis.Z).Normalized().Dot(direction.Normalized()) > .95f;
+            var facingDot = direction.IsZeroApprox() ? 1 : (-_actor.GlobalBasis.Z).Normalized().Dot(direction.Normalized());
+            var facing = facingDot > .95f;
+            decisionFacing = facing; decisionFacingDot = facingDot;
             var action = distance > reach || !visible ? "pursue" : facing ? "attack" : "idle";
+            requestedAction = action;
             if (action == "pursue")
             {
                 requestedPursuit = true;
                 destination = PursuitTarget(TargetPosition(player), delta, Ranged ? _radius * 2 + TargetRadius(player) : reach);
-                if (destination is null && state.PathTurn is null) action = "idle";
+                if (destination is null && state.PathTurn is null)
+                {
+                    action = "idle";
+                    pursuitIdleReason = _routeSearch is not null ? "route-query-pending" :
+                        _routeError is not null ? "route-source-refusal" :
+                        _coarseRouteError is not null ? "route-physical-refusal" : "no-unconsumed-waypoint";
+                }
             }
-            if (action == "attack" && _enemyWeapon?.IsMeleeWeapon == true && !_enemyWeaponHandling!.CanUse(_enemyWeapon))
-                throw new NotSupportedException("Actor's broken melee weapon requires its unarmed attack owner.");
             if (action != state.Action) state = state.Transition(action);
         }
         if (!requestedPursuit) RetireUnusedPursuitSearch();
         if (state.Action == "attack" && state.StartPending && Ranged && !_enemyWeaponHandling!.CanFire(_enemyWeapon!))
         {
-            if (!_enemyWeaponHandling.CanReload(_enemyWeapon!)) throw new NotSupportedException("Actor exhausted usable ammunition and needs weapon reselection.");
-            state = BeginWeaponReload(state);
+            state = _enemyWeapon!.AmmoRegenerationSeconds > 0 ? state.Transition("idle") : BeginWeaponReload(state);
         }
+        // Retain only values from this actual decision; no diagnostic raycast
+        // or navigation query, and no per-frame reference object allocation.
+        _attackDecision = new(state.Target, priorAction, priorSeconds, distance,
+            offset.X * offset.X + offset.Z * offset.Z, offset.Y, reach, CurrentAttackRange,
+            _radius, targetRadius, meleeExtent, targetMeleeExtent, _mover!.SafeMargin, visible, decisionFacing, decisionFacingDot,
+            requestedAction, state.Action, pursuitIdleReason);
         if (state.Action == "attack")
         {
             state = FalloutAttackAnimationSelection.Bind(state, _attackPaths,
@@ -206,9 +253,8 @@ internal sealed partial class RuntimeNativeActorCombat
         if (state.Action == "attack" && _enemyWeapon?.Automatic == true && Ranged &&
             !_enemyWeaponHandling!.CanFire(_enemyWeapon))
         {
-            if (!_enemyWeaponHandling.CanReload(_enemyWeapon))
-                throw new NotSupportedException("Actor exhausted usable ammunition and cannot reload.");
-            state = BeginWeaponReload(state);
+            state = _enemyWeapon.AmmoRegenerationSeconds > 0 ? state.Transition("idle") : _enemyWeaponHandling.CanReload(_enemyWeapon)
+                ? BeginWeaponReload(state) : ReselectCombatWeapon(state);
         }
         _state.Engagement = state;
     }
@@ -247,9 +293,9 @@ internal sealed partial class RuntimeNativeActorCombat
         if (TargetHealth(player) <= 0) return;
         if (Ranged) { ShootTarget(player); return; }
         var distance = _actor.GlobalPosition.DistanceTo(TargetPosition(player));
-        var allowed = _attackRange + _radius + TargetRadius(player);
+        var allowed = CurrentAttackRange + MeleeSurfaceExtent + TargetMeleeExtent(player);
         var before = TargetHealth(player);
-        var resolvedDamage = _enemyWeapon is null ? new FalloutWeaponDamage(_naturalDamage, 1, 0, 1) :
+        var resolvedDamage = _enemyWeapon is null ? new FalloutWeaponDamage(NaturalAttackDamage(), 1, 0, 1) :
             _enemyDamage!.Resolve(_enemyWeapon.Form, _baseWeaponDamage);
         var strikeBone = _actor is RuntimeNativeNpc
             ? _enemyWeapon is null && _attackPath.Contains("attackleft", StringComparison.OrdinalIgnoreCase) ? "Bip01 L Hand" : "Bip01 R Hand"
@@ -263,7 +309,9 @@ internal sealed partial class RuntimeNativeActorCombat
         if (distance <= allowed && CanSeeTarget(player) && _opponent is null && player!.CombatHitPartFrom(origin, _actor) is { } selectedPart)
         {
             part = selectedPart;
+            _world.RecordActorWeaponContact(_records.RuntimeFormKey(0x14), _state.Reference, _enemyWeapon?.Form, resolvedDamage.WeaponScriptInstance);
             _context!.DamagePlayer(resolvedDamage, selectedPart);
+            if (_enemyWeapon is { } weapon) player!.ReceiveWeaponTouchEffects(_state.Reference, weapon.Form);
             player!.ReceiveMeleeKnockback(_actor.GlobalPosition, resolvedDamage.Amount);
             ++_hits;
         }
@@ -290,5 +338,15 @@ internal sealed partial class RuntimeNativeActorCombat
             limbDamage = part is null ? (float?)null : resolvedDamage.Amount * resolvedDamage.LimbMultiplier
         };
         GD.Print($"OPENNV_ACTOR_ATTACK reference={_state.Reference} kind=melee target={_state.Engagement?.Target} part={part} health={before:R}->{TargetHealth(player):R}");
+    }
+
+    private float NaturalAttackDamage()
+    {
+        var damage = _actor is RuntimeNativeNpc && _npcUnarmedDamageSettings is { } settings
+            ? settings.Base + settings.Multiplier * _world.ActorValue(_state.Reference, "Unarmed")
+            : _naturalDamage;
+        if (!float.IsFinite(damage) || damage < 0)
+            throw new InvalidDataException("Actor natural attack damage is invalid.");
+        return damage;
     }
 }

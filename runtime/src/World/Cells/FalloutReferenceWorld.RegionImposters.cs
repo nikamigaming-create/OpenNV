@@ -13,9 +13,25 @@ internal sealed partial class FalloutReferenceWorld
     private FalloutPlayerRegionMembership? _playerRegions;
     private bool _regionPublicationPending;
     internal bool RegionPublicationPending => _regionPublicationPending;
-    internal void CompleteRegionPublication() => _regionPublicationPending = false;
+    // CELL attachment is gameplay state; missing 3D is a separate presentation
+    // divergence. Only the real resident VM/reference binding owner can finish
+    // this receipt, even when a selected model cannot yet be constructed.
+    internal bool CompleteRegionActivation(FalloutFormKey cell, IReadOnlySet<FalloutFormKey> boundReferences)
+    {
+        if (!_regionPublicationPending || _playerRegions is not { } membership || membership.Cell != cell) return false;
+        var selected = membership.Current.Select(region => FalloutRegionImposters.Read(records, region))
+            .OfType<FalloutRegionImposters>().SelectMany(group => group.References).Distinct().ToArray();
+        foreach (var reference in selected)
+        {
+            var instance = Get(reference);
+            if (!boundReferences.Contains(reference) || !instance.RegionCellAttached || Placement(reference).Cell != cell)
+                throw new InvalidOperationException($"Regional reference {reference} has no accepted current-CELL gameplay binding.");
+        }
+        _regionPublicationPending = false;
+        return true;
+    }
     internal FalloutPlayerRegionMembership? CapturePlayerRegions() => _regionPublicationPending
-        ? throw new InvalidOperationException("Accepted regional reference activation has not completed.")
+        ? throw new InvalidOperationException("Accepted regional reference gameplay binding has not completed.")
         : _playerRegions is { } membership
         ? membership with
         {

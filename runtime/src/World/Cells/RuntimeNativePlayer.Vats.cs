@@ -37,6 +37,9 @@ internal partial class RuntimeNativePlayer
         _vatsPublications.SaveBlocker ?? (PendingProjectileImpactCount != 0 ? "projectile-impact-continuation" :
         VatsMenuActive || VatsExecuting ? "vats-active" : null);
     internal FalloutActorProjectileLaunch? CaptureProjectileLaunch() => _playerProjectileLaunch;
+    internal object? VatsMenuObservation => _vatsMenu is { } menu && GodotObject.IsInstanceValid(menu) && menu.IsInsideTree()
+        ? menu.ObservedControls : null;
+
     internal object VatsState => new
     {
         active = VatsMenuActive,
@@ -96,6 +99,7 @@ internal partial class RuntimeNativePlayer
 
     private void OpenVats()
     {
+        if (FatigueKnockoutActive) return;
         if (_vatsVitals is null || _presentationRecords is null || _presentationInventory is null || _hitReferences is null)
             throw new InvalidOperationException("VATS has no shared player/world source owner.");
         if (_vatsMenu is not null || _modalInput || !SourceControls.Fighting || !_movementEnabled || _sourceCamera is not null ||
@@ -122,7 +126,7 @@ internal partial class RuntimeNativePlayer
                     if (!ReferenceEquals(_vats, session)) return;
                     _vatsError = error.Message; RetireVats("presentation-failed");
                     GD.PushError("OPENNV_NATIVE_VATS_PRESENTATION_DIVERGENCE: " + error.Message);
-                });
+                }, () => _vatsActorChoices, SelectVatsActor, SelectVatsPartView);
             layer = new CanvasLayer { Name = "NativeVatsLayer", Layer = 99, ProcessMode = ProcessModeEnum.Always };
             _vatsMenu = menu; _vatsLayer = layer;
             _vatsWasPaused = GetTree().Paused; _vatsPreviousMouse = Input.MouseMode;
@@ -131,8 +135,10 @@ internal partial class RuntimeNativePlayer
             GetTree().Paused = true;
             _vatsOwnsPause = true;
             if (DisplayServer.GetName() != "headless") Input.MouseMode = Input.MouseModeEnum.Visible;
+            _vatsWorldFovBefore = _camera.Fov; _vatsFirstFovBefore = _firstPersonCamera?.Fov;
             AddChild(layer); layer.AddChild(menu);
-            _ = PrepareVatsTargets(_vats, checked(++_vatsGeneration));
+            if (menu.SelectedActor is { } selected) SelectVatsActor(selected);
+            else { _vatsPreparing = false; menu.Refresh(); }
             GD.Print("OPENNV_NATIVE_VATS_OPEN source=control16 owner=shared-queue;source-anatomy;weapon-instance");
         }
         catch (Exception error)
@@ -158,6 +164,7 @@ internal partial class RuntimeNativePlayer
 
     private void QueueVatsTarget(FalloutVatsSession.Target target)
     {
+        if (_vatsPreparing) return;
         var weapon = RequireVatsWeapon();
         var current = VatsTargets().SingleOrDefault(value => value.Reference == target.Reference && value.Part == target.Part) ??
             throw new InvalidOperationException("That VATS target is no longer available.");
@@ -174,7 +181,7 @@ internal partial class RuntimeNativePlayer
         var instance = _presentationInventory!.SelectedWeapon(weapon.Form).Extra.Instance;
         if (_vats.Queue.Any(attack => attack.Weapon != weapon.Form || attack.WeaponInstance != instance))
             throw new InvalidOperationException("The selected weapon instance changed after queueing.");
-        _vats.Execute();
+        _vats.Execute(); RestoreVatsSelectionView();
         var release = _releaseVatsInput; _releaseVatsInput = null;
         release?.Invoke(); GetTree().Paused = _vatsWasPaused; _vatsOwnsPause = false;
         if (DisplayServer.GetName() != "headless") Input.MouseMode = _vatsPreviousMouse;
@@ -195,6 +202,16 @@ internal partial class RuntimeNativePlayer
             { RetireVats("player-or-tracking-lost"); return; }
             if (!VatsExecuting)
             {
+                if (VatsMenuActive && _vats?.CurrentPhase == FalloutVatsSession.Phase.Selecting)
+                {
+                    try { AdvanceVatsSelectionView((float)delta); }
+                    catch (Exception error)
+                    {
+                        _vatsError = error.Message; RetireVats("selection-view-failed");
+                        GD.PushError("OPENNV_NATIVE_VATS_VIEW_DIVERGENCE: " + error.Message);
+                    }
+                    return;
+                }
                 if (!GetTree().Paused && !VatsMenuActive && _vatsVitals.State.ExactHitPoints > 0)
                 {
                     if (_vatsVitals.State.ExactActionPoints >= _vatsVitals.State.MaximumActionPoints) return;
@@ -212,8 +229,7 @@ internal partial class RuntimeNativePlayer
             { RetireVats("tracking-lost"); return; }
             if (_vatsRequestedAttack)
             {
-                if (_weaponAction is not null || _pendingShotCount != 0 || PendingProjectileImpactCount != 0 ||
-                    _vats!.PendingPublications != 0) return;
+                if (!_vats!.CanCompleteAttack(_weaponAction is not null, _pendingShotCount)) return;
                 _vats!.CompleteAttack(_vats.CurrentShotCommitted);
                 _vatsRequestedAttack = false; _vatsMenu?.Refresh();
                 if (_vats.CurrentPhase == FalloutVatsSession.Phase.Completed) { RetireVats("queue-complete"); return; }
@@ -222,9 +238,13 @@ internal partial class RuntimeNativePlayer
             var weapon = RequireVatsWeapon();
             if (weapon.Form != attack.Weapon || _presentationInventory!.SelectedWeapon(weapon.Form).Extra.Instance != attack.WeaponInstance)
             { RetireVats("weapon-instance-changed"); return; }
-            if (!TryVatsPoint(attack.Target.Reference, attack.Target.Part, out var targetPoint, out var visible) || !visible)
+            if (!TryVatsAimPoint(attack.Target.Reference, attack.Target.Part, out var targetPoint))
             {
-                _vatsLastReason = "target-unavailable"; _vats.CompleteAttack(false); _vatsMenu?.Refresh(); return;
+                _vatsLastReason = "target-unavailable";
+                _vats.CompleteAttack(false);
+                if (_vats.CurrentPhase == FalloutVatsSession.Phase.Completed) RetireVats("target-unavailable");
+                else _vatsMenu?.Refresh();
+                return;
             }
             if (!_weaponHandling!.CanFire(weapon) || _vatsVitals.State.ExactActionPoints < attack.Target.ActionPointCost)
             { RetireVats("ammo-or-AP-unavailable"); return; }
@@ -235,6 +255,7 @@ internal partial class RuntimeNativePlayer
                 _pitchRadians = Math.Clamp(MathF.Asin(direction.Y), -_configuration.Player.VerticalLookLimitRadians, _configuration.Player.VerticalLookLimitRadians);
                 _camera.Rotation = new(_pitchRadians, 0, 0);
             }
+            _vats.ApplyActorLineOfSight(attack.Ordinal, () => VatsActorLineOfSight(attack.Target.Reference));
             _vatsRequestedAttack = true;
             RequestWeaponFire();
             if (_weaponAction is null) { RetireVats("weapon-action-refused"); return; }
@@ -262,7 +283,7 @@ internal partial class RuntimeNativePlayer
         if (!VatsBurstActive || _vats?.CurrentAttack is not { } attack) return null;
         if (_presentationInventory!.SelectedWeapon(attack.Weapon).Extra.Instance != attack.WeaponInstance)
             throw new InvalidOperationException("Queued VATS weapon instance was replaced before discharge.");
-        if (!TryVatsPoint(attack.Target.Reference, attack.Target.Part, out var point, out _))
+        if (!TryVatsAimPoint(attack.Target.Reference, attack.Target.Part, out var point))
             throw new InvalidOperationException("Queued VATS target disappeared before discharge.");
         if (!_vats.CurrentShotCommitted && _vatsVitals!.State.ExactActionPoints < attack.Target.ActionPointCost)
             throw new InvalidOperationException("Queued VATS AP became unavailable before discharge.");
@@ -305,6 +326,7 @@ internal partial class RuntimeNativePlayer
             _vatsLastReason = reason;
             ++_vatsGeneration;
             _vatsVisibility?.Dispose(); _vatsVisibility = null; _vatsPreparing = false;
+            RestoreVatsSelectionView(); _vatsActorChoices = [];
             if (_vats?.CurrentPhase is FalloutVatsSession.Phase.Selecting or FalloutVatsSession.Phase.Executing) _vats.Cancel();
             _vatsRequestedAttack = false; _weaponTriggerHeld = false; _pendingShotCount = 0;
             if (_weaponAction is not null && _vatsLayer is not null) CancelWeaponAction();

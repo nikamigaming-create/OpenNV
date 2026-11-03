@@ -66,6 +66,31 @@ internal sealed partial class FalloutQuestStages
         }
     }
 
+    internal OpenNV.Runtime.Gameplay.State.FalloutInventoryChangeLease PrepareInventoryReplacement(
+        FalloutQuestStages staged, IReadOnlyList<FalloutQuestStageResultSnapshot> expected)
+    {
+        var before = CaptureResults(); var after = staged.CaptureResults();
+        var started = false;
+        string Identity(IReadOnlyList<FalloutQuestStageResultSnapshot> values) => System.Text.Json.JsonSerializer.Serialize(values);
+        if (Identity(before) != Identity(expected))
+            throw new InvalidOperationException("Stage-result owner changed during inventory-event preparation.");
+        void Publish(IReadOnlyList<FalloutQuestStageResultSnapshot> values)
+        {
+            _progress.Clear(); _errors.Clear();
+            foreach (var item in values)
+            {
+                _progress.Add((item.Quest, item.Stage), (item.Steps, item.Completed));
+                if (item.Error is { } error) _errors.Add((item.Quest, item.Stage), error);
+            }
+        }
+        return new(() =>
+        {
+            if (Identity(CaptureResults()) != Identity(expected))
+                throw new InvalidOperationException("Stage-result owner changed at inventory publication.");
+            ValidateResults(after); started = true; Publish(after);
+        }, () => { if (started) Publish(before); });
+    }
+
     private void ValidateResults(IReadOnlyList<FalloutQuestStageResultSnapshot> saved)
     {
         ValidateSnapshotShape(saved);

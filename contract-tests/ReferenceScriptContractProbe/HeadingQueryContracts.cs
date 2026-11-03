@@ -7,6 +7,7 @@ internal static class HeadingQueryContracts
 {
     internal static void Run()
     {
+        CompassPresentation();
         foreach (var (target, expected) in new[] { (new float[] { 0, 1, 900 }, 0f), (new float[] { 1, 0, -900 }, 90f),
             (new float[] { -1, 0, 0 }, -90f), (new float[] { 0, -1, 0 }, 180f) })
             Check(MathF.Abs(MathF.Abs(FalloutHeadingAngle.Between([0, 0, 0], target, 0)) - MathF.Abs(expected)) < .0001f &&
@@ -123,6 +124,49 @@ internal static class HeadingQueryContracts
         try { action(); } catch (Exception error) when (error is InvalidDataException or NotSupportedException) { return; }
         throw new InvalidDataException("Invalid heading input was accepted.");
     }
+    private static void CompassPresentation()
+    {
+        FalloutFormKey Key(uint id) => new("Synthetic.esm", id);
+        var candidates = new FalloutCompassAdmissionCandidate[] { new(Key(1), 4, true), new(Key(2), 1, null), new(Key(3), 9, true) };
+        var selected = FalloutCompassAdmission.Select(candidates, 2);
+        Check(selected.Included.SequenceEqual(new[] { Key(1) }) && selected.UnresolvedCapacity.SequenceEqual(new[] { Key(3) }),
+            "Compass capacity invented detection or ignored a possible nearer admission.");
+        selected = FalloutCompassAdmission.Select([new(Key(1), 4, true), new(Key(2), 4, true)], 1);
+        Check(selected.Included.Count == 0 && selected.UnresolvedCapacity.Count == 2, "Compass invented a native cap tie-breaker.");
+        selected = FalloutCompassAdmission.Select([new(Key(1), 9, true), new(Key(2), 1, false), new(Key(3), 4, true)], 1);
+        Check(selected.Included.SequenceEqual(new[] { Key(3) }), "Compass capped before admission or failed squared-distance ordering.");
+        var settings = new FalloutCompassBlinkSettings(1, 2, 4, 300, 200, 100, 10, 20, 30);
+        Check(settings.At(0) == (300, 10) && settings.At(4) == (200, 20) && settings.At(1000) == (100, 30),
+            "Compass blink lost clamping, squared source units or piecewise settings.");
+        var blink = new FalloutCompassBlinkState(255, 0);
+        blink.Advance(settings, 1, 255, 255, .1f, 1);
+        Check(blink.Alpha == 255 && blink.Phase == 3, "Compass blink consumed multiple source phases in one frame.");
+        blink.Advance(settings, 1, 255, 255, 0, 2);
+        Check(blink.Phase == 1, "Compass blink did not leave its expired bright pause.");
+        blink.Advance(settings, 1, 255, 255, 1, 100);
+        Check(blink.Alpha == 0 && blink.Phase == 0 && blink.PauseDeadlineMilliseconds == 110,
+            "Compass blink did not record its source zero-crossing pause deadline.");
+        blink.Advance(settings, 1, 255, 255, 1, 101);
+        blink.Advance(settings, 1, 255, 255, 0, 105);
+        Check(blink.Alpha == 255 && blink.Phase == 3, "Compass reset a retained pause or invented black-hold time.");
+        blink.Advance(settings, 1, 255, 255, 0, 111);
+        Check(blink.Phase == 1, "Compass retained pause never resumed its falling phase.");
+        var transparent = new FalloutCompassBlinkState(0, 0);
+        transparent.Advance(settings, 1, 0, 0, 1, 0);
+        Check(transparent.Alpha == 0, "Zero source HUD opacity produced nonfinite blink alpha.");
+        var code = new byte[2400];
+        new byte[] { 0xdb, 0x81, 0x14, 2, 0, 0, 0xdc, 0x0d, 1, 0, 0, 0, 0xdc, 0xc0 }.CopyTo(code, 1000);
+        code[1800] = 0x68; BinaryPrimitives.WriteUInt32LittleEndian(code.AsSpan(1801), 100);
+        new byte[] { 0xdc, 0x1d, 2, 0, 0, 0 }.CopyTo(code, 2000);
+        var declaration = FalloutExecutableStringTable.ReadCompassHudDeclaration(code,
+            address => address == 100 ? "Interface/HUD/glow_hud_compass_landmark.dds" : null,
+            address => address == 1 ? .625 : address == 2 ? 144 : throw new InvalidDataException());
+        Check(declaration == new FalloutCompassHudDeclaration(.625f, 144), "Compass substituted fitted edge/blink declarations.");
+        code[2000] = 0;
+        Reject(() => FalloutExecutableStringTable.ReadCompassHudDeclaration(code,
+            address => address == 100 ? "Interface/HUD/glow_hud_compass_landmark.dds" : null, _ => .625));
+    }
+
     private static byte[] U32(uint value) => BitConverter.GetBytes(value);
     private static byte[] Text(string value) => Encoding.ASCII.GetBytes(value + '\0');
     private static byte[] Join(params byte[][] values) => values.SelectMany(value => value).ToArray();

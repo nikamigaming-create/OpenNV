@@ -233,8 +233,10 @@ internal partial class RuntimeNativeNpc
             if (completedNow)
             {
                 progress = progress with { Complete = true, RouteFailure = null };
-                _nativeMarkerTravelProgress = progress;
-                Combat.SetTravelProgress(progress);
+                if (FalloutTravelArrivalHeading.Read(_aiStack!, _aiWorld!, source) is { } heading)
+                    Combat.CompleteTravelWithHeading(_aiPackage!, progress, destination, heading, source.Sneaking);
+                else Combat.SetTravelProgress(progress);
+                _nativeMarkerTravelProgress = Combat.PackageMotion!.Travel!;
                 _packageEvents!.Complete();
             }
             // Until this leg publishes a route, retained motion still owns

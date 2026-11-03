@@ -274,6 +274,7 @@ internal sealed partial class RuntimeNativeShotEffects : Node3D
             }
             if (effect.Remaining > 0 || effect.Playback is { Active: true } ||
                 effect.Root.FindChildren("*", "AudioStreamPlayer3D", true, false).OfType<AudioStreamPlayer3D>().Any(voice => voice.Playing) ||
+                _sounds.HasPendingEmitterSounds(effect.Root) ||
                 effect.Completed is not null && !_sounds.CanRetireEmitter(effect.Root)) continue;
             _effects.RemoveAt(i);
             if (effect.Impact is not null)

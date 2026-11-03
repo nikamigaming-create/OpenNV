@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using Godot;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Formats.Gamebryo;
+using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.World.Cells;
 
 namespace OpenNV.Runtime.World.Actors;
@@ -42,6 +43,10 @@ internal sealed partial class RuntimeNativeActorCombat
     internal object HitReactionObservation => new
     {
         state = _state.HitReaction,
+        fatigueKnockout = _state.FatigueKnockout,
+        essentialKnockout = _state.EssentialKnockout,
+        knockedDown = _state.KnockedDown,
+        recoveryIdleUnavailable = _recoveryIdleUnavailable,
         started = _hitReactionsStarted,
         completed = _hitReactionsCompleted,
         last = _lastHitReaction,
@@ -100,6 +105,7 @@ internal sealed partial class RuntimeNativeActorCombat
             var p = _actor.GlobalPosition; var q = _actor.GlobalBasis.Orthonormalized().GetRotationQuaternion();
             _state.HitReaction = new(selected.FormKey, Convert.ToHexString(SHA256.HashData(selected.ReadData())), hit.Part,
                 new(_hitReactionClip.Path, _hitReactionClip.Hash, 0, true), [p.X, p.Y, p.Z], [q.X, q.Y, q.Z, q.W]);
+            RetireDisplacedPursuit();
             if (_state.Engagement is { } engagement) _state.Engagement = engagement.Transition("pursue");
             StopPackageMotion();
             Activity.SetMovement(false, false);
@@ -191,9 +197,15 @@ internal sealed partial class RuntimeNativeActorCombat
             };
             if (next >= clip.Duration)
             {
+                if (_state.KnockedDown && _state.FatigueKnockout is { Phase: not FalloutFatigueKnockoutPhase.GettingUp })
+                    throw new InvalidOperationException("Hit reaction cannot complete a fatigue knockout without its source get-up owner.");
                 _state.HitReaction = null; _hitReactionClip = null; _hitReactionsCompleted++;
-                _state.KnockedDown = false;
-                _state.EssentialKnockout = null;
+                if (_state.KnockedDown)
+                {
+                    _state.KnockedDown = false;
+                    _state.FatigueKnockout = null;
+                    _state.EssentialKnockout = null;
+                }
                 GD.Print($"OPENNV_ACTOR_HIT_REACTION_END reference={_state.Reference} idle={state.Idle}");
             }
         }

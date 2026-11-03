@@ -2,7 +2,7 @@ using OpenNV.Runtime.Content;
 
 namespace OpenNV.Runtime.Gameplay.State;
 
-internal enum FalloutHudEventKind { ItemAdded, Message, ItemRemoved, ObjectiveDisplayed, ObjectiveCompleted, ChallengeProgress, ChallengeCompleted, RadioDiscovered, NoteAdded, ExecutableNotice }
+internal enum FalloutHudEventKind { ItemAdded, Message, ItemRemoved, ObjectiveDisplayed, ObjectiveCompleted, ChallengeProgress, ChallengeCompleted, RadioDiscovered, NoteAdded, ExecutableNotice, LocationDiscovered, ItemUnequipped, ItemEquipped, KarmaMajorLost, KarmaMinorLost, KarmaMajorGained, KarmaMinorGained }
 
 // Events retain source identity and command order. Ordinary text, icons and
 // timing resolve at presentation; note producers retain their copied message
@@ -43,17 +43,19 @@ internal sealed class FalloutHudNotifications
     }
 
     private static bool IsQuestUpdate(FalloutHudEvent value) =>
-        value.Kind is FalloutHudEventKind.ObjectiveDisplayed or FalloutHudEventKind.ObjectiveCompleted;
+        value.Kind is FalloutHudEventKind.ObjectiveDisplayed or FalloutHudEventKind.ObjectiveCompleted or FalloutHudEventKind.LocationDiscovered;
 
     internal static void Validate(IReadOnlyList<FalloutHudEvent> events)
     {
         if (events.Any(value => value.Source.ObjectId == 0 || string.IsNullOrWhiteSpace(value.Source.OwnerPlugin) ||
             (value.Kind switch
             {
+                FalloutHudEventKind.KarmaMajorLost or FalloutHudEventKind.KarmaMinorLost or FalloutHudEventKind.KarmaMajorGained or FalloutHudEventKind.KarmaMinorGained => value.ObjectiveIndex is not null || value.Text is null,
+                FalloutHudEventKind.ItemUnequipped or FalloutHudEventKind.ItemEquipped => value.Count != 0 || value.ObjectiveIndex is not null || value.Text is null,
                 FalloutHudEventKind.ItemAdded or FalloutHudEventKind.ItemRemoved => value.Count <= 0 || value.ObjectiveIndex is not null,
                 FalloutHudEventKind.ChallengeProgress or FalloutHudEventKind.ChallengeCompleted => value.Count <= 0 || value.ObjectiveIndex is not null,
                 FalloutHudEventKind.NoteAdded => value.Count != 0 || value.ObjectiveIndex is not null || value.Text is null,
-                FalloutHudEventKind.Message or FalloutHudEventKind.RadioDiscovered => value.Count != 0 || value.ObjectiveIndex is not null,
+                FalloutHudEventKind.Message or FalloutHudEventKind.RadioDiscovered or FalloutHudEventKind.LocationDiscovered => value.Count != 0 || value.ObjectiveIndex is not null,
                 FalloutHudEventKind.ExecutableNotice => value.Count != 0 || value.ObjectiveIndex is not null || string.IsNullOrWhiteSpace(value.Text),
                 FalloutHudEventKind.ObjectiveDisplayed or FalloutHudEventKind.ObjectiveCompleted => value.Count != 0 || value.ObjectiveIndex is null,
                 _ => true,

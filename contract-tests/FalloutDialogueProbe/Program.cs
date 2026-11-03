@@ -292,6 +292,28 @@ Require(tileFont.TileBaseline == 10 && tileFont.Ascent == 17,
     "Tile drawing reused maximum ascent instead of the independent source descent extent.");
 Require(FalloutMenuXml.Number(centered, (source, _) => source == "screen()" ? 1600 : 600) == 500,
     "Menu geometry did not follow its declared relative expression.");
+var relativeTiles = System.Xml.Linq.XElement.Parse("<rect><user0>4</user0><image name='first'/><template name='not-a-live-tile'/><text name='second'/><hotrect name='third'/></rect>");
+var relativeChildren = FalloutMenuXml.TileChildren(relativeTiles).ToArray();
+Require(relativeChildren.Length == 3 && ReferenceEquals(FalloutMenuXml.UnnamedSibling(relativeChildren[2]), relativeChildren[1]) &&
+    ReferenceEquals(FalloutMenuXml.UnnamedSibling(relativeChildren[0]), relativeChildren[2]),
+    "Unnamed sibling did not follow native reverse-linked child order/wrap or counted properties/templates.");
+Require(FalloutMenuXml.NumericText(500.5f) == "500" && FalloutMenuXml.NumericText(501.5f) == "502" &&
+    FalloutMenuXml.NumericText(-2.5f) == "-2", "Numeric tile strings did not retain native nearest-even signed integer formatting.");
+var inheritedColorMenu = System.Xml.Linq.XElement.Parse("<menu><rect name='branch'><systemcolor>entity_Pipboy</systemcolor><hotrect name='map'><image name='marker'/></hotrect></rect></menu>");
+var inheritedColorImage = inheritedColorMenu.Descendants("hotrect").Single();
+var inheritedColor = FalloutMenuXml.InheritedSystemColor(inheritedColorImage);
+Require(inheritedColorMenu.Element("systemcolor") is null && inheritedColor?.Value == "entity_Pipboy" &&
+    ReferenceEquals(inheritedColor!.Parent, inheritedColorImage.Parent),
+    "A source subtree assumed its menu declared the inherited system color.");
+var detachedColorView = new System.Xml.Linq.XElement("menu", new System.Xml.Linq.XElement(inheritedColor!),
+    new System.Xml.Linq.XElement(inheritedColorImage));
+Require(FalloutMenuXml.InheritedSystemColor(detachedColorView.Element("hotrect")!)?.Value == "entity_Pipboy" &&
+    inheritedColor!.Parent == inheritedColorImage.Parent,
+    "Extracting source color either changed its owner or selected a fallback channel.");
+inheritedColorImage.SetElementValue("systemcolor", "entity_HUDAlt");
+Require(FalloutMenuXml.InheritedSystemColor(inheritedColorImage)?.Value == "entity_HUDAlt" &&
+    FalloutMenuXml.InheritedSystemColor(new System.Xml.Linq.XElement("menu")) is null,
+    "Inherited system color ignored the nearest source override or fabricated a missing declaration.");
 var conditional = System.Xml.Linq.XElement.Parse("<value><copy>7</copy><onlyif><copy>0</copy></onlyif><add>2</add></value>");
 Require(FalloutMenuXml.Number(conditional, (_, _) => throw new InvalidOperationException()) == 2,
     "Menu conditional arithmetic ignored a source predicate.");

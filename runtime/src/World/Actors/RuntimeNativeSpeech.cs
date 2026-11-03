@@ -15,6 +15,7 @@ internal partial class RuntimeNativeSpeech : Node
         internal NativeOwnedPcmStream? Pcm;
         internal FalloutSayToCommand? Command;
         internal string? CommandKind;
+        internal SpeechActionLook? ActionLook;
         internal long CompletedCommands, Generation;
         internal FalloutFormKey? Topic;
         internal FalloutFormKey? Listener;
@@ -166,7 +167,10 @@ internal partial class RuntimeNativeSpeech : Node
                 speakerReference = voice?.Reference.ToString(),
                 listenerReference = voice?.Listener?.ToString(),
                 command = voice?.CommandKind,
-                listenerLookOwner = voice?.CommandKind == "SayTo" ? "unbound" : "not-requested",
+                speakerLookOwner = voice?.ActionLook?.Speaker is not null ? "source-sayto-action-head-target" :
+                    voice?.Info is not null && voice.CommandKind == "SayTo" ? "unbound" : "not-active",
+                listenerLookOwner = voice?.ActionLook?.Listener is not null ? "source-sayto-action-head-target" :
+                    voice?.Info is not null && voice.CommandKind == "SayTo" ? "unbound" : "not-active",
                 completedCommands = _completedCommands,
                 completedPackages = _completedPackages,
                 requestedPackageEventTopics = _requestedPackageEventTopics,
@@ -449,6 +453,7 @@ internal partial class RuntimeNativeSpeech : Node
         voice.Binding = null; voice.LipSha256 = null; voice.Player.Stream = null;
         voice.Lip = null; voice.LipWeights = [];
         ++voice.Generation; _lastVoice = voice;
+        BeginSpeechActionLook(voice);
         if (exchange is { Ambient: false, Completed: null, Completion: null })
             exchange.Completion = new(exchange.Speaker, new HashSet<FalloutFormKey> { exchange.Topic },
                 info.Record.FormKey, voice.Generation);
@@ -488,6 +493,7 @@ internal partial class RuntimeNativeSpeech : Node
 
     private void BindSpeaker(Voice voice, FalloutPluginRecord speaker, Node3D actor)
     {
+        EndSpeechActionLook(voice, voice.ActionLook);
         EndListenerAnimation(voice);
         if (IsInstanceValid(voice.Speaker))
         {
@@ -656,6 +662,7 @@ internal partial class RuntimeNativeSpeech : Node
         var packageCompleted = voice.PackageCompleted;
         var completedPackageEvent = voice.PackageEvent;
         var completedGeneration = voice.Generation;
+        var completedLook = voice.ActionLook;
         void FinishResponse()
         {
             voice.Topic = null; voice.PackageCompleted = null;
@@ -672,6 +679,7 @@ internal partial class RuntimeNativeSpeech : Node
                 (_references ?? throw new InvalidOperationException("Finished speech has no shared reference owner.")).Retained(voice.Reference), receipt);
             _emptyCompletions.CompleteFinished(receipt, identity.Source, FinishResponse, DispatchSourceCompletion, () =>
             {
+                EndSpeechActionLook(voice, completedLook);
                 ++voice.CompletedCommands; ++_completedCommands;
                 // The stage owner observes settled speech only after its source
                 // completion committed. A failed prefix retains the active receipt.
@@ -680,6 +688,7 @@ internal partial class RuntimeNativeSpeech : Node
             return;
         }
         FinishResponse();
+        EndSpeechActionLook(voice, completedLook);
         if (voice.Radio is { } radio)
         {
             InfoCompleted?.Invoke(completed.Record.FormKey);
@@ -736,6 +745,7 @@ internal partial class RuntimeNativeSpeech : Node
         foreach (var voice in _channels.Values)
         {
             voice.UtteranceActive = false;
+            EndSpeechActionLook(voice, voice.ActionLook);
             voice.Player.Stop(); ClearResponseSound(voice); RetireRadioPcm(voice);
             EndListenerAnimation(voice);
             if (IsInstanceValid(voice.Speaker))

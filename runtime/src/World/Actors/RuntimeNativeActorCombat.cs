@@ -52,6 +52,7 @@ internal sealed partial class RuntimeNativeActorCombat : Node
         lastSeverEffect = _lastSeverEffect,
         goreError = _goreError,
         lastLimbEffect = _lastLimbEffect,
+        weaponTouchError = _weaponTouchError,
         error = Error,
         projectileLaunch = _state.ProjectileLaunch,
         muzzle = _enemyMuzzle?.State,
@@ -175,6 +176,7 @@ internal sealed partial class RuntimeNativeActorCombat : Node
             var part = HitPart(collider);
             _hitConditionLocation = explosionDamage ? -1 : part;
             _world.BeforeActorHit(_state.Reference);
+            if (!explosionDamage) _world.RecordActorWeaponContact(_state.Reference, attacker, hitWeapon, damage.WeaponScriptInstance);
             var defense = _world.Defense(_state.Reference, level, globals);
             var amount = defense.Absorb(damage.Amount, FalloutGameSettingFloats.Read(_records, "fMinDamMultiplier"), damage.AmmoEffects);
             var health = _world.Health(_state.Reference);
@@ -191,6 +193,18 @@ internal sealed partial class RuntimeNativeActorCombat : Node
             {
                 Provoke(attacker);
                 RequestHitReaction(hit, explosionDamage ? -1 : hit.Part);
+            }
+            if (!explosionDamage && hitWeapon is { } weapon && !hit.Dead)
+            {
+                ReceiveWeaponTouchEffects(attacker, weapon, level, globals);
+                var finalHealth = _world.Health(_state.Reference).Current;
+                hit = hit with
+                {
+                    HealthAfter = finalHealth,
+                    HealthDamage = hit.HealthDamage + hit.HealthAfter - finalHealth,
+                    Died = hit.Died || !hit.Dead && Dead,
+                    Dead = Dead
+                };
             }
             Error = null;
             GD.Print($"OPENNV_ACTOR_HIT reference={hit.Reference} part={hit.Part} health={hit.HealthBefore:R}->{hit.HealthAfter:R} died={hit.Died}");
@@ -269,6 +283,7 @@ internal sealed partial class RuntimeNativeActorCombat : Node
         _deathPresentationAttempted = true;
         RetireDeathPursuit();
         _state.KnockedDown = false;
+        _state.FatigueKnockout = null;
         _state.HitReaction = null;
         _hitReactionClip = null;
         foreach (var area in _actor.FindChildren("*", "Area3D", true, false).OfType<Area3D>())

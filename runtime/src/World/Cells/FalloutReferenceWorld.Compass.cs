@@ -5,7 +5,7 @@ using OpenNV.Runtime.Content.Definitions;
 namespace OpenNV.Runtime.World.Cells;
 
 internal sealed record FalloutCompassMarker(FalloutFormKey Reference, string Kind, float Heading,
-    float Distance, bool Discovered, bool Hostile = false);
+    float Distance, bool Discovered, bool Hostile = false, float? BlinkDistanceSquared = null);
 
 internal sealed record FalloutCompassFrame(float? HeadingRadians, float? StripOffset,
     IReadOnlyList<FalloutCompassMarker> Markers, IReadOnlyList<string> Unbound);
@@ -28,7 +28,7 @@ internal sealed partial class FalloutReferenceWorld
         if (!float.IsFinite(stripWidth) || stripWidth <= 70)
             throw new InvalidDataException("Source compass strip has no positive heading band.");
         var cell = FalloutCellSceneReader.ReadDefinition(records, player.Cell);
-        var unbound = new List<string> { "player-placed-marker", "distance-blink" };
+        var unbound = new List<string> { "player-placed-marker" };
         var world = cell.Worldspace;
         var north = world is null ? CompassNorthRotation(player.Cell, unbound) : 0;
         if (north is null) return new(null, null, [], unbound);
@@ -91,7 +91,8 @@ internal sealed partial class FalloutReferenceWorld
                             if (!SameSpace(placement)) throw new InvalidDataException("Quest portal is outside the player's source coordinate region.");
                         }
                         Add(target.Reference, "quest", placement, portal ?
-                            DistanceTo(placement, horizontal: false, squared: true) : DistanceTo(placement, true), false, true);
+                            DistanceTo(placement, horizontal: false, squared: true) : DistanceTo(placement, true), false, true, !portal &&
+                                records.GetEffective(FalloutDialogueTopic.RequiredForm(records.GetEffective(target.Reference), "NAME")).Signature != "DOOR");
                     }
                     catch (Exception error) when (error is InvalidDataException or NotSupportedException or InvalidOperationException)
                     { unbound.Add($"quest-target:{target.Reference}:{error.Message}"); }
@@ -115,19 +116,20 @@ internal sealed partial class FalloutReferenceWorld
             var distance = x * x + y * y + z * z;
             return (float)(squared ? distance : Math.Sqrt(distance));
         }
-        void Add(FalloutFormKey reference, string kind, FalloutReferencePlacement placement, float distance, bool discovered, bool clamp)
+        void Add(FalloutFormKey reference, string kind, FalloutReferencePlacement placement, float distance, bool discovered, bool clamp, bool distanceBlink = true)
         {
             var angle = FalloutHeadingAngle.Between(player.Position, placement.Position, heading) * 1.45f;
             if (!clamp && MathF.Abs(angle) >= 70) return;
             angle = Math.Clamp(angle, -70, 70);
-            markers.Add(new(reference, kind, (angle + 70) / 140 * (2 * halfBand), distance, discovered));
+            markers.Add(new(reference, kind, (angle + 70) / 140 * (2 * halfBand), distance, discovered,
+                BlinkDistanceSquared: kind == "actor" || !distanceBlink ? null : DistanceTo(placement, horizontal: false, squared: true)));
         }
 
         void AddActorTicks()
         {
             // Compass detection is independent of collision LOS. Native sound
             // and visual contributions are nonnegative. Source perception,
-            // target skill and levels can establish a minimum remaining score
+            // actual non-sneaking targets can establish a minimum remaining score
             // without inventing light/noise samples.
             // This proves only an admission boolean, never an exact score.
             try
@@ -139,11 +141,6 @@ internal sealed partial class FalloutReferenceWorld
                     new FalloutCondition(owner, 0, 0, (ushort)FalloutConditionFunction.GetActorValue, (uint)FalloutActorValueId.Health, 0, 0, 0)) <= 0) return;
                 var perception = QueryNativeCondition(playerReference,
                     new FalloutCondition(owner, 0, 0, (ushort)FalloutConditionFunction.GetActorValue, (uint)FalloutActorValueId.Perception, 0, 0, 0));
-                var playerLevelValue = QueryNativeCondition(playerReference,
-                    new FalloutCondition(owner, 0, 0, (ushort)FalloutConditionFunction.GetLevel, 0, 0, 0, 0));
-                if (!float.IsFinite(playerLevelValue) || playerLevelValue is < 1 or > ushort.MaxValue || playerLevelValue != MathF.Truncate(playerLevelValue))
-                    throw new NotSupportedException("Detection observer level has no source integer owner.");
-                var playerLevel = (int)playerLevelValue;
                 int Integer(string name) => unchecked((int)records.NumericSettings.IntegerBits(name));
                 var maximum = Setting("fSneakMaxDistance") * (world is null ? 1 : Setting("fSneakExteriorDistanceMult"));
                 var exponent = Setting("fSneakDistanceAttenuationExponent");
@@ -177,9 +174,7 @@ internal sealed partial class FalloutReferenceWorld
                     var distance = DistanceTo(placement, false);
                     if (distance <= maximum) candidates.Add((actor, placement, distance));
                 }
-                // Native caps its retained target list before drawing. Its
-                // history/tie ordering cannot be reconstructed from a subset.
-                if (candidates.Count > cap) throw new NotSupportedException("Actor tick capacity requires retained detection-list ordering.");
+                var admitted = new List<(FalloutReferenceInstance Actor, FalloutReferencePlacement Placement, float Distance, bool Hostile)>();
                 foreach (var (actor, placement, distance) in candidates)
                 {
                     try
@@ -204,25 +199,11 @@ internal sealed partial class FalloutReferenceWorld
                         if (sneaking != 0) throw new NotSupportedException("Stealth target requires complete detection inputs.");
                         var moving = QueryNativeCondition(actor.Reference,
                             new FalloutCondition(basis, 0, 0, (ushort)FalloutConditionFunction.IsMoving, 0, 0, 0, 0));
-                        var skillUpper = 0d;
-                        if (moving != 0)
-                        {
-                            var stats = FalloutActorTemplateOwner.Resolve(records, basis, 2, actor.Templates);
-                            var acbs = stats.ReadSubrecords().Single(field => field.Signature == "ACBS").Data.Span;
-                            var actorLevel = FalloutActorLevel.Resolve(acbs, actor.Templates?.Level);
-                            var skill = ActorValue(actor.Reference, "sneak");
-                            if (!float.IsFinite(skill) || skill < int.MinValue || skill >= int.MaxValue)
-                                throw new NotSupportedException("Detection target skill has no finite source integer value.");
-                            var armorMinimum = Math.Min(0, Math.Min(Integer("iHeavyArmorStealthPenalty"), Integer("iMediumArmorStealthPenalty")));
-                            double SourceInteger(double value) => value is < int.MinValue or > int.MaxValue
-                                ? throw new NotSupportedException("Detection target skill/level arithmetic exceeds its source integer range.") : value;
-                            var levelBonus = SourceInteger((actorLevel - (double)playerLevel) * Integer("iSneakLevelBonus"));
-                            var startPenalty = SourceInteger((double)actorLevel * Integer("iSneakStartBonusLevelPenatly"));
-                            var startBonus = SourceInteger(Integer("iSneakStartBonus") - startPenalty);
-                            skillUpper = SourceInteger(SourceInteger(SourceInteger(Math.Truncate(skill) + levelBonus) + Math.Max(0, startBonus)) - armorMinimum);
-                        }
+                        // Only actual sneaking enables the native effective-Sneak
+                        // deduction. Ordinary movement owns boot noise, not this
+                        // deduction; sneaking was separately refused above.
                         var attenuation = MathF.Pow(Math.Max(0, (maximum - distance * improvedDistance) / maximum), exponent);
-                        var minimumScore = baseline + skillMultiplier * (perceptionSkill * activityMinimum * attenuation - skillUpper);
+                        var minimumScore = baseline + skillMultiplier * (perceptionSkill * activityMinimum * attenuation);
                         if (moving != 0 && Math.Floor(minimumScore) < threshold)
                         {
                             // Native movement sound includes a source boot base
@@ -252,13 +233,23 @@ internal sealed partial class FalloutReferenceWorld
                             throw new NotSupportedException("Detection admission requires light/noise/history inputs.");
                         var hostile = actor.Engagement?.Target == playerReference ||
                             ActorThreat(actor.Reference).Hostile(ActorRelation(actor.Reference, playerReference));
-                        var count = markers.Count;
-                        Add(actor.Reference, "actor", placement, distance, false, false);
-                        if (markers.Count != count) markers[^1] = markers[^1] with { Hostile = hostile };
+                        admitted.Add((actor, placement, distance, hostile));
                     }
                     catch (Exception error) when (error is InvalidDataException or NotSupportedException or InvalidOperationException)
                     { unbound.Add($"actor-detection:{actor.Reference}:{error.Message}"); }
                 }
+                var proven = admitted.ToDictionary(value => value.Actor.Reference);
+                var selection = FalloutCompassAdmission.Select(candidates.Select(value => new FalloutCompassAdmissionCandidate(
+                    value.Actor.Reference, DistanceTo(value.Placement, horizontal: false, squared: true),
+                    proven.ContainsKey(value.Actor.Reference) ? true : null)).ToArray(), cap);
+                foreach (var reference in selection.Included)
+                {
+                    var value = proven[reference]; var count = markers.Count;
+                    Add(reference, "actor", value.Placement, value.Distance, false, false);
+                    if (markers.Count != count) markers[^1] = markers[^1] with { Hostile = value.Hostile };
+                }
+                foreach (var reference in selection.UnresolvedCapacity)
+                    unbound.Add($"actor-capacity:{reference}:nearer-unresolved-admission-or-boundary-tie");
                 unbound.Add("actor-detection:nonnegative-admission-proof;exact-score-light-noise-history-and-enhanced-sensors-unbound");
             }
             catch (Exception error) when (error is InvalidDataException or NotSupportedException or InvalidOperationException)

@@ -103,6 +103,11 @@ internal sealed partial class RuntimeNativeQuestScripts : Node
 
     public override void _ExitTree()
     {
+        if (_current?.Request is { } request)
+        {
+            Scripts.ReturnMessagePresentation(request);
+            CloseMessage();
+        }
         _activationSoundDefault?.Dispose(); _activationSoundDefault = null;
         _vampireQueryDefault?.Dispose(); _vampireQueryDefault = null;
     }
@@ -137,11 +142,6 @@ internal sealed partial class RuntimeNativeQuestScripts : Node
             // absent identity provider; keep source clocks stopped in that case.
             if (menus is { Count: 0 }) { Scripts.Menus.Publish(true); return; }
             Scripts.Advance(delta, gameMode: false, menus: menus);
-            if (_current?.Request is { } request && !Scripts.MessageResults.IsPending(request))
-            {
-                CloseMessage();
-                if (Scripts.TryTakeMessage(out var replacement)) Show(replacement!);
-            }
             return;
         }
         if (Scripts.TryTakeMessage(out var restored)) { Show(restored!); return; }
@@ -166,7 +166,7 @@ internal sealed partial class RuntimeNativeQuestScripts : Node
                 // A removed canvas may still have an input callback queued.
                 // It must never close or answer its replacement.
                 if (_current?.Request != message.Request) return;
-                var accepted = Scripts.MessageResults.Select(message.Request ??
+                var accepted = Scripts.SelectMessage(message.Request ??
                     throw new InvalidDataException("Message input has no source request."), choice);
                 GD.Print($"OPENNV_SOURCE_MESSAGE_{(accepted ? "ACCEPT" : "SUPERSEDED")} source={message.Form} choice={choice}");
                 CloseMessage();

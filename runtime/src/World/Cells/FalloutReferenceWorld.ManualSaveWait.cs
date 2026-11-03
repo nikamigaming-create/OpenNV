@@ -25,7 +25,7 @@ internal sealed partial class FalloutReferenceWorld
                 if (source.Signature != "SOUN" ||
                     !Convert.ToHexString(SHA256.HashData(source.ReadData())).Equals(voice.SoundSha256, StringComparison.OrdinalIgnoreCase))
                     throw new InvalidDataException("Manual wait differs from the winning source sound.");
-                var entry = instance.AnimationSoundEvents.Events.SingleOrDefault(entry => entry.Generation == voice.Generation);
+                var entry = instance.AnimationSoundEvents.FindEvent(voice.Generation);
                 if (entry is null || entry.End != FalloutAnimationSoundEnd.Active || entry.Sound != voice.Sound ||
                     entry.SoundSha256 != voice.SoundSha256 || entry.Path != voice.Path || entry.MediaSha256 != voice.MediaSha256)
                     throw new InvalidDataException("Manual wait has no matching live source generation.");

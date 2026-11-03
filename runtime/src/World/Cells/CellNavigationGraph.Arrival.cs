@@ -7,27 +7,31 @@ internal sealed partial class CellNavigationGraph
     // Source destination radius is a region on the reachable authored floor.
     // Native support is still mandatory; this predicate cannot create it.
     internal Func<Vector3, bool> ArrivalRegion(Vector3 start, Vector3 requested, Vector3 selected,
-        float radius, float horizontalTolerance, float heightTolerance)
-        => ArrivalRegion(start, requested, selected, radius, horizontalTolerance, heightTolerance, out _);
+        float radius, float horizontalTolerance, float heightTolerance, bool actorHeightProjection = false)
+        => ArrivalRegion(start, requested, selected, radius, horizontalTolerance, heightTolerance, out _, actorHeightProjection);
 
     internal Func<Vector3, bool> ArrivalRegion(Vector3 start, Vector3 requested, Vector3 selected,
-        float radius, float horizontalTolerance, float heightTolerance, out Func<Vector3, bool> sourceFloor)
+        float radius, float horizontalTolerance, float heightTolerance, out Func<Vector3, bool> sourceFloor,
+        bool actorHeightProjection = false)
     {
         if (!start.IsFinite() || !requested.IsFinite() || !selected.IsFinite() ||
             !float.IsFinite(radius) || radius <= 0 || !float.IsFinite(horizontalTolerance) || horizontalTolerance < 0 ||
             !float.IsFinite(heightTolerance) || heightTolerance <= 0)
             throw new InvalidDataException("Source arrival region requires finite source floor/radius ownership.");
         var reached = new HashSet<NavigationNode>();
-        var queue = new Queue<NavigationNode>(); queue.Enqueue(NearestNode(start).Node);
+        var queue = new Queue<NavigationNode>(); queue.Enqueue((actorHeightProjection ? NearestActorNode(start) : NearestNode(start)).Node);
         while (queue.TryDequeue(out var current))
             if (reached.Add(current)) foreach (var neighbor in Neighbors(current)) queue.Enqueue(neighbor);
-        var selectedFloor = NearestNode(selected);
-        if (!reached.Contains(selectedFloor.Node) || selected.DistanceSquaredTo(requested) > radius * radius)
+        var selectedFloor = actorHeightProjection ? NearestActorNode(selected) : NearestNode(selected);
+        var offset = selected - requested;
+        var selectedDistance = actorHeightProjection ? new Vector2(offset.X, offset.Y).LengthSquared() : offset.LengthSquared();
+        if (!reached.Contains(selectedFloor.Node) || selectedDistance > radius * radius ||
+            actorHeightProjection && !NativeActorNavigationHeight.Admits(requested.Z, selected.Z))
             throw new InvalidDataException("Selected source endpoint lies outside its reachable requested region.");
         bool SameFloor(Vector3 point)
         {
             if (!point.IsFinite()) return false;
-            var floor = NearestNode(point);
+            var floor = actorHeightProjection ? NearestActorNode(point) : NearestNode(point);
             // Controller roots are above the source surface by their native
             // support margin. A perpendicular closest-point query on a slope
             // moves sideways and falsely looks outside the source floor.
@@ -37,7 +41,8 @@ internal sealed partial class CellNavigationGraph
             var projected = floor.Node.NavMesh.ClosestPoint(floor.Node.TriangleIndex, plane.Value);
             var horizontal = new Vector2(point.X - projected.X, point.Y - projected.Y);
             return reached.Contains(floor.Node) && horizontal.LengthSquared() <= horizontalTolerance * horizontalTolerance &&
-                MathF.Abs(point.Z - projected.Z) < heightTolerance &&
+                (actorHeightProjection ? NativeActorNavigationHeight.Admits(point.Z, projected.Z) :
+                    MathF.Abs(point.Z - projected.Z) < heightTolerance) &&
                 MathF.Abs(projected.Z - selectedPlane.Value.Z) < heightTolerance;
         }
         sourceFloor = SameFloor;

@@ -211,7 +211,7 @@ internal sealed record FalloutQuestScriptHost(Func<FalloutFormKey, short, Action
     Func<FalloutFormKey, int>? Sitting = null, FalloutPlayerTagSkills? TagSkills = null,
     Func<FalloutFormKey, FalloutFormKey, bool>? IsInCell = null, Action<double>? RewardXp = null,
     FalloutGameTime? GameTime = null,
-    Func<FalloutPluginRecord, FalloutPluginRecord, FalloutGameModeProgram, bool>? CanRetryPlayerDeathRead = null);
+    Func<FalloutPluginRecord, FalloutPluginRecord, FalloutGameModeProgram, bool>? CanRetryPlayerDeathRead = null, Action<double>? RewardKarma = null);
 
 internal sealed partial class FalloutQuestScripts
 {
@@ -241,6 +241,8 @@ internal sealed partial class FalloutQuestScripts
     private readonly FalloutPlayerInventory _inventory;
     private readonly FalloutGlobalState? _globals;
     private readonly Queue<FalloutSourceMessage> _messages = [];
+    private FalloutSourceMessage? _presentedMessage;
+    private ulong _lastPresentedMessageSequence;
     private readonly FalloutQuestScriptInitialization _initialization;
     internal FalloutReferenceWorld? References { get; }
     internal FalloutScriptValueStore ScriptValues { get; }
@@ -298,6 +300,7 @@ internal sealed partial class FalloutQuestScripts
         newlyParsedOnRestore = _newlyParsed.Select(key => key.ToString()).ToArray(),
         inventory = _inventory.Items,
         messages = _messages.ToArray(),
+        presentedMessage = _presentedMessage,
         messageResults = detailed ? MessageResults.Capture() : null,
         notifications = _inventory.Notifications.Capture(),
         session = Session.Capture(),
@@ -318,19 +321,38 @@ internal sealed partial class FalloutQuestScripts
     internal IReadOnlyList<FalloutCampaignItem> Inventory => _inventory.Items;
     internal bool TryTakeMessage(out FalloutSourceMessage? message)
     {
-        // Script execution can publish another message before Godot presents
-        // the first. Only the request owning the consumptive result slot can
-        // accept input. Retain source execution order, not obsolete prompts.
-        while (_messages.TryDequeue(out message))
-            if (message.Request is { } request && MessageResults.IsPending(request)) return true;
-        return false;
+        message = null;
+        if (_presentedMessage is not null || !_messages.TryDequeue(out message)) return false;
+        _presentedMessage = message;
+        _lastPresentedMessageSequence = Math.Max(_lastPresentedMessageSequence, message!.Request!.Sequence);
+        return true;
+    }
+
+    internal bool SelectMessage(FalloutMessageRequest request, int button)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        if (_presentedMessage?.Request != request) return false;
+        MessageResults.PublishButton(button);
+        _presentedMessage = null;
+        return true;
+    }
+
+    internal void ReturnMessagePresentation(FalloutMessageRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        var presented = _presentedMessage;
+        if (presented?.Request != request) return;
+        var pending = _messages.ToArray();
+        _messages.EnsureCapacity(checked(pending.Length + 1));
+        _messages.Clear(); _messages.Enqueue(presented!);
+        foreach (var message in pending) _messages.Enqueue(message);
+        _presentedMessage = null;
     }
 
     internal void ShowMessage(FalloutFormKey form, FalloutFormKey? script = null, FalloutFormKey? caller = null)
     {
         var message = FalloutSourceMessage.Read(_records.GetEffective(form));
-        var owner = caller is { } reference && _records.RuntimeFormId(reference) != 0x14 ? reference :
-            script ?? throw new NotSupportedException("ShowMessage has no executing reference or SCPT owner.");
+        var owner = MessageCaller(script, caller);
         message = message with { Request = MessageResults.Begin(form, owner) };
         if (message.Modal) _messages.Enqueue(message);
         else _inventory.Notifications.Publish([new(FalloutHudEventKind.Message, message.Form, 0, Script: script)]);
@@ -339,12 +361,15 @@ internal sealed partial class FalloutQuestScripts
     internal FalloutQuestScriptsSnapshot Capture(FalloutSourceMessage? displayed = null)
     {
         ScriptManualSaves.RequireCapture();
+        if (displayed is not null && _presentedMessage is not null && displayed.Request != _presentedMessage.Request)
+            throw new InvalidDataException("Displayed message differs from its source presentation owner.");
         return new(
         _instances.Select(instance => new FalloutQuestScriptSnapshot(instance.Quest.FormKey, instance.Script.FormKey,
             instance.Clock.Remaining, instance.Executions, instance.Error, instance.Clock.Capture(), instance.PendingCommand,
             instance.Continuations.ToArray())).ToArray(),
-        (displayed is null ? Enumerable.Empty<FalloutMessageRequest>() : [displayed.Request ?? throw new InvalidDataException("Displayed message has no result owner.")])
-            .Concat(_messages.Select(message => message.Request!)).Where(MessageResults.IsPending).ToArray(),
+        (_presentedMessage is null ? Enumerable.Empty<FalloutMessageRequest>() :
+            [_presentedMessage.Request ?? throw new InvalidDataException("Presented message has no source request.")])
+            .Concat(_messages.Select(message => message.Request!)).ToArray(),
         _inventory.Notifications.Capture(), MessageResults.Capture(), Session.Capture(), SaidInfos.OrderBy(key => _records.RuntimeFormId(key)).ToArray(),
         FalloutGameModeProgram.ParserVersion, ScriptValues.Capture(), Auxiliary.CapturePermanent(), Challenges.Capture(), Radio?.Capture(),
         MiscStatistics.Capture(), AddedTopics.OrderBy(key => _records.RuntimeFormId(key)).ToArray());
@@ -954,6 +979,14 @@ internal sealed partial class FalloutQuestScripts
                 return;
             }
             var caller = instance.Script.FormKey.OwnerPlugin;
+            if (operation == "rewardkarma")
+            {
+                if (parts.Length > 2 || arguments.Count != 1) throw new InvalidDataException("RewardKarma requires one signed integer.");
+                if (parts.Length == 2) _ = ReferenceArgument(parts[0]);
+                (host?.RewardKarma ?? throw new NotSupportedException("RewardKarma has no shared player Karma owner."))
+                    (FalloutActorValueCommands.Integer(NumberArgument(arguments[0])));
+                return;
+            }
             if (operation == "rewardxp")
             {
                 if (parts.Length > 2 || arguments.Count != 1)
@@ -975,10 +1008,10 @@ internal sealed partial class FalloutQuestScripts
                 {
                     "equipitem" or "equipobject" when arguments.Count is >= 1 and <= 3 => new FalloutInventoryCommand(
                         FalloutInventoryCommandKind.Equip, target, Item: Form(arguments[0]).FormKey,
-                        NoUnequip: arguments.Count >= 2 && Flag(arguments[1]), Silent: arguments.Count < 3 || Flag(arguments[2])),
+                        NoUnequip: arguments.Count >= 2 && FalloutInventoryCommands.ReadEquipmentFlag(NumberArgument(arguments[1]), true), Silent: arguments.Count >= 3 && FalloutInventoryCommands.ReadEquipmentFlag(NumberArgument(arguments[2]), false)),
                     "unequipitem" when arguments.Count is >= 1 and <= 3 => new FalloutInventoryCommand(
                         FalloutInventoryCommandKind.Unequip, target, Item: Form(arguments[0]).FormKey,
-                        NoEquip: arguments.Count >= 2 && Flag(arguments[1]), Silent: arguments.Count >= 3 && Flag(arguments[2])),
+                        NoEquip: arguments.Count >= 2 && FalloutInventoryCommands.ReadEquipmentFlag(NumberArgument(arguments[1]), true), Silent: arguments.Count >= 3 && FalloutInventoryCommands.ReadEquipmentFlag(NumberArgument(arguments[2]), false)),
                     "removeallitems" when arguments.Count <= 3 => new FalloutInventoryCommand(
                         FalloutInventoryCommandKind.RemoveAll, target,
                         Destination: arguments.Count == 0 || arguments[0] == "0" ? null : instance.Bindings.Reference(arguments[0]),

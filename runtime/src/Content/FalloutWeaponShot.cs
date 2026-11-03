@@ -44,7 +44,7 @@ internal sealed record FalloutWeaponShot(FalloutFormKey Weapon, FalloutFormKey? 
         if (ammunition is null && hasAmmunitionSource || ammunition is not null && !hasAmmunitionSource)
             throw new InvalidDataException("Weapon shot ammunition selection differs from the source WEAP.");
         var type = BinaryPrimitives.ReadUInt32LittleEndian(data);
-        if (type is not (3 or 4 or 5 or 6 or 7 or 8 or 9 or 10 or 13))
+        if (type is not (3 or 4 or 5 or 6 or 7 or 8 or 9 or 10 or 11 or 12 or 13))
             throw new NotSupportedException($"Weapon type {type} needs its melee, mine or specialized attack owner.");
         var attackAnimation = data[41];
         if (type is 10 or 13 && attackAnimation is not (114 or 120 or 126 or 132 or 138 or 150 or 156 or 162))
@@ -61,9 +61,10 @@ internal sealed record FalloutWeaponShot(FalloutFormKey Weapon, FalloutFormKey? 
         if (!extra.IsEmpty)
         {
             if (extra.Length is not (12 or 20)) throw new NotSupportedException($"AMMO DAT2 extent {extra.Length} is unbound.");
-            var ammoCount = BinaryPrimitives.ReadUInt32LittleEndian(extra);
-            if (ammoCount > int.MaxValue) throw new InvalidDataException("AMMO projectile count exceeds runtime storage.");
-            if (ammoCount != 0) count = (int)ammoCount;
+            // The source count consumer reads the low byte of AMMO DAT2,
+            // multiplies a positive override by WEAP AmmoUse, then stores a byte.
+            var ammoCount = extra[0];
+            if (ammoCount != 0) count = unchecked((byte)(ammoCount * data[14]));
             projectile = ammo!.Plugin.AdjustOptionalFormId(BinaryPrimitives.ReadUInt32LittleEndian(extra[4..])) ?? projectile;
             if (extra.Length == 20)
             {
@@ -74,7 +75,8 @@ internal sealed record FalloutWeaponShot(FalloutFormKey Weapon, FalloutFormKey? 
                     throw new InvalidDataException("Consumed ammo return is neither MISC nor AMMO.");
             }
         }
-        if (projectile is null || count <= 0) throw new InvalidDataException("Shot has no source projectile/count.");
+        // A source modifier can rescue a zero base count; final attack admission follows mods.
+        if (projectile is null) throw new InvalidDataException("Shot has no source projectile.");
         var impact = fields.SingleOrDefault(field => field.Signature == "INAM").Data;
         if (!impact.IsEmpty && impact.Length != 4) throw new InvalidDataException("Weapon impact FormID has an invalid extent.");
         var effects = ammo?.ReadSubrecords().Where(field => field.Signature == "RCIL").Select(field =>
@@ -102,23 +104,31 @@ internal sealed record FalloutWeaponShot(FalloutFormKey Weapon, FalloutFormKey? 
 
     internal void RequireInstantRay()
     {
-        if (Projectiles <= 0) throw new InvalidDataException("Instant-ray projectile count is not positive.");
+        RequirePositiveProjectileCount();
         if (Projectile.Hitscan && Projectile.Speed <= 0)
             throw new InvalidDataException($"Hitscan projectile {Projectile.Form} has no positive source speed for impact timing.");
-        const ushort supportedHitscanFlags = 0x028d;
+        const ushort supportedHitscanFlags = 0x028f;
         if (((Projectile.Flags & 2) != 0) != (Projectile.ExplosionSource is not null))
             throw new InvalidDataException($"Projectile {Projectile.Form} explosion flag and reference disagree.");
+        // Beams resolve the same terminal ray contact as Hitscan missiles.
+        // Its EXPL belongs to that contact even when the beam has no Hitscan
+        // flag; both player and NPC contacts already dispatch that owner.
         if (!Projectile.IsInstantRayAttack || Projectile.Type is not (1 or 4 or 8) ||
             (Projectile.Flags & ~supportedHitscanFlags) != 0 ||
             Projectile.HasAlternateTrigger && Projectile.HasAlternateTriggerParameters ||
             Projectile.Type == 8 && Projectile.ExplosionSource is not null ||
-            Projectile.ExplosionSource is not null || Projectile.HasExplicitRotation)
+            Projectile.ExplosionSource is not null &&
+                (Projectile.Type != 4 && (Projectile.Type != 1 || !Projectile.Hitscan) ||
+                    Projectile.HasAlternateTrigger || Projectile.Detonates) ||
+            Projectile.HasExplicitRotation)
             throw new NotSupportedException($"Projectile {Projectile.Form} needs flight, explosion, alternate-trigger or flag simulation.");
+        Projectile.ExplosionSource?.RequireRuntimeDamageOwner();
         RequireSupportedAmmoEffects();
     }
 
     internal void RequireRuntimeAttackOwner()
     {
+        RequirePositiveProjectileCount();
         if (Projectile.IsInstantRayAttack)
         {
             RequireInstantRay();
@@ -132,6 +142,12 @@ internal sealed record FalloutWeaponShot(FalloutFormKey Weapon, FalloutFormKey? 
         if (Projectile.Detonates || Projectile.HasAlternateTrigger && Projectile.ExplosionAltTriggerProximity > 0)
             throw new NotSupportedException($"Projectile {Projectile.Form} needs its proximity or remote-trigger owner.");
         Projectile.ExplosionSource?.RequireRuntimeDamageOwner();
+    }
+
+    private void RequirePositiveProjectileCount()
+    {
+        if (Projectiles < 0) throw new InvalidDataException("Projectile count is negative.");
+        if (Projectiles == 0) throw new NotSupportedException("Source zero-projectile firing lifecycle is unbound.");
     }
 
     private void RequireSupportedAmmoEffects()

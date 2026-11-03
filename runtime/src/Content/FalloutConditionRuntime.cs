@@ -174,6 +174,13 @@ internal sealed partial class FalloutConditionRuntime(FalloutPluginStack records
                 SecondUnused(condition); RequireReference(condition.FormArgument1);
                 return (SameCell is { } same ? same(subject, condition.FormArgument1) :
                     Required(world, "spatial state").InSameCell(subject, condition.FormArgument1, PlayerPlacement?.Invoke(), UnitsToMetres())) ? 1 : 0;
+            case Function.GetIsAlignment:
+                SecondUnused(condition);
+                if (records.GetEffective(Base(subject)).Signature is not ("NPC_" or "CREA")) return 0;
+                if (ActorValue is null && subject == records.RuntimeFormKey(0x14)) return NativeValue(subject, condition);
+                var karma = ActorValue is { } karmaValue ? karmaValue(subject, 23) :
+                    Required(world, "Karma actor values").ActorValue(subject, "Karma");
+                return (uint)FalloutKarma.Alignment(records, karma) == condition.Argument1 ? 1 : 0;
             case Function.GetActorValue:
                 SecondUnused(condition);
                 return ActorValue is { } value ? value(subject, checked((int)condition.Argument1)) :

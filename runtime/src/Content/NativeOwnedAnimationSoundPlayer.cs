@@ -20,6 +20,7 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer : Node3D
     private bool _lostCaptureAtRetirement;
     private bool _retired;
     private readonly ulong _nativeOwner;
+    private readonly bool _referenceLoopOwner;
     internal IReadOnlyList<Node> ActiveNativeVoices => _voices.Keys.ToArray();
     private FalloutAnimationSoundCaptureDiagnostic? _retiredCaptureDiagnostic;
     internal FalloutAnimationSoundCaptureDiagnostic CaptureDiagnostic => _retiredCaptureDiagnostic ?? ReadCaptureDiagnostic(_retired);
@@ -27,8 +28,8 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer : Node3D
     private FalloutAnimationSoundCaptureDiagnostic ReadCaptureDiagnostic(bool retired) => new(CanCaptureSilent, retired,
         _lostCaptureAtRetirement, _spatial.Count, _voices.Count, _eventCount, Array.AsReadOnly(_unbound.ToArray()));
     private bool HasUnreceiptedFault => _events is null ? _unbound.Count != 0 :
-        !_events.CanCapture || _unbound.Except(_events.OwnedLanes, StringComparer.Ordinal).Any();
-    internal bool CanCaptureSilent => !_lostCaptureAtRetirement &&
+        !_events.CanCapture || _unbound.Any(lane => !_events!.OwnsLane(lane));
+    internal bool CanCaptureSilent => !_lostCaptureAtRetirement && !SourcePosePending && _pcmRestoreFailure is null &&
         _voices.Values.All(voice => voice.Pcm is not null && voice.Completed is null) && !HasUnreceiptedFault;
     internal bool CanRetireTransientEffect => _spatial.Count == 0 && _voices.Count == 0 && CanCaptureSilent;
     internal IReadOnlyCollection<string> Unbound => _unbound;
@@ -39,11 +40,17 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer : Node3D
     {
         eventCount = _eventCount,
         ownerRetired = _retired,
+        sourcePosePending = SourcePosePending,
+        queuedSourceKeys = _pendingSourceSounds.Count,
+        pcmRestoreError = _pcmRestoreFailure?.Message,
         activeSpatial = _spatial.Count,
         activeVoices = _voices.Count,
         unbound = _unbound.ToArray(),
         last = LastEvent,
-        sourceEvents = _events?.Events,
+        sourceEvents = _events?.RecentDiagnosticEvents,
+        sourceEventsTotalCount = _events?.EventCount ?? 0,
+        sourceEventsTruncated = (_events?.EventCount ?? 0) > FalloutAnimationSoundEvents.DiagnosticEventLimit,
+        sourceEventsScope = "recent-diagnostic-tail;authoritative-save-history-unchanged",
         pcmContinuations = _voices.Where(pair => pair.Value.Pcm is not null).Select(pair => new
         {
             generation = pair.Value.Generation,
@@ -64,11 +71,16 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer : Node3D
     };
 
     internal NativeOwnedAnimationSoundPlayer(FalloutPluginStack records, RuntimeLiveContentSource content,
-        Node3D actor, float unitsToMetres, FalloutSoundRandomState random, FalloutAnimationSoundEvents? events = null, FalloutFormKey? creatureSoundSource = null)
+        Node3D actor, float unitsToMetres, FalloutSoundRandomState random, FalloutAnimationSoundEvents? events = null, FalloutFormKey? creatureSoundSource = null, bool referenceLoopOwner = false,
+        Func<string?, NativeOwnedSoundSourceScene>? sourceScenes = null, bool sourcePoseBoundary = false)
     {
         if (!float.IsFinite(unitsToMetres) || unitsToMetres <= 0) throw new ArgumentOutOfRangeException(nameof(unitsToMetres));
         _records = records; _content = content; _actor = actor; _unitsToMetres = unitsToMetres; _random = random; _events = events;
         _creatureSoundSource = creatureSoundSource;
+        if (sourcePoseBoundary && sourceScenes is null)
+            throw new ArgumentException("Deferred source sound requires its actual source-scene owner.", nameof(sourceScenes));
+        _sourceScenes = sourceScenes; _sourcePoseBoundary = sourcePoseBoundary;
+        _referenceLoopOwner = referenceLoopOwner;
         _nativeOwner = actor.GetInstanceId();
         if (_events is not null)
         {
@@ -78,10 +90,10 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer : Node3D
         Name = "OwnedAnimationSounds";
     }
 
-    internal string Dispatch(string textKey) => DispatchSegments(textKey);
+    internal string Dispatch(string textKey) => DispatchSourceText(textKey);
 
     internal string DispatchSound(FalloutFormKey form, Node3D? emitter = null, Action? completed = null) =>
-        Dispatch("SOUN:" + form, emitter ?? this, ownsLoopStop: true, form, completed);
+        DispatchSourceSound(form, emitter, completed);
 
     internal void PrepareSound(FalloutFormKey form)
     {
@@ -138,8 +150,7 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer : Node3D
                 var loop = FalloutSoundLoop.Read(selected.Source);
                 if (loop.Mode != FalloutSoundLoopMode.None)
                 {
-                    if (stream is not AudioStreamWav wav) throw new NotSupportedException("Source PCM loops require decoded owned WAV samples.");
-                    pcm = new(wav, loop); stream = pcm.Stream;
+                    pcm = new(stream, loop); stream = pcm.Stream;
                 }
                 if (selected.Source.IsTwoDimensional)
                 {
@@ -187,7 +198,7 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer : Node3D
         }
     }
 
-    internal string Dispatch(FalloutNifTextKeyEvent key) => DispatchSegments(key.Text);
+    internal string Dispatch(FalloutNifTextKeyEvent key) => DispatchSourceText(key.Text);
 
     private string DispatchSegments(string text)
     {
@@ -210,7 +221,11 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer : Node3D
     public override void _Process(double delta)
     {
         using var frameWork = OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Measure(OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Owner.AnimationAudio);
-        foreach (var (voice, selected) in _spatial.Where(pair => _voices[pair.Key].Attachment is null)) ApplyListener(voice, selected);
+        foreach (var (voice, selected) in _spatial.Where(pair => _voices[pair.Key].Attachment is null))
+        {
+            PublishMappedVoicePosition(voice, _voices[voice]);
+            ApplyListener(voice, selected);
+        }
     }
 
     private void ApplyListener(AudioStreamPlayer3D voice, FalloutAnimationSoundSelection selected)

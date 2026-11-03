@@ -7,6 +7,7 @@ internal enum FalloutDefaultObject
     Stimpak = 0,
     RadX = 2,
     RadAway = 3,
+    CreatureFood = 18,
     DoctorsBag = 21
 }
 

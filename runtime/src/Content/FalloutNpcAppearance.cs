@@ -32,7 +32,8 @@ internal sealed record FalloutNpcAppearance(FalloutFormKey Npc, FalloutFormKey? 
     IReadOnlyList<FalloutNpcAppearancePart> RaceParts, IReadOnlyList<FalloutNpcAppearancePart> Models,
     IReadOnlyList<FalloutNpcInventoryItem> Inventory, IReadOnlyList<FalloutNpcArmor> Armor,
     IReadOnlyList<FalloutFormKey> EquippedArmor, IReadOnlyList<string> Blockers,
-    FalloutFormKey? Hair, FalloutFormKey? Eyes, bool RuntimeFace = false, float? HeightOverride = null)
+    FalloutFormKey? Hair, FalloutFormKey? Eyes, bool RuntimeFace = false, float? HeightOverride = null,
+    FalloutFormKey? BipedWeapon = null)
 {
     internal bool CanConstruct => Blockers.Count == 0;
     internal float Height => HeightOverride is { } height ? FalloutNpcHeight.Require(height) : FalloutNpcHeight.Normalize(NpcHeightBytes, RaceHeight);

@@ -82,6 +82,26 @@ public partial class RuntimeCoordinator
         };
     }
 
+    private object CaptureNativePlayerDriveState()
+    {
+        if (!IsInsideTree() || _nativePlayer is null)
+            throw new InvalidOperationException("Player observation has no active gameplay owner.");
+        // Explicit action checkpoints do not enumerate the world or replay
+        // capture-readiness checks across every retained audio/actor owner.
+        return new
+        {
+            schema = "opennv-player-observation/v1",
+            process = System.Environment.ProcessId,
+            scope = "player",
+            diagnosticTravel = CaptureNativeDiagnosticTravel(),
+            paused = GetTree().Paused,
+            playerPresentation = _nativePlayer.PresentationState,
+            gameplayHud = _nativeGameplayHud?.State,
+            vats = _nativePlayer.VatsState,
+            vatsMenu = _nativePlayer.VatsMenuObservation
+        };
+    }
+
     private object CaptureNativeDriveState(bool detailed = true)
     {
         static float[] Vector(Vector3 value) => [value.X, value.Y, value.Z];
@@ -122,6 +142,7 @@ public partial class RuntimeCoordinator
             },
             referenceEvents = _nativeReferenceEvents?.State,
             droppedItems = _nativeDroppedItems?.State,
+            dynamicMines = _nativeDynamicMines?.State,
             rigidBodies = detailed ? CaptureNativeRigidBodies() : null,
             modelConstraints = detailed ? _nativeReferencePresentation?.Nodes.SelectMany(reference =>
                 OpenNV.Runtime.SceneGraph.NodeTraversal.Descendants<RuntimeNifHingeJoint>(reference.Value)
@@ -178,6 +199,7 @@ public partial class RuntimeCoordinator
                 blockingShape = _nativePlayer.BlockingShape,
                 collisionResident = _nativePlayer.CollisionResident,
                 collisionContacts = _nativePlayer.CollisionContacts,
+                physicalShape = _nativePlayer.PhysicalShapeObservation,
                 modalInput = _nativePlayer.ModalInput,
                 input = _nativePlayer.InputState,
                 activation = detailed ? _nativePlayer.ObserveActivation(collider => new
@@ -224,6 +246,7 @@ public partial class RuntimeCoordinator
             actorDivergences = _nativeActorDivergences.ToArray(),
             referenceDivergences = _nativeReferenceDivergences.ToArray(),
             playerMoves = _nativeReferences?.PlayerMoves.State,
+            diagnosticTravel = CaptureNativeDiagnosticTravel(),
             mapMarkers = !detailed ? null : _nativeReferences?.KnownMapMarkers.Select(marker => new
             {
                 reference = marker.Source.Reference.ToString(),
@@ -675,7 +698,9 @@ public partial class RuntimeCoordinator
             if (restore.State.LeveledItems is { } leveledItems) _nativeReferences.LeveledItems.Restore(leveledItems);
             if (restore.State.ActorBaseFlags is { } baseFlags) _nativeReferences.ActorBaseFlags.Restore(baseFlags);
             _nativeReferences.RestoreEncounterZones(restore.State.EncounterZones);
+            _nativeReferences.RuntimeReferences.Restore(restore.State.RuntimeReferences, restore.State.TransientExplosions);
             _nativeReferences.TransientExplosions.Restore(restore.State.TransientExplosions);
+            _nativeReferences.RestoreDynamicMines(restore.State.DynamicMines);
             if (restore.State.References is { } savedReferences) _nativeReferences.Restore(savedReferences);
             else SetMeta("opennv_reference_state_divergence", "Legacy save has no reference-instance state.");
             _nativeReferences.RestorePlayerRegions(restore.State.PlayerRegions, restore.State.ActiveCell);
@@ -1189,6 +1214,19 @@ public partial class RuntimeCoordinator
             finally { if (actor is not null) DiscardNativeActor(actor, previousActor); }
             return;
         }
+        if (baseObject.Signature == "SOUN")
+        {
+            var sound = new NativeOwnedPlacedSound(_nativePluginStack!, source, _nativeReferences!, reference,
+                _configuration.World.GameUnitsToMeters, error =>
+                {
+                    _nativeReferenceDivergences[reference.FormKey.ToString()] = error;
+                    GD.PushError($"OPENNV_NATIVE_PLACED_SOUND_DIVERGENCE reference={reference.FormKey}: {error}");
+                })
+            { Transform = ReferenceTransform(reference) };
+            root.AddChild(sound);
+            Observe("placed-source-sound-owner");
+            return;
+        }
         if (baseObject.ModelPath is null)
             return;
         if (baseObject.Light is not null)
@@ -1236,6 +1274,12 @@ public partial class RuntimeCoordinator
         root.AddChild(instance);
         RuntimeNativeDestructible.Attach(instance, _nativeReferences!.Get(reference.FormKey), _nativePluginStack!, source,
             _configuration.World.GameUnitsToMeters, _configuration.Player.CollisionMask | _configuration.Player.CollisionLayer, NativeCombatContext);
+        RuntimeNativePlacedMine.Attach(instance, _nativeReferences!, reference.FormKey, _nativePluginStack!, source,
+            _configuration.World.GameUnitsToMeters, _configuration.Player.CollisionMask | _configuration.Player.CollisionLayer,
+            NativeCombatContext, cell.Cell.Worldspace is not null,
+            () => (_nativeOpeningStageDriver ?? throw new NotSupportedException("Mine player skill owner is unavailable.")).PlayerSkillValue("explosives"),
+            () => (_nativeOpeningStageDriver ?? throw new NotSupportedException("Mine player perk owner is unavailable.")).PlayerMineTriggerChance,
+            error => _nativeReferenceDivergences[reference.FormKey.ToString()] = error);
         if (cell.Cell.Worldspace is not null && (baseObject.Signature is "STAT" or "SCOL" or "TREE") &&
             (reference.Flags & 0x00008000) != 0)
             NativeExteriorDetailBlend.Bind(instance, terrain: false);
@@ -1499,7 +1543,7 @@ public partial class RuntimeCoordinator
             RuntimeLiveContentSource.Current!, _configuration.World.GameUnitsToMeters,
             (appearance, part, nif, geometry) => NativeNpcMaterial.Resolve(appearance, part, nif, geometry, _nativePluginStack!,
                 NativeAmbient(_nativeActiveCell?.Cell ?? throw new InvalidOperationException("Player body has no active cell."))));
-        _nativePlayer.ActivateReference = collider => _nativeDroppedItems?.TryActivate(collider) == true || _nativeReferenceEvents?.TryActivate(collider) == true;
+        _nativePlayer.ActivateReference = collider => TryActivateNativeDynamicMine(collider) || _nativeDroppedItems?.TryActivate(collider) == true || _nativeReferenceEvents?.TryActivate(collider) == true;
         _nativePlayer.NoActivationFeedback = () =>
             (_nativeQuestScripts ?? throw new InvalidOperationException("Native activation feedback has no quest session."))
                 .Scripts.NoActivationSound.RejectActivation(_nativePluginStack!.RuntimeFormKey(0x14));
@@ -1583,6 +1627,7 @@ public partial class RuntimeCoordinator
         // logs _Ready exceptions without propagating them to that transaction.
         _nativeOpeningStageDriver.InitializeOwnedState();
         AddNativeDroppedItems();
+        AddNativeDynamicMines();
         _nativeImageSpaceClock = new(_nativeImageSpaceState);
         AddChild(_nativeImageSpaceClock);
         GD.Print(

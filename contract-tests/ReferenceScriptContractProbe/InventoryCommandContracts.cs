@@ -5,21 +5,32 @@ using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.World.Cells;
 
-internal static class InventoryCommandContracts
+internal static partial class InventoryCommandContracts
 {
     internal static void Run(bool projectLocal = false)
     {
+        var labels = new[] { "zeta", "A (2)", ".357", "A (10)", "A", "9mm", "Alpha", "alpha", "Zebra" };
+        Require(FalloutSourceMenuTextOrder.Order(labels, value => value)
+            .SequenceEqual(new[] { ".357", "9mm", "A", "A (10)", "A (2)", "Alpha", "Zebra", "alpha", "zeta" }),
+            "Source menu ordering used form IDs, natural counts or host-culture collation.");
+        RunAcquisitionEvents();
+        RunWeaponHitScripts();
         var directory = projectLocal ? Directory.CreateDirectory(Path.Combine("local", "inventory-commands-" + Guid.NewGuid().ToString("N")))
             : Directory.CreateTempSubdirectory("opennv-inventory-commands-");
         try
         {
+            byte[] ScriptHeader(uint references)
+            {
+                var value = new byte[20]; BinaryPrimitives.WriteUInt32LittleEndian(value.AsSpan(4), references);
+                return value;
+            }
             var header = new byte[12]; BinaryPrimitives.WriteSingleLittleEndian(header, 1.34f);
             var questItem = Item("MISC", 4, "QuestItem", 8); BinaryPrimitives.WriteUInt32LittleEndian(questItem.AsSpan(8), 0x400);
             File.WriteAllBytes(Path.Combine(directory.FullName, "Items.esm"), Join(
                 Record("TES4", 0, Field("HEDR", header)), Item("WEAP", 1, "Gun", 15), Item("MISC", 2, "Loot", 8),
-                Record("SCPT", 0x200, Field("SCTX", Text("scn PickupScript\nbegin OnAdd player\nreturn\nend")), Field("SCRO", BitConverter.GetBytes(0x14u))),
-                Record("SCPT", 0x201, Field("SCTX", Text("scn ActivateScript\nbegin OnActivate\nreturn\nend"))),
-                Record("SCPT", 0x202, Field("SCTX", Text("scn OtherRecipient\nbegin OnAdd Actor\nreturn\nend")), Field("SCRO", BitConverter.GetBytes(0x900u))),
+                Record("SCPT", 0x200, Field("SCHR", ScriptHeader(1)), Field("SCDA", []), Field("SCTX", Text("scn PickupScript\nbegin OnAdd player\nreturn\nend")), Field("SCRO", BitConverter.GetBytes(0x14u))),
+                Record("SCPT", 0x201, Field("SCHR", ScriptHeader(0)), Field("SCDA", []), Field("SCTX", Text("scn ActivateScript\nbegin OnActivate\nreturn\nend"))),
+                Record("SCPT", 0x202, Field("SCHR", ScriptHeader(1)), Field("SCDA", []), Field("SCTX", Text("scn OtherRecipient\nbegin OnAdd Actor\nreturn\nend")), Field("SCRO", BitConverter.GetBytes(0x900u))),
                 Record("MISC", 9, Field("EDID", Text("ScriptedPickup")), Field("DATA", new byte[8]), Field("SCRI", BitConverter.GetBytes(0x200u))),
                 Record("MISC", 10, Field("EDID", Text("ActivateOnly")), Field("DATA", new byte[8]), Field("SCRI", BitConverter.GetBytes(0x201u))),
                 Record("MISC", 11, Field("EDID", Text("OtherRecipientItem")), Field("DATA", new byte[8]), Field("SCRI", BitConverter.GetBytes(0x202u))),
@@ -27,15 +38,36 @@ internal static class InventoryCommandContracts
                     Field("LVLO", LeveledEntry(2)), Field("LVLO", LeveledEntry(9))),
                 Armor(3, "Protected", 6, true), questItem, Armor(5, "Suit", 2), Armor(6, "OtherSuit", 2),
                 Record("NPC_", 7, Field("CNTO", Join(BitConverter.GetBytes(2u), BitConverter.GetBytes(3)))),
+                Record("GMST", 0x24, Field("EDID", Text("sMissingName")), Field("DATA", Text("Synthetic missing name"))),
+                Record("MISC", 0x20, Field("EDID", Text("EmptyName")), Field("DATA", new byte[8]), Field("FULL", Text(""))),
+                Record("MISC", 0x23, Field("EDID", Text("ZeroExtentName")), Field("DATA", new byte[8]), Field("FULL", [])),
+                Record("MISC", 0x21, Field("EDID", Text("SpaceName")), Field("DATA", new byte[8]), Field("FULL", Text(" "))),
+                Record("MISC", 0x22, Field("EDID", Text("Named")), Field("DATA", new byte[8]), Field("FULL", Text("Source Name"))),
                 Item("WEAP", 8, "OtherGun", 15), Record("NPC_", 0x100, Field("ACBS", new byte[24]),
                     Field("CNTO", Join(BitConverter.GetBytes(2u), BitConverter.GetBytes(3)))),
                 Record("CREA", 0x101, Field("ACBS", new byte[24]), Field("CNTO", Join(BitConverter.GetBytes(2u), BitConverter.GetBytes(2)))),
                 Record("CONT", 0x110), Record("ACTI", 0x111), Record("CELL", 0x800, Field("DATA", [1])), Group(0x800,
                     Join(Reference("ACHR", 0x900, 0x100, "Actor"), Reference("REFR", 0x901, 0x110, "Chest"),
                         Reference("ACRE", 0x902, 0x101, "Creature"), Reference("REFR", 0x903, 0x111, "Activator"))),
+                Record("GMST", 0x30, Field("EDID", Text("sEquipItemOnPlayer")), Field("DATA", Text("was equipped"))),
+                Record("GMST", 0x31, Field("EDID", Text("sUnequipItemOnPlayer")), Field("DATA", Text("was unequipped"))),
                 Record("QUST", 0x600, [Field("EDID", Text("InventoryQuest")), .. new uint[] { 0x14, 1, 2, 3, 4, 5, 6, 8, 0x900, 0x901 }
                     .Concat([0x902u, 0x903u]).Select(id => Field("SCRO", BitConverter.GetBytes(id)))])));
             using var records = FalloutPluginStack.Load(directory.FullName, ["Items.esm"]);
+            Require(!FalloutInventoryAccess.TryDisplayName(records.GetEffective(Key(1)), out _) &&
+                !FalloutInventoryAccess.TryDisplayName(records.GetEffective(Key(0x20)), out _) &&
+                !FalloutInventoryAccess.TryDisplayName(records.GetEffective(Key(0x23)), out _) &&
+                FalloutInventoryAccess.TryDisplayName(records.GetEffective(Key(0x21)), out var spaceName) && spaceName == " " &&
+                FalloutInventoryAccess.TryDisplayName(records.GetEffective(Key(0x22)), out var sourceName) && sourceName == "Source Name" &&
+                FalloutInventoryAccess.CanTransfer(records, records.GetEffective(Key(0x20)), false),
+                "Container name admission used EditorId/whitespace fallback or changed direct transfer authority.");
+            Require(FalloutRecordDisplayName.Read(records.GetEffective(Key(1))) == "" &&
+                FalloutRecordDisplayName.Read(records.GetEffective(Key(0x20))) == "" &&
+                FalloutRecordDisplayName.Read(records.GetEffective(Key(0x23))) == "" &&
+                FalloutRecordDisplayName.ReadOrMissing(records, records.GetEffective(Key(1))) == "Synthetic missing name" &&
+                FalloutRecordDisplayName.ReadOrMissing(records, records.GetEffective(Key(0x21))) == " " &&
+                FalloutRecordDisplayName.ReadOrMissing(records, records.GetEffective(Key(0x22))) == "Source Name",
+                "Raw FULL and explicit missing-name consumer policies were conflated.");
             using var world = new FalloutReferenceWorld(records);
             world.LoadCell(FalloutCellSceneReader.Read(records, Key(0x800)));
             var inventory = new FalloutPlayerInventory(123);
@@ -154,23 +186,36 @@ internal static class InventoryCommandContracts
                 commands.EquippedObject(Key(0x14), 5) is null,
                 "Original three-argument UnequipItem consumed gear or retained its no-unequip lock.");
             Script("player.EquipItem Gun 1 1");
-            var unequipBefore = JsonSerializer.Serialize(inventory.Capture());
-            Reject(() => Script("player.UnequipItem Gun 1 1"));
-            Reject(() => Script("player.UnequipItem Gun 0 0"));
-            Reject(() => Script("player.UnequipItem Gun"));
-            Reject(() => Script("player.UnequipItem Gun 2 1"));
-            Reject(() => Script("player.UnequipItem Gun 0 2"));
-            Require(JsonSerializer.Serialize(inventory.Capture()) == unequipBefore,
-                "Unowned admission/notification or invalid UnequipItem flags changed equipment.");
+            Script("player.UnequipItem Gun 1 1");
+            Require(commands.EquippedObject(Key(0x14), 5) is null && !inventory.Item(Key(1))!.UnequipLocked,
+                "Resident NoEquip invented a persistent CannotWear ban or failed the actual source unequip.");
+            Script("player.EquipItem Gun 0 1\nplayer.UnequipItem Gun 2 2\nplayer.EquipItem Gun 0 1");
+            var noticeBefore = inventory.Notifications.Capture().LastOrdinal;
+            Script("player.UnequipItem Gun");
+            Require(inventory.Notifications.Capture().LastOrdinal == noticeBefore + 1 && commands.EquippedObject(Key(0x14), 5) is null,
+                "Default UnequipItem did not publish its real source notice.");
+            Script("player.EquipItem Gun");
+            Require(commands.EquippedObject(Key(0x14), 5) == Key(1) &&
+                inventory.Notifications.Capture().LastOrdinal == noticeBefore + 2 &&
+                inventory.Notifications.Capture().Pending.Last().Event is { Kind: FalloutHudEventKind.ItemEquipped, Text: " was equipped." },
+                "Default EquipItem remained silent or source NoEquip incorrectly prevented re-equipping.");
+            var flagsBefore = JsonSerializer.Serialize(inventory.Capture());
+            Reject(() => Script("player.UnequipItem Gun 0.5 1"));
+            Require(JsonSerializer.Serialize(inventory.Capture()) == flagsBefore,
+                "Unbound fractional equipment flag conversion changed actual equipment.");
+            Script("player.EquipItem Gun 1 1");
             Script("player.RemoveAllItems\nplayer.AddItem Suit 1 1\nplayer.EquipItem Suit 0 1\nplayer.EquipItem Protected 0 1");
             Require(inventory.Items.Select(item => item.FormKey).ToHashSet().SetEquals(new[] { Key(3), Key(4), Key(5) }) &&
                 inventory.Equipped.Count == 2 && commands.EquippedObject(Key(0x14), 5) is null,
                 "RemoveAllItems lost protected items or kept removed equipment.");
             Script("if player.GetEqObj 5 != 0\nUnexpectedWeapon\nendif");
+            Script("player.EquipItem Suit 2 1");
+            Require(inventory.Item(Key(5))!.UnequipLocked, "Positive native NoUnequip integer did not retain the actual source lock.");
+            Script("player.EquipItem Suit 0 0");
+            Require(!inventory.Item(Key(5))!.UnequipLocked, "Already-worn EquipItem did not clear its actual source lock.");
             var before = JsonSerializer.Serialize(inventory.Capture());
-            Reject(() => Script("player.EquipItem Suit 2 1"));
-            Reject(() => Script("player.EquipItem Suit 0 0"));
-            Require(JsonSerializer.Serialize(inventory.Capture()) == before, "Rejected equip flags changed inventory.");
+            Reject(() => Script("player.EquipItem Suit 0.5 1"));
+            Require(JsonSerializer.Serialize(inventory.Capture()) == before, "Unbound fractional equip conversion changed inventory.");
             inventory.Add(records, Key(2), 2, 1, true, extra: new(2, .4f, Key(0x100)));
             var chest = world.Inventory(Key(0x901), 1).Contents;
             chest.Add(records, Key(2), 1, 1, true, extra: new(1, .8f, Key(0x100)));
@@ -290,7 +335,20 @@ internal static class InventoryCommandContracts
         catch (Exception error) when (error is InvalidDataException or NotSupportedException or InvalidOperationException or OverflowException) { return; }
         throw new InvalidDataException("Invalid inventory operation was accepted.");
     }
-    private static byte[] Item(string type, uint id, string name, int length) => Record(type, id, Field("EDID", Text(name)), Field("DATA", new byte[length]));
+    private static byte[] Item(string type, uint id, string name, int length)
+    {
+        var fields = new List<byte[]> { Field("EDID", Text(name)), Field("DATA", new byte[length]) };
+        if (type == "WEAP")
+        {
+            var data = new byte[196];
+            BinaryPrimitives.WriteUInt32LittleEndian(data, 3);
+            BinaryPrimitives.WriteSingleLittleEndian(data.AsSpan(4), 1);
+            BinaryPrimitives.WriteSingleLittleEndian(data.AsSpan(60), 1);
+            fields.Add(Field("DNAM", data));
+            fields.Add(Field("ETYP", BitConverter.GetBytes(2)));
+        }
+        return Record(type, id, fields.ToArray());
+    }
     private static byte[] LeveledEntry(uint id)
     {
         var entry = new byte[12]; BinaryPrimitives.WriteUInt16LittleEndian(entry, 1);

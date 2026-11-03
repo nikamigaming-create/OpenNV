@@ -13,6 +13,7 @@
     <Compile Include="../../runtime/src/Content/FalloutPluginStack.SharedSource.cs" Link="FalloutPluginStack.SharedSource.cs" />
     <Compile Include="../../runtime/src/Content/FalloutQuestObjectFlags.cs" Link="FalloutQuestObjectFlags.cs" />
     <Compile Include="../../runtime/src/Content/FalloutSoundVoices.cs" Link="FalloutSoundVoices.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutSpatialReferenceId.cs" Link="FalloutSpatialReferenceId.cs" />
     <Compile Include="../../runtime/src/Content/FalloutFiniteSoundVoice.cs" Link="FalloutFiniteSoundVoice.cs" />
     <Compile Include="..\..\runtime\src\Content\FalloutFiniteSoundSaveDrain.cs" Link="FalloutFiniteSoundSaveDrain.cs" />
     <Compile Include="..\..\runtime\src\Content\FalloutSoundLoop.cs" Link="FalloutSoundLoop.cs" />
@@ -39,6 +40,7 @@
     <Compile Include="../../runtime/src/Formats/FaceGen/*.cs" Link="%(Filename)%(Extension)" />
     <Compile Include="../../runtime/src/Content/FalloutNumericGameSettings.cs" Link="FalloutNumericGameSettings.cs" />
     <Compile Include="../../runtime/src/Content/FalloutExecutableStringTable.cs" Link="FalloutExecutableStringTable.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutExecutableStringTable.SystemColors.cs" Link="FalloutExecutableStringTable.SystemColors.cs" />
     <Compile Include="../../runtime/src/Content/FalloutExecutableInputControls.cs" Link="FalloutExecutableInputControls.cs" />
     <Compile Include="../../runtime/src/Content/FalloutExecutableStringTable.Static.cs" Link="FalloutExecutableStringTable.Static.cs" />
     <Compile Include="../../runtime/src/Content/FalloutExecutableStringTable.Inline.cs" Link="FalloutExecutableStringTable.Inline.cs" />

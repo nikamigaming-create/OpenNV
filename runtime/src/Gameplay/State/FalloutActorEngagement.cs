@@ -8,6 +8,10 @@ internal sealed record FalloutActorEngagement(FalloutFormKey Target, string Acti
     FalloutWeaponHandlingSnapshot? WeaponHandling = null, ulong? AttackRandomState = null,
     FalloutActorPathTurn? PathTurn = null)
 {
+    internal static bool IsActorAttacker(FalloutPluginStack records, FalloutFormKey reference) =>
+        // PlayerRef is an engine bootstrap reference, absent from the ESM.
+        reference == records.RuntimeFormKey(0x14) || records.GetEffective(reference).Signature is "ACHR" or "ACRE";
+
     internal void Validate()
     {
         PathTurn?.Validate();
@@ -26,4 +30,8 @@ internal sealed record FalloutActorEngagement(FalloutFormKey Target, string Acti
 
     internal FalloutActorEngagement Transition(string action) => this with
     { Action = action, Seconds = 0, StartPending = true, Animation = null, AnimationHash = null, PathTurn = null };
+
+    internal FalloutActorEngagement ForConfidence(byte confidence) => confidence == 0
+        ? Action == "flee" ? this : Transition("flee")
+        : Action == "flee" ? Transition("pursue") : this;
 }

@@ -5,6 +5,7 @@ namespace OpenNV.Runtime.World.Actors;
 internal sealed partial class RuntimeNativeActorCombat
 {
     private NativeActorWeaponAttachment? _packageWeapon;
+    private FalloutWeaponPresentation? _packageBipedWeapon;
     private NativeActorCombatAnimation? _packageAim, _packageGrip;
     private bool _packageWeaponPrepared;
     private uint _packageWeaponType;
@@ -12,7 +13,7 @@ internal sealed partial class RuntimeNativeActorCombat
     private FalloutPluginRecord? _packageWeaponPolicySource;
     private bool _packageWeaponsVisible = true;
     internal uint WeaponAnimationType => _enemyWeapon?.WeaponAnimationType ?? _packageWeaponType;
-    internal uint ScriptWeaponAnimationType => _enemyWeapon is not null || _packageWeapon is not null
+    internal uint ScriptWeaponAnimationType => _enemyWeapon is not null || _packageWeapon is not null || _packageBipedWeapon is not null
         ? FalloutWeaponPresentation.ScriptAnimationType(WeaponAnimationType) : 0;
     internal float ScriptArmorRating
     {
@@ -32,7 +33,7 @@ internal sealed partial class RuntimeNativeActorCombat
 
     internal void PrepareInventoryChange()
     {
-        if (OwnsPose || _enemyWeapon is not null || _packageWeapon is not null)
+        if (OwnsPose || _enemyWeapon is not null || _packageWeapon is not null || _packageBipedWeapon is not null)
             throw new NotSupportedException("Changing a presented actor weapon requires its animation and attachment retirement owner.");
         _packageWeaponPrepared = false;
     }
@@ -60,7 +61,14 @@ internal sealed partial class RuntimeNativeActorCombat
                 var weapon = _world.WeaponPresentation(item.FormKey, false);
                 _packageWeaponType = weapon.WeaponAnimationType;
                 _world.Inventory(_state.Reference, _context!.Level(), _context.Globals).Contents.Equip(_records, item.FormKey);
-                _packageWeapon = new(weapon, _skeleton, _content);
+                var bipedModel = weapon.BipedList is not null &&
+                    FalloutWeaponBipedModels.Read(_records, weapon.Form, ((RuntimeNativeNpc)_actor).Appearance.Female, _world.FormLists)
+                        .Any(part => part.ModelPath is not null);
+                var attach = weapon.Model is not null ? NativeActorWeaponAttachment.CanAttachSourceModel(weapon, _content) :
+                    !bipedModel && !weapon.DefaultUnarmed;
+                if (attach)
+                    _packageWeapon = new(weapon, _skeleton, _content);
+                else if (bipedModel || weapon.Model is not null) _packageBipedWeapon = weapon;
                 var directory = _skeletonPath[.._skeletonPath.LastIndexOf('/')];
                 if (weapon.Grip != 255)
                 {
@@ -69,13 +77,14 @@ internal sealed partial class RuntimeNativeActorCombat
                 }
             }
         }
-        if (_packageWeapon is not null && (_packageAim is null || _packageAimSneaking != sneaking))
+        var selected = _packageWeapon?.Weapon ?? _packageBipedWeapon;
+        if (selected is not null && (_packageAim is null || _packageAimSneaking != sneaking))
         {
             var directory = _skeletonPath[.._skeletonPath.LastIndexOf('/')];
-            _packageAim = new(SelectPath(directory, (sneaking ? "sneak" : "") + _packageWeapon.Weapon.AnimationGroup + "aim"),
+            _packageAim = new(SelectPath(directory, (sneaking ? "sneak" : "") + selected.AnimationGroup + "aim"),
                 _content, _skeleton, _packageWeapon, true);
             _packageAimSneaking = sneaking;
         }
-        _packageWeapon?.Root.Show(); Activity.SetWeaponDrawn(_packageWeapon is not null);
+        _packageWeapon?.Root.Show(); Activity.SetWeaponDrawn(selected is not null);
     }
 }

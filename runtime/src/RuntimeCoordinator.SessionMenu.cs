@@ -343,6 +343,11 @@ public partial class RuntimeCoordinator
                 try { presentation.RetireBindings(); }
                 catch (Exception error) { GD.PushError($"OPENNV_NATIVE_SESSION_RETIRE_FAILURE {error.Message}"); }
             }
+            if (_nativeCurrentCellRoot is { } sourceRoot)
+            {
+                try { NativeOwnedPlacedSound.RetireSubtree(sourceRoot); }
+                catch (Exception error) { GD.PushError($"OPENNV_NATIVE_SESSION_SOUND_RETIRE_FAILURE {error.Message}"); }
+            }
             PrepareNativeOpenXrExit();
             GD.Print($"OPENNV_NATIVE_SESSION_QUIT prototypes={_nativeNifPrototypes.Count} sourceReaders=drained");
             GetTree().Quit();

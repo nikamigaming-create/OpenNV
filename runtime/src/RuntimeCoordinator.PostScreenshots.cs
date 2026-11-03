@@ -350,7 +350,12 @@ public partial class RuntimeCoordinator
                 }
                 finally
                 {
-                    if (root is not null && GodotObject.IsInstanceValid(root)) root.Free();
+                    var retirementError = DiscardNativeStagedSubtree(root);
+                    if (retirementError is not null)
+                    {
+                        row["status"] = "blocked"; row["retirementError"] = retirementError.Message;
+                        GD.PushWarning($"OPENNV_NATIVE_POST_SCREENSHOT_RETIRE_BLOCKED error={retirementError.Message}");
+                    }
                     if (_nativeActiveCell is { } active && _nativeReferences!.IsCellResident(active.Cell.FormKey))
                         _nativeReferences.UnloadCell(active.Cell.FormKey);
                     _nativeCurrentCellRoot = null; _nativeActiveCell = null;

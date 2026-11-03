@@ -15,6 +15,9 @@ internal sealed class FalloutInstallationSettings
     private Lazy<IReadOnlyDictionary<string, (byte Keyboard, byte Mouse)>>? _controlDefaults;
     internal FalloutRendererConfiguration Renderer => _renderer.Value;
     internal FalloutNumericIniSettings NumericIni => _numericIni.Value;
+    private Lazy<IReadOnlyDictionary<string, uint>> _hardSystemColors = new(() =>
+        throw new NotSupportedException("Hard system-color declarations have no executable owner."));
+    internal IReadOnlyDictionary<string, uint> HardSystemColors => _hardSystemColors.Value;
 
     internal static FalloutInstallationSettings Read(RuntimeLiveContentSource source) => Instances.GetValue(source, ReadInstallation);
 
@@ -22,6 +25,7 @@ internal sealed class FalloutInstallationSettings
     {
         var settings = new FalloutInstallationSettings();
         settings._controlDefaults = new(() => FalloutExecutableStringTable.ReadControlDefaults(source.FalloutExecutablePath));
+        settings._hardSystemColors = new(() => FalloutExecutableStringTable.ReadHardSystemColors(source.FalloutExecutablePath));
         settings._stringDefaults = new(() => FalloutExecutableStringTable.ReadIniStringDefaults(source.FalloutExecutablePath));
         settings._floatDefaults = new(() => FalloutExecutableStringTable.ReadFloatDefaults(
             Path.Combine(Path.GetDirectoryName(source.ContentRoot)!,
@@ -51,7 +55,8 @@ internal sealed class FalloutInstallationSettings
         return new(FalloutExecutableStringTable.ReadIniDeclarations(bytes), _iniLayers, source.StackId + ":" + executable + ":" + hash);
     }
 
-    internal static FalloutInstallationSettings ReadLayers(IEnumerable<string> paths, IEnumerable<FalloutInstallationSetting>? profile = null)
+    internal static FalloutInstallationSettings ReadLayers(IEnumerable<string> paths, IEnumerable<FalloutInstallationSetting>? profile = null,
+        IReadOnlyDictionary<string, uint>? hardSystemColors = null)
     {
         var settings = new FalloutInstallationSettings();
         foreach (var path in paths) settings.Add(path, true);
@@ -60,6 +65,12 @@ internal sealed class FalloutInstallationSettings
         settings._stringDefaults = new(() => new Dictionary<string, string>());
         settings._numericIni = new(() => throw new NotSupportedException("INI declarations have no bound executable owner."));
         settings.Apply(profile ?? []);
+        if (hardSystemColors is not null)
+        {
+            var captured = new System.Collections.ObjectModel.ReadOnlyDictionary<string, uint>(
+                hardSystemColors.ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.OrdinalIgnoreCase));
+            settings._hardSystemColors = new(() => captured);
+        }
         return settings;
     }
 

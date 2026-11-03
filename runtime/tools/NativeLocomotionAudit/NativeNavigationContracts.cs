@@ -34,8 +34,33 @@ internal static partial class NativeNavigationContracts
         Console.WriteLine("OPENNV_PACKAGE_MARKER_FLOOR_PASS elevated=true lateralAndOverheadRefused=true missingRefused=true");
     }
 
+    private static void CheckReferenceApproachRegionFallback()
+    {
+        using var data = JsonDocument.Parse("""
+            {"schema":"opennv-owned-cell-navigation/v1","navmeshes":[
+             {"formId":"raised-floor","cellFormId":"cell","version":11,
+              "verticesGameUnits":[[-10,-10,3],[10,-10,3],[-10,10,3],[10,10,3]],
+              "triangles":[{"vertexIndices":[0,1,2],"adjacentTriangles":[-1,1,-1],"flags":0},
+                           {"vertexIndices":[1,3,2],"adjacentTriangles":[-1,-1,0],"flags":0}],"externalConnections":[]}]}
+            """);
+        var graph = CellNavigationGraph.Load(data.RootElement, new HashSet<string> { "cell" });
+        var start = new Vector3(0, 0, 3); var endpoint = new Vector3(5, 0, 0); var reference = new Vector3(7, 0, 0);
+        var route = RuntimeCoordinator.FindNativeBotSourceRegion(graph, start, endpoint, reference, 2, 4);
+        if (!route.ReferenceRegion || route.Path[^1].DistanceTo(endpoint) <= 2 ||
+            !graph.ArrivalRegion(start, reference, route.Path[^1], 4, .01f, .6f)(route.Path[^1]))
+            throw new InvalidOperationException("Reference approach fallback lost its actual requested region or reused the failed point radius.");
+        var refused = false;
+        try { _ = RuntimeCoordinator.FindNativeBotSourceRegion(graph, start, endpoint, reference, 2, 2); }
+        catch (InvalidOperationException) { refused = true; }
+        if (!refused) throw new InvalidOperationException("Reference approach fallback fabricated an unconstrained source endpoint.");
+    }
+
     internal static void Run()
     {
+        CheckReferenceApproachRegionFallback();
+        CheckPursuitQueryRetarget();
+        CheckActorSourceHeight();
+        CheckVerticalTriangleIndex();
         CheckSourceCharacterEnvelopes();
         CheckWanderSelection();
         CheckElevatedPackageMarker();

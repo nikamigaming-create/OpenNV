@@ -81,6 +81,9 @@ internal sealed class NativeVatsVisibilitySamples : IDisposable
             FrustumOffset = camera.FrustumOffset,
             CullMask = _queryLayer,
             Current = true,
+            // Functional fragment masks must not inherit the world image-space
+            // compositor or advance its shared HDR adaptation history.
+            Compositor = new Compositor(),
             Environment = new Godot.Environment
             {
                 BackgroundMode = Godot.Environment.BGMode.Color,

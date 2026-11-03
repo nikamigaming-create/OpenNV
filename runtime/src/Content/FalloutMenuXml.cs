@@ -11,6 +11,12 @@ namespace OpenNV.Runtime.Content;
 internal static class FalloutMenuXml
 {
     private static readonly ConditionalWeakTable<RuntimeLiveContentSource, Dictionary<string, (string Hash, XElement Root)>> Parsed = new();
+    // System color is inherited through actual source tile ancestry. A view
+    // extracting a subtree must retain its authored owner, not assume the menu
+    // itself declares the trait or substitute another UI color channel.
+    internal static XElement? InheritedSystemColor(XElement tile) => tile.AncestorsAndSelf()
+        .Select(owner => owner.Element("systemcolor")).FirstOrDefault(value => value is not null);
+
     internal static XElement Read(string path)
     {
         var source = RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("Owned menu source is absent.");
@@ -174,6 +180,29 @@ internal static class FalloutMenuXml
 
     // Relative tile names in owned resources can end at the attribute boundary;
     // a missing closing parenthesis does not introduce another name character.
+    internal static IEnumerable<XElement> TileChildren(XElement tile) => tile.Elements().Where(element =>
+        element.Name.LocalName is "rect" or "hotrect" or "image" or "text" or "nif" or "menu" or "window" or "radial");
+
+    // Native children are linked in reverse creation order. Unnamed sibling
+    // advances that list with wrap, hence the preceding authored tile.
+    internal static XElement UnnamedSibling(XElement tile)
+    {
+        var siblings = TileChildren(tile.Parent ?? throw new InvalidDataException("Sibling has no parent tile.")).ToArray();
+        var index = Array.IndexOf(siblings, tile);
+        if (index < 0) throw new InvalidDataException("Relative source is not an actual child tile.");
+        return siblings[(index + siblings.Length - 1) % siblings.Length];
+    }
+
+    internal static string NumericText(float value)
+    {
+        // Tile string reactions store the x87 nearest-integer result and use
+        // signed decimal text. Preserve the ordinary round-to-nearest-even mode.
+        var rounded = MathF.Round(value, MidpointRounding.ToEven);
+        if (!float.IsFinite(rounded) || (double)rounded < int.MinValue || (double)rounded > int.MaxValue)
+            throw new InvalidDataException("Numeric tile text exceeds signed integer storage.");
+        return ((int)rounded).ToString(CultureInfo.InvariantCulture);
+    }
+
     internal static string? RelativeName(string source, string kind)
     {
         var prefix = kind + "(";

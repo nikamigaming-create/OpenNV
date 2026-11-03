@@ -8,7 +8,7 @@ namespace OpenNV.Runtime.World.Cells;
 internal sealed record FalloutInventoryScriptExecution(FalloutScriptValueContext Values,
     Func<string, FalloutScriptFunction?> Function,
     Action<string, IReadOnlyList<string>> Command,
-    Func<string, string, FalloutScriptFunction>? UserFunction = null);
+    Func<string, string, FalloutScriptFunction>? UserFunction = null, FalloutScriptExecutionBudget? Budget = null);
 
 internal static class FalloutInventoryScriptEvents
 {
@@ -27,7 +27,7 @@ internal static class FalloutInventoryScriptEvents
         if (source.Length != 1) throw new NotSupportedException("Inventory event requires an unambiguous source script.");
         var bindings = new FalloutScriptBindings(records, item, script, fields);
         var blocks = FalloutGameModeProgram.ReadEvents(FalloutDialogueTopic.ScriptText(source[0].Data.Span));
-        var budget = new FalloutScriptExecutionBudget(); var executed = 0;
+        var budget = execution.Budget ?? new FalloutScriptExecutionBudget(); var executed = 0;
         foreach (var block in blocks)
         {
             if (!block.Event.Equals(eventName, StringComparison.OrdinalIgnoreCase)) continue;

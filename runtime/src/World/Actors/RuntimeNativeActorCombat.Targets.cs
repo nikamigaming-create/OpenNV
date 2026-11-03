@@ -21,6 +21,7 @@ internal sealed partial class RuntimeNativeActorCombat
 
     private Vector3 TargetPosition(RuntimeNativePlayer? player) => _opponent?._actor.GlobalPosition ?? player!.GlobalPosition;
     private float TargetRadius(RuntimeNativePlayer? player) => _opponent?._radius ?? player!.CombatRadius;
+    private float TargetMeleeExtent(RuntimeNativePlayer? player) => _opponent?.MeleeSurfaceExtent ?? player!.CombatMeleeExtent;
     private float TargetHealth(RuntimeNativePlayer? player) => _opponent is { } actor
         ? _world.Health(actor._state.Reference).Current : _context!.Vitals().ExactHitPoints;
     private Vector3 TargetPoint(RuntimeNativePlayer? player) => _opponent?.BodyTargetPoint() ?? player!.CombatTargetPoint;

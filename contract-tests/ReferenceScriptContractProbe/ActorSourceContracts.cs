@@ -6,7 +6,7 @@ using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.World.Actors;
 using OpenNV.Runtime.World.Cells;
 
-internal static class ActorSourceContracts
+internal static partial class ActorSourceContracts
 {
     internal static void Run()
     {
@@ -15,6 +15,8 @@ internal static class ActorSourceContracts
         try
         {
             RandomDialogueContracts(directory);
+            ActorDisplayNameContracts(directory);
+            CompassNonSneakingDetection(directory);
             var warning = new FalloutAggroRadiusWarning(new("Actors.esm", 0x14), RemainingSeconds: 5);
             var firstWarning = warning.Advance(2, 5, 2);
             var coldWarning = JsonSerializer.Deserialize<FalloutAggroRadiusWarning>(JsonSerializer.Serialize(firstWarning.State))!;
@@ -49,6 +51,8 @@ internal static class ActorSourceContracts
                 ActorList(0x821, 100, (1, 0x800)),
                 Record("MISC", 0x840, Field("EDID", Text("CreatureLoot")), Field("DATA", new byte[8])),
                 Record("FACT", 0x8e0), Record("FACT", 0x8e1),
+                Record("FACT", 0x8ee, Field("XNAM", Join(BitConverter.GetBytes(0x8eeu), BitConverter.GetBytes(0), BitConverter.GetBytes(2u)))),
+                Record("GMST", 0x8ef, Field("EDID", Text("iProjectileMineShooterCanTrigger")), Field("DATA", BitConverter.GetBytes(1))),
                 Record("PERK", 0x8e2, Field("PRKE", [2, 0, 0]), Field("DATA", [0, 3, 2]),
                     Field("PRKC", [1]), Field("CTDA", Condition(35, 0)), Field("EPFT", [1]),
                     Field("EPFD", BitConverter.GetBytes(2f)), Field("PRKF", [])),
@@ -183,7 +187,22 @@ internal static class ActorSourceContracts
                 {
                     regionalWorld.AdoptRegionImposter(Key(0x905));
                     Check(regionalWorld.RegionPublicationPending, "New CELL entry lost its activation receipt.");
-                    regionalWorld.CompleteRegionPublication();
+                    // A render/import failure must remain visible without
+                    // inventing or withholding the accepted gameplay binding.
+                    var failedView = new FalloutRegionImposterVisibility(records);
+                    Check(!failedView.Publish(new[] { Key(0x8f9) },
+                        _ => throw new NotSupportedException("fixture-selected-source-3D-missing"), (_, _) => { }) &&
+                        failedView.Error == "fixture-selected-source-3D-missing",
+                        "Regional presentation fault was hidden or reported successful.");
+                    RejectRegionGameplayBinding(() => regionalWorld.CapturePlayerRegions());
+                    RejectRegionGameplayBinding(() => regionalWorld.CompleteRegionActivation(targetCell.FormKey, new HashSet<FalloutFormKey>()));
+                    Check(!regionalWorld.CompleteRegionActivation(beforePlacement.Cell,
+                        new HashSet<FalloutFormKey> { Key(0x908), Key(0x905) }) && regionalWorld.RegionPublicationPending,
+                        "Stale other-CELL bindings completed the accepted region activation.");
+                    Check(regionalWorld.CompleteRegionActivation(targetCell.FormKey,
+                        new HashSet<FalloutFormKey> { Key(0x908), Key(0x905) }) &&
+                        regionalWorld.CapturePlayerRegions() is not null && failedView.Error is not null,
+                        "Actual gameplay binding did not admit capture independently of retained missing 3D.");
                     var composed = regionalWorld.ComposeResidency(FalloutCellSceneReader.Read(records, Key(0x884)),
                         .0142875f, [targetCell]);
                     Check(composed.References.Any(reference => reference.FormKey == Key(0x908)),
@@ -329,6 +348,20 @@ internal static class ActorSourceContracts
             world.LoadCell(FalloutCellSceneReader.Read(records, Key(0x880)));
             DialoguePackageQueryContracts.Run(directory, records, world, speaker);
             CombatAlarmContracts.Run(records);
+            using (var mines = new FalloutReferenceWorld(records))
+            {
+                var creator = Key(0x900); var candidate = Key(0x901); var faction = Key(0x8ee);
+                mines.ChangeFaction(creator, faction, 0, false);
+                Check(!mines.DeployedMineActorEligible(creator, creator),
+                    "Positive shooter-can-trigger bypassed the creator's source self-ally faction reaction.");
+                Check(mines.DeployedMineActorEligible(creator, candidate), "A neutral actor was excluded from a deployed mine.");
+                mines.ChangeFaction(candidate, faction, 0, false);
+                Check(!mines.DeployedMineActorEligible(creator, candidate), "A friendly faction actor triggered a deployed mine.");
+                using var coldMines = new FalloutReferenceWorld(records);
+                coldMines.RestoreActorOverrides(mines.CaptureActorOverrides());
+                Check(!coldMines.DeployedMineActorEligible(creator, creator) && !coldMines.DeployedMineActorEligible(creator, candidate),
+                    "Cold faction continuation changed deployed mine creator/friendly eligibility.");
+            }
             UnloadedActorPackageContracts.Run(records);
             var choices = new HashSet<FalloutFormKey>();
             for (ulong seed = 0; seed < 32; seed++)
@@ -696,6 +729,11 @@ internal static class ActorSourceContracts
         BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(12), id); data.CopyTo(bytes, 24); return bytes;
     }
     private static void Check(bool condition, string message) { if (!condition) throw new InvalidOperationException(message); }
+    private static void RejectRegionGameplayBinding(Action action)
+    {
+        try { action(); } catch (InvalidOperationException) { return; }
+        throw new InvalidDataException("Incomplete regional gameplay binding was admitted.");
+    }
     private static void Reject(Action action)
     {
         try { action(); } catch (Exception error) when (error is InvalidDataException or NotSupportedException) { return; }

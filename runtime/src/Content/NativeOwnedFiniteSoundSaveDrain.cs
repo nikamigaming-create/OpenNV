@@ -28,7 +28,7 @@ internal sealed class NativeOwnedFiniteSoundSaveDrain : IFalloutFiniteSoundSaveD
     {
         voice.Validate();
         if (!GodotObject.IsInstanceValid(node) || !node.IsInsideTree() ||
-            !bound() || events.Reference != voice.Reference || !events.CanAwaitNativeCompletion)
+            !bound() || events.Identity != voice.Reference || !events.CanAwaitNativeCompletion)
             throw new NotSupportedException("Save preparation lacks its already proven finite native owner.");
         _records = records; _events = events; Voice = voice; _node = node; _completion = completion;
         _bound = bound; _release = release;

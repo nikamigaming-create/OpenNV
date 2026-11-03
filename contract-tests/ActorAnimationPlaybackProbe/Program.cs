@@ -14,6 +14,28 @@ var released = weaponClock.SampleSeconds(4, true);
 if (weaponClock.Crossed(released, weaponClock.Duration, false, false).Any(key => key.Text == "Fire") ||
     weaponClock.Crossed(released, weaponClock.Duration, false, false).Last().Text != "end")
     throw new InvalidOperationException("Automatic weapon release did not exit through its finite source tail.");
+// An attack's authored reentry point is independent of its visual end.
+var refireClock = new FalloutWeaponAnimationTimeline([new(0, "start"), new(.1f, "Hit"),
+    new(.4f, "a:5"), new(1, "a:3"), new(2, "end")], 0, 2, 1);
+if (refireClock.TryRefire(.399, out _) || !refireClock.TryRefire(.4f, out var nextAttack) || nextAttack != "attack5" ||
+    !refireClock.IsRefireMarker("a:5") || refireClock.IsRefireMarker("a:3") ||
+    refireClock.Crossed(0, .4, true, false).Count(key => FalloutWeaponAnimationTimeline.DischargesWeapon(key.Text)) != 1)
+    throw new InvalidOperationException("Semi-automatic refire did not retain first-marker selection and the committed discharge prefix.");
+var tailRefire = new FalloutWeaponAnimationTimeline([new(0, "start"), new(.1f, "Hit"), new(1.8f, "a:R"), new(2, "end")], 0, 2, 1);
+if (tailRefire.TryRefire(1.5, out _) || !tailRefire.TryRefire(MathF.BitIncrement(1.5f), out var fallbackAttack) || fallbackAttack is not null)
+    throw new InvalidOperationException("Source attack tail threshold lost its strict boundary or authored-weapon fallback.");
+var sourceOrderRefire = new FalloutWeaponAnimationTimeline([new(0, "start"), new(.1f, "Hit"),
+    new(.8f, "a:4"), new(.4f, "a:3"), new(2, "end")], 0, 2, 1);
+if (sourceOrderRefire.TryRefire(.5, out _) || !sourceOrderRefire.TryRefire(.8f, out var firstSourceGroup) || firstSourceGroup != "attack4")
+    throw new InvalidOperationException("Attack reentry reordered authored text-key declarations.");
+var revolverClock = new FalloutWeaponAnimationTimeline([new(0, "start"), new(.0333333f, "Hit"),
+    new(.19999981f, "Sound: WPN357RevolverCock"), new(.39999986f, "a:5"), new(.6666665f, "end")], 0, .6666665f, 1);
+if (!revolverClock.TryRefire(.82 * .699999988079071, out var revolverNext) || revolverNext != "attack5" ||
+    .82 * .699999988079071 >= revolverClock.Duration)
+    throw new InvalidOperationException("Owned revolver timing still waits for the entire visual clip before refiring.");
+if (weaponClock.TryRefire(1, out _))
+    throw new InvalidOperationException("Unqualified missing-marker replacement was admitted.");
+
 var throwClock = new FalloutWeaponAnimationTimeline([new(0, "start"), new(.5f, "Hold"), new(.8f, "Release"), new(1.5f, "end")], 0, 1.5f, 1);
 if (throwClock.Hold != .5 || throwClock.Discharges != 1 ||
     throwClock.Crossed(0, .5, true, false).Any(key => FalloutWeaponAnimationTimeline.DischargesWeapon(key.Text)) ||

@@ -35,12 +35,15 @@ internal static partial class ScriptSoundContracts
                 Sound(0x107, "AliasSound", "fx/winner.wav", 0),
                 Record("REFR", 0x200, Field("EDID", Text("EmitterA"))),
                 Record("REFR", 0x201, Field("EDID", Text("EmitterB"))),
+                Record("PGRE", 0x202, Field("EDID", Text("ProjectileEmitterA"))),
+                Record("PMIS", 0x203, Field("EDID", Text("ProjectileEmitterB"))),
                 Record("SCPT", 0x601, Field("SCHR", header), Local(1, "done"), Local(2, "sound"), Local(3, "path"),
                     Join(Enumerable.Range(0x100, 8).Concat([0x200, 0x201]).Select(id => Field("SCRO", BitConverter.GetBytes((uint)id))).ToArray()), Field("SCTX", Text(source))),
                 Record("QUST", 0x600, Field("DATA", [1, 0]), Field("SCRI", BitConverter.GetBytes(0x601u)))));
             File.WriteAllBytes(Path.Combine(directory, "Patch.esp"), Join(Record("TES4", 0, Field("MAST", Text("Sounds.esm"))),
                 Sound(0x100, "SourceSound", "fx/winner.wav", 0, attenuation: 200, frequency: 10)));
             using var records = FalloutPluginStack.Load(directory, ["Sounds.esm", "Patch.esp"]);
+            InventoryBatch(records);
             using var world = new FalloutReferenceWorld(records);
             var quests = new FalloutQuestState(records);
             var sounds = world.Sounds;
@@ -151,6 +154,17 @@ internal static partial class ScriptSoundContracts
             records.SoundVoices.Stop(new("SOUNDS.ESM", 0x107));
             Require(stoppedAlias == 1, "StopSound lost canonical case-insensitive plugin identity.");
             SourcePaths(records, world, quests, Execute, directory);
+            foreach (var id in new uint[] { 0x202, 0x203 })
+            {
+                var reference = Key(id);
+                sounds.PlayAtReference(reference, Key(0x100));
+                var request = sounds.LastRequest!;
+                Require(request.Caller == reference && request.Reference == reference && sounds.IsActive(request.Id),
+                    "Placed projectile sound lost its actual reference identity.");
+                records.SoundVoices.Stop(Key(0x100), reference);
+                Require(!sounds.IsActive(request.Id) && voices[request.Id].Releases == 1,
+                    "Reference-filtered StopSound did not retire the actual placed projectile voice.");
+            }
             ended.Dispose();
             quests.SetVariable(caller, 1, 0);
             var fallback = new FalloutQuestScripts(records, quests, new HashSet<FalloutFormKey>(), new FalloutPlayerInventory(), defaultProcessingDelay: 0, references: world);

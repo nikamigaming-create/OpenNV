@@ -4,6 +4,9 @@ using OpenNV.Runtime.Content;
 namespace OpenNV.Runtime.Gameplay.State;
 
 internal sealed record FalloutInventoryTransfer(FalloutFormKey Item, int Count);
+internal sealed class FalloutInventoryCleanupException(string message, Exception cause)
+    : InvalidOperationException(message, cause)
+{ }
 
 internal sealed partial class FalloutPlayerInventory
 {
@@ -12,6 +15,8 @@ internal sealed partial class FalloutPlayerInventory
 
     private void RequireNoChangeInProgress()
     {
+        if (_scriptIterationActive && !_scriptTraversalOwned)
+            throw new NotSupportedException("Inventory mutation requires its retained native script traversal/restart owner.");
         if (_changeInProgress) throw new InvalidOperationException("Inventory mutation cannot interleave a prepared transfer.");
     }
 
@@ -28,6 +33,24 @@ internal sealed partial class FalloutPlayerInventory
                 source.TransferToCore(destination!, transfer.Form, transfer.Count, null, false);
             }
         });
+    }
+
+    internal void ModifyWithPreparedOwner(Action<FalloutPlayerInventory> plan, FalloutInventoryChangeLease effects) =>
+        ApplyRemovalTransaction(null, (staged, _) => plan(staged), effects);
+
+    internal void TransferItemsWithPreparedOwner(FalloutPlayerInventory target,
+        IReadOnlyList<FalloutInventoryTransfer> transfers, FalloutInventoryChangeLease effects,
+        Action<FalloutPlayerInventory, FalloutPlayerInventory> stage)
+    {
+        ArgumentNullException.ThrowIfNull(transfers); ArgumentNullException.ThrowIfNull(stage);
+        ArgumentNullException.ThrowIfNull(effects);
+        if (transfers.Any(transfer => transfer is null)) throw new InvalidDataException("Inventory event transfer is absent.");
+        ApplyRemovalTransaction(target, (source, destination) =>
+        {
+            // The source event owner stages the actual incoming variants and
+            // dispatches their events in the same detached inventory plan.
+            stage(source, destination!);
+        }, effects);
     }
 
     internal void TransferToWithPreparedOwner(FalloutPlayerInventory target, FalloutFormKey form, int count,
@@ -48,6 +71,17 @@ internal sealed partial class FalloutPlayerInventory
             else source.RemoveCore(item, 1, true);
             stageEffects?.Invoke(source);
         }, effects);
+    }
+
+    internal void ConsumeDeployedWeapon(FalloutFormKey weapon, FalloutItemVariant selected, long revision,
+        FalloutInventoryChangeLease publication)
+    {
+        RequireRevision(revision);
+        if (Item(weapon) is not { RecordType: "WEAP" } item || !Equipped.Contains(item.RuntimeFormId) || SelectedWeapon(weapon).Extra != selected)
+            throw new InvalidOperationException("Deployed weapon selection changed before source release.");
+        // The ordinary consuming weapon removes from the selected stack while
+        // retaining equipment if another instance remains. Drop is different.
+        ConsumeOne(weapon, publication);
     }
 
     internal void ConsumeWorldItem(FalloutInventoryChangeLease effects) =>
@@ -81,11 +115,26 @@ internal sealed partial class FalloutPlayerInventory
         Action<FalloutPlayerInventory, FalloutPlayerInventory?> plan, FalloutInventoryChangeLease? effects = null)
     {
         if (ReferenceEquals(this, other)) throw new InvalidOperationException("Inventory transfer needs distinct owners.");
+        if (_scriptIterationActive && !_scriptTraversalOwned || other is { _scriptIterationActive: true, _scriptTraversalOwned: false })
+            throw new NotSupportedException("Inventory mutation requires its retained native script traversal/restart owner.");
         if (_changeInProgress || other?._changeInProgress == true)
             throw new InvalidOperationException("Inventory removal cannot interleave another authoritative transaction.");
         _changeInProgress = true;
         if (other is not null) other._changeInProgress = true;
         FalloutInventoryChangeLease? first = null, second = null;
+        var ownersDisposed = false;
+        void DisposeOwners(Exception? transactionFailure)
+        {
+            if (ownersDisposed) return;
+            ownersDisposed = true;
+            var cleanupFailures = new List<Exception>();
+            foreach (var owner in new[] { effects, second, first })
+                try { owner?.Dispose(); } catch (Exception error) { cleanupFailures.Add(error); }
+            if (cleanupFailures.Count == 0) return;
+            if (transactionFailure is not null) cleanupFailures.Insert(0, transactionFailure);
+            throw new FalloutInventoryCleanupException("Inventory cleanup failed: " +
+                string.Join("; ", cleanupFailures.Select(error => error.Message)), new AggregateException(cleanupFailures));
+        }
         try
         {
             var before = Copy(); var beforeOther = other?.Copy();
@@ -98,7 +147,12 @@ internal sealed partial class FalloutPlayerInventory
             var changed = !SameSnapshot(before.Capture(), after) || !ReferenceEquals(before._traversal, staged._traversal);
             var otherChanged = other is not null && (!SameSnapshot(beforeOther!.Capture(), afterOther!) ||
                 !ReferenceEquals(beforeOther!._traversal, stagedOther!._traversal));
-            if (!changed && !otherChanged && effects is null) return;
+            if (!changed && !otherChanged && effects is null)
+            {
+                _scriptMutationRevision = staged._scriptMutationRevision;
+                if (other is not null) other._scriptMutationRevision = stagedOther!._scriptMutationRevision;
+                return;
+            }
             var revision = Revision; var otherRevision = other?.Revision ?? 0;
             if (changed) _ = checked(revision + 1);
             if (otherChanged) _ = checked(otherRevision + 1);
@@ -108,6 +162,8 @@ internal sealed partial class FalloutPlayerInventory
             {
                 if (changed) PublishPrepared(staged, revision + 1);
                 if (otherChanged) other!.PublishPrepared(stagedOther!, otherRevision + 1);
+                _scriptMutationRevision = staged._scriptMutationRevision;
+                if (other is not null) other._scriptMutationRevision = stagedOther!._scriptMutationRevision;
                 first?.Commit(); second?.Commit(); effects?.Commit();
             }
             catch
@@ -115,16 +171,35 @@ internal sealed partial class FalloutPlayerInventory
                 // Rollback callbacks run with the original item state restored.
                 if (changed) PublishPrepared(before, revision);
                 if (otherChanged) other!.PublishPrepared(beforeOther!, otherRevision);
-                effects?.Dispose(); second?.Dispose(); first?.Dispose();
+                _scriptMutationRevision = before._scriptMutationRevision;
+                if (other is not null) other._scriptMutationRevision = beforeOther!._scriptMutationRevision;
                 throw;
             }
-            first?.Complete(); second?.Complete(); effects?.Complete();
+            // All state is committed. Attempt every owner's finalization even
+            // if an earlier callback fails; compensation is no longer valid.
+            var finalizationFailures = new List<Exception>();
+            foreach (var finalizer in new[] { first, second, effects })
+                try { finalizer?.Complete(); } catch (Exception error) { finalizationFailures.Add(error); }
+            if (finalizationFailures.Count != 0)
+                throw new InvalidOperationException("Committed inventory finalization failed.",
+                    new AggregateException(finalizationFailures));
+        }
+        catch (Exception error)
+        {
+            // Own compensation before publishing an escaping failure. In
+            // particular, an unhandled rethrow must not be relied on to enter
+            // this method's finally and discover its rollback exception there.
+            DisposeOwners(error);
+            throw;
         }
         finally
         {
-            effects?.Dispose(); second?.Dispose(); first?.Dispose();
-            _changeInProgress = false;
-            if (other is not null) other._changeInProgress = false;
+            try { DisposeOwners(null); }
+            finally
+            {
+                _changeInProgress = false;
+                if (other is not null) other._changeInProgress = false;
+            }
         }
     }
 
@@ -134,6 +209,9 @@ internal sealed partial class FalloutPlayerInventory
         _equipped.Clear(); _equipped.UnionWith(prepared._equipped);
         _random = prepared._random;
         _traversal = prepared._traversal;
+        _scriptOrder = CopyScriptOrder(prepared._scriptOrder);
+        _scriptInitializations = prepared._scriptInitializations.ToArray();
+        _scriptMutationRevision = prepared._scriptMutationRevision;
         Revision = revision;
     }
 

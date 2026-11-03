@@ -175,7 +175,8 @@ internal static class CorpseEquippedLootContracts
         Require(Stamp(world, contents, player) == before, "A nested authoritative removal interleaved corpse transfer preparation.");
         player.PrepareChange = null;
         var invalidTarget = new FalloutPlayerInventory(19);
-        invalidTarget.Restore(new([contents.Item(Key(0x50))! with { EditorId = "NotTheSameSourceItem" }], null), [], 19);
+        invalidTarget.Restore(new([contents.Item(Key(0x50))! with { EditorId = "NotTheSameSourceItem" },
+            contents.Item(Key(0x51))!], null), [], 19);
         var invalidBefore = Stamp(world, contents, invalidTarget);
         Reject(() => contents.TransferTo(invalidTarget, Key(0x50), 1));
         Require(Stamp(world, contents, invalidTarget) == invalidBefore, "A transfer overwrote a conflicting target item identity.");
@@ -195,7 +196,8 @@ internal static class CorpseEquippedLootContracts
         receiver.Restore(new([ammo], null), [], 19);
         source.Exchange(receiver, [new(Key(0x50), 1, true), new(Key(0x51), 2, false)]);
         Require(source.Item(Key(0x50)) is null && receiver.Item(Key(0x50))!.Variants!.Single().Condition == .42f &&
-            source.Item(Key(0x51))!.Count == 19 && receiver.Item(Key(0x51))!.Count == 3 &&
+            receiver.SelectedWeapon(Key(0x50)).Extra.Magazine is { Loaded: 12, Generated: false } &&
+            source.Item(Key(0x51))!.Count == 7 && receiver.Item(Key(0x51))!.Count == 15 &&
             state.CorpseEquipment is { Attachments.Count: 1, HandlingWeapon: null, WeaponHandling: null } &&
             History(state.Capture()) == History(before), "The shared exchange path bypassed retirement or changed trade item/ammo/condition totals.");
         Cold(records, world.Capture());

@@ -1438,6 +1438,12 @@ if (args is ["--inventory-command-contracts"])
     InventoryCommandContracts.Run();
     return;
 }
+if (args is ["--inventory-command-contracts", var inventorySourceRoot])
+{
+    InventoryCommandContracts.Run();
+    InventoryCommandContracts.RunOwnedWeaponHitScripts(inventorySourceRoot);
+    return;
+}
 if (args is ["--animation-resource-contracts"])
 {
     AnimationResourceContracts.Run();
@@ -1841,7 +1847,16 @@ try
     Require(!results.IsPending(request) && results.IsPending(replacement) && !results.Select(request, 0) &&
         results.Take(Key(0x900)) == -1 && results.Select(replacement, 2) && results.Take(Key(0x902)) == 2 && !results.IsPending(replacement),
         "A replaced message callback corrupted the current result slot.");
-    Console.WriteLine("OPENNV_MESSAGE_RESULT_CONTRACT_PASS callerIsolation=true consumedOnce=true replaced=true staleCallback=true coldResult=true");
+    results.PublishButton(1);
+    var orphan = results.Capture();
+    Require(orphan.Caller is null && orphan.Button == 1 && results.Take(Key(0x902)) == -1,
+        "A native-style queued callback invented a new caller after prior consumption.");
+    var orphanCold = new FalloutMessageResults(); orphanCold.Restore(orphan);
+    Require(orphanCold.Capture() == orphan, "Cold shared button state rejected a source callback without an unconsumed caller.");
+    var legacyCold = new FalloutMessageResults();
+    legacyCold.Restore(new(7, Key(0x900), -1));
+    Require(legacyCold.IsPending(new(Key(0x800), Key(0x900), 7)), "Legacy result state lost its inferred slot generation.");
+    Console.WriteLine("OPENNV_MESSAGE_RESULT_CONTRACT_PASS callerIsolation=true consumedOnce=true globalCallback=true orphanCold=true legacyOwner=true");
     Reject(() => world.IsEnabled(Key(0x907)));
     using var enabledCold = new FalloutReferenceWorld(records);
     enabledCold.Restore(JsonSerializer.Deserialize<FalloutReferenceSnapshot[]>(JsonSerializer.Serialize(world.Capture()))!);
@@ -1891,6 +1906,7 @@ ObjectPhysicsContracts.Run();
 GrabEventContracts.Run();
 FurnitureContracts.Run();
 AuthoredRagdollContracts.Run();
+PlayerFatigueKnockoutContracts.Run();
 ActorDamageContracts.Run();
 StoppedPoseContracts.Run();
 SandboxAdmissionFailureContracts.Run();

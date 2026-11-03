@@ -58,7 +58,7 @@ internal sealed partial class RuntimeNifParticleSystem
         ReleaseParticleDraw(freeVisual: true);
         _turbulence?.Dispose(); _turbulence = null;
         _active.Clear(); _rates.Clear(); _speeds.Clear(); _lifespans.Clear(); _gravityStrengths.Clear(); _remainders.Clear();
-        _meshes.Clear(); _colliders.Clear(); _keyColors.Clear(); _spawnOwners.Clear(); _particleIndices.Clear(); _stepTransforms.Clear();
+        _meshes.Clear(); _particleMeshSources.Clear(); _emissionError = null; _colliders.Clear(); _keyColors.Clear(); _spawnOwners.Clear(); _particleIndices.Clear(); _stepTransforms.Clear();
         _particles = []; _drawBuffer = []; _drawOrder = []; _modifiers = []; _drawModifiers = []; _activeDrawModifiers = []; _colliderPoses = [];
         _source = null!; _data = null!; _nodes = null!;
         _pendingShader = null; _sourceFile = null; _configured = false;
@@ -67,6 +67,7 @@ internal sealed partial class RuntimeNifParticleSystem
     private void RequireConfigured()
     {
         if (!_configured || _retired) throw new InvalidOperationException("Particle instance has no live source lifetime.");
+        if (_emissionError is not null) throw new NotSupportedException(_emissionError);
     }
 
     private void ConfigureParticleDraw(ShaderMaterial shader)
@@ -147,7 +148,7 @@ internal sealed partial class RuntimeNifParticleSystem
             _turbulence?.Dispose(); _turbulence = null;
             _collisionWork.Clear(); _particleIndices.Clear();
             _active.Clear(); _rates.Clear(); _speeds.Clear(); _lifespans.Clear(); _gravityStrengths.Clear(); _remainders.Clear();
-            _meshes.Clear(); _colliders.Clear(); _keyColors.Clear(); _spawnOwners.Clear(); _stepTransforms.Clear();
+            _meshes.Clear(); _particleMeshSources.Clear(); _emissionError = null; _colliders.Clear(); _keyColors.Clear(); _spawnOwners.Clear(); _stepTransforms.Clear();
             _particles = []; _drawBuffer = []; _drawOrder = []; _modifiers = []; _colliderPoses = [];
             _nodes = null!; LifecycleEvent = null; _configured = false;
             _sourceFile = null; _pendingShader = null;

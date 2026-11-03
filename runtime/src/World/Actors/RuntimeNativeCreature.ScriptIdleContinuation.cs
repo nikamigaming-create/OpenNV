@@ -7,13 +7,14 @@ namespace OpenNV.Runtime.World.Actors;
 internal sealed partial class RuntimeNativeCreature
 {
     private FalloutIdleDeactivation? _scriptIdleDeactivation;
+    private FalloutPackageAnimationSource? _scriptIdleDeactivationIncoming;
     private int _scriptIdleRequestState, _scriptIdleSequenceState;
     private bool _scriptIdleEndPending;
     private bool _ambientIdleInterrupted;
 
     private FalloutCreatureScriptIdlePhase CaptureScriptIdlePhase() =>
         new(_scriptIdleRequestState, _scriptIdleSequenceState, _scriptIdleDeactivation?.Capture(), _ambientIdleInterrupted,
-            _scriptIdleAnimation?.AccumulationTime);
+            _scriptIdleAnimation?.AccumulationTime, _scriptIdleDeactivationIncoming);
 
     private void RestoreScriptIdlePhase(FalloutActorStoppedIdleAnimation saved)
     {
@@ -24,11 +25,14 @@ internal sealed partial class RuntimeNativeCreature
         _scriptIdleAnimation!.RestoreAccumulationTime(phase.AccumulationTime);
         _scriptIdleRequestState = phase.RequestState; _scriptIdleSequenceState = phase.SequenceState;
         _scriptIdleEndPending = false; _scriptIdleDeactivation = null; _ambientIdleInterrupted = phase.Interrupted;
+        _scriptIdleDeactivationIncoming = phase.DeactivationIncoming;
         if (phase.Deactivation is { } retained)
         {
             if (!phase.Interrupted && !FinalScriptIdleEndWasConsumed(saved.Animation.Clock))
                 throw new InvalidDataException("Creature idle return has no consumed final source End marker.");
-            var fade = new FalloutIdleDeactivation(GroupKeys(_scriptIdleAnimation!).Blend, ScriptIdleTransitionSettings());
+            var incoming = phase.DeactivationIncoming is null ? null : Combat!.AutomaticIdleReplacementSource(phase.DeactivationIncoming);
+            var fade = new FalloutIdleDeactivation(GroupKeys(_scriptIdleAnimation!).Blend, ScriptIdleTransitionSettings(),
+                incoming is null ? null : GroupKeys(incoming.Animation).Blend);
             fade.Restore(retained); _scriptIdleDeactivation = fade;
         }
     }
@@ -59,11 +63,14 @@ internal sealed partial class RuntimeNativeCreature
         clock.RemainingAdditionalLoops == 0 && !clock.IncludeStart &&
         ScriptIdleEndTimes(_scriptIdleAnimation!).Any(time => time <= clock.SourceSeconds);
 
-    private void BeginScriptIdleDeactivation()
+    private void BeginScriptIdleDeactivation(NativeActorCombatAnimation? incoming = null)
     {
         _scriptIdleEndPending = false;
         if (_scriptIdleDeactivation is not null) return;
-        var fade = new FalloutIdleDeactivation(GroupKeys(_scriptIdleAnimation!).Blend, ScriptIdleTransitionSettings());
+        _scriptIdleEaseIn = null; _scriptIdleEaseFrom = null;
+        var fade = new FalloutIdleDeactivation(GroupKeys(_scriptIdleAnimation!).Blend, ScriptIdleTransitionSettings(),
+            incoming is null ? null : GroupKeys(incoming.Animation).Blend);
+        _scriptIdleDeactivationIncoming = incoming is null ? null : new(incoming.Path, incoming.Hash);
         _scriptIdleDeactivation = fade; _scriptIdleSequenceState = 3;
         // End is dispatched during this animation update: anchor the ordinary
         // ease-out now, independently of the remaining/clamped KF phase.
@@ -73,6 +80,16 @@ internal sealed partial class RuntimeNativeCreature
 
     private void PublishCurrentScriptIdlePose()
     {
+        if (_outgoingScriptIdles.Count != 0 || _scriptIdleEaseIn is not null || !ScriptIdleSequenceActive)
+        {
+            var layers = _outgoingScriptIdles.Select(value =>
+                (value.Animation, value.Clock.SourceSeconds, value.Fade.Weight)).ToList();
+            if (ScriptIdleSequenceActive)
+                layers.Add((_scriptIdleAnimation!, _scriptIdleClock!.SourceSeconds,
+                    _scriptIdleDeactivation?.Weight ?? (_scriptIdleEaseIn is null ? 1 : 1 - _scriptIdleEaseIn.Weight)));
+            Combat!.ComposeIdleLayers(layers, _animation, SourceSeconds, automaticSlot: AmbientIdleActive ? AutomaticExecutionSlot : (byte)7);
+            return;
+        }
         if (AmbientIdleActive)
         {
             var layers = new List<(RuntimeNativeNifAnimation Animation, float Time, float Ease)>
@@ -84,7 +101,7 @@ internal sealed partial class RuntimeNativeCreature
                 snapshot = new(_scriptIdleAnimation!, _scriptIdleSnapshot!, [], _scriptIdleSnapshotScalars!,
                     factors.SnapshotWeight, factors.IncomingWeight);
             }
-            Combat!.ComposeIdleLayers(layers, _animation, SourceSeconds, snapshot);
+            Combat!.ComposeIdleLayers(layers, _animation, SourceSeconds, snapshot, AutomaticExecutionSlot);
             return;
         }
         if (_scriptIdleDeactivation is { } fade)
@@ -108,20 +125,28 @@ internal sealed partial class RuntimeNativeCreature
             throw new InvalidOperationException("Creature idle cannot release an active source sequence.");
         var saved = _aiState!.CreatureScriptIdle!;
         var ambient = AmbientIdleActive;
-        if (!ambient) _animation.ApplySourceTime(SourceSeconds);
+        if (!ambient && Combat?.OwnsPose != true) _animation.ApplySourceTime(SourceSeconds);
         _scriptIdleSequenceState = 0; _scriptIdleRequestState = 3;
         Godot.GD.Print($"OPENNV_CREATURE_SCRIPT_IDLE_END reference={Appearance.Reference} idle={saved.Animation.Idle} " +
             $"revision={saved.Animation.Revision} sourceSeconds={_scriptIdleClock!.SourceSeconds:R} request=3 sequence=0");
-        ClearScriptIdleOwner();
-        if (ambient && Combat?.OwnsPose != true) Combat?.ComposeIdleLayers([], _animation, SourceSeconds);
+        _scriptIdleDeactivation = null; _scriptIdleDeactivationIncoming = null;
+        if (_queuedScriptIdle is null && _outgoingScriptIdles.Count == 0) ClearScriptIdleOwner();
+        else
+        {
+            _aiState!.CreatureScriptIdle = saved with { ScriptPhase = CaptureScriptIdlePhase(), Requests = CaptureCreatureIdleRequests() };
+            PublishCurrentScriptIdlePose();
+        }
+        if (ambient && !ScriptIdleActive && Combat?.OwnsPose != true) Combat?.ComposeIdleLayers([], _animation, SourceSeconds);
     }
 
     private void ClearScriptIdleOwner()
     {
-        _automaticIdleOwner = false;
+        ClearCreatureIdleRequests();
+        _automaticIdleOwner = false; _automaticExecutionSlot = 7;
         _scriptIdleAnimation = null; _scriptIdleClock = null; _scriptIdleTransition = null; _scriptIdleSnapshot = null;
         _scriptIdleSnapshotScalars = null;
-        _scriptIdleDeactivation = null; _scriptIdleEndPending = false; _scriptIdlePosePublished = false;
+        _scriptIdleDeactivation = null; _scriptIdleDeactivationIncoming = null;
+        _scriptIdleEndPending = false; _scriptIdlePosePublished = false;
         _scriptIdleRequestState = 0; _scriptIdleSequenceState = 0; _ambientIdleInterrupted = false;
         if (_aiState is { } state) state.CreatureScriptIdle = null;
     }

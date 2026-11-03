@@ -29,6 +29,7 @@ public partial class NativeNifInstanceAudit
             try { declared.ApplySourceTime(.5f); throw new InvalidDataException("Incomplete animation was applied."); }
             catch (NotSupportedException) { }
             ExerciseAccumulationLayers();
+            ExerciseExternalControllerSlots();
             GD.Print("OPENNV_EXTERNAL_ANIMATION_TARGET_PASS absentAlternative=true bodyAdvances=true declaredUnboundRefused=true");
         }
         finally { skeleton.Node.Free(); }

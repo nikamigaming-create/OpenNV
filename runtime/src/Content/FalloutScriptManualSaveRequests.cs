@@ -4,7 +4,11 @@ using OpenNV.Runtime.Gameplay.State;
 namespace OpenNV.Runtime.Content;
 
 internal sealed record FalloutScriptManualSaveSite(ulong Invocation, FalloutFormKey Caller,
-    FalloutFormKey Program, string RecordSha256, string ProgramSha256, int Statement);
+    FalloutFormKey Program, string RecordSha256, string ProgramSha256, int Statement,
+    Guid? InventoryEventList = null, FalloutFormKey? InventoryContainer = null);
+
+internal sealed record FalloutScriptInventoryCaller(FalloutFormKey Item, Guid EventList,
+    FalloutFormKey? Container, Func<bool> IsRetained);
 
 internal sealed record FalloutScriptManualSaveReceipt(ulong Generation, Guid Slot, ulong RequestedPhase,
     IReadOnlyList<FalloutScriptManualSaveSite> Sites, string Disposition, string? Error,
@@ -19,13 +23,15 @@ internal sealed record FalloutScriptManualSaveInvocation(ulong Invocation, bool 
 internal sealed class FalloutScriptManualSaveRequests(FalloutPluginStack records)
 {
     internal sealed class Entered(FalloutFormKey caller, FalloutFormKey program,
-        string recordHash, string programHash, ulong invocation)
+        string recordHash, string programHash, ulong invocation, FalloutScriptInventoryCaller? inventory)
     {
         internal FalloutFormKey Caller { get; } = caller;
         internal FalloutFormKey Program { get; } = program;
         internal string RecordHash { get; } = recordHash;
         internal string ProgramHash { get; } = programHash;
         internal ulong Invocation { get; } = invocation;
+        internal Guid? InventoryEventList { get; } = inventory?.EventList;
+        internal FalloutFormKey? InventoryContainer { get; } = inventory?.Container;
     }
 
     internal sealed class Invocation : IDisposable
@@ -94,9 +100,18 @@ internal sealed class FalloutScriptManualSaveRequests(FalloutPluginStack records
         _enginePhase = enginePhase;
     }
 
-    private Invocation Enter(FalloutFormKey caller, FalloutPluginRecord program, FalloutGameModeProgram executing)
+    private Invocation Enter(FalloutFormKey caller, FalloutPluginRecord program, FalloutGameModeProgram executing,
+        FalloutScriptInventoryCaller? inventory)
     {
-        if (records.RuntimeFormId(caller) != 0x14 &&
+        if (inventory is not null)
+        {
+            if (inventory.Item != caller || inventory.EventList == Guid.Empty || !inventory.IsRetained() ||
+                program.Signature != "SCPT" || FalloutScriptLocals.AttachedScript(records, records.GetEffective(caller))?.FormKey != program.FormKey ||
+                inventory.Container is { } container && records.RuntimeFormId(container) != 0x14 &&
+                records.GetEffective(container).Signature is not ("REFR" or "ACHR" or "ACRE"))
+                throw new InvalidDataException("Inventory script invocation lost its actual item, event-list or containing-object owner.");
+        }
+        else if (records.RuntimeFormId(caller) != 0x14 &&
             records.GetEffective(caller).Signature is not ("REFR" or "ACHR" or "ACRE" or "QUST") &&
             !(caller == program.FormKey && program.Signature == "SCPT"))
             throw new InvalidDataException("Script save invocation caller has no source instance.");
@@ -109,15 +124,15 @@ internal sealed class FalloutScriptManualSaveRequests(FalloutPluginStack records
             _recordHashes.Add(program.FormKey, recordHash =
                 Convert.ToHexString(SHA256.HashData(program.ReadData())).ToLowerInvariant());
         var entered = new Entered(caller, program.FormKey, recordHash,
-            executing.ProgramSha256, checked(++_invocation));
+            executing.ProgramSha256, checked(++_invocation), inventory);
         _entered.Add(entered.Invocation);
         return new(this, entered);
     }
 
     internal IEnumerable<bool> Execute(FalloutFormKey caller, FalloutPluginRecord source,
-        FalloutGameModeProgram program, IEnumerable<bool> steps)
+        FalloutGameModeProgram program, IEnumerable<bool> steps, FalloutScriptInventoryCaller? inventory = null)
     {
-        using var invocation = Enter(caller, source, program);
+        using var invocation = Enter(caller, source, program, inventory);
         using var enumerator = steps.GetEnumerator();
         while (true)
         {
@@ -146,7 +161,7 @@ internal sealed class FalloutScriptManualSaveRequests(FalloutPluginStack records
             _receipt = new(checked(++_generation), Guid.NewGuid(), CurrentPhase, [], "pending", null);
         }
         _sites.Add(new(entered.Invocation, entered.Caller, entered.Program,
-            entered.RecordHash, entered.ProgramHash, statement));
+            entered.RecordHash, entered.ProgramHash, statement, entered.InventoryEventList, entered.InventoryContainer));
         _unclosedRequests.Add(entered.Invocation);
         var invocations = (_receipt!.Invocations ?? []).ToList();
         if (!invocations.Any(item => item.Invocation == entered.Invocation))

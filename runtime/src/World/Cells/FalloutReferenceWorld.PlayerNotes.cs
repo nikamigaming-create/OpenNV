@@ -23,6 +23,14 @@ internal sealed partial class FalloutReferenceWorld
     internal void AcquirePlayerNote(FalloutFormKey note, FalloutHudNotifications notifications)
     {
         if (PlayerNotes.Contains(note)) return;
+        var notice = PlayerNoteNotice(note);
+        notifications.RequirePublish([notice]);
+        PlayerNotes.AddMembership(note);
+        notifications.PublishNote(notice);
+    }
+
+    internal FalloutHudEvent PlayerNoteNotice(FalloutFormKey note)
+    {
         var record = records.GetEffective(note);
         var fullName = record.ReadSubrecords().SingleOrDefault(field => field.Signature == "FULL").Data;
         var name = fullName.IsEmpty ? string.Empty : FalloutDialogueTopic.Text(fullName.Span);
@@ -37,10 +45,7 @@ internal sealed partial class FalloutReferenceWorld
             text.Append(name); consumed = true;
         }
         if (!consumed) throw new InvalidDataException("Note feedback format omitted its NOTE name.");
-        var notice = new FalloutHudEvent(FalloutHudEventKind.NoteAdded, record.FormKey, 0, Text: text.ToString());
-        notifications.RequirePublish([notice]);
-        PlayerNotes.AddMembership(record.FormKey);
-        notifications.PublishNote(notice);
+        return new FalloutHudEvent(FalloutHudEventKind.NoteAdded, record.FormKey, 0, Text: text.ToString());
     }
 
     internal static void RequirePlayerItemAcquisition(FalloutPluginStack records, FalloutPluginRecord item,

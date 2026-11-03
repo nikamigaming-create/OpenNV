@@ -112,6 +112,25 @@ internal static class StoppedIndependentIdleContracts
                 [scalar with { Target = scalar.Target with { Name = "" } }],
                 [visibility with { Value = .5f }],
             }) Reject(() => (blend with { Scalars = invalidScalars }).Validate());
+            // The movement replacement must retain BOTH source blend owners:
+            // the incoming blend can be longer than the old automatic clip.
+            var incomingMetadata = new FalloutIdleTransition.Metadata(0, 30, 0);
+            var replacementFade = new FalloutIdleDeactivation(metadata, settings, incomingMetadata);
+            replacementFade.Advance(0); replacementFade.Advance(.125);
+            var incomingSource = new FalloutPackageAnimationSource("meshes/fixture/mtforward.kf", new string('d', 64));
+            var replacementPhase = new FalloutCreatureScriptIdlePhase(2, 3, replacementFade.Capture(), true,
+                .375f, incomingSource);
+            replacementPhase.Validate(null);
+            var coldReplacement = JsonSerializer.Deserialize<FalloutCreatureScriptIdlePhase>(JsonSerializer.Serialize(replacementPhase))!;
+            coldReplacement.Validate(null);
+            var reboundFade = new FalloutIdleDeactivation(metadata, settings, incomingMetadata);
+            reboundFade.Restore(coldReplacement.Deactivation!);
+            Require(coldReplacement == replacementPhase && reboundFade.Weight == replacementFade.Weight &&
+                replacementFade.DurationSeconds > fade.DurationSeconds,
+                "Automatic movement replacement lost its actual incoming source or independently anchored fade on cold resume.");
+            Reject(() => (replacementPhase with { Interrupted = false }).Validate(null));
+            Reject(() => (replacementPhase with { DeactivationIncoming = incomingSource with { Sha256 = "invalid" } }).Validate(null));
+            Reject(() => (replacementPhase with { SequenceState = 1, Deactivation = null }).Validate(null));
             var coldFade = new FalloutIdleDeactivation(metadata, settings);
             coldFade.Restore(restored.ScriptPhase!.Deactivation!);
             fade.Advance(.0625); coldFade.Advance(.0625);
@@ -131,6 +150,63 @@ internal static class StoppedIndependentIdleContracts
             heldClock.DispatchHeldBoundary(_ => { });
             var held = returning with { Animation = returning.Animation with { Clock = heldClock.Capture() }, ScriptPhase = new(2, 5) };
             JsonSerializer.Deserialize<FalloutActorStoppedIdleAnimation>(JsonSerializer.Serialize(held))!.Copy().Validate(records);
+            var pending = new FalloutActorIdleRequestSnapshot(Key(0x34), Hash(0x34), "script", 1, 0);
+            var queued = held with { Requests = new(pending, []) };
+            var queuedCold = JsonSerializer.Deserialize<FalloutActorStoppedIdleAnimation>(JsonSerializer.Serialize(queued))!.Copy();
+            queuedCold.Validate(records);
+            Require(queuedCold.Requests!.Queued == pending && queuedCold.Animation.Clock == heldClock.Capture() &&
+                queuedCold.ScriptPhase == held.ScriptPhase && queuedCold.Transition!.Phase == held.Transition!.Phase,
+                "Queued creature request rebound a KF, selected repetitions or advanced its held current prefix.");
+            var incoming = new FalloutFurnitureClipSnapshot(returning.Animation.Idle, returning.Animation.IdleSha256,
+                returning.Animation.Resource, returning.Animation.Sha256);
+            var previousSource = new FalloutFurnitureClipSnapshot(animation.Idle, animation.IdleSha256, animation.Resource, animation.Sha256);
+            var outgoingFade = new FalloutIdleDeactivation(metadata, settings);
+            var outgoing = new FalloutCreatureOutgoingIdle("ambient", animation.Copy(), outgoingFade.Capture(), incoming, .875f);
+            var replacement = held with
+            {
+                Transition = null, ScriptPhase = new(2, 2),
+                Requests = new(null, [outgoing], outgoingFade.Capture(), previousSource)
+            };
+            var replacementCold = JsonSerializer.Deserialize<FalloutActorStoppedIdleAnimation>(JsonSerializer.Serialize(replacement))!.Copy();
+            replacementCold.Validate(records);
+            Require(replacementCold.Transition is null && replacementCold.OwnsTransitionMetadata(replacementCold.Animation.Idle),
+                "Queued replacement lost its compiled Blend metadata when it had no snapshot transition.");
+            var outgoingOnly = replacementCold with
+            { ScriptPhase = new(3, 0), Requests = replacementCold.Requests! with { IncomingEase = null, IncomingFrom = null } };
+            outgoingOnly.Validate(records);
+            Require(outgoingOnly.OwnsTransitionMetadata(outgoing.Animation.Idle) &&
+                !(outgoingOnly with { Requests = null }).OwnsTransitionMetadata(outgoing.Animation.Idle) &&
+                !replacementCold.OwnsTransitionMetadata(new("Pose.esm", 0xffffff)),
+                "Outgoing ease lost its own Blend metadata, or a retired/foreign source gained transition ownership.");
+            var blend15 = FalloutIdleGroupTextKeys.Read("SpecialIdle_Replacement", [new(0, "Blend:15")]);
+            var nativeReplacement = new FalloutIdleDeactivation(blend15.Blend, new(.2f, 1));
+            Require(blend15.Kind(0, 0) == FalloutIdleGroupKeyKind.TransitionMetadata && nativeReplacement.DurationSeconds == .5f,
+                "Replacement Blend15 was discarded or failed to drive its actual30-Hz ease duration.");
+            Require(replacementCold.Animation.Clock == held.Animation.Clock && replacementCold.Requests!.Outgoing[0].Animation.Clock == animation.Clock &&
+                replacementCold.Requests.Outgoing[0].AccumulationTime == .875f && !replacementCold.Requests.IncomingEase!.Started &&
+                !ReferenceEquals(replacementCold.Requests.Outgoing[0].Animation.ResidualPose!.Bones[0].Position, animation.ResidualPose!.Bones[0].Position),
+                "Cold replacement lost independent source clocks, accumulation, first-update ease anchor or deep pose ownership.");
+            var restoredOutgoingFade = new FalloutIdleDeactivation(metadata, settings);
+            restoredOutgoingFade.Restore(replacementCold.Requests!.Outgoing[0].Ease);
+            outgoingFade.Advance(.125); restoredOutgoingFade.Advance(.125);
+            Require(outgoingFade.Capture() == restoredOutgoingFade.Capture() && outgoingFade.ElapsedSeconds == 0,
+                "Cold replacement advanced its unstarted native ease anchor by a frame.");
+            outgoingFade.Advance(.125); restoredOutgoingFade.Advance(.125);
+            Require(outgoingFade.Capture() == restoredOutgoingFade.Capture() && outgoingFade.ElapsedSeconds == .125,
+                "Cold replacement restarted its future outgoing ease phase.");
+            Reject(() => (failure with { IndependentIdle = replacement }).Validate(records, actor));
+            var retiredCurrent = returning with { Transition = null, ScriptPhase = new(3, 0), Requests = new(null, [outgoing]) };
+            retiredCurrent.Validate(records);
+            foreach (var invalid in new[]
+            {
+                queued with { Requests = queued.Requests! with { Queued = pending with { IdleSha256 = new string('0', 64) } } },
+                replacement with { Requests = replacement.Requests! with { IncomingFrom = null } },
+                replacement with { Requests = null },
+                replacement with { Requests = replacement.Requests! with { Outgoing = [outgoing with { Ease = new(0, 0, true) }] } },
+                replacement with { Requests = replacement.Requests! with { Outgoing = [outgoing with { Animation = animation with { Resource = "meshes/fixture/wrong.kf" } }] } },
+                held with { Transition = null },
+                retiredCurrent with { Requests = null },
+            }) Reject(() => invalid.Validate(records));
             heldClock.Advance(.0625);
             Reject(() => (held with { Animation = held.Animation with { Clock = heldClock.Capture() } }).Validate(records));
         }
@@ -143,7 +219,7 @@ internal static class StoppedIndependentIdleContracts
         Reject(() => FalloutReferenceSnapshot.Validate(captured.Select(value => value with
         { Engagement = new(Key(0x902), "idle", 1, false, "meshes/fixture/combat-idle.kf", new string('d', 64),
             [2, 3, 4], [0, 0, 0, 1]) }).ToArray()));
-        Console.WriteLine("OPENNV_STOPPED_INDEPENDENT_IDLE_CONTRACT_PASS sourceIdle=true independentOfPackageCollection=true endlessPhase=true futureTextKeys=true baseClock=true rng=true faultRetained=true residualCopy=true invalidAtomic=true attachmentBindings=true missingOrChangedAttachmentsRefused=true priorSchema=true nativePose=unverified");
+        Console.WriteLine("OPENNV_STOPPED_INDEPENDENT_IDLE_CONTRACT_PASS sourceIdle=true independentOfPackageCollection=true endlessPhase=true futureTextKeys=true baseClock=true rng=true faultRetained=true residualCopy=true invalidAtomic=true attachmentBindings=true missingOrChangedAttachmentsRefused=true priorSchema=true creatureQueuedRequest=true outgoingIndependentClock=true coldEaseAnchor=true nativePose=unverified");
     }
 
     private static void Reject(Action action)

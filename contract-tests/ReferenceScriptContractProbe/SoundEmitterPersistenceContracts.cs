@@ -50,7 +50,7 @@ internal static class SoundEmitterPersistenceContracts
         foreach (var player in new[] { false, true })
         {
             var state = new FalloutNativeCampaignState(schema, "", default, "", 0, "", null!, null!, [], [], [], [], [], [], [],
-                References: player ? null : [new(sounds.Reference, new("Pose.esm", 0x800), new("Pose.esm", 0x10), null, null,
+                References: player ? null : [new(sounds.Reference.RequireSource(), new("Pose.esm", 0x800), new("Pose.esm", 0x10), null, null,
                     new Dictionary<uint, double>(), null,
                     AnimationSoundEvents: sounds)],
                 PlayerPackageAudio: player ? new(sounds, 7) : null);

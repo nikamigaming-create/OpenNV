@@ -29,11 +29,11 @@ internal sealed partial class FalloutReferenceWorld
     internal FalloutFormKey? GetLinkedRef(FalloutFormKey reference)
     {
         var source = records.GetEffective(reference);
-        if (source.Signature is not ("REFR" or "ACHR" or "ACRE") || source.IsDeleted)
+        if (!FalloutCellSceneReader.IsReferenceType(source.Signature) || source.IsDeleted)
             throw new InvalidDataException("Linked-reference query requires a live placed source reference.");
         var linked = FalloutPatrolRoute.Linked(source);
         if (linked is { } target && records.RuntimeFormId(target) != 0x14 &&
-            (records.GetEffective(target).Signature is not ("REFR" or "ACHR" or "ACRE") || records.GetEffective(target).IsDeleted))
+            (!FalloutCellSceneReader.IsReferenceType(records.GetEffective(target).Signature) || records.GetEffective(target).IsDeleted))
             throw new InvalidDataException("Source linked reference does not identify a live placed target.");
         return linked;
     }

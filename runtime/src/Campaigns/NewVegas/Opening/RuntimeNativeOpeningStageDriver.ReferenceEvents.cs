@@ -119,7 +119,7 @@ internal partial class RuntimeNativeOpeningStageDriver
                 ReadActorValue: ReadActorValue, ChangeActorValue: ChangeActorValue, Inventory: InventoryCommands, Challenges: _scripts.Challenges,
                 HeadingAngle: ReferenceHeadingAngle, ResetPlayerHealth: _vitals.ResetHealth,
                 CurrentPackage: CurrentActorPackage, Sitting: ActorSitting, TagSkills: _tagSkills, IsInCell: IsInCell, IsHardcore: () => _scripts.Session.Hardcore,
-                RewardXp: value => _experience.Reward(value), GameTime: _gameTime,
+                RewardXp: value => _experience.Reward(value), RewardKarma: RewardPlayerKarma, GameTime: _gameTime,
                 IsDead: DialogueActorDead, HealthPercentage: ActorHealthPercentage,
                 MiscStatistic: name => _scripts.MiscStatistics.Read(FalloutMiscStatisticNames.Index(
                     RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("Statistic declarations have no owned source."), name)),
@@ -129,6 +129,7 @@ internal partial class RuntimeNativeOpeningStageDriver
         _stageResults = new(_pluginStack, _quests, results.StageSteps,
             EvaluateMessageCondition, () => !_moviePlaying, evaluateRunOn: true);
         RestoreStageResults();
+        _ = InventoryAcquisition;
         _scriptHost = _scriptHost with
         {
             ExecuteProgram = results.ExecuteProgram,
@@ -193,7 +194,7 @@ internal partial class RuntimeNativeOpeningStageDriver
                 _dialoguePlayerBodyParts ??= FalloutBodyPartData.Read(_pluginStack.GetEffective(_pluginStack.RuntimeFormKey(0x1d)));
                 return _dialoguePlayerBodyParts.LimbCondition(value, Vitals.MaximumHitPoints, Vitals.LimbDamage);
             }
-            return _playerSkills.Value(value);
+            return FalloutPlayerActorValues.HasPool(value) ? _playerActorValues.ReadCurrent(value) : _playerSkills.Value(value);
         }
         var world = _scripts.References!;
         if (id == FalloutActorValueId.Health) return world.Health(actor).Current;
@@ -266,6 +267,8 @@ internal partial class RuntimeNativeOpeningStageDriver
     internal float PlayerSkillValue(string name) => _playerSkills.Value(name);
     internal float PlayerCombatValue(int value) => _playerSkills.Value(value);
     internal IReadOnlyList<FalloutPerkEntry> PlayerPerkEntries => _playerSkills.PerkEntries;
+    internal float PlayerMineTriggerChance => FalloutPlayerPerkNumericEffects.Apply(4, 100,
+        _playerSkills.PerkEntries, PlayerExperienceCondition);
     internal bool PlayerJuryRigging => FalloutPlayerPerkNumericEffects.Apply(48, 0, _playerSkills.PerkEntries, PlayerExperienceCondition) > 0;
     private int SourcePlayerLevel
     {

@@ -26,6 +26,8 @@ internal sealed record FalloutDroppedReferenceSnapshot(Guid Identity, FalloutFor
             var declared = FalloutWeaponModifications.Read(records, Base).Aggregate(0, (mask, mod) => mask | (1 << mod.Slot));
             if ((Item.WeaponMods & declared) != Item.WeaponMods) throw new InvalidDataException("Dropped reference has an undeclared weapon modification.");
         }
+        if (Item.Magazine is { Generated: true } generated)
+            FalloutWeaponRecharge.Validate(FalloutWeaponPresentation.Read(records, Base, weaponMods: Item.WeaponMods), generated);
     }
 
     internal void ValidateState()
@@ -33,11 +35,12 @@ internal sealed record FalloutDroppedReferenceSnapshot(Guid Identity, FalloutFor
         if (Identity == Guid.Empty || string.IsNullOrWhiteSpace(Base.OwnerPlugin) || Base.ObjectId == 0 || Item.Count <= 0 || Item.Hotkey is not null ||
             (Item.WeaponMods & ~7) != 0 || Item.Condition is { } condition && (!float.IsFinite(condition) || condition is < 0 or > 1) ||
             Item.Instance is { } instance && (instance == Guid.Empty || Item.Count != 1) ||
-            Item.Magazine is { } magazine && (Item.Instance is null || magazine.Loaded < 0 || magazine.Ammunition.ObjectId == 0))
+            Item.Magazine is { } magazine && (Item.Instance is null || magazine.Loaded < 0 || magazine.Ammunition.ObjectId == 0 ||
+                !double.IsFinite(magazine.RechargeSeconds) || magazine.RechargeSeconds < 0 || !magazine.Generated && magazine.RechargeSeconds != 0))
             throw new InvalidDataException("Dropped reference has invalid identity, base, contents or placement.");
         Placement.Validate();
         if (Physics is not null) FalloutObjectPhysicsSnapshot.ValidateSet(Physics);
-        if ((Ammunition?.Sum(extra => extra.Count) ?? 0) != (Item.Magazine?.Loaded ?? 0) ||
+        if ((Ammunition?.Sum(extra => extra.Count) ?? 0) != (Item.Magazine is { Generated: false } physical ? physical.Loaded : 0) ||
             Ammunition?.Any(extra => extra.Count <= 0 || extra.Hotkey is not null || extra.Instance is not null ||
                 extra.Magazine is not null || extra.WeaponMods != 0) == true)
             throw new InvalidDataException("Dropped magazine lost its exact ammunition contents.");
@@ -64,10 +67,10 @@ internal sealed partial class FalloutReferenceWorld
         // Do not strand an item whose return to player inventory is refused by
         // the shared acquisition owner. Scripted pickup remains explicit.
         RequirePlayerItemAcquisition(records, records.GetEffective(form), records.RuntimeFormKey(0x14));
-        if (extra.Magazine is { Loaded: > 0 } magazine)
+        if (extra.Magazine is { Loaded: > 0, Generated: false } magazine)
             RequirePlayerItemAcquisition(records, records.GetEffective(magazine.Ammunition), records.RuntimeFormKey(0x14));
         var result = new FalloutDroppedReferenceSnapshot(Guid.NewGuid(), form, placement.Copy(), extra with { Count = count, Hotkey = null });
-        if (extra.Magazine is { Loaded: > 0 } contents)
+        if (extra.Magazine is { Loaded: > 0, Generated: false } contents)
             result = result with { Ammunition = inventory.RemovalExtras(contents.Ammunition, contents.Loaded) };
         result.Validate(records);
         return result;
@@ -89,7 +92,7 @@ internal sealed partial class FalloutReferenceWorld
     {
         var item = _droppedItems.GetValueOrDefault(identity) ?? throw new InvalidOperationException("Dropped item is no longer available.");
         RequirePlayerItemAcquisition(records, records.GetEffective(item.Base), records.RuntimeFormKey(0x14));
-        if (item.Item.Magazine is { Loaded: > 0 } loaded)
+        if (item.Item.Magazine is { Loaded: > 0, Generated: false } loaded)
             RequirePlayerItemAcquisition(records, records.GetEffective(loaded.Ammunition), records.RuntimeFormKey(0x14));
         var removed = false;
         using var effects = new FalloutInventoryChangeLease(() =>
@@ -105,7 +108,7 @@ internal sealed partial class FalloutReferenceWorld
         inventory.AddWithPreparedOwner(records, item.Base, item.Item.Count, level, false, effects, globals, item.Item,
             stageAddition: staged =>
             {
-                if (item.Item.Magazine is { Loaded: > 0 } magazine)
+                if (item.Item.Magazine is { Loaded: > 0, Generated: false } magazine)
                     foreach (var extra in item.Ammunition!)
                         staged.Add(records, magazine.Ammunition, extra.Count, level, true, globals, extra);
             });

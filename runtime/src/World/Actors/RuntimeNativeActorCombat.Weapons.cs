@@ -9,6 +9,46 @@ internal sealed partial class RuntimeNativeActorCombat
 {
     private BoneAttachment3D? _embeddedMuzzle;
 
+    private FalloutActorEngagement ReselectCombatWeapon(FalloutActorEngagement state)
+    {
+        var previous = _enemyWeapon?.Form;
+        RetireCombatWeaponPresentation();
+        _state.Engagement = state.Transition("pursue") with
+        { WeaponHandling = _enemyWeaponHandling?.Capture() ?? state.WeaponHandling };
+        // Keep handling, random streams, fired projectiles and world effects
+        // alive. A newly chosen empty magazine uses ordinary reload next tick.
+        PrepareEngagement();
+        Activity.SetWeaponDrawn(_enemyWeapon is not null);
+        GD.Print($"OPENNV_ACTOR_WEAPON_RESELECT reference={_state.Reference} previous={previous} selected={_enemyWeapon?.Form}");
+        return _state.Engagement;
+    }
+
+    private void RetireCombatWeaponPresentation()
+    {
+        _enemyMuzzle?.Retire(); _enemyMuzzle = null;
+        RetireAttachment(_enemyObject); _enemyObject = null;
+        _embeddedMuzzle?.Free(); _embeddedMuzzle = null;
+        // A package must not later resurrect the exhausted combat choice.
+        RetireAttachment(_packageWeapon); _packageWeapon = null;
+        _packageBipedWeapon = null;
+        _packageWeaponPrepared = false; _packageWeaponType = 0;
+        _packageAim = _packageGrip = null;
+        _enemyWeapon = null; _enemyDamage = null; _enemySkillValues = null;
+        _enemyShot = null;
+        if (_enemyRayExclusions is not null) ((Godot.Collections.Array)_enemyRayExclusions).Dispose();
+        _enemyRayExclusions = null;
+        _muzzlePresentationError = _casingPresentationError = _beamPresentationError = null;
+        _combatIdle = _combatAim = _combatGrip = null;
+        // These controllers bind directly to their weapon's source nodes.
+        _combatClips.Clear(); _pathTurnAnimations.Clear();
+        static void RetireAttachment(NativeActorWeaponAttachment? attachment)
+        {
+            if (attachment is null) return;
+            foreach (var part in attachment.BodyAttachments) part.Free();
+            attachment.Attachment.Free();
+        }
+    }
+
     private FalloutCampaignItem? SelectCombatWeapon()
     {
         var owned = _world.Inventory(_state.Reference, _context!.Level(), _context.Globals);
@@ -19,7 +59,7 @@ internal sealed partial class RuntimeNativeActorCombat
             .Where(row => FalloutWeaponCondition.CanUse(row.Weapon, row.Item) &&
                 (style?.WeaponRestriction != 1 || row.Weapon.IsMeleeWeapon) &&
                 (style?.WeaponRestriction != 2 || !row.Weapon.IsMeleeWeapon) &&
-                (!row.Weapon.HasAmmunitionSource || handling.Ammunition(row.Weapon) is not null))
+                HasUsableAmmunition(row.Weapon))
             .OrderByDescending(row => owned.Contents.Equipped.Contains(row.Item.RuntimeFormId))
             .ThenByDescending(row =>
             {
@@ -28,8 +68,23 @@ internal sealed partial class RuntimeNativeActorCombat
                     FalloutWeaponDamageResolver.NewVegasConditionMultiplier(FalloutWeaponCondition.SelectedCondition(row.Item));
             }).ThenBy(row => row.Item.RuntimeFormId).ToArray();
         var selected = choices.FirstOrDefault().Item;
+        var previous = owned.Contents.EquippedObject(_records, 5);
         owned.ResolveWeaponSelection(_records, selected?.FormKey);
+        if (previous != selected?.FormKey) _world.InventoryChanged(_state.Reference);
         return selected;
+
+        bool HasUsableAmmunition(FalloutWeaponPresentation weapon)
+        {
+            if (weapon.AmmoRegenerationSeconds > 0) return weapon.ClipSize >= weapon.AmmoUse;
+            if (!weapon.HasAmmunitionSource) return true;
+            if (handling.Ammunition(weapon) is not { } ammo) return false;
+            if (weapon.AmmoUse == 0) return true;
+            if (!weapon.NpcsUseAmmo) return weapon.ClipSize >= weapon.AmmoUse;
+            var instance = owned.Contents.SelectedWeapon(weapon.Form).Extra.Instance;
+            var available = Math.Max(0, (owned.Contents.Item(ammo)?.Count ?? 0) -
+                owned.Contents.LoadedInventoryRounds(ammo, instance));
+            return Math.Min(weapon.ClipSize, available) >= weapon.AmmoUse;
+        }
     }
 
     private void PrepareWeapon(FalloutCampaignItem item, FalloutPluginRecord stats, string directory)
@@ -41,19 +96,26 @@ internal sealed partial class RuntimeNativeActorCombat
         if (_enemyWeapon.Automatic && (!float.IsFinite(_enemyWeapon.AttackShotsPerSecond) || _enemyWeapon.AttackShotsPerSecond <= 0))
             throw new InvalidDataException("Actor automatic weapon has no valid source attack-shot rate.");
         owned.Contents.Equip(_records, item.FormKey);
-        if (_enemyWeapon.Model is not null) _enemyObject = new(_enemyWeapon, _skeleton, _content);
+        if (_enemyWeapon.Model is not null && NativeActorWeaponAttachment.CanAttachSourceModel(_enemyWeapon, _content))
+            _enemyObject = new(_enemyWeapon, _skeleton, _content);
         else if (Ranged)
         {
+            if (_enemyWeapon.Model is not null)
+                throw new NotSupportedException("Actor skinned inventory model has no attached projectile socket owner.");
             var node = _enemyWeapon.ResolveEmbeddedProjectileNode(Enumerable.Range(0, _skeleton.Node.GetBoneCount())
                 .Select(index => _skeleton.Node.GetBoneName(index).ToString()));
             _embeddedMuzzle = new() { Name = "SourceEmbeddedWeaponMuzzle", BoneName = node };
             _skeleton.Node.AddChild(_embeddedMuzzle);
         }
-        _enemyWeaponHandling = new(owned.Contents, nativeNpc: true);
-        if (_state.Engagement!.WeaponHandling is { } restored)
-            _enemyWeaponHandling.Restore(restored, key => _world.WeaponPresentation(key, false),
-                (key, mods) => _world.WeaponPresentation(key, false, mods));
-        else if (Ranged) _enemyWeaponHandling.CompleteReload(_enemyWeapon);
+        if (_enemyWeaponHandling is null)
+        {
+            _enemyWeaponHandling = new(owned.Contents, nativeNpc: true);
+            if (_state.Engagement!.WeaponHandling is { } restored)
+                _enemyWeaponHandling.Restore(restored, key => _world.WeaponPresentation(key, false),
+                    (key, mods) => _world.WeaponPresentation(key, false, mods));
+            else if (Ranged) _enemyWeaponHandling.CompleteReload(_enemyWeapon);
+        }
+        if (_enemyWeapon.AmmoRegenerationSeconds > 0) _enemyWeaponHandling.MaterializeRecharge(_enemyWeapon);
         var itemData = _records.GetEffective(item.FormKey).ReadSubrecords().Single(field => field.Signature == "DATA").Data.Span;
         _baseWeaponDamage = BinaryPrimitives.ReadInt16LittleEndian(itemData[12..]);
         var data = stats.ReadSubrecords().Single(field => field.Signature == "DATA").Data.Span;

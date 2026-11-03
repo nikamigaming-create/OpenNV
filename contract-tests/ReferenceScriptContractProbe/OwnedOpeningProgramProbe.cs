@@ -152,7 +152,7 @@ internal static class OwnedOpeningProgramProbe
         for (var frame = 0; frame < 6000 && quests.Stage(opening) < 55; frame++)
         {
             while (spoken.TryDequeue(out var voice)) executor.ExecuteResult(voice.Info, voice.Speaker, false);
-            while (scripts.TryTakeMessage(out var message)) scripts.MessageResults.Select(message!.Request!, 0);
+            while (scripts.TryTakeMessage(out var message)) scripts.SelectMessage(message!.Request!, 0);
             if (racePending) { racePending = false; scripts.ExecuteClaimedMenu(opening, 1036, questHost); }
             scripts.AdvanceClaimed(quests.StageDone(opening, 0) ? opening : intro, 1d / 60, questHost);
             world.AdvanceEnableChanges(1d / 60, FalloutReferenceFadeSettings.Read(settings), _ => false);

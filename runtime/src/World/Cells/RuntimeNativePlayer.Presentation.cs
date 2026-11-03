@@ -54,6 +54,7 @@ internal partial class RuntimeNativePlayer
         firstPersonLighting = _firstPersonLighting?.State,
         third = _thirdPerson?.State,
         error = _presentationError,
+        fatigueKnockout = FatigueKnockoutObservation,
         weaponHandling = WeaponHandlingState,
         limbMovement = LimbMovementState,
         xr = XrState
@@ -109,14 +110,31 @@ internal partial class RuntimeNativePlayer
     {
         PublishSelfCameraVisibility();
         if (_xr is not null) return;
-        if (_sourceCamera is not null || _furniturePhase != 0) return;
+        // Selection owns one completed camera pose for both the live view and
+        // its asynchronous fragment sampler. Ordinary modal presentation must
+        // not republish an uncorrected orbit while those samples are pending.
+        if (_vats?.CurrentPhase == FalloutVatsSession.Phase.Selecting &&
+            _vatsCompletedCameraTransform is { } selectedView)
+        {
+            _camera.GlobalTransform = selectedView;
+            return;
+        }
+        if (_sourceCamera is not null || _furniturePhase != 0)
+        {
+            _sourceFirstPersonAudioFrame = _camera.GlobalTransform; _sourceAudioFramePublished = true;
+            return;
+        }
         if (!_thirdPersonMode && _firstPerson is { Toddler: true })
         {
             _camera.Transform = _firstPerson.SourceCamera * new Transform3D(new Basis(Vector3.Right, _pitchRadians), Vector3.Zero);
+            _sourceFirstPersonAudioFrame = _camera.GlobalTransform; _sourceAudioFramePublished = true;
             return;
         }
         var head = Vector3.Up * _configuration.Player.SpawnCenterHeightMeters + _configuration.Player.DesktopCameraOffsetMeters.Vector3();
         var basis = new Basis(Vector3.Right, _pitchRadians);
+        // The actual first-person eye frame excludes the third-person pullback.
+        // Retained first-person sound emitters keep their original source space.
+        _sourceFirstPersonAudioFrame = GlobalTransform * new Transform3D(basis, head); _sourceAudioFramePublished = true;
         var offset = _thirdPersonMode ? basis.Z * _thirdPersonDistance : Vector3.Zero;
         if (_thirdPersonMode && IsInsideTree())
         {
@@ -140,6 +158,7 @@ internal partial class RuntimeNativePlayer
     {
         if (!GetTree().Paused) AdvancePendingProjectileImpacts((float)delta);
         if (_presentationRecords is null) return;
+        if (FatigueOwnsPose) { PublishPlayerFatiguePose(); return; }
         var active = !_modalInput && _sourceCamera is null && _furniturePhase == 0 && _movementEnabled;
         if (_firstPersonPixels is not null) _firstPersonPixels.Visible = _presentationError is null && active && !_thirdPersonMode && (_firstPerson?.Weapon is null || _weaponHandling!.Drawn || _weaponAction is not null);
         if (_thirdPerson is not null)
@@ -160,6 +179,16 @@ internal partial class RuntimeNativePlayer
         if (_presentationEquipment is null || !equipment.SequenceEqual(_presentationEquipment) || appearanceRevision != _presentationAppearanceRevision || weaponMods != _presentationWeaponMods || weaponInstance != _presentationWeaponInstance)
         {
             var changing = _presentationEquipment is not null;
+            var weaponChanged = _firstPerson?.Weapon?.Form != (equippedWeapon.ObjectId == 0 ? FalloutDefaultUnarmedWeapon.Form(_presentationRecords) : equippedWeapon) ||
+                weaponMods != _presentationWeaponMods || weaponInstance != _presentationWeaponInstance;
+            if (weaponChanged)
+            {
+                // Preparation/action errors belong to the retired instance.
+                // World impacts and damage errors keep their independent owners.
+                _firePreparationError = _weaponActionError = _muzzleError = null;
+                _weaponResourcePreparation = _firePreparationTiming = null;
+                _firePreparationMilliseconds = 0;
+            }
             _presentationEquipment = equipment; _presentationError = null; CancelWeaponAction(); _pendingShotCount = 0; _shot = null;
             _presentationAppearanceRevision = appearanceRevision;
             _presentationWeaponMods = weaponMods;
@@ -185,6 +214,7 @@ internal partial class RuntimeNativePlayer
         if (!active && _xr is null && !(_firstPerson is { Toddler: true } && !_modalInput && _sourceCamera is null && _furniturePhase == 0))
         {
             PublishThirdPersonCamera();
+            PublishSoundPoseBoundary();
             return;
         }
         if (_presentationError is not null) return;
@@ -209,6 +239,8 @@ internal partial class RuntimeNativePlayer
         if (_presentationError is not null) return;
         PublishThirdPersonCamera();
         PublishPendingShot();
+        PublishAutomaticReloadAfterDischarge();
+        PublishSoundPoseBoundary();
     }
 
     private void PublishWeaponSight(double seconds)
@@ -232,7 +264,7 @@ internal partial class RuntimeNativePlayer
         var records = _presentationRecords!; var content = RuntimeLiveContentSource.Current!;
         var appearance = _appearance!();
         var weapon = equipped.Select(records.RuntimeFormKey).Where(key => records.GetEffective(key).Signature == "WEAP")
-            .Select(key => (FalloutFormKey?)key).SingleOrDefault();
+            .Select(key => (FalloutFormKey?)key).SingleOrDefault() ?? FalloutDefaultUnarmedWeapon.Require(records);
         var ambient = _presentationAmbient!();
         RuntimeNativePlayerActor? first = null, third = null;
         try
@@ -241,6 +273,8 @@ internal partial class RuntimeNativePlayer
             third = new(records, content, appearance, weapon, false, UnitsToMeters, ambient, _presentationWeaponMods, _presentationFormLists);
             if (first.Error is not null || third.Error is not null) throw new NotSupportedException(first.Error ?? third.Error);
             third.ConfigureBodyContacts(CollisionLayer);
+            first.Actor.SetMeta("opennv_reference_form_key", records.RuntimeFormKey(0x14).ToString());
+            third.Actor.SetMeta("opennv_reference_form_key", records.RuntimeFormKey(0x14).ToString());
             third.SetMeta("opennv_reference_form_key", records.RuntimeFormKey(0x14).ToString());
             first.SetViewPolicy(true, false);
             third.SetViewPolicy(_xr is null && _thirdPersonMode, true);
@@ -319,7 +353,7 @@ internal partial class RuntimeNativePlayer
             }
             PrepareWeaponResources();
             PresentationChanged?.Invoke();
-            Activity.SetWeaponDrawn(weapon is not null && _weaponHandling.Drawn);
+            Activity.SetWeaponDrawn(_weaponHandling.Drawn);
         }
         finally { first?.Free(); third?.Free(); }
     }

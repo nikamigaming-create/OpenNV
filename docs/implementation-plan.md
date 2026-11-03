@@ -1,15 +1,18 @@
 # Playable OpenNV implementation plan
 
-Updated 2026-10-31 under the user's direction. This is the sole active plan.
+Updated 2026-11-03 under the user's direction. This is the sole active plan.
 Root owns integration, builds, game input and Git. User-authorized workers
 implement or review separate shared-system repairs in parallel; private drafts
 keep the current build stable. Individual coding decisions and builds do not
 wait for approval. Parallel work supports, and does not replace, retail
 recording, Godot replay and ordinary gameplay verification.
 
-Immediate priority is the user's live retail/Godot side-by-side gameplay request
-at native 3840x2160 and 60 FPS. Do not expand test infrastructure in place of
-playing and repairing the game. Required checks still precede publication.
+Immediate priority is complete weapon and mob behavior in source-authored areas,
+at native 3840x2160 and sustained 60 FPS. Use short encounter batches, close the
+game, repair shared owners, then return for the next batch. Teleport or fast
+travel to actual source areas is authorized. Keep recording off; do not create
+proof captures, expand the harness, or leave gameplay sessions running during
+coding. Required checks still precede publication.
 
 ## Objective and boundaries
 
@@ -82,15 +85,16 @@ rather than being inferred from FNV results.
 
 ## Current batch and delivery order
 
-The user rejected the published tester build. Retail recording and Godot replay
-are the primary execution loop. The current verified state and remaining capture
-gaps are in current-work.md; old package-route checks do not establish playability.
+The user rejected the published tester build. Bounded ordinary encounters and
+shared-system repairs are the primary execution loop. The current verified state
+and remaining blockers are in current-work.md; old package-route checks do not
+establish playability.
 
-1. Record substantial ordinary retail gameplay batches across source areas and
-   applicable action/state permutations. Capture objects and arrangement, actor
-   routines/support, scripts/quests/factions, combat and animation, voices/radio,
-   Pip-Boy controls, doors/fast travel, weather/clouds/LOD and save/reload. Maintain
-   the source-bound coverage queue and reacquire missing required evidence.
+1. Execute bounded weapon-family and mob-family encounters in their actual
+   source areas. Exercise damage, retaliation, animation, audio, reload, effects,
+   equipment and save continuation through ordinary gameplay owners. Retain
+   compact outcomes and frame timing, then close the game before coding. Keep
+   missing and failed combinations visible in the existing coverage queue.
 2. Establish comparable starting state before a matched replay. Preserve actual
    source/event/timing/UI/audio/pixel evidence separately. Unjoined diagnostics
    expose failures but cannot certify a matched run. Sampled actor fields and a

@@ -67,6 +67,7 @@ public partial class NativeNifInstanceAudit
             ExerciseParticlePlane();
             ExerciseParticleContactSelection();
             ExerciseParticleMetadata();
+            ExerciseParticleNontriangleSource();
             GD.Print("OPENNV_PARTICLE_CHANNELS_PASS sourceLifespan=true newBirthOnly=true independentInstances=true linkedPlane=true boundedContact=true sourceReset=true invalidBindingsAndChainsRejected=true retailCollisionParity=unverified");
 
             void ConfigureInvalid(bool cycle)

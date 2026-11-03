@@ -14,6 +14,7 @@ internal sealed partial class RuntimeNativeNifAnimation
     private readonly Dictionary<FalloutNifScalarTarget, RuntimeNifScalarBinding> _scalars = [];
     private readonly List<RuntimeNifUnboundAnimationChannel> _unbound = [];
     private readonly List<FalloutNifControllerLink> _absentTargets = [];
+    private readonly List<RuntimeNifUnboundAnimationChannel> _absentControllers = [];
     private readonly Dictionary<FalloutNifControllerLink, Action<float>> _snapshotCandidateActions = [];
     private readonly Dictionary<string, (Node3D Node, byte Priority, FalloutNifAnimationSampler Sampler)> _snapshotTargets = new(StringComparer.Ordinal);
     private readonly Dictionary<Node3D, NativeNifAnimationBlend.Bone> _snapshotBlendScratch = [];
@@ -55,6 +56,14 @@ internal sealed partial class RuntimeNativeNifAnimation
                 {
                     if (link.Interpolator >= 0) _ = source.ReadObject(link.Interpolator);
                     _absentTargets.Add(link); continue;
+                }
+                if (skeleton.MaterialChannels.HasAbsentSourceController(link))
+                {
+                    var optional = skeleton.BindVisualChannel(source, link) ??
+                        throw new InvalidDataException("Absent source controller lost its revision-aware property slot.");
+                    _otherChannels.Add(optional);
+                    _absentControllers.Add(new(link, "Matching source property controller and retained KF controller are absent."));
+                    continue;
                 }
                 if (link.ControllerType == "NiTransformController" &&
                     link.PropertyType.Length == 0 && link.Variable1.Length == 0 && link.Variable2.Length == 0)
@@ -126,6 +135,7 @@ internal sealed partial class RuntimeNativeNifAnimation
     internal IReadOnlyList<FalloutNifTextKey> TextKeys { get; }
     internal IReadOnlyList<RuntimeNifUnboundAnimationChannel> UnboundChannels => _unbound;
     internal IReadOnlyList<FalloutNifControllerLink> AbsentSourceTargets => _absentTargets;
+    internal IReadOnlyList<RuntimeNifUnboundAnimationChannel> AbsentSourceControllers => _absentControllers;
     internal int TransformChannelCount => _transforms.Count;
     internal int ScalarChannelCount => _scalars.Count;
 

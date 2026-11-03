@@ -140,13 +140,14 @@ internal sealed partial class RuntimeNativeCreature
                     value.Equals("StartLoop", StringComparison.OrdinalIgnoreCase) || value.Equals("EndLoop", StringComparison.OrdinalIgnoreCase);
                 var kind = declarations.Kind(ordinal, segment);
                 structural |= kind == FalloutIdleGroupKeyKind.GroupMarker;
-                if (ReferenceEquals(animation, _scriptIdleAnimation) && !_scriptIdleClock!.HasGroupTiming && kind == FalloutIdleGroupKeyKind.GroupMarker &&
+                if (ReferenceEquals(animation, _scriptIdleAnimation) && _scriptIdleSequenceState != 2 && !_scriptIdleClock!.HasGroupTiming && kind == FalloutIdleGroupKeyKind.GroupMarker &&
                     value.Equals("End", StringComparison.OrdinalIgnoreCase) && _scriptIdleClock!.AdditionalLoops == 0 &&
                     _scriptIdleDeactivation is null)
                     _scriptIdleEndPending = true;
                 var disposition = kind == FalloutIdleGroupKeyKind.NonmatchingGroupMarker
                     ? "source-nonmatching-group-marker" : kind == FalloutIdleGroupKeyKind.TransitionMetadata &&
-                        ReferenceEquals(animation, _scriptIdleAnimation) && _scriptIdleTransition is not null
+                        _aiState?.CreatureScriptIdle?.OwnsTransitionMetadata(idle) == true &&
+                        (ReferenceEquals(animation, _scriptIdleAnimation) || _outgoingScriptIdles.Any(value => ReferenceEquals(value.Animation, animation)))
                         ? "source-transition-metadata" : structural ? "source-phase-owner" : DispatchCreatureTextKey(value);
                 if (disposition.Contains("unbound", StringComparison.Ordinal))
                     throw new NotSupportedException($"Creature event idle key {value} is unbound.");

@@ -32,7 +32,7 @@ internal partial class RuntimeNativeOpeningStageDriver
                 CurrentPackage: CurrentActorPackage, Sitting: ActorSitting, TagSkills: _tagSkills, IsInCell: IsInCell,
                 IsHardcore: () => _scripts.Session.Hardcore,
                 RewardXp: value => (_experience ?? throw new NotSupportedException("Ability XP command requires initialized experience.")).Reward(value),
-                GameTime: gameTime));
+                GameTime: gameTime, RewardKarma: RewardPlayerKarma));
         _playerAbilities.BindExecutor(executor.ExecuteActiveEffect);
         _playerSkills.BindAbilityScripts(_playerAbilities);
         _playerActorValues.BindAbilityLifecycle(_playerAbilities.Synchronize);

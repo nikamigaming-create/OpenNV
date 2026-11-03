@@ -28,7 +28,9 @@ internal partial class RuntimeNativeOpeningStageDriver
     private Action? _releaseBarterInput;
     private readonly HashSet<CanvasItem> _screenSplatters = [];
     private string? SaveInteractionBlocker =>
+        _inventoryAcquisition?.Failure is not null ? "inventory-event-failure" :
         _player.VatsSaveBlocker is { } vats ? vats :
+        _player.FatigueKnockoutSaveBlocker is { } fatigue ? fatigue :
         PlayerAdvancementSaveBlocker is { } advancement ? advancement :
         _moviePlaying ? "movie" : _player.FurnitureActive ? "furniture" :
         _conversation?.Active == true ? "conversation" : _speech is { CanCaptureState: false } ? "speech" :
@@ -39,6 +41,7 @@ internal partial class RuntimeNativeOpeningStageDriver
         _barterMenu is not null ? "barter-menu" : _caravanMenu is not null ? "caravan-menu" :
         TerminalSaveBlocker;
     private string? SaveContinuationBlocker => SaveInteractionBlocker ?? (
+        _scripts.References?.RegionPublicationPending == true ? "regional-reference-gameplay-binding" :
         _scripts.References?.HasPendingProcedureCapture == true ? "actor-procedure-initialization" :
         _scripts.References?.HasPendingCorpseEquipmentCapture == true ? "actor-corpse-continuation" :
         _scripts.References?.TransientExplosions.SaveBlocker ?? StageResultsSaveBlocker);
@@ -265,6 +268,8 @@ internal partial class RuntimeNativeOpeningStageDriver
         var rotation = transform.Basis.Orthonormalized().GetRotationQuaternion().Normalized();
         var complete = _tagSkillContract is null ? !_scripts.Session.InCharGen :
             _quests.IsCompleted(FalloutDialogueTopic.Find(_pluginStack, "QUST", FalloutNativeCampaignSave.OpeningQuestEditorId).FormKey);
+        if (_scripts.References!.InventoryScriptFrameActive)
+            throw new InvalidOperationException("Campaign capture has an active carried inventory script cursor.");
         var state = FalloutNativeCampaignSave.Capture(_saveCompatibilityId, activeCell, _inventory.Capture(), _playerName, _character,
             _vigorContract, Special, _tagSkillContract, _tagSkills.Selection, _traitFarewellContract, _traits, PlayerControls,
             [transform.Origin.X, transform.Origin.Y, transform.Origin.Z], [rotation.X, rotation.Y, rotation.Z, rotation.W],
@@ -280,6 +285,7 @@ internal partial class RuntimeNativeOpeningStageDriver
             Vitals = vitals,
             WeaponHandling = _player.CaptureWeaponHandling(),
             PlayerHitKnockback = _player.CaptureHitKnockback(),
+            PlayerFatigueKnockout = _player.CaptureFatigueKnockout(),
             Ingestibles = _ingestibles.Capture(),
             ActorOverrides = _scripts.References!.CaptureActorOverrides(),
             FactionRelations = _scripts.References.CaptureFactionRelations(),
@@ -292,6 +298,8 @@ internal partial class RuntimeNativeOpeningStageDriver
             PlayerNotes = _scripts.References.PlayerNotes.Capture(),
             PlayerCaravanCards = _scripts.References.PlayerCaravanCards.Capture(),
             DroppedItems = _scripts.References.CaptureDroppedItems(),
+            DynamicMines = _scripts.References.CaptureDynamicMines(),
+            RuntimeReferences = _scripts.References.RuntimeReferences.Capture(),
             PlayerProjectileLaunch = _player.CaptureProjectileLaunch(),
             PlayerAdvancement = _advancement?.CaptureSettled(),
             EncounterZones = _scripts.References.CaptureEncounterZones(),

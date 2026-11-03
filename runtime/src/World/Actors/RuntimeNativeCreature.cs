@@ -173,7 +173,7 @@ internal sealed partial class RuntimeNativeCreature : CharacterBody3D
     public override void _Process(double delta)
     {
         using var frameWork = OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Measure(OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Owner.CreatureAnimation);
-        if (AmbientIdleActive && (Combat?.Dead == true || Combat?.OwnsPose == true))
+        if ((AmbientIdleActive || EatIdleActive) && (Combat?.Dead == true || Combat?.OwnsPose == true || _creatureEatRetiring))
         { ObserveAmbientInterruption(delta); return; }
         if (HasDetachedPendingSandboxStart || Combat?.Dead == true || Combat?.OwnsPose == true) return;
         if (Error is not null) return;

@@ -18,8 +18,8 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer
         var stream = node is AudioStreamPlayer3D positioned ? positioned.Stream : ((AudioStreamPlayer)node).Stream;
         if (playback is null || !GodotObject.IsInstanceValid(playback) || stream is null) return;
         var events = _events ?? throw new InvalidDataException("Finite native playback lacks its original source generation.");
-        var entry = events.Events.Single(entry => entry.Generation == generation);
-        var proof = new FalloutFiniteSoundVoice(_nativeOwner, events.Reference, generation,
+        var entry = events.RequireEvent(generation);
+        var proof = new FalloutFiniteSoundVoice(_nativeOwner, events.Identity, generation,
             entry.Sound, entry.SoundSha256, entry.Path!, entry.MediaSha256!);
         voice.CompletionWait = new(proof, node.GetInstanceId(), playback.GetInstanceId(), stream.GetInstanceId());
         _ = ReadFiniteVoice(node, voice);
@@ -34,7 +34,7 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer
         if (voice.SaveDrain is { } prepared) return prepared.PendingVoice;
         if (_lostCaptureAtRetirement || _retiredCaptureDiagnostic is not null ||
             _events?.CanAwaitNativeCompletion != true ||
-            _unbound.Except(_events.OwnedLanes, StringComparer.Ordinal).Any() ||
+            _unbound.Any(lane => !_events!.OwnsLane(lane)) ||
             !_voices.TryGetValue(node, out var bound) || !ReferenceEquals(bound, voice) ||
             voice.Generation is not { } generation || voice.Loop.Mode != FalloutSoundLoopMode.None || voice.Releasing ||
             voice.CompletionWait is null || !GodotObject.IsInstanceValid(node) || !node.IsInsideTree() ||
@@ -48,7 +48,7 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer
         while (processOwner is not null && processOwner.ProcessMode == ProcessModeEnum.Inherit)
             processOwner = processOwner.GetParent();
         if (!node.CanProcess() && !(treePaused && processOwner?.ProcessMode == ProcessModeEnum.Pausable)) return null;
-        var entry = _events.Events.SingleOrDefault(entry => entry.Generation == generation);
+        var entry = _events.FindEvent(generation);
         if (entry is not { End: FalloutAnimationSoundEnd.Active, Error: null }) return null;
         var playing = node is AudioStreamPlayer3D spatial ? spatial.Playing : ((AudioStreamPlayer)node).Playing;
         var paused = node is AudioStreamPlayer3D spatiallyPaused ? spatiallyPaused.StreamPaused : ((AudioStreamPlayer)node).StreamPaused;
@@ -59,7 +59,7 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer
             !double.IsFinite(stream.GetLength()) || stream.GetLength() <= 0 ||
             stream is AudioStreamWav { LoopMode: not AudioStreamWav.LoopModeEnum.Disabled } ||
             !stream.GetMeta("opennv_owned_media_sha256", "").AsString().Equals(entry.MediaSha256, StringComparison.OrdinalIgnoreCase)) return null;
-        var proof = new FalloutFiniteSoundVoice(_nativeOwner, _events.Reference, generation,
+        var proof = new FalloutFiniteSoundVoice(_nativeOwner, _events.Identity, generation,
             entry.Sound, entry.SoundSha256, entry.Path!, entry.MediaSha256!);
         var phase = node is AudioStreamPlayer3D ? Engine.GetPhysicsFrames() : Engine.GetProcessFrames();
         return treePaused
@@ -72,15 +72,15 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer
     private NativeOwnedFiniteSoundSaveDrain PrepareFiniteSaveDrain(Node node, Voice voice)
     {
         bool Bound() => !_lostCaptureAtRetirement && _retiredCaptureDiagnostic is null &&
-            !_unbound.Except(_events!.OwnedLanes, StringComparer.Ordinal).Any() &&
+            !_unbound.Any(lane => !_events!.OwnsLane(lane)) &&
             _voices.TryGetValue(node, out var current) && ReferenceEquals(current, voice) &&
             voice.Loop.Mode == FalloutSoundLoopMode.None && !voice.Releasing && voice.Completed is null &&
             voice.Attachment is { Alive: true };
         if (_events?.CanAwaitNativeCompletion != true || voice.Generation is not { } generation ||
             voice.CompletionWait is null || voice.SaveDrain is not null || !Bound())
             throw new NotSupportedException("Source audio has no independent, already proven finite native save-drain binding.");
-        var entry = _events.Events.Single(entry => entry.Generation == generation);
-        var proof = new FalloutFiniteSoundVoice(_nativeOwner, _events.Reference, generation,
+        var entry = _events.RequireEvent(generation);
+        var proof = new FalloutFiniteSoundVoice(_nativeOwner, _events.Identity, generation,
             entry.Sound, entry.SoundSha256, entry.Path!, entry.MediaSha256!);
         var lease = new NativeOwnedFiniteSoundSaveDrain(_records, _events, proof, node, voice.CompletionWait,
             Bound, () => voice.SaveDrain = null);
@@ -116,7 +116,7 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer
     // finite media; its source/native registry must prove every active generation.
     internal bool CanAwaitFiniteCompletion => _events?.CanAwaitNativeCompletion == true &&
         !_lostCaptureAtRetirement && _retiredCaptureDiagnostic is null &&
-        !_unbound.Except(_events.OwnedLanes, StringComparer.Ordinal).Any() &&
+        !_unbound.Any(lane => !_events!.OwnsLane(lane)) &&
         !_spatial.Keys.Any(node => !_voices.ContainsKey(node)) &&
         (_voices.Count == 0 || PendingOwnFiniteVoices?.Count == _voices.Values.Count(voice => voice.Pcm is null));
 }

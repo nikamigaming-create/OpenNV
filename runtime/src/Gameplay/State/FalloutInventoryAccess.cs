@@ -4,6 +4,14 @@ namespace OpenNV.Runtime.Gameplay.State;
 
 internal static class FalloutInventoryAccess
 {
+    // Container list admission reads the actual TESFullName component. An
+    // editor identity is not a player-visible name; spaces are real characters.
+    internal static bool TryDisplayName(FalloutPluginRecord item, out string name)
+    {
+        name = FalloutRecordDisplayName.Read(item);
+        return name.Length != 0;
+    }
+
     internal static bool CanTransfer(FalloutPluginStack records, FalloutPluginRecord item, bool fromPlayer)
     {
         if (fromPlayer && records.QuestObjects.IsQuestObject(item.FormKey)) return false;

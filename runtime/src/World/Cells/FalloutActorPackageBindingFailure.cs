@@ -35,6 +35,8 @@ internal sealed record FalloutActorPackageBindingFailure(FalloutFormKey Package,
         Blink?.Validate();
         Retirement.Validate();
         IndependentIdle?.Validate();
+        if (IndependentIdle is { ScriptPhase: not null } or { Requests: not null })
+            throw new InvalidDataException("Creature idle requests cannot use the stopped NPC package owner.");
         if (IndependentIdle is not null && MovingBasePose)
             throw new NotSupportedException("Stopped independent IDLE requires its stationary base pose.");
     }

@@ -4,6 +4,7 @@ using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.Formats.Gamebryo;
 using OpenNV.Runtime.World.Actors;
+using OpenNV.Runtime.World.Cells;
 
 public partial class NativePlayerPresentationAudit
 {
@@ -26,8 +27,14 @@ public partial class NativePlayerPresentationAudit
             try
             {
                 source = FalloutWeaponPresentation.Read(records, record.FormKey);
-                if (source.IsMine) failures.Add(new { stage = "attack-owner", error = "Mine placement and proximity detonation are unbound." });
-                else if (!source.IsMeleeWeapon)
+                if (source.IsMine)
+                {
+                    var shot = FalloutWeaponShot.Read(records, source.Form, null, source.HasAmmunitionSource);
+                    RuntimeNativePlacedMine.RequireSource(shot.Projectile);
+                    if (FalloutMineSource.Read(records, shot.Projectile.Form) is null)
+                        throw new NotSupportedException("Mine has no persistent source projectile owner.");
+                }
+                else if (!source.IsMeleeWeapon && !source.IsNonDischargeAction)
                     foreach (var ammo in source.Ammunition.Count == 0 ? new FalloutFormKey?[] { null } : source.Ammunition.Select(key => (FalloutFormKey?)key))
                     {
                         FalloutWeaponShot? shot = null;
@@ -67,7 +74,16 @@ public partial class NativePlayerPresentationAudit
                                 actor.Advance(0, Vector3.Zero, true, false);
                                 if (actor.Error is not null) throw new NotSupportedException(actor.Error);
                                 var keys = clip.TextKeys.SelectMany(key => key.Value.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)).ToArray();
-                                actions.Add(new { first, group, variant, clip.Sequence.CycleType, keys });
+                                actions.Add(new
+                                {
+                                    first,
+                                    group,
+                                    variant,
+                                    clip.Sequence.CycleType,
+                                    keys,
+                                    absentSourceControllers = clip.AbsentSourceControllers.Select(slot => new
+                                    { slot.Source.NodeName, slot.Source.PropertyType, slot.Source.ControllerType, slot.Reason }).ToArray()
+                                });
                                 if (group.StartsWith("attack", StringComparison.Ordinal) && !keys.Any(FalloutWeaponAnimationTimeline.DischargesWeapon) &&
                                     !(held.Automatic && held.AttackAnimation == 74 && clip.Sequence.CycleType == 0))
                                     throw new NotSupportedException("Attack animation has no source Hit, Fire or Release event.");

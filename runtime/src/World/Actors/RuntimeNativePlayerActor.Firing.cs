@@ -19,16 +19,9 @@ internal sealed partial class RuntimeNativePlayerActor
     internal Transform3D ShellTransform() => _equippedObject!.Socket(Skeleton, "ShellCasingNode");
     internal bool HasShellSocket => _equippedObject?.HasSocket("ShellCasingNode") == true;
 
-    private Transform3D WeaponNodeInSkeleton(Node3D source)
-    {
-        var local = Transform3D.Identity;
-        for (Node3D? node = source; node != _weaponAttachment; node = node.GetParent() as Node3D)
-        {
-            if (node is null) throw new InvalidOperationException("Weapon node left its attachment.");
-            local = node.Transform * local;
-        }
-        return Skeleton.Node.GetBoneGlobalPose(Skeleton.BoneIndex("Weapon")) * local;
-    }
+    private Transform3D WeaponNodeInSkeleton(Node3D source) =>
+        (_equippedObject ?? throw new InvalidOperationException("Player weapon source attachment is absent."))
+            .TransformInSkeleton(Skeleton, source);
 
     internal void PrepareMuzzle(FalloutProjectile projectile, NativeOwnedAnimationSoundPlayer? sounds = null,
         Func<NodePath, Node3D>? soundEmitter = null)

@@ -15,7 +15,6 @@ internal static partial class NativeCapsuleNavigation
         private readonly PhysicsTestMotionParameters3D _query;
         private readonly PhysicsTestMotionResult3D _hit = new();
         private readonly NativeCharacterStep.QueryResources _steps;
-        private readonly PhysicsRayQueryParameters3D _support;
         private readonly Rid _rid;
         private readonly ulong _identity, _world;
         private bool _disposed;
@@ -31,7 +30,6 @@ internal static partial class NativeCapsuleNavigation
             _rid = body.GetRid(); _identity = body.GetInstanceId(); _world = body.GetWorld3D().GetInstanceId();
             _query = new() { Margin = body.SafeMargin, MaxCollisions = 4 };
             _steps = new(body);
-            _support = PhysicsRayQueryParameters3D.Create(Vector3.Zero, Vector3.Zero, body.CollisionMask, [_rid]);
             SampleLength = EdgeSampleLength(body, stepHeight, spacing);
         }
         private void RequireOwner()
@@ -46,7 +44,7 @@ internal static partial class NativeCapsuleNavigation
             RequireOwner();
             if (!from.IsFinite() || !desired.IsFinite()) throw new InvalidDataException("Movement edge requires finite endpoints.");
             var body = _body; var stepHeight = _stepHeight; var resident = _resident; var probe = _probe;
-            var query = _query; var hit = _hit; var stepQueries = _steps; var supportRay = _support; var rid = _rid;
+            var query = _query; var hit = _hit; var stepQueries = _steps; var rid = _rid;
             var floorCosine = MathF.Cos(body.FloorMaxAngle);
             var maximumDrop = stepHeight + Math.Max(stepHeight, body.FloorSnapLength);
             bool Sweep(Vector3 origin, Vector3 motion)
@@ -100,21 +98,11 @@ internal static partial class NativeCapsuleNavigation
             if (!walkable &&
                 !NativeCharacterStep.TrySupport(body, landing, stepHeight, out reconciledFloor, stepQueries)) return Reject("landing-slope",
                     FirstContact(hit, supportedFrom, supportedFrom + downward));
-            // The rounded bottom can stop on a steep stair edge although the
-            // same pose has a walkable root floor within the mover's snap
-            // interval. Only that shared native support reconciles it; the
-            // complete capsule sweeps, root floor, height and residency still
-            // apply. A source guide's incline supplies no support evidence.
-            // A rounded capsule can touch a walkable normal on a ledge while
-            // its feet remain over empty space. Sliding then pushes that body
-            // off the edge instead of executing the planned waypoint. Require
-            // the same native floor beneath the controller root as well.
-            var surface = landing + Vector3.Up * stepQueries.ContactOffset;
-            supportRay.From = surface + Vector3.Up * body.SafeMargin * 8;
-            supportRay.To = surface - Vector3.Up * Math.Max(stepHeight, body.FloorSnapLength);
-            using var support = NativeCharacterStep.QuerySupport(body, supportRay);
-            if (support.Count == 0) return Reject("root-floor-missing");
-            if (support["normal"].AsVector3().Dot(Vector3.Up) < floorCosine) return Reject("root-floor-slope");
+            // A walkable contact on the complete downward capsule sweep is
+            // physical support. A separate center ray can miss beneath a long
+            // horizontal capsule that is supported elsewhere on its surface.
+            // Steep-only contacts still require the shared support reconciliation
+            // above; source-floor, height and residency remain independent.
             var height = landing.Y - from.Y;
             if (height > stepHeight + body.SafeMargin * 8) return Reject("landing-too-high");
             if (height < -maximumDrop - body.SafeMargin * 8) return Reject("landing-too-low");
@@ -125,8 +113,17 @@ internal static partial class NativeCapsuleNavigation
         internal bool ValidateSegment(Vector3 start, Vector3 desired, Func<Vector3, bool> sourceFloor,
             out Vector3 landing, out string? reason)
         {
-            RequireOwner();
             ArgumentNullException.ThrowIfNull(sourceFloor);
+            return ValidateSegmentCore(start, desired, sourceFloor, out landing, out reason);
+        }
+
+        internal bool ValidateDirectSegment(Vector3 start, Vector3 desired, out Vector3 landing, out string? reason)
+            => ValidateSegmentCore(start, desired, null, out landing, out reason);
+
+        private bool ValidateSegmentCore(Vector3 start, Vector3 desired, Func<Vector3, bool>? sourceFloor,
+            out Vector3 landing, out string? reason)
+        {
+            RequireOwner();
             if (!start.IsFinite() || !desired.IsFinite()) throw new InvalidDataException("Movement segment requires finite endpoints.");
             landing = start;
             var distance = new Vector2(desired.X - start.X, desired.Z - start.Z).Length();
@@ -139,7 +136,7 @@ internal static partial class NativeCapsuleNavigation
             {
                 if (!TrySingleEdge(landing, start.Lerp(desired, (float)index / samples), basis, out var next))
                 { reason = RejectionReason; return false; }
-                if (!sourceFloor(next)) { reason = "source-corridor-floor"; return false; }
+                if (sourceFloor?.Invoke(next) == false) { reason = "source-corridor-floor"; return false; }
                 landing = next;
             }
             reason = null;
@@ -149,12 +146,15 @@ internal static partial class NativeCapsuleNavigation
         {
             if (_disposed) return;
             _disposed = true;
-            _query.Dispose(); _hit.Dispose(); _steps.Dispose(); _support.Dispose();
+            _query.Dispose(); _hit.Dispose(); _steps.Dispose();
         }
     }
 
     private static float EdgeSampleLength(CharacterBody3D body, float stepHeight, float spacing)
     {
+        if (body is RuntimeNativePlayer player)
+            return Math.Min(spacing, Math.Max(.03f, Math.Min(stepHeight * .5f,
+                player.PhysicalRadius * player.PhysicalShapeScale * .5f)));
         var children = body.GetChildren();
         using ((Godot.Collections.Array)children)
             return Math.Min(spacing, Math.Max(.03f, Math.Min(stepHeight * .5f,

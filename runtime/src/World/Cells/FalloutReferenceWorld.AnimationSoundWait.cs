@@ -10,6 +10,7 @@ internal sealed partial class FalloutReferenceWorld
     {
         get
         {
+            if (_dynamicMines.Values.Any(mine => !mine.AnimationSoundEvents.CanCapture)) return true;
             // Keep only a blocker identity. Recheck its actual ledger every
             // time; a cleared witness requires a fresh complete search.
             if (_lastPendingAnimationSoundCapture is { } previous &&
@@ -36,12 +37,14 @@ internal sealed partial class FalloutReferenceWorld
     {
         var pending = _instances.Values.Where(instance => !instance.AnimationSoundsCaptureReady)
             .OrderBy(instance => records.RuntimeFormId(instance.Reference)).ToArray();
-        if (pending.Length == 0) return null;
+        var dynamicPending = _dynamicMines.Values.Where(mine => !mine.AnimationSoundEvents.CanCapture).ToArray();
+        if (pending.Length == 0 && dynamicPending.Length == 0) return null;
         var result = new List<FalloutFiniteSoundVoice>();
-        foreach (var instance in pending)
+        var ledgers = pending.Select(instance => instance.AnimationSoundEvents)
+            .Concat(dynamicPending.Select(mine => mine.AnimationSoundEvents));
+        foreach (var events in ledgers)
         {
-            var events = instance.AnimationSoundEvents;
-            if (!events.CanAwaitNativeCompletion || records.SoundVoices.PendingFiniteSourceVoices(instance.Reference) is not { Count: > 0 } voices)
+            if (!events.CanAwaitNativeCompletion || records.SoundVoices.PendingFiniteSourceVoices(events.Identity) is not { Count: > 0 } voices)
                 return null;
             var active = events.PendingNativeCompletion
                 .ToDictionary(entry => entry.Generation);
@@ -49,7 +52,7 @@ internal sealed partial class FalloutReferenceWorld
             foreach (var proof in voices)
             {
                 proof.Validate();
-                if (proof.Reference != instance.Reference || !active.Remove(proof.Generation, out var entry) ||
+                if (proof.Reference != events.Identity || !active.Remove(proof.Generation, out var entry) ||
                     proof.Sound != entry.Sound || proof.SoundSha256 != entry.SoundSha256 ||
                     proof.Path != entry.Path || proof.MediaSha256 != entry.MediaSha256)
                     throw new InvalidDataException("Finite audio wait lacks its exact retained source/native generation.");

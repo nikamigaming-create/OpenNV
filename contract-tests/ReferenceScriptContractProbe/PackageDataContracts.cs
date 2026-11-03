@@ -26,6 +26,20 @@ internal static class PackageDataContracts
             restored.Weight(FalloutSandboxActivity.Wander) == 129, "Sandbox continuation lost preference or clamped before candidate selection.");
         Require(FalloutSandboxPreferences.Choose([0, 3, 0, 2], 3) == 3,
             "Sandbox selection crossed a zero-weight candidate or the wrong ticket boundary.");
+        const float units = .0142875f;
+        var radiusHostile = new FalloutActorThreat(new("Base.esm", 0x701), 2, 4, 1, true, 500);
+        var sightDistance = 2500 * units;
+        var beyondWarning = 1000 * units;
+        Require(radiusHostile.AcquisitionAt(1, beyondWarning * beyondWarning, sightDistance, units) == (true, false) &&
+            (radiusHostile with { Radius = 0 }).AcquisitionAt(1, beyondWarning * beyondWarning, sightDistance, units) == (true, false),
+            "Source warning radius incorrectly caps independently hostile sight acquisition.");
+        var warningOnly = radiusHostile with { Aggression = 1 };
+        var warningInside = 375 * units;
+        Require(warningOnly.AcquisitionAt(0, warningInside * warningInside, sightDistance, units) == (false, true) &&
+            warningOnly.AcquisitionAt(0, beyondWarning * beyondWarning, sightDistance, units) == (false, false) &&
+            warningOnly.AcquisitionAt(2, warningInside * warningInside, sightDistance, units) == (false, false) &&
+            radiusHostile.AcquisitionAt(1, 3000 * units * (3000 * units), sightDistance, units) == (false, false),
+            "Warning range leaked into friends, distant non-hostiles or general sight distance.");
         var exclusions = new FalloutSandboxActivities(31);
         Require(Enum.GetValues<FalloutSandboxActivity>().Where(exclusions.Allows).SequenceEqual([FalloutSandboxActivity.Wander]),
             "Sandbox exclusion mask disabled wandering or admitted a forbidden activity.");
@@ -151,6 +165,7 @@ internal static class PackageDataContracts
             packages.Add(Package(0x48c, 12, 12, 0, Location(1, 0x800), Location(1, 0x800)));
             packages.Add(Package(0x48d, 12, 12, 0, Field("PLDT", new byte[11])));
             packages.Add(Package(0x48e, 12, 0, 0x00080000, Location(2, radius: 10), Target(2, 18, 2), specific: 0x0200));
+            packages.Add(Package(0x48f, 12, 0, 0x00883400, Location(2, radius: 10), Target(2, 18, 2), specific: 0x0200));
             for (byte kind = 18; kind <= 38; kind++)
                 packages.Add(Package(0xa00u + kind, 12, kind, 0));
             File.WriteAllBytes(Path.Combine(directory, "Base.esm"), Join(
@@ -164,7 +179,8 @@ internal static class PackageDataContracts
                 Record("CREA", 0x714, Field("ACBS", new byte[24]), Field("VTCK", new byte[3])),
                 Record("CONT", 0x716, Field("CNTO", Join(BitConverter.GetBytes(0xb20u), BitConverter.GetBytes(2)))),
                 Record("VTYP", 0x715),
-                Record("STAT", 0x3b), Record("CELL", 0x800, Field("DATA", [1])), References(), Join(packages.ToArray())));
+                Record("STAT", 0x3b), Record("CELL", 0x800, Field("DATA", [1])), References(),
+                Record("CELL", 0x801, Field("DATA", [1])), Join(packages.ToArray())));
             using var records = FalloutPluginStack.Load(directory, ["Base.esm"]);
             CheckSandboxDailyWindows(new FalloutNumericGameSettings(records));
             var activity = FalloutSandboxActivityProgress.Select(records.NumericSettings, 100,
@@ -225,6 +241,36 @@ internal static class PackageDataContracts
             Reject(() => FalloutPackageTarget.Read(records.GetEffective(Key(0x488))));
             Reject(() => FalloutFindFurniturePackage.Read(records.GetEffective(Key(0x487))));
             var find = FalloutFindPackage.Read(records.GetEffective(Key(0x48e)));
+            var emptyFind = FalloutFindFoodPackage.Read(records.GetEffective(Key(0x48f)));
+            Require(emptyFind.Count == 2 && emptyFind.Running && emptyFind.WeaponDrawn && emptyFind.Declaration.AllowKilling,
+                "Find Food adapter changed its authored quota or movement permissions.");
+            Reject(() => FalloutFindFoodPackage.Read(records.GetEffective(Key(0x48e))));
+            var findProgress = new FalloutFindFoodProgress(Key(0x800), FalloutFindFoodPhase.Wander, .01f);
+            var crossing = findProgress.AdvanceWander(.02, true);
+            Require(!crossing.Retry && crossing.Progress.RetrySeconds < 0 &&
+                !crossing.Progress.AdvanceWander(0, false).Retry &&
+                crossing.Progress.AdvanceWander(0, true) is { Retry: true, Progress.Phase: FalloutFindFoodPhase.Acquire, Progress.RetrySeconds: 20 },
+                "Find Wander retry skipped its float crossing or mover-readiness edge.");
+            var findCold = System.Text.Json.JsonSerializer.Deserialize<FalloutFindFoodProgress>(
+                System.Text.Json.JsonSerializer.Serialize(crossing.Progress))!;
+            findCold.Validate();
+            Require(findCold == crossing.Progress && findCold.AdvanceWander(0, true).Retry,
+                "Cold Find restarted its source retry clock or lost its Wander phase.");
+            var findMotion = copiedMotion with { Package = Key(0x48f), Sandbox = null, FindFood = crossing.Progress };
+            findMotion.Validate();
+            var coldFindMotion = System.Text.Json.JsonSerializer.Deserialize<FalloutActorPackageMotion>(
+                System.Text.Json.JsonSerializer.Serialize(findMotion))!;
+            coldFindMotion.Validate();
+            Require(coldFindMotion.FindFood == crossing.Progress && coldFindMotion.Wander!.Destination.SequenceEqual(findMotion.Wander!.Destination),
+                "Cold Find lost its retry phase or actual Wander destination.");
+            Reject(() => (findMotion with { FindFood = crossing.Progress with { Phase = FalloutFindFoodPhase.Acquire } }).Validate());
+            Reject(() => (findMotion with { Sandbox = activity }).Validate());
+            new FalloutFindFoodSourceScan([], []).RequireEmpty(_ => false);
+            new FalloutFindFoodSourceScan([], [Key(0x710)]).RequireEmpty(reference => reference == Key(0x710));
+            Reject(() => new FalloutFindFoodSourceScan([], [Key(0x700)]).RequireEmpty(_ => false));
+            Reject(() => new FalloutFindFoodSourceScan([new(Key(0x903), Key(0xb20), 1, false, null)], []).RequireEmpty(_ => true));
+            Reject(() => new FalloutFindFoodSourceScan([new(Key(0x901), Key(0xb20), 1, true, 0)], []).RequireEmpty(_ => false));
+            new FalloutFindFoodSourceScan([new(Key(0x710), Key(0xb20), 1, true, 0)], []).RequireEmpty(reference => reference == Key(0x710));
             Require(find.AllowFalls && find.AllowKilling && find.Target is { Type: 2, RawTarget: 18, CountOrDistance: 2 },
                 "Find declaration lost its independent flags or source target.");
             Reject(() => FalloutFindPackage.Read(records.GetEffective(Key(0x488))));
@@ -253,6 +299,9 @@ internal static class PackageDataContracts
                     before.UninitializedInventories.Contains(Key(0x904)) && sourceWorld.Get(Key(0x904)).Inventory is null,
                     "Find source collection lost a placed stack or silently rolled an uninitialized inventory.");
                 var container = sourceWorld.Inventory(Key(0x904), 1).Contents;
+                Require(!emptyFind.QuotaSatisfied(new FalloutPlayerInventory(7), sourceWorld.IsActorFood) &&
+                    !emptyFind.QuotaSatisfied(container, _ => false) && emptyFind.QuotaSatisfied(container, sourceWorld.IsActorFood),
+                    "Find quota did not use the actual retained matching food count.");
                 Require(container.Item(Key(0xb20)) is { Count: 2, Value: 7, Weight: 1.5f },
                     "Ingredient inventory lost its source count, value or weight.");
                 var revision = container.Revision;
@@ -268,6 +317,18 @@ internal static class PackageDataContracts
                     "Placed ingredient pickup or script item count lost its inventory stack.");
                 Require(sourceWorld.FindFoodSources(Key(0x900), find, 1).Sources.All(value => value.Reference != Key(0x903)),
                     "Find source collection retained a taken placed stack.");
+            }
+            using (var mergedWorld = new FalloutReferenceWorld(records))
+            {
+                var merged = FalloutCellSceneReader.Read(records, Key(0x800)) with
+                { Cell = FalloutCellSceneReader.ReadDefinition(records, Key(0x801)) };
+                mergedWorld.LoadCell(merged);
+                mergedWorld.SetActorPackageStartLocation(Key(0x900), new(Key(0x800), [1, 2, 3]));
+                Require(!mergedWorld.IsCellResident(Key(0x800)) && mergedWorld.IsResident(Key(0x900)) &&
+                    mergedWorld.FindFoodSources(Key(0x900), find, 1).Sources.Any(value => value.Reference == Key(0x903)),
+                    "Find confused an actor's retained source CELL with its actual residency container.");
+                mergedWorld.UnloadCell(Key(0x801));
+                Reject(() => mergedWorld.FindFoodSources(Key(0x900), find, 1));
             }
             var cellLocation = FalloutScriptPackage.Read(records.GetEffective(Key(0x489)));
             var objectLocation = FalloutScriptPackage.Read(records.GetEffective(Key(0x48a)));

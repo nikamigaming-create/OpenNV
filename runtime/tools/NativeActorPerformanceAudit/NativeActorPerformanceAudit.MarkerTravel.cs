@@ -13,15 +13,24 @@ public partial class NativeActorPerformanceAudit
     private async Task MarkerTravelCold(string game, string mod, string root, string actorId, string questId,
         short stage, string[] dependencies, bool failedRoute = false, bool ownedRoom = false)
     {
+        if (!failedRoute && DisplayServer.GetName() == "headless")
+            throw new NotSupportedException("Marker gait/arrival audit requires a display-backed process; headless runtime intentionally skips physics pose publication.");
         var fixture = new Node3D(); AddChild(fixture);
         FalloutReferenceWorld? world = null;
         RuntimeNativeNpc? actor = null;
         var roomPrototypes = new Dictionary<string, RuntimeNativeNifPrototype>(StringComparer.OrdinalIgnoreCase);
         try
         {
-            var installation = new FalloutModStackSelection([new(mod, root, dependencies)]).Resolve(game);
+            if (mod == "-" && (root != "-" || dependencies.Length != 0))
+                throw new ArgumentException("Base-stack marker audit requires '-' mod/root and no additional roots.");
+            var installation = mod == "-" ? null : new FalloutModStackSelection([new(mod, root, dependencies)]).Resolve(game);
+            var transformedHeading = RuntimeNativeActorCombat.SourceArrivalHeading(
+                new Basis(Vector3.Up, Mathf.Pi / 2).Scaled(new(2, 3, 2)), Mathf.Pi / 2);
+            var identityHeading = RuntimeNativeActorCombat.SourceArrivalHeading(Basis.Identity, Mathf.Pi / 2);
+            if (MathF.Abs(transformedHeading) > .000001f || MathF.Abs(identityHeading + Mathf.Pi / 2) > .000001f)
+                throw new InvalidDataException("Arrival heading ignored the actual parent world frame or source clockwise convention.");
             RuntimeLiveContentSource.Configure(game, RuntimeLiveContentSource.FalloutNewVegasGame,
-                installation.ContentRoots.Skip(1).ToArray(), installation.ActivePlugins, installation.Settings);
+                installation?.ContentRoots.Skip(1).ToArray(), installation?.ActivePlugins, installation?.Settings);
             var content = RuntimeLiveContentSource.Current!;
             using var records = FalloutPluginStack.Load(content.PluginSources);
             world = new(records);
@@ -54,6 +63,8 @@ public partial class NativeActorPerformanceAudit
             var navigation = CellNavigationGraph.LoadOwned(records, cell.Cell.FormKey);
             var packageEvents = new List<(string Event, FalloutFormKey Package)>();
             var effects = new List<FalloutReferenceScriptEffect>();
+            FalloutActorPathTurn? headingAtDone = null;
+            Quaternion? rotationAtDone = null;
             Rid movementShape = default;
 
             Vector3 Source(Vector3 point) => new Vector3(point.X, -point.Z, point.Y) / units;
@@ -75,11 +86,32 @@ public partial class NativeActorPerformanceAudit
                 }, Globals: globals));
 
             var scripts = Scripts(world);
+            NativeActorNavigationRoute SourceRoute(Vector3 from, Vector3 to, float radius)
+            {
+                if (radius != 0) throw new NotSupportedException("Marker fixture has no combat-radius destination producer.");
+                var path = navigation.FindPath(Source(from), Source(to), out var prefixRegion, out var corridorFloor,
+                    actorHeightProjection: true);
+                var points = path.Select(Native).ToArray();
+                Func<Vector3, bool> Prefix(Vector3 point, int resume)
+                {
+                    var region = prefixRegion(Source(point), resume, .01f / units,
+                        NativeCapsuleNavigation.SourceHeightTolerance / units);
+                    return current => region(Source(current));
+                }
+                var terminalFloor = NativeActorNavigationRoute.ReadTerminalFloor(points, Prefix);
+                var reachableFloor = corridorFloor(.01f / units, NativeCapsuleNavigation.SourceHeightTolerance / units);
+                var selected = points[^1];
+                points[^1] = new(selected.X, to.Y, selected.Z);
+                return new(points, PrefixArrival: Prefix, SourceSha256: navigation.SourceSha256,
+                    TerminalFloor: terminalFloor, CorridorFloor: point => reachableFloor(Source(point)));
+            }
+
             var context = new NativeActorCombatContext(() => null,
                 () => throw new InvalidOperationException("Marker Travel fixture queried player vitals."),
                 (_, _) => throw new InvalidOperationException("Marker Travel fixture attacked the player."),
                 (from, to) => navigation.FindPath(Source(from), Source(to)).Select(Native).ToArray(),
-                _ => true, () => 1, globals, .4f, 9.81f, PlayerCell: () => cell.Cell.FormKey);
+                _ => true, () => 1, globals, .4f, 9.81f, PlayerCell: () => cell.Cell.FormKey,
+                RouteRegion: SourceRoute);
 
             if (ownedRoom)
             {
@@ -132,7 +164,15 @@ public partial class NativeActorPerformanceAudit
                 if (created.CollisionMask != movementMask)
                     throw new InvalidDataException("Reference re-enable lost the late movement envelope's intended collision mask.");
                 created.SetProcess(false); created.SetPhysicsProcess(false); created.Combat.SetPhysicsProcess(false);
-                created.ExecutePackageEvent = scripts.ExecutePackageEvent;
+                created.ExecutePackageEvent = (program, reference) =>
+                {
+                    if (program.Kind == "POEA")
+                    {
+                        headingAtDone = owner.Get(caller).PackageMotion?.ArrivalTurn;
+                        rotationAtDone = created.GlobalBasis.Orthonormalized().GetRotationQuaternion();
+                    }
+                    scripts.ExecutePackageEvent(program, reference);
+                };
                 // Match the runtime bootstrap ordering: Combat owns the saved
                 // package pose before source AI binds its continuation.
                 created.ConfigureAi(records, quests, cell, reference => Placement(owner, reference),
@@ -206,12 +246,35 @@ public partial class NativeActorPerformanceAudit
             var packageHash = SHA256.HashData(package.ReadData());
             var navigationHash = navigation.SourceSha256;
 
+            var packagePoseFrames = 0;
+            var changingPackagePoseFrames = 0;
+            Dictionary<int, Transform3D>? previousPackageLegs = null;
+
             async Task Frame()
             {
                 await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
                 var current = actor ?? throw new InvalidOperationException("Marker Travel actor was released.");
                 current._PhysicsProcess(1d / 60);
+                // Compare actual physics-published gait with the render result.
+                // Head tracking and facial publication legitimately change other bones.
+                var skeleton = current.Skeleton.Node;
+                var packageOnly = current.Combat?.PackageMoving == true &&
+                    JsonSerializer.SerializeToElement(current.PoseOwners).GetProperty("owner").GetString() == "package";
+                var packageLegs = packageOnly ? Enumerable.Range(0, skeleton.GetBoneCount())
+                    .Where(index => new[] { "Thigh", "Calf", "Foot" }.Any(part =>
+                        skeleton.GetBoneName(index).ToString().Contains(part, StringComparison.OrdinalIgnoreCase)))
+                    .ToDictionary(index => index, skeleton.GetBonePose) : null;
                 current._Process(1d / 60);
+                if (packageLegs is not null)
+                {
+                    if (packageLegs.Count == 0 || packageLegs.Any(pair => !pair.Value.IsEqualApprox(skeleton.GetBonePose(pair.Key))))
+                        throw new InvalidDataException("NPC render publication replaced the package's actual walking leg pose.");
+                    if (previousPackageLegs is not null && packageLegs.Any(pair =>
+                        previousPackageLegs.TryGetValue(pair.Key, out var previous) && !previous.IsEqualApprox(pair.Value)))
+                        ++changingPackagePoseFrames;
+                    previousPackageLegs = packageLegs;
+                    ++packagePoseFrames;
+                }
                 if (current.GetChildren().OfType<CollisionShape3D>()
                     .Single(value => value.Name == "SourceActorMovementEnvelope").Shape.GetRid() != movementShape)
                     throw new InvalidDataException("Source body turning rebuilt its unchanged movement envelope and invalidated its route: " +
@@ -244,6 +307,7 @@ public partial class NativeActorPerformanceAudit
                 if (frame == 1799) throw new InvalidDataException("Marker Travel did not produce an in-progress capsule route snapshot: " +
                     JsonSerializer.Serialize(actor.AiState) + " " + JsonSerializer.Serialize(actor.Combat!.Observation));
             }
+            AssertStalledPortalApproachRetirement(actor.Combat!, world.Get(caller));
             if (world.PendingPackageEventCount != 0) throw new InvalidDataException("Initial package event remained pending before the cold save.");
             var snapshots = JsonSerializer.Deserialize<FalloutReferenceSnapshot[]>(JsonSerializer.Serialize(world.Capture()))!;
             var savedActor = snapshots.Single(value => value.Reference == caller);
@@ -310,6 +374,8 @@ public partial class NativeActorPerformanceAudit
                 if (world.Get(caller).PackageMotion is { } advancing && advancing.Animation == savedMotion.Animation)
                     resumedTravelSeconds = Math.Max(resumedTravelSeconds, advancing.Seconds);
             }
+            if (packagePoseFrames == 0 || changingPackagePoseFrames == 0)
+                throw new InvalidDataException("Marker Travel never proved an advancing package gait surviving NPC render publication.");
             var completedMotion = world.Get(caller).PackageMotion ?? throw new InvalidDataException("Marker Travel lost its completion snapshot.");
             var completed = completedMotion.Travel ?? throw new InvalidDataException("Marker Travel lost its completion record.");
             DrainPackageEvents(world, scripts);
@@ -320,6 +386,40 @@ public partial class NativeActorPerformanceAudit
                 !navigationHash.Equals(CellNavigationGraph.LoadOwned(records, cell.Cell.FormKey).SourceSha256, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidDataException("Cold native marker Travel failed supported arrival, one-time POEA or source identity checks: " +
                     JsonSerializer.Serialize(actor.AiState) + " " + JsonSerializer.Serialize(actor.Combat!.Observation));
+            var headingSource = FalloutTravelArrivalHeading.Read(records, world,
+                FalloutPackageTravelGoal.Read(records, world, caller, package));
+            if (headingSource is { } sourceYaw)
+            {
+                var expected = GamebryoCoordinate.ConvertReferenceEuler(new(0, 0, sourceYaw), 1).GetRotationQuaternion();
+                if (rotationAtDone is not { } atDone ||
+                    atDone.AngleTo(expected) > Mathf.Pi / 180 && headingAtDone is null)
+                    throw new InvalidDataException("Source end event did not observe the admitted heading goal before final yaw.");
+                if (headingAtDone is { MinimumRemainingSeconds: > 0 } && atDone.AngleTo(expected) <= Mathf.Pi / 180)
+                    throw new InvalidDataException("Arrival heading snapped before its source end event instead of retaining the finite turn.");
+                var ordinaryTarget = FalloutPackageTravelGoal.Read(records, world, caller, package);
+                if (FalloutTravelArrivalHeading.Read(records, world,
+                    ordinaryTarget with { Movement = ordinaryTarget.Movement with { Reference = caller } }) is not null)
+                    throw new InvalidDataException("Ordinary reference inherited heading-marker semantics.");
+                var arrivalPosition = actor.GlobalPosition;
+                if (world.Get(caller).PackageMotion?.ArrivalTurn is { } pendingHeading)
+                {
+                    var pendingSave = JsonSerializer.Deserialize<FalloutReferenceSnapshot[]>(JsonSerializer.Serialize(world.Capture()))!;
+                    if (pendingSave.Single(value => value.Reference == caller).PackageMotion?.ArrivalTurn != pendingHeading)
+                        throw new InvalidDataException("Cold capture lost the actual arrival heading/minimum turn phase.");
+                    actor.Free(); actor = null;
+                    world.Dispose(); world = new(records); world.Restore(pendingSave); world.LoadCell(cell);
+                    scripts = Scripts(world); actor = CreateActor(world);
+                    if (world.Get(caller).PackageMotion?.ArrivalTurn != pendingHeading)
+                        throw new InvalidDataException("Cold actor binding replaced the accepted arrival goal.");
+                    for (var frame = 0; frame < 600 && world.Get(caller).PackageMotion?.ArrivalTurn is not null; frame++) await Frame();
+                }
+                if (world.Get(caller).PackageMotion?.ArrivalTurn is not null ||
+                    actor.GlobalBasis.Orthonormalized().Z.DistanceTo(new Basis(expected).Z) > .00001f ||
+                    new Vector2(actor.GlobalPosition.X - arrivalPosition.X, actor.GlobalPosition.Z - arrivalPosition.Z).Length() > .001f ||
+                    packageEvents.Count(value => value.Event == "OnPackageStart" && value.Package == packageKey) != 1 ||
+                    packageEvents.Count(value => value.Event == "OnPackageDone" && value.Package == packageKey) != 1)
+                    throw new InvalidDataException("Authored arrival yaw did not complete through a stationary cold turn without event replay.");
+            }
             var completionEffects = effects.Count;
             for (var frame = 0; frame < 12; frame++) await Frame();
             if (world.Get(caller).PackageMotion?.Travel?.Complete != true ||
@@ -340,4 +440,92 @@ public partial class NativeActorPerformanceAudit
             foreach (var prototype in roomPrototypes.Values) prototype.Scene.Root.Free();
         }
     }
+    private static void AssertStalledPortalApproachRetirement(RuntimeNativeActorCombat owner, FalloutReferenceInstance state)
+    {
+        const System.Reflection.BindingFlags flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+        var type = typeof(RuntimeNativeActorCombat);
+        var routeType = type.GetNestedType("RouteDoor", System.Reflection.BindingFlags.NonPublic)!;
+        var routeField = type.GetField("_routeDoor", flags)!;
+        var pathField = type.GetField("_pursuitPath", flags)!;
+        var cursorField = type.GetField("_pursuitCursor", flags)!;
+        var retire = type.GetMethod("RetireStalledPortalApproach", flags)!;
+        var original = state.PackageMotion ?? throw new InvalidDataException("Portal retirement fixture lacks an actual package pose.");
+        var combat = new RuntimeNativeActorCombat();
+        try
+        {
+            type.GetField("_state", flags)!.SetValue(combat, state);
+            type.GetField("_context", flags)!.SetValue(combat, type.GetField("_context", flags)!.GetValue(owner));
+            var progress = original.Travel ?? throw new InvalidDataException("Portal retirement fixture lacks actual Travel.");
+            var position = new Vector3(original.Position[0], original.Position[1], original.Position[2]);
+            // Synthetic protocol inputs exercise an unparented controller only.
+            // The real actor's route, physics and event owner are never changed;
+            // its actual motion record is borrowed and unconditionally restored.
+            var door = state.Reference;
+            var contact = new NativeNavigationContact(0, 0, position, Vector3.Up, position, position);
+            var route = Activator.CreateInstance(routeType, flags | System.Reflection.BindingFlags.Public, null,
+                [contact, door, true], null)!;
+            var requested = routeType.GetField("Requested", flags)!;
+            var error = routeType.GetField("Error", flags)!;
+            Vector3[] approach = [position, position + Vector3.Forward];
+            routeField.SetValue(combat, route); pathField.SetValue(combat, approach); cursorField.SetValue(combat, 1);
+            state.PackageMotion = original with { Travel = progress with { PortalDoor = door } };
+            var contextField = type.GetField("_context", flags)!;
+            var context = (NativeActorCombatContext)contextField.GetValue(combat)!;
+            var attempts = 0;
+            try
+            {
+                contextField.SetValue(combat, context with
+                {
+                    RequestPortal = (actorReference, doorReference) =>
+                    {
+                        if (actorReference != state.Reference || doorReference != door)
+                            throw new InvalidDataException("Portal admission changed its actual requesting owner.");
+                        return ++attempts == 2;
+                    }
+                });
+                if (combat.RequestPackagePortal(door) || (bool)requested.GetValue(route)!)
+                    throw new InvalidDataException("Rejected portal request was published as an admitted event.");
+                if (!combat.RequestPackagePortal(door) || !(bool)requested.GetValue(route)! ||
+                    (bool)retire.Invoke(combat, [route])! || !ReferenceEquals(routeField.GetValue(combat), route) ||
+                    !ReferenceEquals(pathField.GetValue(combat), approach) || attempts != 2)
+                    throw new InvalidDataException("Actual admitted portal request was treated as disposable navigation.");
+            }
+            finally { contextField.SetValue(combat, context); }
+            // The admitted synthetic protocol case ends here without dispatching
+            // a source event. A distinct unrequested query tests physical failure.
+            route = Activator.CreateInstance(routeType, flags | System.Reflection.BindingFlags.Public, null,
+                [contact, door, true], null)!;
+            routeField.SetValue(combat, route);
+            error.SetValue(route, "source-binding-fault");
+            if ((bool)retire.Invoke(combat, [route])! || !ReferenceEquals(routeField.GetValue(combat), route))
+                throw new InvalidDataException("Source-binding failure was erased by physical approach retirement.");
+            error.SetValue(route, null);
+            if (!(bool)retire.Invoke(combat, [route])! || routeField.GetValue(combat) is not null ||
+                ((Vector3[])pathField.GetValue(combat)!).Length != 0 || (int)cursorField.GetValue(combat)! != 0 ||
+                combat.PackageRouteFailure is not { Failures: > 0, RetrySeconds: > 0 } failure ||
+                !failure.Error.Contains("portal approach", StringComparison.Ordinal) ||
+                JsonSerializer.Serialize(state.PackageMotion) != JsonSerializer.Serialize(original with { Travel = progress with { PortalDoor = door } }))
+                throw new InvalidDataException("Unrequested failed approach lost its actual pose, error/retry owner or retained its disposable door.");
+            state.PackageMotion = original;
+            combat.SetTravelProgress(progress);
+            var published = state.PackageMotion ?? throw new InvalidDataException("Portal failure lost its retained motion.");
+            var publishedTravel = published.Travel ?? throw new InvalidDataException("Portal failure lost its Travel owner.");
+            if (publishedTravel.RouteFailure != failure || publishedTravel.RouteWaypoints is not { Length: 0 } ||
+                publishedTravel.Complete || published.Seconds != original.Seconds ||
+                !published.Position.SequenceEqual(original.Position) || !published.Rotation.SequenceEqual(original.Rotation))
+                throw new InvalidDataException("Failed portal retirement fabricated arrival/motion or could not publish its real failure continuation.");
+            var retained = JsonSerializer.Deserialize<FalloutActorPackageMotion>(JsonSerializer.Serialize(published)) ??
+                throw new InvalidDataException("Portal failure protocol did not round-trip its actual snapshot.");
+            if (retained.Travel?.RouteFailure != failure || retained.Seconds != original.Seconds ||
+                !retained.Position.SequenceEqual(original.Position) || !retained.Rotation.SequenceEqual(original.Rotation) ||
+                JsonSerializer.Serialize(retained.AnimationLayers) != JsonSerializer.Serialize(original.AnimationLayers))
+                throw new InvalidDataException("Portal failure protocol lost its real pose/layers/clock or retry receipt in serialization.");
+        }
+        finally
+        {
+            state.PackageMotion = original;
+            combat.Free();
+        }
+    }
+
 }

@@ -6,7 +6,7 @@ internal sealed record FalloutPlayerNotesSnapshot(IReadOnlyList<FalloutFormKey> 
 
 // Collected NOTE identities have their own ordered player state. These methods
 // own membership only; command feedback and note playback belong to their callers.
-internal sealed class FalloutPlayerNotes
+internal sealed partial class FalloutPlayerNotes
 {
     private readonly FalloutPluginStack _records;
     private readonly List<FalloutFormKey> _notes = [];

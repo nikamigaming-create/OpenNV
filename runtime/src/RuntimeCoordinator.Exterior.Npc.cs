@@ -59,6 +59,8 @@ public partial class RuntimeCoordinator
         var armor = _nativeReferences.EquippedArmor(reference.FormKey, level, _nativeGlobals);
         var appearance = FalloutNpcAppearanceResolver.Resolve(_nativePluginStack!, reference.Base, reference.FormKey, armor,
             _nativeReferences.ActorAppearanceOverride(reference.FormKey), selection, _nativeReferences.FormLists);
+        appearance = FalloutWeaponBipedModels.Apply(_nativePluginStack!, appearance,
+            _nativeReferences.Get(reference.FormKey).Inventory?.Contents.EquippedObject(_nativePluginStack!, 5), _nativeReferences.FormLists);
         var preparation = new ExteriorNpcPreparation(appearance, RuntimeLiveContentSource.Current!, cancellation);
         _nativeGridNpcPreparations.Add(preparation);
         return preparation;

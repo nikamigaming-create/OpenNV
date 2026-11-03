@@ -63,6 +63,16 @@ internal sealed class FalloutVatsSession(FalloutPlayerVitals vitals)
         CurrentPhase = Phase.Executing;
     }
 
+    internal void ApplyActorLineOfSight(long ordinal, Func<bool> canSeeActor)
+    {
+        var attack = CurrentAttack ?? throw new InvalidOperationException("VATS has no current queued attack.");
+        if (attack.Ordinal != ordinal || CurrentShotCommitted)
+            throw new InvalidOperationException("VATS sight outcome no longer owns the pending action.");
+        // Sight can downgrade a chosen success. It neither redraws the roll nor
+        // removes the queued shot, spends AP, or promotes an existing miss.
+        if (attack.Success && !canSeeActor()) _queue[_next] = attack with { Success = false };
+    }
+
     internal void CommitShot(long ordinal)
     {
         var attack = CurrentAttack ?? throw new InvalidOperationException("VATS has no current queued attack.");
@@ -72,11 +82,21 @@ internal sealed class FalloutVatsSession(FalloutPlayerVitals vitals)
         _committed.Add(ordinal);
     }
 
+    internal bool CanCompleteAttack(bool weaponActionPending, int pendingDischarges)
+    {
+        var attack = CurrentAttack ?? throw new InvalidOperationException("VATS has no current queued attack.");
+        if (pendingDischarges < 0) throw new ArgumentOutOfRangeException(nameof(pendingDischarges));
+        // A retired session's projectile still blocks global save admission,
+        // but cannot become this action's completion obligation.
+        return !weaponActionPending && pendingDischarges == 0 &&
+            !_publications.Any(publication => publication.Ordinal == attack.Ordinal);
+    }
+
     internal void CompleteAttack(bool fired)
     {
         var attack = CurrentAttack ?? throw new InvalidOperationException("VATS has no current queued attack.");
         if (fired != _committed.Contains(attack.Ordinal)) throw new InvalidOperationException("VATS shot and AP publication disagree.");
-        if (_publications.Any(publication => publication.Ordinal == attack.Ordinal))
+        if (!CanCompleteAttack(false, 0))
             throw new InvalidOperationException("VATS attack still owns unfinished projectile publications.");
         ++_next;
         if (_next == _queue.Count) CurrentPhase = Phase.Completed;

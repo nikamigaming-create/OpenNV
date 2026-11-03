@@ -42,6 +42,8 @@ public partial class RuntimeCoordinator
         internal double SourceMilliseconds, MaximumSliceMilliseconds;
         internal BotNavigationProjection? PriorProjection;
         internal float PrefixLength = 8f;
+        internal NumericVector RegionTarget = end;
+        internal float RegionRadius = projection;
         internal bool ExtendedPrefix;
         internal bool PartialRoute;
         internal bool RetainedPrefix;
@@ -80,6 +82,8 @@ public partial class RuntimeCoordinator
         requestedStart = new[] { request.Start.X, request.Start.Y, request.Start.Z },
         requestedEnd = new[] { request.End.X, request.End.Y, request.End.Z },
         referenceTarget = new[] { request.Target.X, request.Target.Y, request.Target.Z },
+        sourceRegionTarget = new[] { request.RegionTarget.X, request.RegionTarget.Y, request.RegionTarget.Z },
+        sourceRegionRadius = request.RegionRadius,
         localTarget = new[] { request.LocalTarget.X, request.LocalTarget.Y, request.LocalTarget.Z },
         sourcePoints = request.WorldPath.Length,
         request.Resume,
@@ -150,7 +154,7 @@ public partial class RuntimeCoordinator
                 $"source={current.Identity} sourceSha256={_botNavigation!.SourceSha256} start={current.Start} " +
                 $"requested={current.End} projected={current.WorldPath[^1]} projectionRadius={current.Projection} referenceTarget={current.Target} " +
                 $"scope={Scope(current)} localTarget={current.LocalTarget} arrivalRadius={current.ArrivalRadius} " +
-                $"basis={current.BodyBasis} stepHeight={_configuration.Player.StepHeightMeters} spacing={current.Spacing} " +
+                $"basis={current.BodyBasis} stepHeight={current.Player.PhysicalStepHeight} spacing={current.Spacing} " +
                 $"resume={current.Resume} sourceExclusions=0 nativeError={error.Message}");
             if (current.WideGridAttempt)
             {
@@ -158,7 +162,7 @@ public partial class RuntimeCoordinator
                 current.WideGridError = error.Message;
                 current.Spacing = current.StandardSpacing;
                 current.Search = NativeCapsuleNavigation.Search(player, Native(start), current.LocalTarget,
-                    _configuration.Player.StepHeightMeters, current.Spacing, NativeCollisionResident,
+                    current.Player.PhysicalStepHeight, current.Spacing, NativeCollisionResident,
                     probe: current.Probe, targetRadius: current.ArrivalRadius, corridor: current.Intent!.Corridor,
                     arrival: NativeBotSearchArrival(current), minimumSearchRadius: current.PrefixLength).GetEnumerator();
                 return null;
@@ -188,7 +192,7 @@ public partial class RuntimeCoordinator
                 var allowPartial = !current.Intent!.ReferenceApproach && current.Intent.Projection is null;
                 if (allowPartial) current.PartialFloorStart ??= Native(start);
                 current.Search = NativeCapsuleNavigation.Search(player, Native(start), current.LocalTarget,
-                    _configuration.Player.StepHeightMeters, current.Spacing, NativeCollisionResident, maximumNodes: 3600, probe: current.Probe,
+                    current.Player.PhysicalStepHeight, current.Spacing, NativeCollisionResident, maximumNodes: 3600, probe: current.Probe,
                     targetRadius: corridorRadius, corridor: current.Intent!.Corridor, arrival: refinedArrival,
                     partialResult: allowPartial ? () => current.PartialRoute = true : null,
                     minimumSearchRadius: current.ExtendedPrefix ? current.PrefixLength : 0,
@@ -208,7 +212,7 @@ public partial class RuntimeCoordinator
                 current.Spacing = Math.Max(.9f, current.StandardSpacing);
                 current.CoarseError = null;
                 current.Search = NativeCapsuleNavigation.Search(player, Native(start), current.LocalTarget,
-                    _configuration.Player.StepHeightMeters, current.Spacing, NativeCollisionResident,
+                    current.Player.PhysicalStepHeight, current.Spacing, NativeCollisionResident,
                     probe: current.Probe, targetRadius: current.ArrivalRadius, corridor: current.Intent.Corridor,
                     arrival: NativeBotSearchArrival(current), minimumSearchRadius: current.PrefixLength).GetEnumerator();
                 return null;
@@ -225,7 +229,7 @@ public partial class RuntimeCoordinator
                     current.ExtendedPrefix = retry.Extended;
                     var fallbackIntent = NativeCapsuleNavigation.Intent(origin, current.WorldPath, Native(current.Target), current.Distance,
                         length: nextPrefix,
-                        projection: current.Projection > 0 ? new(Native(current.End), current.WorldPath[^1], current.Projection) : null);
+                        projection: current.RegionRadius > 0 ? new(Native(current.RegionTarget), current.WorldPath[^1], current.RegionRadius) : null);
                     if ((!retry.Extended || fallbackIntent.Projection is null && fallbackIntent.Resume < current.WorldPath.Length) &&
                         origin.DistanceTo(fallbackIntent.Target) > 0.2f && fallbackIntent.Target != current.LocalTarget)
                     {
@@ -236,15 +240,15 @@ public partial class RuntimeCoordinator
                         current.ArrivalRadius = fallbackIntent.ArrivalRadius;
                         IReadOnlyList<Vector3> corridor = fallbackIntent.ReferenceApproach ? [fallbackIntent.Target] : fallbackIntent.Corridor;
                         current.Probe = new(NativeCapsuleNavigation.FirstCorridorContact(current.Player, origin, corridor), current.Events.CollisionReference);
-                        current.StandardSpacing = Math.Max(.3f, _configuration.Player.CapsuleRadiusMeters);
+                        current.StandardSpacing = Math.Max(.3f, current.Player.PhysicalRadius);
                         current.RefinedSpacing = NativeCapsuleNavigation.RefinementSpacing(current.StandardSpacing,
-                            _configuration.Player.CapsuleRadiusMeters, current.Player.GlobalBasis.X.Length());
+                            current.Player.PhysicalRadius, current.Player.PhysicalShapeScale);
                         current.WideGridAttempt = current.ExtendedPrefix;
                         current.WideGridError = null;
                         current.Spacing = current.WideGridAttempt ? Math.Max(.9f, current.StandardSpacing) : current.StandardSpacing;
                         current.CoarseError = null;
                         current.Search = NativeCapsuleNavigation.Search(player, origin, current.LocalTarget,
-                            _configuration.Player.StepHeightMeters, current.Spacing, NativeCollisionResident,
+                            current.Player.PhysicalStepHeight, current.Spacing, NativeCollisionResident,
                             probe: current.Probe, targetRadius: current.ArrivalRadius, corridor: fallbackIntent.Corridor, arrival: NativeBotSearchArrival(current),
                             minimumSearchRadius: current.ExtendedPrefix ? current.PrefixLength : 0).GetEnumerator();
                         return null;
@@ -305,6 +309,7 @@ public partial class RuntimeCoordinator
         {
             var retained = partial.Request;
             request.SourcePath = retained.SourcePath;
+            request.RegionTarget = retained.RegionTarget; request.RegionRadius = retained.RegionRadius;
             request.WorldPath = retained.WorldPath;
             request.PrefixArrival = retained.PrefixArrival;
             request.PrefixLength = retained.PrefixLength;
@@ -345,28 +350,28 @@ public partial class RuntimeCoordinator
             request.WorldPath = request.SourcePath.Select(World).ToArray();
             intent = NativeCapsuleNavigation.Intent(origin, request.WorldPath, Native(request.Target), request.Distance,
                 length: request.PrefixLength,
-                projection: request.Projection > 0 ? new(Native(request.End), request.WorldPath[^1], request.Projection) : null);
+                projection: request.RegionRadius > 0 ? new(Native(request.RegionTarget), request.WorldPath[^1], request.RegionRadius) : null);
         }
         request.Intent = intent;
         request.LocalTarget = intent.Target; request.Resume = intent.Resume; request.ArrivalRadius = intent.ArrivalRadius;
         IReadOnlyList<Vector3> corridor = intent.ReferenceApproach ? [intent.Target] : intent.Corridor;
         request.Probe = new(NativeCapsuleNavigation.FirstCorridorContact(request.Player, origin, corridor), request.Events.CollisionReference);
-        request.StandardSpacing = Math.Max(.3f, _configuration.Player.CapsuleRadiusMeters);
+        request.StandardSpacing = Math.Max(.3f, request.Player.PhysicalRadius);
         request.RefinedSpacing = NativeCapsuleNavigation.RefinementSpacing(request.StandardSpacing,
-            _configuration.Player.CapsuleRadiusMeters, request.Player.GlobalBasis.X.Length());
+            request.Player.PhysicalRadius, request.Player.PhysicalShapeScale);
         request.WideGridAttempt = request.ExtendedPrefix;
         request.Spacing = request.WideGridAttempt ? Math.Max(.9f, request.StandardSpacing) : request.StandardSpacing;
         if (intent.Projection is not null)
         {
-            var region = _botNavigation!.ArrivalRegion(Source(request.Start), Source(request.End), request.SourcePath[^1],
-                request.Projection / units, request.Player.SafeMargin * 8 / units, NativeCapsuleNavigation.SourceHeightTolerance / units,
+            var region = _botNavigation!.ArrivalRegion(Source(request.Start), Source(request.RegionTarget), request.SourcePath[^1],
+                request.RegionRadius / units, request.Player.SafeMargin * 8 / units, NativeCapsuleNavigation.SourceHeightTolerance / units,
                 out var sourceFloor);
             request.Arrival = point => region(new Vector3(point.X, -point.Z, point.Y) / units);
             request.ProjectionFloor = point => sourceFloor(new Vector3(point.X, -point.Z, point.Y) / units);
         }
         request.CoarseError = null;
         request.Search = NativeCapsuleNavigation.Search(request.Player, origin, request.LocalTarget,
-            _configuration.Player.StepHeightMeters, request.Spacing, NativeCollisionResident, probe: request.Probe,
+            request.Player.PhysicalStepHeight, request.Spacing, NativeCollisionResident, probe: request.Probe,
             targetRadius: request.ArrivalRadius, corridor: intent.Corridor, arrival: NativeBotSearchArrival(request),
             minimumSearchRadius: request.ExtendedPrefix ? request.PrefixLength : 0).GetEnumerator();
     }
@@ -412,17 +417,32 @@ public partial class RuntimeCoordinator
         float Penalty(Vector3 point) => penalties!.Any(portal => portal.DistanceSquaredTo(point) < .0001f)
             ? 500f / units : 0;
         Func<Vector3, float>? cost = penalties is { Count: > 0 } ? Penalty : null;
+        var result = FindNativeBotSourceRegion(_botNavigation!, Source(request.Start), Source(request.End), Source(request.Target),
+            request.Projection / units, request.Distance / units, cost);
+        request.RegionTarget = result.ReferenceRegion ? request.Target : request.End;
+        request.RegionRadius = result.ReferenceRegion ? request.Distance : request.Projection;
+        return (result.Path, result.Prefix);
+    }
+
+    internal static (IReadOnlyList<Vector3> Path, Func<Vector3, int, float, float, Func<Vector3, bool>> Prefix, bool ReferenceRegion)
+        FindNativeBotSourceRegion(CellNavigationGraph navigation, Vector3 start, Vector3 endpoint, Vector3 reference,
+            float projectionRadius, float approachRadius, Func<Vector3, float>? portalPenalty = null)
+    {
         try
         {
-            var path = _botNavigation!.FindPath(Source(request.Start), Source(request.End), out var prefix,
-                destinationRadiusGameUnits: request.Projection / units, portalPenalty: cost);
-            return (path, prefix);
+            var path = navigation.FindPath(start, endpoint, out var prefix,
+                destinationRadiusGameUnits: projectionRadius, portalPenalty: portalPenalty);
+            return (path, prefix, false);
         }
-        catch (InvalidOperationException) when (request.Distance > 0 || request.Projection > 0)
+        catch (InvalidOperationException) when (approachRadius > 0)
         {
-            var path = _botNavigation!.FindPath(Source(request.Start), Source(request.End), out var prefix,
-                portalPenalty: cost);
-            return (path, prefix);
+            // A straight-line standoff can lie beyond a ledge while another
+            // reachable point is inside the actual reference's approach range.
+            // Keep that real requested region; an unconstrained nearest point
+            // cannot later attest the failed small projection radius.
+            var path = navigation.FindPath(start, reference, out var prefix,
+                destinationRadiusGameUnits: approachRadius, portalPenalty: portalPenalty);
+            return (path, prefix, true);
         }
     }
 
@@ -458,27 +478,27 @@ public partial class RuntimeCoordinator
             request.PartialRoute = false; request.RetainedPrefix = false; _botPartialContinuation = null;
             var intent = NativeCapsuleNavigation.Intent(origin, request.WorldPath, Native(request.Target), request.Distance,
                 length: request.PrefixLength,
-                projection: request.Projection > 0 ? new(Native(request.End), request.WorldPath[^1], request.Projection) : null);
+                projection: request.RegionRadius > 0 ? new(Native(request.RegionTarget), request.WorldPath[^1], request.RegionRadius) : null);
             request.Intent = intent; request.LocalTarget = intent.Target; request.Resume = intent.Resume;
             request.ArrivalRadius = intent.ArrivalRadius; request.Arrival = null; request.ProjectionFloor = null;
             if (intent.Projection is not null)
             {
                 Vector3 Source(NumericVector p) => new Vector3(p.X, -p.Z, p.Y) / units;
-                var region = _botNavigation!.ArrivalRegion(Source(request.Start), Source(request.End), path[^1],
-                    request.Projection / units, request.Player.SafeMargin * 8 / units,
+                var region = _botNavigation!.ArrivalRegion(Source(request.Start), Source(request.RegionTarget), path[^1],
+                    request.RegionRadius / units, request.Player.SafeMargin * 8 / units,
                     NativeCapsuleNavigation.SourceHeightTolerance / units, out var floor);
                 request.Arrival = point => region(new Vector3(point.X, -point.Z, point.Y) / units);
                 request.ProjectionFloor = point => floor(new Vector3(point.X, -point.Z, point.Y) / units);
             }
             IReadOnlyList<Vector3> corridor = intent.ReferenceApproach ? [intent.Target] : intent.Corridor;
             request.Probe = new(NativeCapsuleNavigation.FirstCorridorContact(request.Player, origin, corridor), request.Events.CollisionReference);
-            request.StandardSpacing = Math.Max(.3f, _configuration.Player.CapsuleRadiusMeters);
+            request.StandardSpacing = Math.Max(.3f, request.Player.PhysicalRadius);
             request.RefinedSpacing = NativeCapsuleNavigation.RefinementSpacing(request.StandardSpacing,
-                _configuration.Player.CapsuleRadiusMeters, request.Player.GlobalBasis.X.Length());
+                request.Player.PhysicalRadius, request.Player.PhysicalShapeScale);
             request.Spacing = request.StandardSpacing; request.WideGridAttempt = false;
             request.WideGridError = null; request.CoarseError = null;
             request.Search = NativeCapsuleNavigation.Search(request.Player, origin, request.LocalTarget,
-                _configuration.Player.StepHeightMeters, request.Spacing, NativeCollisionResident, probe: request.Probe,
+                request.Player.PhysicalStepHeight, request.Spacing, NativeCollisionResident, probe: request.Probe,
                 targetRadius: request.ArrivalRadius, corridor: intent.Corridor, arrival: NativeBotSearchArrival(request)).GetEnumerator();
             GD.Print($"OPENNV_BOT_ALTERNATE_CORRIDOR preferences={preference.PenalizedPortals.Count} sourceSha256={preference.SourceSha256} sourceExclusions=0 target={request.LocalTarget}");
             return true;

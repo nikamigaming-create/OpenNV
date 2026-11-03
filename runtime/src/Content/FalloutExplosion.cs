@@ -28,6 +28,7 @@ internal sealed record FalloutExplosion(FalloutFormKey Form, float Force, float 
     internal bool IgnoresImageSpaceSwap => (Flags & IgnoreImageSpaceSwap) != 0;
     internal bool PushesSourceOnly => (Flags & PushSourceReferenceOnly) != 0;
     internal bool HasUnpresentedVisuals => Light is not null || ImpactDataSet is not null;
+    internal FalloutIngestible? TouchEnchantment { get; init; }
 
     internal static FalloutExplosion Read(FalloutPluginStack records, FalloutFormKey key)
     {
@@ -75,6 +76,8 @@ internal sealed record FalloutExplosion(FalloutFormKey Form, float Force, float 
         if (result.Force < 0 || result.Damage < 0 || result.Radius < 0 || result.ImageSpaceRadius < 0 ||
             result.RadiationLevel < 0 || result.RadiationDissipationSeconds < 0 || result.RadiationRadius < 0)
             throw new InvalidDataException("Explosion DATA contains a negative magnitude.");
+        if (result.ObjectEffect is { } objectEffect && records.GetEffective(objectEffect).Signature == "ENCH")
+            result = result with { TouchEnchantment = FalloutIngestible.ReadWeaponEnchantment(records, objectEffect) };
         return result;
 
         void Check(FalloutFormKey? form, params string[] signatures)
@@ -90,7 +93,15 @@ internal sealed record FalloutExplosion(FalloutFormKey Form, float Force, float 
     {
         if ((Flags & ~KnownFlags) != 0)
             throw new NotSupportedException($"Explosion {Form} flags 0x{Flags:x8} need their source effect owner.");
-        if (PlacedImpactObject is not null || ObjectEffect is not null)
-            throw new NotSupportedException($"Explosion {Form} needs its placed-object or object-effect owner.");
+        if (PlacedImpactObject is not null)
+            throw new NotSupportedException($"Explosion {Form} needs its persistent placed-object owner.");
+        if (ObjectEffect is { } effect)
+        {
+            if (Radius == 0)
+                throw new NotSupportedException($"Explosion {Form} requires its zero-radius direct enchantment contact owner.");
+            if (TouchEnchantment is not { } enchantment || enchantment.Form != effect)
+                throw new NotSupportedException($"Explosion {Form} needs its declared object-effect delivery owner.");
+            OpenNV.Runtime.Gameplay.State.FalloutInstantTouchEffects.RequireSourceOwner(enchantment, areaDelivered: true, healthDelivered: true);
+        }
     }
 }

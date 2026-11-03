@@ -6,12 +6,12 @@ namespace OpenNV.Runtime.Content;
 // reference attachment are separate from the command's caller and media path.
 internal sealed class FalloutSoundVoices(FalloutPluginStack records)
 {
-    private sealed record Voice(long Id, FalloutFormKey Sound, FalloutFormKey? Reference,
+    private sealed record Voice(long Id, FalloutFormKey Sound, FalloutSpatialReferenceId? Reference,
         string Owner, Func<bool> Playing, Action Stop, Action? Retire,
-        FalloutFormKey? SourceReference, Func<OpenNV.Runtime.Content.FalloutFiniteSoundVoice?>? FiniteWait,
+        FalloutSpatialReferenceId? SourceReference, Func<OpenNV.Runtime.Content.FalloutFiniteSoundVoice?>? FiniteWait,
         Func<object?>? FiniteWaitState, Func<IFalloutFiniteSoundSaveDrainLease>? PrepareSaveDrain, Func<bool>? CheckpointReady);
     private readonly Dictionary<long, Voice> _voices = [];
-    private readonly Dictionary<FalloutFormKey, long> _sourceRegistrations = [];
+    private readonly Dictionary<FalloutSpatialReferenceId, long> _sourceRegistrations = [];
     private long _nextId, _stopRequests, _stopped;
     private readonly List<Action> _retirementObservers = [];
     private FalloutFiniteSoundSaveDrain? _saveDrain;
@@ -36,8 +36,8 @@ internal sealed class FalloutSoundVoices(FalloutPluginStack records)
         persistence = "transient-source-voices;no-cold-replay",
     };
 
-    internal IDisposable Register(FalloutFormKey sound, FalloutFormKey? reference, string owner,
-        Func<bool> playing, Action stop, Action? retire = null, FalloutFormKey? sourceReference = null,
+    internal IDisposable Register(FalloutFormKey sound, FalloutSpatialReferenceId? reference, string owner,
+        Func<bool> playing, Action stop, Action? retire = null, FalloutSpatialReferenceId? sourceReference = null,
         Func<OpenNV.Runtime.Content.FalloutFiniteSoundVoice?>? finiteWait = null, Func<object?>? finiteWaitState = null,
         Func<IFalloutFiniteSoundSaveDrainLease>? prepareSaveDrain = null, Func<bool>? checkpointReady = null)
     {
@@ -58,11 +58,11 @@ internal sealed class FalloutSoundVoices(FalloutPluginStack records)
     {
         ArgumentNullException.ThrowIfNull(references);
         if (references.Count == 0) throw new ArgumentException("A source drain requires its retiring references.", nameof(references));
-        var sources = references.Select(ValidateReference).ToHashSet();
+        var sources = references.Select(reference => ValidateReference(reference)).ToHashSet();
         return PrepareFiniteDrain(sources);
     }
 
-    private FalloutFiniteSoundSaveDrain PrepareFiniteDrain(IReadOnlySet<FalloutFormKey>? references)
+    private FalloutFiniteSoundSaveDrain PrepareFiniteDrain(IReadOnlySet<FalloutSpatialReferenceId>? references)
     {
         if (_saveDrain is not null) throw new InvalidOperationException("The source graph already has a finite save-drain lease.");
         if (Error is not null) throw new NotSupportedException("Source audio failure: " + Error);
@@ -114,7 +114,7 @@ internal sealed class FalloutSoundVoices(FalloutPluginStack records)
         }
     }
 
-    internal IReadOnlyList<OpenNV.Runtime.Content.FalloutFiniteSoundVoice>? PendingFiniteSourceVoices(FalloutFormKey reference)
+    internal IReadOnlyList<OpenNV.Runtime.Content.FalloutFiniteSoundVoice>? PendingFiniteSourceVoices(FalloutSpatialReferenceId reference)
     {
         reference = ValidateReference(reference);
         var bound = _voices.Values.Where(voice => voice.SourceReference == reference).ToArray();
@@ -134,7 +134,7 @@ internal sealed class FalloutSoundVoices(FalloutPluginStack records)
         return result.OrderBy(proof => proof.Generation).ToArray();
     }
 
-    internal void Stop(FalloutFormKey sound, FalloutFormKey? reference = null)
+    internal void Stop(FalloutFormKey sound, FalloutSpatialReferenceId? reference = null)
     {
         if (Error is not null) throw new InvalidOperationException(Error);
         sound = ValidateSound(sound);
@@ -194,11 +194,34 @@ internal sealed class FalloutSoundVoices(FalloutPluginStack records)
             throw new InvalidDataException("StopSound requires a SOUN form.");
         return source.FormKey;
     }
-    private FalloutFormKey ValidateReference(FalloutFormKey reference)
+    private readonly Dictionary<uint, List<Func<bool>>> _runtimeReferenceOwners = [];
+
+    internal IDisposable BindRuntimeReference(uint id, Func<bool> owns)
     {
-        if (reference == records.RuntimeFormKey(0x14)) return reference;
-        var source = records.GetEffective(reference);
-        if (source.Signature is not ("ACHR" or "ACRE" or "REFR"))
+        FalloutSpatialReferenceId.Runtime(id).Validate();
+        ArgumentNullException.ThrowIfNull(owns);
+        if (!owns()) throw new InvalidDataException("Runtime sound reference has no published world owner.");
+        if (!_runtimeReferenceOwners.TryGetValue(id, out var owners)) _runtimeReferenceOwners.Add(id, owners = []);
+        owners.Add(owns);
+        return new Scope(() =>
+        {
+            owners.Remove(owns);
+            if (owners.Count == 0) _runtimeReferenceOwners.Remove(id);
+        });
+    }
+
+    private FalloutSpatialReferenceId ValidateReference(FalloutSpatialReferenceId reference)
+    {
+        reference.Validate();
+        if (reference.RuntimeId is { } id)
+        {
+            if (!_runtimeReferenceOwners.TryGetValue(id, out var owners) || !owners.Any(owns => owns()))
+                throw new InvalidDataException("Runtime sound reference lost its actual world owner.");
+            return reference;
+        }
+        if (reference.Source == records.RuntimeFormKey(0x14)) return reference;
+        var source = records.GetEffective(reference.RequireSource());
+        if (!FalloutCellSceneReader.IsReferenceType(source.Signature))
             throw new InvalidDataException("Sound source filter is not an object reference.");
         return source.FormKey;
     }

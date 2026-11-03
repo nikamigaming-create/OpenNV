@@ -18,6 +18,12 @@ internal sealed partial class NativeActorWeaponAttachment
     private readonly List<BoneAttachment3D> _bodyAttachments = [];
     private readonly float _units;
 
+    internal static bool CanAttachSourceModel(FalloutWeaponPresentation weapon, RuntimeLiveContentSource content)
+    {
+        var path = weapon.Model?.ModelPath ?? throw new InvalidDataException("Equipped weapon has no source inventory model.");
+        return !FalloutNifGeometryOrder.HasSkinnedGeometry(NativeOwnedNifCache.Read(content, path, out _));
+    }
+
     internal NativeActorWeaponAttachment(FalloutWeaponPresentation weapon, RuntimeNativeNifSkeleton skeleton,
         RuntimeLiveContentSource content)
     {
@@ -27,6 +33,8 @@ internal sealed partial class NativeActorWeaponAttachment
         var path = model.ModelPath ?? throw new InvalidDataException("Equipped weapon has no source model.");
         if (!content.TryRead(path, null, out var bytes, out _)) throw new FileNotFoundException(path);
         var source = FalloutNifFile.Read(bytes);
+        if (FalloutNifGeometryOrder.HasSkinnedGeometry(source))
+            throw new InvalidOperationException("Skinned inventory models do not attach as ordinary weapon objects.");
         _modelResource = path; _modelSha256 = source.Sha256;
         var targets = source.Blocks.Where(block => block.TypeName is "NiNode" or "NiTriShape" or "NiTriStrips")
             .Select(block => source.ReadObject(block.Index) is FalloutNifNode node ? node.Name : source.ReadGeometry(block.Index).Name).ToHashSet(StringComparer.Ordinal);
@@ -118,18 +126,28 @@ internal sealed partial class NativeActorWeaponAttachment
     {
         var source = Nodes.SingleOrDefault(node => node.GetMeta("opennv_nif_source_name", "").AsString().Equals(name, StringComparison.OrdinalIgnoreCase)) ??
             throw new NotSupportedException($"Equipped source weapon has no unique {name}.");
+        return skeleton.Node.GlobalTransform * TransformInSkeleton(skeleton, source);
+    }
+
+    internal Transform3D TransformInSkeleton(RuntimeNativeNifSkeleton skeleton, Node3D source)
+    {
         var local = Transform3D.Identity;
-        for (Node3D? node = source; node != Attachment; node = node.GetParent() as Node3D)
+        for (Node3D? node = source; node is not null; node = node.GetParent() as Node3D)
         {
-            if (node is null) throw new InvalidOperationException("Weapon socket left its attachment.");
+            if (node is BoneAttachment3D mount && (mount == Attachment || _bodyAttachments.Contains(mount)))
+            {
+                if (mount.GetParent() != skeleton.Node)
+                    throw new InvalidOperationException("Weapon mount left its actual source skeleton.");
+                return skeleton.Node.GetBoneGlobalPose(skeleton.BoneIndex(mount.BoneName.ToString())) * local;
+            }
             local = node.Transform * local;
         }
-        return skeleton.Node.GlobalTransform * skeleton.Node.GetBoneGlobalPose(skeleton.BoneIndex("Weapon")) * local;
+        throw new InvalidOperationException("Weapon source node left its owned attachment graph.");
     }
 
     internal bool HasSocket(string name) => Nodes.Any(node =>
         node.GetMeta("opennv_nif_source_name", "").AsString().Equals(name, StringComparison.OrdinalIgnoreCase));
 
     internal Transform3D ReleaseTransform(RuntimeNativeNifSkeleton skeleton) =>
-        skeleton.Node.GlobalTransform * skeleton.Node.GetBoneGlobalPose(skeleton.BoneIndex("Weapon")) * Root.Transform;
+        skeleton.Node.GlobalTransform * TransformInSkeleton(skeleton, Root);
 }

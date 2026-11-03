@@ -18,7 +18,7 @@ internal static class TransientExplosionContracts
             var count = new byte[24]; UInt(count, 0, 2);
             var reference = Record("REFR", 0x900, Field("EDID", Text("Marker")), Field("NAME", BitConverter.GetBytes(0x801u)), Field("DATA", new byte[24]));
             File.WriteAllBytes(Path.Combine(directory.FullName, "Explosion.esm"), Join(Record("TES4", 0),
-                Explosion(0x800, 0), Explosion(0x803, 10), Record("ACTI", 0x801, Field("SCRI", BitConverter.GetBytes(0x802u))),
+                Explosion(0x800, 0), Explosion(0x803, 10), Record("PROJ", 0x804), Record("ACTI", 0x801, Field("SCRI", BitConverter.GetBytes(0x802u))),
                 Record("SCPT", 0x802, Field("SCHR", header), Field("SLSD", local), Field("SCVR", Text("created")),
                     Field("SLSD", count), Field("SCVR", Text("count")),
                     Field("SCRO", BitConverter.GetBytes(0x800u)), Field("SCRO", BitConverter.GetBytes(0x900u)),
@@ -26,6 +26,7 @@ internal static class TransientExplosionContracts
                 Record("CELL", 0x810, Field("DATA", [1])), Group(0x810, reference)));
             using var records = FalloutPluginStack.Load(directory.FullName, ["Explosion.esm"]);
             CheckSchemaAdmission(Path.Combine(directory.FullName, "invalid-save.json"));
+            CheckSharedRuntimeIdentities(records);
             using var world = new FalloutReferenceWorld(records);
             world.LoadCell(FalloutCellSceneReader.Read(records, Key(0x810)));
             var completions = new Dictionary<uint, Action>();
@@ -76,6 +77,43 @@ internal static class TransientExplosionContracts
             Console.WriteLine("OPENNV_TRANSIENT_EXPLOSION_PASS typedResult=true scriptStatement=true activeSaveRefused=true retiredCold=true monotonic=true invalidAtomic=true failedRetryRefused=true");
         }
         finally { directory.Delete(true); }
+    }
+
+    private static void CheckSharedRuntimeIdentities(FalloutPluginStack records)
+    {
+        var runtime = new FalloutRuntimeReferences(records);
+        var abandoned = runtime.Prepare(FalloutRuntimeReferenceKind.Projectile, Key(0x804));
+        abandoned.Publication.Dispose();
+        Check(runtime.Capture().LastId == 0, "Uncommitted mine reserved an authoritative identity.");
+        var projectile = runtime.Prepare(FalloutRuntimeReferenceKind.Projectile, Key(0x804));
+        using (projectile.Publication)
+        {
+            projectile.Publication.Commit();
+            Check(projectile.Identity.RuntimeId == 0xff000001 && projectile.Identity.Source is null,
+                "Runtime projectile masqueraded as an owned-file reference.");
+            projectile.Publication.Dispose();
+        }
+        Check(runtime.Capture().LastId == 0, "Failed deployment leaked an allocated identity.");
+        projectile = runtime.Prepare(FalloutRuntimeReferenceKind.Projectile, Key(0x804));
+        using (projectile.Publication) { projectile.Publication.Commit(); projectile.Publication.Complete(); }
+        var explosions = new FalloutTransientExplosions(records, runtime)
+        {
+            Prepare = _ => new(new(Key(0x810), [0, 0, 0], [0, 0, 0]), (_, done, _) => done(), () => { })
+        };
+        var value = explosions.Function(() => Key(0x900)).InvokeValue([new(FalloutScriptValue.Form(0x800))]);
+        Check(value.Number == 0xff000002, "Explosion reused a persistent projectile identity.");
+        var coldRuntime = new FalloutRuntimeReferences(records);
+        coldRuntime.Restore(JsonSerializer.Deserialize<FalloutRuntimeReferencesSnapshot>(JsonSerializer.Serialize(runtime.Capture())));
+        var coldExplosions = new FalloutTransientExplosions(records, coldRuntime);
+        coldExplosions.Restore(Cold(explosions.Capture()));
+        Check(coldRuntime.Require(0xff000001).Kind == FalloutRuntimeReferenceKind.Projectile &&
+            coldRuntime.Require(0xff000002).Retired, "Cold shared allocator lost projectile or explosion ownership.");
+        var identity = JsonSerializer.Deserialize<FalloutSpatialReferenceId>(JsonSerializer.Serialize(projectile.Identity));
+        Check(identity == projectile.Identity, "Typed projectile identity changed during JSON continuation.");
+        Reject(() => identity.RequireSource());
+        Reject(() => FalloutSpatialReferenceId.Runtime(0x01000001).Validate());
+        var next = coldRuntime.Prepare(FalloutRuntimeReferenceKind.Projectile, Key(0x804));
+        using (next.Publication) Check(next.Identity.RuntimeId == 0xff000003, "Cold allocator reused a retained ID.");
     }
 
     internal static void RunOwned(string dataRoot)
@@ -130,6 +168,11 @@ internal static class TransientExplosionContracts
         { Music = new(Key(0x800), new string('A', 64), null, null, 0, 0, false) }));
         Reject(() => FalloutNativeCampaignSave.Write(path, prior with { Schema = FalloutNativeCampaignSave.ExpectedSchema }));
         Check(!File.Exists(path), "A current save without allocator authority reached the filesystem.");
+        var v71 = admitted with { Schema = FalloutNativeCampaignSave.BeforeDynamicMineSchema };
+        Check(FalloutNativeCampaignSave.AdmitPreviousOwnerSchema(v71).Schema == FalloutNativeCampaignSave.ExpectedSchema,
+            "v71 source-mine saves were not admitted without changing their contents.");
+        Reject(() => FalloutNativeCampaignSave.AdmitPreviousOwnerSchema(v71 with { RuntimeReferences = new(0, []) }));
+        Reject(() => FalloutNativeCampaignSave.AdmitPreviousOwnerSchema(v71 with { DynamicMines = [] }));
     }
     private static FalloutFormKey Key(uint id) => new("Explosion.esm", id);
     private static void Check(bool valid, string message) { if (!valid) throw new InvalidDataException(message); }

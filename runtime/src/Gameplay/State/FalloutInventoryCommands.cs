@@ -14,6 +14,22 @@ internal sealed class FalloutInventoryCommands(FalloutPluginStack records, Fallo
     Action<FalloutFormKey>? prepareActorChange = null, Func<FalloutFormKey, bool>? weaponDrawn = null,
     Action<FalloutFormKey, FalloutFormKey>? consumeIngestible = null)
 {
+    internal static bool ReadEquipmentFlag(double value, bool positiveOnly)
+    {
+        if (!double.IsFinite(value) || value != Math.Truncate(value) || value < int.MinValue || value > int.MaxValue)
+            throw new NotSupportedException("Equipment command integer flag conversion is unbound.");
+        return positiveOnly ? value > 0 : value != 0;
+    }
+    private FalloutHudEvent? PrepareEquipmentNotice(FalloutFormKey item, bool visible, bool equipped)
+    {
+        if (!visible) return null;
+        var name = FalloutRecordDisplayName.Read(records.GetEffective(item));
+        var suffix = FalloutGameSettingStrings.Read(records, equipped ? "sEquipItemOnPlayer" : "sUnequipItemOnPlayer");
+        var notice = new FalloutHudEvent(equipped ? FalloutHudEventKind.ItemEquipped : FalloutHudEventKind.ItemUnequipped,
+            item, 0, Text: name + " " + suffix + ".");
+        player.Notifications.RequirePublish([notice]);
+        return notice;
+    }
     private bool IsPlayer(FalloutFormKey target) => target == records.RuntimeFormKey(0x14);
     private FalloutPlayerInventory Inventory(FalloutFormKey target) => IsPlayer(target) ? player : world.Inventory(target, level(), globals).Contents;
 
@@ -41,10 +57,7 @@ internal sealed class FalloutInventoryCommands(FalloutPluginStack records, Fallo
         }
         if (weapon is null)
         {
-            var fallback = records.RuntimeFormKey(0x1f4);
-            if (!records.TryGetEffective(fallback, out var fists) || fists.Signature != "WEAP")
-                throw new NotSupportedException("Engine unarmed fallback requires its winning weapon source.");
-            weapon = fallback;
+            weapon = FalloutDefaultUnarmedWeapon.Require(records);
         }
         foreach (var member in FalloutFormList.Entries(records, list, world.FormLists))
             if (member == weapon) return true;
@@ -87,6 +100,10 @@ internal sealed class FalloutInventoryCommands(FalloutPluginStack records, Fallo
                     {
                         world.AcquirePlayerNote(changedItem, player.Notifications); return;
                     }
+                    if (world.InventoryAcquisition is { } acquisition)
+                    {
+                        acquisition.Add(changedItem, command.Count, command.Silent); return;
+                    }
                     FalloutReferenceWorld.RequirePlayerItemAcquisition(records, source, command.Target);
                 }
                 var revision = inventory.Revision;
@@ -123,15 +140,22 @@ internal sealed class FalloutInventoryCommands(FalloutPluginStack records, Fallo
                 {
                     if (inventory.Item(item) is null) return;
                     if (command.NoUnequip) throw new NotSupportedException("An ingestible cannot retain an equipped lock.");
+                    var consumedNotice = PrepareEquipmentNotice(item, isPlayer && !command.Silent, equipped: true);
                     (consumeIngestible ?? throw new NotSupportedException("EquipItem has no bound ingestible transaction."))(command.Target, item);
+                    if (consumedNotice is not null) player.Notifications.Publish([consumedNotice]);
                     return;
                 }
                 if (records.GetEffective(item).Signature is not ("ARMO" or "WEAP"))
                     throw new NotSupportedException("EquipItem consumption requires its book/ammo/ingestible owner.");
                 if (inventory.Item(item) is null) return;
-                if (!command.Silent && isPlayer)
-                    throw new NotSupportedException("EquipItem visible equipment notification requires its source HUD message owner.");
-                if (isPlayer) inventory.Equip(records, item, command.NoUnequip);
+                var wasEquipped = inventory.Equipped.Contains(records.RuntimeFormId(item));
+                var equipNotice = PrepareEquipmentNotice(item, isPlayer && !command.Silent && !wasEquipped, equipped: true);
+                if (isPlayer)
+                {
+                    inventory.Equip(records, item, command.NoUnequip);
+                    if (!wasEquipped && inventory.Equipped.Contains(records.RuntimeFormId(item)) && equipNotice is not null)
+                        player.Notifications.Publish([equipNotice]);
+                }
                 else
                 {
                     prepareActorChange?.Invoke(command.Target);
@@ -142,11 +166,18 @@ internal sealed class FalloutInventoryCommands(FalloutPluginStack records, Fallo
                 var removedEquipment = command.Item ?? throw new InvalidDataException("UnequipItem has no item.");
                 if (records.GetEffective(removedEquipment).Signature is not ("ARMO" or "WEAP"))
                     throw new InvalidDataException("UnequipItem requires armor or a weapon.");
-                if (command.NoEquip) throw new NotSupportedException("UnequipItem NoEquip requires a persistent equipment-admission lock owner.");
-                if (!command.Silent && isPlayer)
-                    throw new NotSupportedException("UnequipItem visible equipment notification requires its source HUD message owner.");
+                // The direct resident source procedure accepts this argument
+                // but never reads it. It does not create a CannotWear ban.
+                if (command.NoEquip && !isPlayer && (!world.IsResident(command.Target) ||
+                    world.Get(command.Target).QuerySpatialPlacement is null || world.Get(command.Target).QueryNativeCondition is null))
+                    throw new NotSupportedException("UnequipItem NoEquip queued-process continuation is unbound.");
                 if (!inventory.Equipped.Contains(records.RuntimeFormId(removedEquipment))) return;
-                if (isPlayer) inventory.Unequip(records, removedEquipment, force: true);
+                var unequipNotice = PrepareEquipmentNotice(removedEquipment, isPlayer && !command.Silent, equipped: false);
+                if (isPlayer)
+                {
+                    if (inventory.Unequip(records, removedEquipment, force: true) && unequipNotice is not null)
+                        player.Notifications.Publish([unequipNotice]);
+                }
                 else
                 {
                     prepareActorChange?.Invoke(command.Target);

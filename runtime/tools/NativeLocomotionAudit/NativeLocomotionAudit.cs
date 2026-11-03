@@ -101,6 +101,7 @@ public partial class NativeLocomotionAudit : Node3D
                 NativeNavigationContracts.Run();
                 await CheckRoundedLandingContact();
                 await CheckUnsupportedLandingContact();
+                await CheckWalkableContactGapSupport();
                 GetTree().Quit(); return;
             }
             NativeNavigationContracts.Run();
@@ -121,6 +122,7 @@ public partial class NativeLocomotionAudit : Node3D
             await CheckSupportedStepHeadroom();
             await CheckRoundedLandingContact();
             await CheckUnsupportedLandingContact();
+            await CheckWalkableContactGapSupport();
             await Check(.2f, false, true, standardHumanoid: true);
             await Check(.7f, false, false, standardHumanoid: true);
             await Check(.3f, false, true);
@@ -213,6 +215,25 @@ public partial class NativeLocomotionAudit : Node3D
                     if (!rangeRefused) throw new InvalidOperationException("Approach radius admitted an occupied or different-floor destination.");
                 }
                 GD.Print("OPENNV_NATIVE_APPROACH_REGION_PASS targetCollision=true supportedEndpoint=true queryBodyUnmoved=true insufficientRangeRefused=true differentFloorRefused=true");
+                foreach (var direct in new[]
+                {
+                    (Goal: new Vector3(3, 0, 1), Resident: true, Accepted: true),
+                    (Goal: new Vector3(0, 0, -5), Resident: true, Accepted: false),
+                    (Goal: new Vector3(3, 0, 1), Resident: false, Accepted: false)
+                })
+                {
+                    IReadOnlyList<Vector3>? approach = null;
+                    try
+                    {
+                        foreach (var result in NativeCapsuleNavigation.Search(body, body.GlobalPosition, direct.Goal, .4f, .64f,
+                            _ => direct.Resident, targetRadius: .6f, corridor: [direct.Goal], directOnly: true))
+                            if (result is not null) { approach = result; break; }
+                    }
+                    catch (InvalidOperationException) { }
+                    if ((approach is not null) != direct.Accepted || body.GlobalTransform != initial ||
+                        approach is not null && approach[^1].DistanceTo(direct.Goal) > .6f)
+                        throw new InvalidOperationException("Direct approach bypassed native collision/residency or failed its supported target radius.");
+                }
                 var partial = false;
                 IReadOnlyList<Vector3>? frontier = null;
                 foreach (var result in NativeCapsuleNavigation.Search(body, body.GlobalPosition, target, .4f, .32f,

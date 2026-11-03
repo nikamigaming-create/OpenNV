@@ -51,13 +51,14 @@ internal sealed partial class RuntimeNativeActorCombat
     internal string? EngagementError => _engagementError;
     private string? _assistanceError;
     private bool _engagementPrepared;
+    private bool _engagementFleePrepared;
     private long _attacks, _hits, _assistsReceived;
     private int _pendingHitscanImpacts;
     private object? _lastAttack;
     private object? _lastHitscanImpact;
     private object? _lastExplosion;
     private FalloutActorActivityState Activity => _actor is RuntimeNativeNpc npc ? npc.Activity : ((RuntimeNativeCreature)_actor).Activity;
-    internal bool OwnsPose => _state.KnockedDown || _context is not null && (_state.Engagement is not null || _state.AggroWarning is not null || ReactingToHit);
+    internal bool OwnsPose => _state.KnockedDown || _fatigueKnockoutError is not null || _context is not null && (_state.Engagement is not null || _state.AggroWarning is not null || ReactingToHit);
     internal bool Restrained => _state.Restrained;
     internal int? ScriptCombatProcedure => _state.Engagement is null ? null : _state.Engagement.Action == "flee" ? 16 : 13;
     internal int? ScriptCombatPackage => _state.Engagement is null ? null : _state.Engagement.Action == "flee" ? 10 : 5;
@@ -77,6 +78,8 @@ internal sealed partial class RuntimeNativeActorCombat
         ingestibles = _state.Ingestibles,
         threat = _threat,
         relation = _relation,
+        lastAttackDecision = _state.Engagement is { } current && _attackDecision is { } decision &&
+            decision.Target == current.Target ? (AttackDecision?)decision : null,
         attacks = _attacks,
         hits = _hits,
         assistsReceived = _assistsReceived,
@@ -110,6 +113,8 @@ internal sealed partial class RuntimeNativeActorCombat
 
     private FalloutActorEngagement? CaptureEngagement()
     {
+        if (_fatigueKnockoutError is { } fatigueError)
+            throw new NotSupportedException("Fatigue knockout continuation is unbound: " + fatigueError);
         if (!Dead && _hitKnockbackError is { } knockbackFailure)
             throw new NotSupportedException($"Living actor hit knockback continuation remains unowned: {knockbackFailure}");
         // A hit can create an engagement before the next physics update. A
@@ -136,7 +141,11 @@ internal sealed partial class RuntimeNativeActorCombat
 
     private void Provoke(FalloutFormKey attacker)
     {
-        if (Dead || _state.Unconscious) return;
+        if (Dead || _state.Unconscious || attacker == _state.Reference) return;
+        // A trap/projectile or non-actor magic caster retains its physical
+        // damage attribution, but cannot become an Actor combat target. Do
+        // not substitute the player, an ownership faction or an inferred NPC.
+        if (!FalloutActorEngagement.IsActorAttacker(_records, attacker)) return;
         if (_world.IgnoresFriendlyHits(_state.Reference) &&
             (attacker == _records.RuntimeFormKey(0x14) && _state.PlayerTeammate || _world.ActorRelation(_state.Reference, attacker) >= 2)) return;
         _state.AggroWarning = null;
@@ -237,10 +246,21 @@ internal sealed partial class RuntimeNativeActorCombat
             }
         }
         if (Dead) { RestoreDeath(); return; }
-        if (_context is null || !EffectiveEnabled || _state.Unconscious || FollowCombatError is not null) return;
+        if (_context is null || !EffectiveEnabled || _state.Unconscious && _state.FatigueKnockout is null || FollowCombatError is not null) return;
         RefreshProcessEquipment();
         var player = _context.Player();
         if (!_context.Resident(_actor.GlobalPosition)) return;
+        if (AdvanceFatigueKnockout()) return;
+        if (!GetTree().Paused && _enemyWeapon is { AmmoRegenerationSeconds: > 0 } recharging)
+        {
+            try { _enemyWeaponHandling!.AdvanceRecharge(recharging, delta); }
+            catch (Exception error)
+            {
+                if (_engagementError != error.Message) GD.PushError($"OPENNV_ACTOR_RECHARGE_UNBOUND reference={_state.Reference} {error.Message}");
+                _engagementError = error.Message;
+                return;
+            }
+        }
         if (_state.ConversationSuppressionSeconds is { } suppression)
             _state.ConversationSuppressionSeconds = FalloutConversationSuppression.Advance(suppression, delta);
         if (ReactingToHit && !_engagementPrepared && _state.Engagement is not null)
@@ -312,11 +332,25 @@ internal sealed partial class RuntimeNativeActorCombat
     private void PrepareCombatPresentation()
     {
         if (_engagementError is not null) return;
+        _threat = CurrentThreat();
+        var fleeing = _threat.Confidence == 0;
+        if (_engagementPrepared && _engagementFleePrepared != fleeing)
+        {
+            var previous = _state.Engagement!;
+            // Confidence belongs to mutable actor values. Crossing cowardly
+            // confidence replaces the old action palette, not the target,
+            // item magazines, fired projectiles or authoritative random stream.
+            RetireCombatWeaponPresentation();
+            _state.Engagement = previous with
+            { WeaponHandling = _enemyWeaponHandling?.Capture() ?? previous.WeaponHandling };
+            _engagementPrepared = false;
+        }
+        _state.Engagement = _state.Engagement!.ForConfidence(_threat.Confidence);
         if (!_engagementPrepared)
         {
-            _threat = CurrentThreat();
-            if (_threat.Confidence == 0) PrepareFlee();
+            if (fleeing) PrepareFlee();
             else PrepareEngagement();
+            _engagementFleePrepared = fleeing;
             _engagementPrepared = true;
             _state.CaptureEngagement = CaptureEngagement;
         }
@@ -330,8 +364,11 @@ internal sealed partial class RuntimeNativeActorCombat
     private void PrepareFlee()
     {
         PrepareMovement();
-        _enemySounds = new(_records, _content, _actor, _skeleton.UnitsToMetres, _state.SoundRandom, _state.AnimationSoundEvents);
-        _actor.AddChild(_enemySounds);
+        if (_enemySounds is null)
+        {
+            _enemySounds = new(_records, _content, _actor, _skeleton.UnitsToMetres, _state.SoundRandom, _state.AnimationSoundEvents);
+            _actor.AddChild(_enemySounds);
+        }
         var directory = _skeletonPath[.._skeletonPath.LastIndexOf('/')];
         var gender = _actor is RuntimeNativeNpc npc && npc.Appearance.Female ? "female/" : "";
         _movementPath = SelectPath(directory, $"locomotion/{gender}mtfastforward", $"locomotion/{gender}mtforward",
@@ -408,7 +445,11 @@ internal sealed partial class RuntimeNativeActorCombat
             if (_state.PrepareNativeInventoryRemoval == PrepareNativeInventoryRemoval) _state.PrepareNativeInventoryRemoval = null;
             if (_state.StopCombat == StopCombat) _state.StopCombat = null;
             if (_state.QuerySpatialPlacement == CaptureSpatialPlacement) _state.QuerySpatialPlacement = null;
-            if (_state.CaptureEngagement == CaptureEngagement) _state.CaptureEngagement = null;
+            if (_state.CaptureEngagement == CaptureEngagement)
+            {
+                _world.RetireOutgoingWeaponTarget(_state.Reference);
+                _state.CaptureEngagement = null;
+            }
             if (_state.CanCaptureCorpseEquipment == CorpseEquipmentCaptureReady) _state.CanCaptureCorpseEquipment = null;
             if (_state.CaptureCorpseEquipment == CaptureCorpseEquipment) _state.CaptureCorpseEquipment = null;
             if (_state.CaptureCorpseEquipmentForFiniteWait == CaptureCorpseEquipmentForFiniteWait) _state.CaptureCorpseEquipmentForFiniteWait = null;

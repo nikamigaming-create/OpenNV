@@ -50,15 +50,8 @@ internal sealed class NativeOwnedPcmStream : IDisposable
     internal NativeOwnedPcmData Data { get; }
     internal AudioStream Stream { get; }
 
-    internal NativeOwnedPcmStream(AudioStreamWav wav, FalloutSoundLoop loop, FalloutPcmPlaybackSnapshot? saved = null)
-        : this(RequireWav(wav), loop, saved) { }
-
-    private static NativeOwnedPcmData RequireWav(AudioStreamWav wav)
-    {
-        if (wav.Format != AudioStreamWav.FormatEnum.Format16Bits)
-            throw new NotSupportedException("Checkpointed PCM playback currently requires decoded 16-bit WAV samples.");
-        return new(wav);
-    }
+    internal NativeOwnedPcmStream(AudioStream source, FalloutSoundLoop loop, FalloutPcmPlaybackSnapshot? saved = null)
+        : this(new NativeOwnedPcmData(source), loop, saved) { }
 
     internal NativeOwnedPcmStream(NativeOwnedPcmData data, FalloutSoundLoop loop, FalloutPcmPlaybackSnapshot? saved = null,
         bool suspended = false)

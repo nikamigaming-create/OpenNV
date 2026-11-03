@@ -12,6 +12,17 @@ internal sealed record FalloutFindFoodSource(FalloutFormKey Reference, FalloutFo
 internal sealed record FalloutFindFoodSourceScan(IReadOnlyList<FalloutFindFoodSource> Sources,
     IReadOnlyList<FalloutFormKey> UninitializedInventories)
 {
+    internal void RequireEmpty(Func<FalloutFormKey, bool> excludedInventoryHolder)
+    {
+        ArgumentNullException.ThrowIfNull(excludedInventoryHolder);
+        var unknown = UninitializedInventories.Count(reference => !excludedInventoryHolder(reference));
+        if (unknown != 0)
+            throw new NotSupportedException($"Find Food cannot establish an empty resident search: {unknown} Character/container inventories are uninitialized.");
+        var sources = Sources.Count(value => !value.Inventory || !excludedInventoryHolder(value.Reference));
+        if (sources != 0)
+            throw new NotSupportedException($"Find Food has {sources} real resident food sources requiring their acquisition permission, priority and action owners.");
+    }
+
     internal bool PlayerInspected => false;
     internal bool NonresidentSourcesInspected => false;
 }
@@ -23,6 +34,11 @@ internal sealed partial class FalloutReferenceWorld
         if (package.Target is not { Type: 2, RawTarget: 18 })
             throw new NotSupportedException("Find source collection requires its Food-category target owner.");
         var center = package.Location(records, this, actor);
+        // Persistent exterior references retain their source storage CELL.
+        // The loaded scene can own that actor without loading the storage
+        // CELL as a separate scene. Search belongs to actual residency.
+        if (!IsResident(actor) || !SameTravelRegion(SpatialPlacement(actor, null, unitsToMetres).Cell, center.Cell))
+            throw new NotSupportedException("Find Food search has no resident actor in its retained source region.");
         var radius = package.Source.LocationRadius;
         if (radius <= 0) throw new NotSupportedException("Find Food needs its zero-radius search semantics.");
         var region = TravelRegion(center.Cell);

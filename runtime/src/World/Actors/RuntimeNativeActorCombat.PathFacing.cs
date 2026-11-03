@@ -1,5 +1,6 @@
 using Godot;
 using OpenNV.Runtime.Content;
+using OpenNV.Runtime.Formats.Gamebryo;
 using OpenNV.Runtime.Gameplay.State;
 
 namespace OpenNV.Runtime.World.Actors;
@@ -71,6 +72,54 @@ internal sealed partial class RuntimeNativeActorCombat
         { MinimumRemainingSeconds = Math.Max(0, turn.MinimumRemainingSeconds - (float)delta) };
         _routeTurning = true;
         return true;
+    }
+
+    internal static float SourceArrivalHeading(Basis parentFrame, float sourceHeading)
+    {
+        if (!float.IsFinite(sourceHeading)) throw new InvalidDataException("Arrival heading is not finite.");
+        var source = GamebryoCoordinate.ConvertReferenceEuler(new(0, 0, sourceHeading), 1);
+        var forward = -(parentFrame.Orthonormalized() * source).Z;
+        forward.Y = 0;
+        if (!forward.IsFinite() || forward.IsZeroApprox())
+            throw new NotSupportedException("Arrival heading has no planar world-frame direction.");
+        return MathF.Atan2(-forward.X, -forward.Z);
+    }
+
+    // The source Travel procedure requests its authored end heading before
+    // advancing to Done. Admission changes no root/clock; ordinary physics
+    // consumes the independent turn even after the package end event fires.
+    internal void CompleteTravelWithHeading(FalloutPluginRecord package, FalloutTravelProgress progress,
+        Vector3 endpoint, float sourceHeading, bool sneaking)
+    {
+        if (!progress.Complete || !float.IsFinite(sourceHeading) || !endpoint.IsFinite())
+            throw new InvalidDataException("Travel arrival heading has invalid source input.");
+        if (_state.PackageMotion is not { } motion || motion.Package != package.FormKey)
+            throw new InvalidOperationException("Travel arrival heading has no matching motion owner.");
+        if (OwnsPose || !PackageMovementReady || motion.ArrivalTurn is not null)
+            throw new NotSupportedException("Travel arrival heading has a competing mover owner.");
+        if (_routeError is not null)
+            throw new NotSupportedException("Travel arrival heading cannot substitute for a failed source route.");
+        PrepareMovement();
+        var forward = -_actor.GlobalBasis.Orthonormalized().Z;
+        var current = MathF.Atan2(-forward.X, -forward.Z);
+        var desired = SourceArrivalHeading(_actor.GetParent<Node3D>().GlobalBasis, sourceHeading);
+        var difference = WrappedHeading(desired - current);
+        FalloutActorPathTurn? goal = null;
+        if (difference != 0)
+        {
+            var minimum = MathF.Abs(difference) > PathTurnAdmissionRadians
+                ? _records.NumericSettings.Float("fActorTurnAnimMinTime") : 0;
+            if (!float.IsFinite(minimum) || minimum < 0)
+                throw new InvalidDataException("Source actor minimum turn time is invalid.");
+            if (MathF.Abs(difference) > PathTurnAdmissionRadians) _ = PathTurnClip(difference > 0, sneaking);
+            goal = new(endpoint.X, endpoint.Y, endpoint.Z, desired, difference > 0, minimum);
+            goal.Validate();
+        }
+        // One publication after all admission/asset checks. Source end-event
+        // callbacks can observe this pending goal and the still-current yaw.
+        DisposeRouteSearch();
+        SetTravelProgress(progress);
+        _state.PackageMotion = _state.PackageMotion! with { PathTurn = null, ArrivalTurn = goal };
     }
 
     private NativeActorCombatAnimation PathTurnClip(bool left, bool sneaking = false)

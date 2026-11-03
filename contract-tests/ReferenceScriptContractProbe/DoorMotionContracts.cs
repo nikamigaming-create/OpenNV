@@ -12,6 +12,7 @@ internal static class DoorMotionContracts
         Directory.CreateDirectory(directory);
         try
         {
+            ExerciseInitialActionState(directory);
             var local = new byte[24]; UInt(local, 0, 1);
             var placed = Record("REFR", 0x90, Field("EDID", Text("DoorRef")), Field("NAME", BitConverter.GetBytes(1u)), Field("DATA", new byte[24]));
             var group = new byte[24 + placed.Length]; Encoding.ASCII.GetBytes("GRUP").CopyTo(group, 0);
@@ -84,6 +85,46 @@ internal static class DoorMotionContracts
             Console.WriteLine("OPENNV_DOOR_MOTION_STATE_PASS typedTarget=true states=1,2,3,4 duplicateNoRestart=true noActivation=true prefix=true coldPhase=true corruptAtomic=true reversal=unbound sourcePose=unverified");
         }
         finally { foreach (var file in Directory.EnumerateFiles(directory)) File.Delete(file); Directory.Delete(directory); }
+    }
+
+    private static void ExerciseInitialActionState(string directory)
+    {
+        static byte[] Placed(uint id, params byte[][] flags) => Record("REFR", id,
+            Field("NAME", BitConverter.GetBytes(1u)), Field("DATA", new byte[24]), Join(flags));
+        static byte[] Source(params byte[][] placed)
+        {
+            var children = Join(placed); var group = new byte[24 + children.Length];
+            Encoding.ASCII.GetBytes("GRUP").CopyTo(group, 0); UInt(group, 4, (uint)group.Length);
+            UInt(group, 8, 0x80); UInt(group, 12, 6); children.CopyTo(group, 24);
+            return Join(Record("TES4", 0, Field("HEDR", new byte[12])), Record("DOOR", 1),
+                Record("CELL", 0x80, Field("DATA", [1])), group);
+        }
+        static byte[] Action(uint value) => Field("XACT", BitConverter.GetBytes(value));
+        static FalloutFormKey ActionKey(uint id) => new("ActionFlags.esm", id);
+        var path = Path.Combine(directory, "ActionFlags.esm");
+        File.WriteAllBytes(path, Source(Placed(0x90), Placed(0x91, Action(13)),
+            Placed(0x92, Action(0x1000004)), Placed(0x93, Action(4), Action(1))));
+        using (var records = FalloutPluginStack.Load(directory, ["ActionFlags.esm"]))
+        using (var world = new FalloutReferenceWorld(records))
+        {
+            world.LoadCell(FalloutCellSceneReader.Read(records, ActionKey(0x80)));
+            Require(!world.Get(ActionKey(0x90)).DoorOpen && world.Get(ActionKey(0x91)).DoorOpen &&
+                world.Get(ActionKey(0x92)).DoorOpen && !world.Get(ActionKey(0x93)).DoorOpen,
+                "Source action state lost absent/default, bit-four open, low-byte conversion or last declaration semantics.");
+            Require(world.Get(ActionKey(0x91)).DoorMotion is null,
+                "Source initial open fabricated an active animation or motion receipt.");
+            world.Get(ActionKey(0x91)).DoorOpen = false;
+            var saved = JsonSerializer.Deserialize<FalloutReferenceSnapshot[]>(JsonSerializer.Serialize(world.Capture()))!;
+            using var cold = new FalloutReferenceWorld(records); cold.Restore(saved);
+            Require(!cold.Get(ActionKey(0x91)).DoorOpen && cold.Get(ActionKey(0x92)).DoorOpen &&
+                cold.Get(ActionKey(0x91)).DoorMotion is null,
+                "Cold restore reapplied initial source open over the player's saved closed state or replayed motion.");
+        }
+        File.WriteAllBytes(path, Source(Placed(0x90, Field("XACT", [4]))));
+        using var malformed = FalloutPluginStack.Load(directory, ["ActionFlags.esm"]);
+        using var rejected = new FalloutReferenceWorld(malformed);
+        Reject(() => rejected.Get(ActionKey(0x90)));
+        Require(rejected.InstanceCount == 0, "Malformed source XACT published a partially initialized reference.");
     }
 
     private static FalloutFormKey Key(uint id) => new("Doors.esm", id);

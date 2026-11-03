@@ -27,6 +27,13 @@ internal sealed record FalloutProjectile(FalloutFormKey Form, ushort Flags, usho
     internal float ExplosionAltTriggerTimer { get; private init; }
     internal bool HasAlternateTriggerParameters => ExplosionAltTriggerProximity > 0 || ExplosionAltTriggerTimer > 0;
     internal FalloutExplosion? ExplosionSource { get; private init; }
+    internal FalloutFormKey? ProjectileLight { get; private init; }
+    internal FalloutFormKey? FlightSound { get; private init; }
+    internal FalloutFormKey? CountdownSound { get; private init; }
+    internal FalloutFormKey? DisableSound { get; private init; }
+    internal FalloutFormKey? DefaultWeapon { get; private init; }
+    internal bool IsRemoteMine => Type == 2 && Detonates && ExplosionSource is not null;
+    internal bool IsProximityMine => (Flags & 6) == 6 && ExplosionAltTriggerProximity > 0;
 
     internal float HitscanImpactDelaySeconds(float distanceMeters, float unitsToMeters)
     {
@@ -66,6 +73,12 @@ internal sealed record FalloutProjectile(FalloutFormKey Form, ushort Flags, usho
             ImpactForce = Number(data, 52),
             ExplosionAltTriggerProximity = Number(data, 28),
             ExplosionAltTriggerTimer = Number(data, 32),
+            ProjectileLight = record.Plugin.AdjustOptionalFormId(BinaryPrimitives.ReadUInt32LittleEndian(data[16..])),
+            FlightSound = record.Plugin.AdjustOptionalFormId(BinaryPrimitives.ReadUInt32LittleEndian(data[40..])),
+            CountdownSound = record.Plugin.AdjustOptionalFormId(BinaryPrimitives.ReadUInt32LittleEndian(data[56..])),
+            DisableSound = record.Plugin.AdjustOptionalFormId(BinaryPrimitives.ReadUInt32LittleEndian(data[60..])),
+            DefaultWeapon = data.Length >= 68
+                ? record.Plugin.AdjustOptionalFormId(BinaryPrimitives.ReadUInt32LittleEndian(data[64..])) : null,
             ExplosionSource = (flags & 2) != 0 ? FalloutExplosion.Read(records,
                 explosion ?? throw new InvalidDataException("Explosive projectile has no EXPL reference.")) : null,
         };

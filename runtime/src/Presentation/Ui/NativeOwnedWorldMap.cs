@@ -73,8 +73,9 @@ internal sealed partial class NativeOwnedWorldMap : Control
                 .Select(property => new XElement(property)), _markerTemplate);
         _cursorTemplate = new XElement(menu.Descendants().Single(tile => (string?)tile.Attribute("name") == "MM_WorldMapCursor"));
         _markerRules = new(new XElement("menu",
-            new XElement(menu.Descendants("menu").Single().Element("systemcolor") ??
-                throw new InvalidDataException("World map has no source system color.")), _markerParent, _cursorTemplate));
+            new XElement(FalloutMenuXml.InheritedSystemColor(image) ??
+                throw new InvalidDataException("World map image has no authored system color in its source ancestry.")),
+            _markerParent, _cursorTemplate));
         var map = FalloutWorldMap.Read(records, world);
         _mapSize = new(map.Width, map.Height);
         _texture = NativeOwnedMediaLoader.LoadTexture(map.Texture);

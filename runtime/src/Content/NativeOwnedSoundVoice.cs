@@ -1,14 +1,24 @@
 using System.Globalization;
 using Godot;
+using OpenNV.Runtime.Content.Definitions;
 
 namespace OpenNV.Runtime.Content;
 
 internal static class NativeOwnedSoundVoice
 {
-    internal static FalloutFormKey? Reference(FalloutPluginStack records, Node emitter)
+    internal static FalloutFormKey? Reference(FalloutPluginStack records, Node emitter) =>
+        Identity(records, emitter)?.RequireSource();
+
+    internal static FalloutSpatialReferenceId? Identity(FalloutPluginStack records, Node emitter)
     {
         for (Node? node = emitter; node is not null; node = node.GetParent())
         {
+            if (node.HasMeta("opennv_runtime_reference"))
+            {
+                var identity = FalloutSpatialReferenceId.Runtime(node.GetMeta("opennv_runtime_reference").AsUInt32());
+                identity.Validate();
+                return identity;
+            }
             // The engine player has no placed ACHR record, but is still the
             // authoritative source reference for its weapons and child effects.
             if (node is OpenNV.Runtime.World.Cells.RuntimeNativePlayer)
@@ -19,8 +29,12 @@ internal static class NativeOwnedSoundVoice
             if (colon <= 0 || !uint.TryParse(text.AsSpan(colon + 1), NumberStyles.HexNumber,
                 CultureInfo.InvariantCulture, out var id))
                 throw new InvalidDataException("Owned sound emitter has malformed reference identity.");
-            var source = records.GetEffective(new(text[..colon], id));
-            if (source.Signature is not ("ACHR" or "ACRE" or "REFR"))
+            var reference = new FalloutFormKey(text[..colon], id);
+            // Child effects can carry the engine player's identity before the
+            // ancestor walk reaches its body. It has no placed ACHR record.
+            if (reference == records.RuntimeFormKey(FalloutEngineForms.PlayerReference)) return reference;
+            var source = records.GetEffective(reference);
+            if (!FalloutCellSceneReader.IsReferenceType(source.Signature))
                 throw new InvalidDataException("Owned sound emitter identity is not an object reference.");
             return source.FormKey;
         }

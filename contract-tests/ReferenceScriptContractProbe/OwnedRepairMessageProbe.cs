@@ -35,7 +35,7 @@ internal static class OwnedRepairMessageProbe
         }
         void Select(FalloutSourceMessage message, int index)
         {
-            Require(message.ButtonIndices!.Contains(index) && messages.MessageResults.Select(message.Request!, index),
+            Require(message.ButtonIndices!.Contains(index) && messages.SelectMessage(message.Request!, index),
                 "Owned visible choice did not own the result slot.");
             var result = script.Dispatch(broken, "GameMode", elapsedSeconds: .1);
             Require(result.Error is null, "Owned menu result failed: " + result.Error);

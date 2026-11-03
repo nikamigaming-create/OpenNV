@@ -7,6 +7,8 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer
 {
     private sealed record Voice(Node3D Emitter, bool FollowEmitter, FalloutSoundLoop Loop, AudioStream? OwnedStream, Action? Completed, long? Generation)
     {
+        internal Action? SourceEmitterExiting { get; set; }
+        internal NativeOwnedSoundSourceScene? SourceScene { get; init; }
         internal NativeOwnedPcmStream? Pcm { get; init; }
         internal bool Releasing { get; set; }
         internal IDisposable? Registration { get; set; }
@@ -18,6 +20,7 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer
     private readonly Dictionary<string, Node3D> _emitters = new(StringComparer.Ordinal);
 
     internal bool CanRetireEmitter(Node3D emitter) => !_lostCaptureAtRetirement && !HasUnreceiptedFault &&
+        !HasPendingEmitterSounds(emitter) &&
         !_voices.Values.Any(voice => voice.Emitter == emitter ||
             GodotObject.IsInstanceValid(voice.Emitter) && emitter.IsAncestorOf(voice.Emitter));
 
@@ -57,13 +60,21 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer
     }
 
     internal (Node3D Emitter, bool FollowEmitter) ResolveEmitter(string name, bool sourceLoop = false)
-        => RuntimeNativeNifSoundEmitters.Resolve(_actor, name, sourceLoop, _emitters);
+    {
+        var scene = CurrentSourceScene();
+        var selected = RuntimeNativeNifSoundEmitters.Resolve(scene.Root, name, sourceLoop, SceneEmitterCache(scene));
+        if (_sourceScenes is not null) _emitterScenes[selected.Emitter] = scene;
+        return selected;
+    }
 
     private void TrackVoice(Node voice, Node3D emitter, FalloutSoundLoop loop, FalloutFormKey sound, Action? completed, long? generation, bool followEmitter,
         NativeOwnedPcmStream? pcm = null)
     {
         var stream = voice is AudioStreamPlayer3D spatial ? spatial.Stream : ((AudioStreamPlayer)voice).Stream;
-        var state = new Voice(emitter, followEmitter, loop, loop.Mode == FalloutSoundLoopMode.None ? null : stream, completed, generation) { Pcm = pcm };
+        var sourceScene = _emitterScenes.GetValueOrDefault(emitter);
+        sourceScene?.RequireEmitter(emitter);
+        var state = new Voice(emitter, followEmitter, loop, loop.Mode == FalloutSoundLoopMode.None ? null : stream, completed, generation)
+        { Pcm = pcm, SourceScene = sourceScene };
         var entry = generation is { } boundGeneration ? _events!.Events.Single(value => value.Generation == boundGeneration) : null;
         var retain = loop.Mode == FalloutSoundLoopMode.None && entry is { End: FalloutAnimationSoundEnd.Active, Played: true } &&
             stream is not null && double.IsFinite(stream.GetLength()) && stream.GetLength() > 0 &&
@@ -75,21 +86,39 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer
             if (retain)
                 state.Attachment = NativeOwnedFiniteSoundHost.Attach(_records, _events!, generation!.Value, voice, emitter, loop,
                     () => { StopVoice(voice); FinishVoice(voice, FalloutAnimationSoundEnd.Cancelled); },
-                    () => { if (voice is AudioStreamPlayer3D spatialVoice) ApplyListener(spatialVoice, _spatial[spatialVoice]); }, followEmitter);
+                    () => { if (voice is AudioStreamPlayer3D spatialVoice) ApplyListener(spatialVoice, _spatial[spatialVoice]); }, followEmitter, sourceScene);
+            else if (voice is AudioStreamPlayer3D && sourceScene is not null)
+            {
+                AddChild(voice);
+                PublishMappedVoicePosition(voice, state);
+            }
             else if (voice is AudioStreamPlayer3D) emitter.AddChild(voice);
+            else if (_referenceLoopOwner) _actor.AddChild(voice);
             else AddChild(voice);
             if (pcm is not null) voice.AddChild(new NativeOwnedPcmVoicePause(voice, pcm));
         }
         catch { if (voice is AudioStreamPlayer3D spatialVoice) _spatial.Remove(spatialVoice); voice.Free(); throw; }
-        var reference = voice is AudioStreamPlayer3D && followEmitter ? NativeOwnedSoundVoice.Reference(_records, emitter) : null;
+        var reference = voice is AudioStreamPlayer3D && followEmitter ? NativeOwnedSoundVoice.Identity(_records, emitter) : null;
         state.Registration = _records.SoundVoices.Register(sound, reference, "source-animation-or-response",
             () => GodotObject.IsInstanceValid(voice) && (voice is AudioStreamPlayer3D positioned ? positioned.Playing : ((AudioStreamPlayer)voice).Playing),
             () => { StopVoice(voice); FinishVoice(voice, FalloutAnimationSoundEnd.SourceStopped); },
             () => { StopVoice(voice); FinishVoice(voice, FalloutAnimationSoundEnd.Cancelled); },
-            _events?.Reference, () => ReadFiniteVoice(voice, state), () => state.CompletionWait?.State,
+            _events?.Identity, () => ReadFiniteVoice(voice, state), () => state.CompletionWait?.State,
             () => PrepareFiniteSaveDrain(voice, state),
             pcm is null ? null : () => ObservePcmVoice(voice, state).Ready);
         _voices.Add(voice, state);
+        if (sourceScene is not null && voice is AudioStreamPlayer3D && state.Attachment is null)
+        {
+            // Moving the native voice into the correct audio viewport must not
+            // silently extend an attached loop beyond its actual source node.
+            state.SourceEmitterExiting = () =>
+            {
+                if (!_voices.ContainsKey(voice)) return;
+                StopVoice(voice);
+                FinishVoice(voice, FalloutAnimationSoundEnd.Cancelled);
+            };
+            emitter.TreeExiting += state.SourceEmitterExiting;
+        }
         // Unexpected retirement of the actual audio node remains cancellation.
         // Retiring only its finite source attachment does not emit this signal.
         voice.TreeExiting += () =>
@@ -108,6 +137,7 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer
     }
 
     internal int StopEmitterLoops(Node3D emitter) => StopVoices(emitter, loopsOnly: true);
+    internal int StopEmitterSounds(Node3D emitter) => StopVoices(emitter);
 
     private int StopVoices(Node3D emitter, bool loopsOnly = false)
     {
@@ -196,6 +226,8 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer
     {
         if (node is AudioStreamPlayer3D spatialVoice) _spatial.Remove(spatialVoice);
         if (!_voices.Remove(node, out var voice)) return;
+        if (voice.SourceEmitterExiting is { } sourceExit && GodotObject.IsInstanceValid(voice.Emitter))
+            voice.Emitter.TreeExiting -= sourceExit;
         voice.Registration?.Dispose();
         voice.Attachment?.Dispose();
         if (voice.OwnedStream is { } stream)

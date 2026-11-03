@@ -44,6 +44,7 @@ public partial class NativeNifInstanceAudit : Node
             {
                 ExerciseRenderedMenuMaterialOutput();
                 ExercisePointLightOverflow();
+                ExerciseIsolatedModelLifetime();
                 ExerciseAuthoredDecalSurfaces(); ExerciseDormantEnvironmentMask();
                 ExerciseDormantBillboardEnvironmentFlag(); ExerciseLocalMapHideSecret();
                 ExerciseLightingShaderCache();

@@ -113,11 +113,12 @@ internal static class FalloutPlayerPerkCapabilities
         30 => "FalloutHackingPerkEffects.ApplyScienceBonus",
         32 => "RuntimeNativeOpeningStageDriver.IgnoreBrokenLock",
         34 => "FalloutWeaponSpread.PlayerMedianDeviationDegrees",
+        37 => "FalloutWeaponReloadSpeed.Calculate",
         42 => "FalloutPlayerMovementSpeed.Calculate",
         _ => null
     };
 
-    private static bool SingleActiveOwner(byte entryPoint) => entryPoint is 9 or 10 or 20 or 22 or 30 or 32 or 42;
+    private static bool SingleActiveOwner(byte entryPoint) => entryPoint is 9 or 10 or 20 or 22 or 30 or 32 or 37 or 42;
 
     internal static string? ModifierOwner(int actorValue, FalloutActorValuePool pool, IReadOnlyList<int> skillActorValues)
     {

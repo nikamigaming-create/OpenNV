@@ -2,13 +2,13 @@ namespace OpenNV.Runtime.Gameplay.State;
 
 // Preparation changes no authoritative inventory or presentation. Reversible
 // commits follow both inventory publications; native teardown follows all commits.
-internal sealed class FalloutInventoryChangeLease(Action commit, Action rollback, Action? complete = null) : IDisposable
+internal sealed class FalloutInventoryChangeLease(Action commit, Action rollback, Action? complete = null, Action? cancelPreparation = null) : IDisposable
 {
-    private bool _started, _completed;
+    private bool _started, _completed, _disposed;
 
     internal void Commit()
     {
-        if (_started || _completed) throw new InvalidOperationException("Inventory change lease was already consumed.");
+        if (_started || _completed || _disposed) throw new InvalidOperationException("Inventory change lease was already consumed.");
         _started = true;
         commit();
     }
@@ -22,8 +22,10 @@ internal sealed class FalloutInventoryChangeLease(Action commit, Action rollback
 
     public void Dispose()
     {
-        if (!_started || _completed) return;
-        rollback();
+        if (_disposed || _completed) return;
+        _disposed = true;
+        if (_started) rollback();
+        else cancelPreparation?.Invoke();
         _started = false;
     }
 }

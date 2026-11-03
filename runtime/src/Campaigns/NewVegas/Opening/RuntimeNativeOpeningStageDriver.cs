@@ -109,10 +109,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
     internal void DamagePlayer(FalloutWeaponDamage damage, byte part)
     {
         _scripts.References?.BeforeActorHit(_pluginStack.RuntimeFormKey(0x14));
-        _incomingDefense ??= new(_pluginStack);
-        var armor = _inventory.Equipped.Select(_pluginStack.RuntimeFormKey)
-            .Where(key => _pluginStack.GetEffective(key).Signature == "ARMO").ToArray();
-        var defense = _incomingDefense.Read(_raceSexContract.Player, _inventory, armor);
+        var defense = ReadSharedPlayerDefense();
         _vitals.Damage(defense.Absorb(damage.Amount, FalloutGameSettingFloats.Read(_pluginStack, "fMinDamMultiplier"), damage.AmmoEffects),
             part, damage.LimbMultiplier);
     }
@@ -249,11 +246,11 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
             if (name.Equals("XP", StringComparison.OrdinalIgnoreCase)) return Vitals.ExperiencePoints;
             if (FalloutBodyPartData.LimbActorValue(name) is { } limb)
                 return DialogueActorValue(_pluginStack.RuntimeFormKey(0x14), limb);
-            return IsSpecial(name) ? _playerActorValues.ReadCurrent(FalloutPlayerActorValues.SpecialValue(name)) : _playerSkills.Value(name);
+            return FalloutPlayerActorValues.HasPool(name) ? _playerActorValues.ReadCurrent(FalloutPlayerActorValues.PoolValue(name)) : _playerSkills.Value(name);
         }, RequireLevelUpOwner: () => _vitals.RequireLevelUpOwner(),
             ReadPlayerActorValue: ReadPlayerActorValue, ChangePlayerActorValue: ChangePlayerActorValue,
             Inventory: InventoryCommands, ResetPlayerHealth: () => _vitals.ResetHealth(), CurrentPackage: CurrentActorPackage,
-            Sitting: ActorSitting, TagSkills: _tagSkills, RewardXp: value => _experience.Reward(value), GameTime: gameTime);
+            Sitting: ActorSitting, TagSkills: _tagSkills, RewardXp: value => _experience.Reward(value), RewardKarma: RewardPlayerKarma, GameTime: gameTime);
         _captureScripts = captureScripts;
         _playerSkills = new(pluginStack, () => Special, IsPlayerTagSkill, () => _traits, globals, inventory,
             raceSexContract.Player, () => _scripts.References!.ActorRace(pluginStack.RuntimeFormKey(0x14)), () => _scripts.Session.Hardcore,
@@ -262,6 +259,24 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         _playerActorValues.BindConstantModifiers(_playerSkills.Modifiers);
         _playerAbilities.Synchronize();
         _vitals = FalloutPlayerVitals.FromActorValues(pluginStack, _playerActorValues, restore?.State.Vitals);
+        _playerActorValues.BindFatigueLevel(() => _vitals.State.Level);
+        _player.ConfigureFatigueKnockout(_pluginStack, _pluginStack.GetEffective(_raceSexContract.Player),
+            () => _playerActorValues.ReadCurrent(22), () =>
+            {
+                _playerSkills.RequireFatigueKnockoutEffects();
+                _ingestibles.RequireFatigueKnockoutEffects();
+            }, restore?.State.PlayerFatigueKnockout);
+        _player.ConfigureWeaponTouchEffects((target, caster, condition) => SharedConditions.Evaluate(condition,
+            new(target, caster, _scripts.References!.GetLinkedRef)), amount => _vitals.Damage(amount));
+        _player.ConfigureTouchEnchantments((target, caster, source) =>
+        {
+            float Condition(FalloutCondition condition) => SharedConditions.Evaluate(condition,
+                new(target, caster, _scripts.References!.GetLinkedRef));
+            if (target != _pluginStack.RuntimeFormKey(0x14))
+                return _scripts.References!.PrepareActorTouchEnchantment(target, source, Condition, areaDelivered: true);
+            var apply = _playerActorValues.PrepareTouchEnchantment(source, Condition, areaDelivered: true);
+            return () => { if (_vitals.State.ExactHitPoints > 0) apply(); };
+        });
         _player.ConfigureVats(_vitals, EvaluateTargetCondition, restore?.State.PlayerProjectileLaunch);
         _playerSkills.HealthPercentage = () => _vitals.State.MaximumHitPoints <= 0 ? 1f :
             Math.Clamp((float)(_vitals.State.ExactHitPoints / _vitals.State.MaximumHitPoints), 0f, 1f);
@@ -337,6 +352,11 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
             if (BlockingExecutionError is not null) return;
             RefreshRadioStations();
             _ingestibles.Advance(delta);
+            if (!GetTree().Paused)
+            {
+                _playerActorValues.AdvanceFatigue(delta);
+                _scripts.References?.AdvanceActorFatigue(delta);
+            }
             _scripts.References?.AdvanceActorIngestibles(delta);
             _stageResults?.Continue();
             AdvancePlayerAdvancement();

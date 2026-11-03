@@ -139,7 +139,7 @@ internal partial class RuntimeNativeConversation : Node
                 currentPackage: _currentPackage, vampireQuery: _vampireQuery, itemCount: _itemCount, referenceDistance: _referenceDistance,
                 referenceInZone: _referenceInZone, sitting: _sitting, deadCount: _deadCount, isDead: _isDead, sleeping: _sleeping,
                 world: _world, randomPercent: _conditionRandom is null ? null : () => _conditionRandom(100));
-            _speakerName = FalloutDialogueTopic.Text(npc.ReadSubrecords().Single(field => field.Signature == "FULL").Data.Span);
+            _speakerName = _world is null ? FalloutRecordDisplayName.ReadActor(_records, npc) : _world.ActorDisplayName(_speaker);
             _speech.BeginPlayerDialogue(_speaker);
             _layer = new CanvasLayer { Layer = 95 }; AddChild(_layer);
             _menu = new(() => _speech.SkipResponse(), Fail); _layer.AddChild(_menu);

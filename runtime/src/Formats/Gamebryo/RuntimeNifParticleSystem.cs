@@ -20,6 +20,8 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
     private readonly Dictionary<string, float> _gravityStrengths = new(StringComparer.Ordinal);
     private readonly Dictionary<string, double> _remainders = new(StringComparer.Ordinal);
     private readonly Dictionary<int, FalloutNifMeshData> _meshes = [];
+    private readonly Dictionary<int, FalloutNifParticleSystem> _particleMeshSources = [];
+    private string? _emissionError;
     private IReadOnlyDictionary<int, Node3D> _nodes = null!;
     private readonly Dictionary<int, Transform3D> _stepTransforms = [];
     private readonly Random _random = new();
@@ -91,6 +93,14 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
         block = _source.Block.Index,
         worldSpace = _source.WorldSpace,
         capacity = _particles.Length,
+        emissionError = _emissionError,
+        deferredMeshSources = _particleMeshSources.Values.Select(source => new
+        {
+            block = source.Block.Index,
+            type = source.Block.TypeName,
+            data = source.Geometry.Data,
+            unbound = "source-particle-buffer-emission-sampling"
+        }).ToArray(),
         active = ActiveCount,
         births = BirthCount,
         deaths = DeathCount,
@@ -172,8 +182,11 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
         _source = source; _nodes = nodes; _units = units;
         _data = file.ReadObject(source.Geometry.Data) as FalloutNifParticleData ??
             throw new InvalidDataException("Particle system has no particle data.");
+        // The six source keep bits request CPU attribute retention, independently
+        // of compression. This owner retains its source data and particle state;
+        // requesting retention does not introduce another simulation mode.
         if (_data.Maximum == 0 || _data.Additional != -1 || _data.Active != 0 || _data.HasNormals || _data.HasRotations ||
-            _data.HasAxes || _data.Keep != 0 || _data.Compress != 0 || _data.Flags != 0 || _data.Consistency != 0 ||
+            _data.HasAxes || (_data.Keep & ~0x3f) != 0 || _data.Compress != 0 || _data.Flags != 0 || _data.Consistency != 0 ||
             _data.HasTextureIndices != (_data.Subtextures.Length != 0))
             throw new NotSupportedException($"Particle data {_data.Block.Index} has unsupported runtime fields.");
         _modifiers = source.Modifiers.Select(index => file.ReadObject(index) as FalloutNifParticleModifier ??
@@ -212,6 +225,13 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
                     foreach (var index in mesh.Meshes)
                     {
                         RequireNode(index);
+                        if (file.ReadObject(index) is FalloutNifParticleSystem particleSource)
+                        {
+                            if (file.ReadObject(particleSource.Geometry.Data) is not FalloutNifParticleData)
+                                throw new InvalidDataException("Particle emitter source has no declared particle data.");
+                            _particleMeshSources.TryAdd(index, particleSource);
+                            continue;
+                        }
                         var data = file.ReadMeshData(file.ReadGeometry(index).Data);
                         if (data.Vertices.Length == 0 || mesh.VelocityType == 0 && data.Normals.Length != data.Vertices.Length ||
                             mesh.EmissionType == 3 && data.Triangles.Length == 0)
@@ -518,6 +538,14 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
         {
             emitter = mesh.Emitter;
             var index = mesh.Meshes[_random.Next(mesh.Meshes.Length)];
+            if (_particleMeshSources.TryGetValue(index, out var particleSource))
+            {
+                _emissionError = $"Particle system {_source.Block.Index} emitter {mesh.Block.Index} reached source {index} " +
+                    $"({particleSource.Block.TypeName}), emission {mesh.EmissionType}, velocity {mesh.VelocityType}: " +
+                    "source particle-buffer emission sampling and retained position-slot semantics are unbound.";
+                SetProcess(false);
+                throw new NotSupportedException(_emissionError);
+            }
             transform = TransformOf(index);
             var geometry = _meshes[index];
             var vertex = _random.Next(geometry.Vertices.Length);

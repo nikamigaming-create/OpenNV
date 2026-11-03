@@ -11,6 +11,7 @@ internal static class NativeNavigationSchedulingContracts
         AbsentAndCancelledOwners();
         CursorLifetime();
         ThreadAndReentry();
+        TurnRotationAllocations();
         Console.WriteLine("Native navigation scheduling: over-budget caller fairness, shared bounds, process/physics phases, absent/cancelled owners, terminal/fault cleanup, exact cursor progress and thread ownership PASS.");
     }
 
@@ -109,6 +110,29 @@ internal static class NativeNavigationSchedulingContracts
         Require(schedule.TryBegin(used, 5, 5) && unused.Snapshot.SkippedInactiveTurns == 1,
             "An unrequested synchronous cursor blocked asynchronous work."); schedule.Finish(used, .5);
         unused.Retire("cancelled"); used.Retire("cancelled");
+    }
+
+    private static void TurnRotationAllocations()
+    {
+        var schedule = new NativeNavigationWorkSchedule();
+        var absent = schedule.Register(); var active = schedule.Register();
+        for (ulong phase = 1; phase <= 128; ++phase)
+        {
+            Require(schedule.TryBegin(active, phase, phase), "Warm active cursor lost its turn.");
+            schedule.Finish(active, .1);
+        }
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        for (ulong phase = 129; phase <= 640; ++phase)
+        {
+            Require(schedule.TryBegin(active, phase, phase), "Active cursor lost its rotation turn.");
+            schedule.Finish(active, .1);
+        }
+        var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+        Require(allocated == 0 && schedule.Count == 2 && active.Snapshot.Grants == 640 &&
+            absent.Snapshot.SkippedInactiveTurns == 640,
+            "Live/absent turn rotation allocated replacement nodes or changed cursor admission.");
+        absent.Retire("cancelled"); active.Retire("cancelled");
+        Require(schedule.Count == 0, "Allocation fixture retained cursor registrations.");
     }
 
     private static void CursorLifetime()

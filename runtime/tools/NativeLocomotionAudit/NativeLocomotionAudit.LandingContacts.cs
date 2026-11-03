@@ -1,6 +1,7 @@
 using Godot;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.World.Cells;
+using OpenNV.Runtime.World.Actors;
 
 public partial class NativeLocomotionAudit
 {
@@ -58,11 +59,15 @@ public partial class NativeLocomotionAudit
                 corridor: [desired, pose.Origin]);
             if (body.GlobalTransform != reversePose) throw new InvalidOperationException("Rounded-corner reverse planning moved the controller.");
             await WalkCorridorBody(body, reverse, .025f);
-            if (new Vector2(body.GlobalPosition.X - pose.Origin.X, body.GlobalPosition.Z - pose.Origin.Z).Length() > .04f ||
+            await SettleCorridorBody(body);
+            if (!body.IsOnFloor() || new Vector2(body.GlobalPosition.X - pose.Origin.X, body.GlobalPosition.Z - pose.Origin.Z).Length() > .04f ||
                 Math.Abs(body.GlobalPosition.Y - pose.Origin.Y) > .12f ||
                 !NativeCharacterStep.TrySupport(body, body.GlobalPosition, .4f, out _) ||
                 geometry.Any(value => value.node.GlobalTransform != value.GlobalTransform))
-                throw new InvalidOperationException("The ordinary mover did not return over the unchanged, root-supported corner.");
+                throw new InvalidOperationException($"The ordinary mover did not return over the unchanged, root-supported corner. " +
+                    $"start={pose.Origin} actual={body.GlobalPosition} velocity={body.Velocity} onFloor={body.IsOnFloor()} " +
+                    $"supported={NativeCharacterStep.TrySupport(body, body.GlobalPosition, .4f, out _)} " +
+                    $"geometryUnchanged={geometry.All(value => value.node.GlobalTransform == value.GlobalTransform)}");
             GD.Print("OPENNV_NATIVE_ROUNDED_LANDING_PASS steepCapsuleContact=true boundedRootFloor=true controllerBothDirections=true unavailableRefused=true noQueryMovement=true geometryUnchanged=true fixture=synthetic parity=unverified");
         }
         finally { scene.Free(); }
@@ -98,6 +103,50 @@ public partial class NativeLocomotionAudit
                 probe.GuideRejection?.Reason != "landing-slope" || body.GlobalTransform != pose)
                 throw new InvalidOperationException($"A rounded edge over a root-floor gap bypassed the mover's real support gate or lost its native contact; refused={refused}. {probe.DescribeFailure()}");
             GD.Print("OPENNV_NATIVE_LANDING_GAP_PASS steepCapsuleContact=true initialRootSupported=true missingDestinationRootRefused=true exactContactRetained=true noQueryMovement=true fixture=synthetic parity=unverified");
+        }
+        finally { scene.Free(); }
+    }
+
+    private async Task CheckWalkableContactGapSupport()
+    {
+        var scene = new Node3D(); AddChild(scene);
+        var first = LandingBox(scene, new(0, -.5f, -1.125f), new(4, 1, 1.75f));
+        var second = LandingBox(scene, new(0, -.5f, 1.125f), new(4, 1, 1.75f));
+        var envelope = NativeActorMovementEnvelope.Horizontal(new(0, 0, 0), new(20, 100, 20), 1, .01f)!;
+        var body = new CharacterBody3D { Position = new(0, 0, -.5f), FloorSnapLength = .32f, FloorMaxAngle = FloorAngle };
+        var shape = new CollisionShape3D(); envelope.Capsules.Single().Publish(shape, 1); body.AddChild(shape); scene.AddChild(body);
+        try
+        {
+            await SettleCorridorBody(body);
+            var pose = body.GlobalTransform;
+            var goal = new Vector3(0, pose.Origin.Y, 0);
+            var geometry = new[] { first.GlobalTransform, second.GlobalTransform };
+            var probe = new NativeNavigationProbe(null);
+            using (var edge = new NativeCapsuleNavigation.EdgeQuery(body, .4f, .32f, _ => true, probe))
+            {
+                if (!edge.TrySingleEdge(pose.Origin, goal, pose.Basis, out var landing) ||
+                    probe.LastDownwardSweep is not { Collided: true, Contacts.Count: > 0 } contacts ||
+                    !contacts.Contacts.Any(contact => contact.Normal.Dot(Vector3.Up) >= MathF.Cos(body.FloorMaxAngle)) ||
+                    NativeCharacterStep.TrySupport(body, landing, .4f, out _) || body.GlobalTransform != pose)
+                    throw new InvalidOperationException("Complete horizontal capsule support was replaced by a center ray or moved the query body. " + probe.DescribeFailure());
+                var unsupported = new Vector3(0, pose.Origin.Y, 5);
+                if (edge.TrySingleEdge(unsupported, unsupported + Vector3.Back * .1f, pose.Basis, out _))
+                    throw new InvalidOperationException("Removing the redundant root ray admitted a capsule with no downward contact.");
+            }
+            using (var edge = new NativeCapsuleNavigation.EdgeQuery(body, .4f, .32f, point => point.Z < -.1f))
+                if (edge.TrySingleEdge(pose.Origin, goal, pose.Basis, out _) || edge.RejectionReason != "destination-not-resident")
+                    throw new InvalidOperationException("Capsule contact bypassed actual destination residency.");
+            await WalkCorridorBody(body, new[] { goal }, .025f);
+            await SettleCorridorBody(body);
+            if (!body.IsOnFloor() || new Vector2(body.GlobalPosition.X - goal.X, body.GlobalPosition.Z - goal.Z).Length() > .04f ||
+                NativeCharacterStep.TrySupport(body, body.GlobalPosition, .4f, out _) ||
+                first.GlobalTransform != geometry[0] || second.GlobalTransform != geometry[1])
+                throw new InvalidOperationException("The ordinary controller did not retain its complete capsule support across the root-center gap.");
+            await WalkCorridorBody(body, new[] { pose.Origin }, .025f);
+            await SettleCorridorBody(body);
+            if (!body.IsOnFloor() || new Vector2(body.GlobalPosition.X - pose.Origin.X, body.GlobalPosition.Z - pose.Origin.Z).Length() > .04f)
+                throw new InvalidOperationException("The ordinary capsule controller did not return over the unchanged support geometry.");
+            GD.Print("OPENNV_NATIVE_CAPSULE_GAP_SUPPORT_PASS walkableManifold=true centerRayMissing=true controllerBothDirections=true noContactRefused=true unavailableRefused=true noQueryMovement=true geometryUnchanged=true fixture=synthetic parity=unverified");
         }
         finally { scene.Free(); }
     }

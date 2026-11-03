@@ -20,7 +20,7 @@ internal sealed class FalloutPreparedTransientExplosion(FalloutReferencePlacemen
 
 // EXPL is a transient runtime reference, not a fabricated winning REFR record.
 // This owner deliberately does not implement general item/actor spawning.
-internal sealed class FalloutTransientExplosions(FalloutPluginStack records)
+internal sealed class FalloutTransientExplosions(FalloutPluginStack records, FalloutRuntimeReferences? runtimeReferences = null)
 {
     private const uint Prefix = 0xff000000;
     private const uint MaximumId = 0x00ffffff;
@@ -31,6 +31,7 @@ internal sealed class FalloutTransientExplosions(FalloutPluginStack records)
         internal string? Error { get; set; }
     }
     private readonly Dictionary<uint, Instance> _instances = [];
+    private readonly FalloutRuntimeReferences _runtimeReferences = runtimeReferences ?? new(records);
     private uint _lastId;
     private int _activeCount;
     private string? _failure;
@@ -80,18 +81,23 @@ internal sealed class FalloutTransientExplosions(FalloutPluginStack records)
             throw new NotSupportedException("PlaceAtMe base has no transient EXPL owner.");
         var explosion = FalloutExplosion.Read(records, key);
         explosion.RequireRuntimeDamageOwner();
-        if (explosion.HasUnpresentedVisuals || explosion.ImageSpace is not null || explosion.Damage != 0 || explosion.RadiationLevel != 0 ||
+        if (explosion.HasUnpresentedVisuals || explosion.ImageSpace is not null || explosion.Damage != 0 || explosion.RadiationLevel != 0 || explosion.ObjectEffect is not null ||
             explosion.PushesSourceOnly || declaration.ReadSubrecords().Any(field => field.Signature == "SCRI"))
-            throw new NotSupportedException("Placed EXPL requires an unowned light, impact, image-space preparation, damage/event attribution, source-only force or attached script owner.");
+            throw new NotSupportedException("Placed EXPL requires an unowned light, impact, image-space preparation, damage/event attribution, object enchantment, source-only force or attached script owner.");
         if (explosion.FirstSound is not null || explosion.SecondSound is not null)
             throw new NotSupportedException("Placed EXPL sound preparation and transient emitter identity are not yet owned.");
         using var prepared = (Prepare ?? throw new NotSupportedException("PlaceAtMe has no active transient explosion presentation owner."))
             (new(caller, explosion));
         prepared.Placement.Validate();
-        var id = Prefix | ++_lastId;
+        var allocation = _runtimeReferences.Prepare(FalloutRuntimeReferenceKind.Explosion, key);
+        using var publication = allocation.Publication;
+        publication.Commit();
+        var id = allocation.Identity.RuntimeId!.Value;
+        _lastId = id & MaximumId;
         var instance = new Instance(new(id, key, caller, prepared.Placement.Copy()));
         _instances.Add(id, instance);
         _activeCount++;
+        publication.Complete();
         try
         {
             prepared.Start(id, () => Complete(id), error => Fail(id, error));
@@ -112,6 +118,7 @@ internal sealed class FalloutTransientExplosions(FalloutPluginStack records)
         if (instance.Retired)
             throw new InvalidOperationException("Transient explosion completion has no active successful lifetime.");
         instance.Retired = true;
+        _runtimeReferences.Retire(id);
         _activeCount--;
     }
     private void Fail(uint id, string error)
@@ -140,12 +147,17 @@ internal sealed class FalloutTransientExplosions(FalloutPluginStack records)
     {
         if (_lastId != 0 || _instances.Count != 0) throw new InvalidOperationException("Transient explosion restore requires a fresh owner.");
         if (snapshot is null) return;
-        ValidateSnapshot(snapshot);
+        var shared = _runtimeReferences.Capture().LastId != 0;
+        ValidateSnapshot(snapshot, shared);
+        if (!shared && snapshot.LastId != 0) _runtimeReferences.Restore(null, snapshot);
         if (records.Plugins.Count == 256 && snapshot.LastId != 0)
             throw new InvalidDataException("Saved transient explosion allocator collides with loaded forms.");
         var restored = new Dictionary<uint, Instance>();
         foreach (var value in snapshot.Retired)
         {
+            if (_runtimeReferences.Require(value.Id) is not { Kind: FalloutRuntimeReferenceKind.Explosion, Retired: true } runtime ||
+                runtime.Base != value.Explosion)
+                throw new InvalidDataException("Saved explosion differs from the shared runtime reference owner.");
             if (records.GetEffective(value.Explosion).Signature != "EXPL" || records.GetEffective(value.Placement.Cell).Signature != "CELL" ||
                 records.RuntimeFormId(value.Caller) != 0x14 && records.GetEffective(value.Caller).Signature is not ("REFR" or "ACHR" or "ACRE"))
                 throw new InvalidDataException("Saved transient explosion source identity is invalid.");
@@ -154,9 +166,10 @@ internal sealed class FalloutTransientExplosions(FalloutPluginStack records)
         foreach (var (id, value) in restored) _instances.Add(id, value);
         _lastId = snapshot.LastId;
     }
-    internal static void ValidateSnapshot(FalloutTransientExplosionsSnapshot snapshot)
+    internal static void ValidateSnapshot(FalloutTransientExplosionsSnapshot snapshot, bool sharedAllocation = false)
     {
-        if (snapshot.LastId > MaximumId || snapshot.Retired is null || snapshot.Retired.Count != snapshot.LastId)
+        if (snapshot.LastId > MaximumId || snapshot.Retired is null ||
+            (sharedAllocation ? snapshot.Retired.Count > snapshot.LastId : snapshot.Retired.Count != snapshot.LastId))
             throw new InvalidDataException("Saved transient explosion allocator is invalid.");
         var ids = new HashSet<uint>();
         foreach (var value in snapshot.Retired)
@@ -166,6 +179,8 @@ internal sealed class FalloutTransientExplosions(FalloutPluginStack records)
                 throw new InvalidDataException("Saved transient explosion identity is invalid or duplicated.");
             value.Placement.Validate();
         }
+        if (ids.Count == 0 ? snapshot.LastId != 0 : ids.Max(id => id & MaximumId) != snapshot.LastId)
+            throw new InvalidDataException("Saved explosion high-water mark differs from its owned references.");
     }
     internal void ValidateFormHandle(double raw)
     {
@@ -174,7 +189,7 @@ internal sealed class FalloutTransientExplosions(FalloutPluginStack records)
         if (id is 0 or 0x14) return;
         if (UsesTransientNamespace(id) && records.Plugins.Count < 256)
         {
-            if (!_instances.ContainsKey(id)) throw new InvalidDataException($"Script contains an unowned transient reference {id:x8}.");
+            _ = _runtimeReferences.Require(id);
             return;
         }
         _ = records.GetEffective(records.RuntimeFormKey(id));

@@ -16,10 +16,10 @@ internal sealed partial class NativeOwnedPipBoyMenu
 
     private string InventoryInstanceLabel(FalloutCampaignItem item, FalloutItemVariant extra)
     {
-        var condition = item.RecordType is "WEAP" or "ARMO" ? $"  {(extra.Condition ?? 1) * 100:0}%" : "";
-        var hotkey = extra.Hotkey is { } slot ? $"  [{slot}]" : "";
-        var mods = extra.WeaponMods != 0 ? " +" : "";
-        return NameOf(item.FormKey) + mods + (extra.Count > 1 ? $" ({extra.Count})" : "") + condition + hotkey;
+        var mods = extra.WeaponMods != 0 ? "+" : "";
+        var record = _records.GetEffective(item.FormKey);
+        var name = extra.Count > 1 ? FalloutRecordDisplayName.ReadOrMissing(_records, record) : FalloutRecordDisplayName.Read(record);
+        return name + mods + (extra.Count > 1 ? $" ({extra.Count})" : "");
     }
 
     private void BeginInventoryAction(string action, FalloutCampaignItem selected)

@@ -31,6 +31,24 @@ internal static class HudNotificationsProbe
         try { new FalloutHudNotifications().Restore(saved with { Pending = [saved.Current!] }); }
         catch (InvalidDataException) { failed = true; }
         Require(failed, "Duplicate saved notification order was admitted.");
+
+        var discoveries = new FalloutHudNotifications();
+        var discovery = new FalloutHudEvent(FalloutHudEventKind.LocationDiscovered, new FalloutFormKey("Synthetic.esm", 4), 0);
+        discoveries.Publish([discovery]);
+        discoveries.Advance(0, _ => 4);
+        discoveries.MarkPresented(discoveries.Current!.Ordinal);
+        var discoverySave = discoveries.Capture();
+        var coldDiscovery = new FalloutHudNotifications();
+        coldDiscovery.Restore(JsonSerializer.Deserialize<FalloutHudNotificationsSnapshot>(JsonSerializer.Serialize(discoverySave))!);
+        Require(coldDiscovery.Current!.Event == discovery && coldDiscovery.Current.Presented,
+            "Cold discovery lost its source identity or accepted sound receipt.");
+        coldDiscovery.RequestQuestUpdateCancellation();
+        coldDiscovery.ConsumeQuestUpdateCancellation(false);
+        Require(coldDiscovery.Current is null, "Quest cancellation retained a source cinematic discovery reminder.");
+        failed = false;
+        try { FalloutHudNotifications.Validate([discovery with { Count = 1 }]); }
+        catch (InvalidDataException) { failed = true; }
+        Require(failed, "Discovery event admitted an item count.");
     }
     private static void Require(bool condition, string message)
     {

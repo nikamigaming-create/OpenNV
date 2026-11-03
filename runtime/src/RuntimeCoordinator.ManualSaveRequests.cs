@@ -86,6 +86,8 @@ public partial class RuntimeCoordinator
         return _nativeManualSaves.Receipt!;
     }
 
+    private (Guid Session, ulong Generation)? _announcedNativeQuickSave;
+
     private void PublishNativeManualSave(RuntimeManualSaveReceipt receipt)
     {
         if (_publishedNativeManualSave == receipt) return;
@@ -93,7 +95,18 @@ public partial class RuntimeCoordinator
             _nativeOpeningStageDriver!.AcknowledgeCheckpoint(_nativeActiveCell!.Cell.FormKey);
         var prior = _publishedNativeManualSave;
         _publishedNativeManualSave = receipt;
-        if (_nativeSessionMenu is null)
+        if (receipt.Origin == RuntimeManualSaveOrigin.PlayerInput && receipt.Disposition == "pending" &&
+            _announcedNativeQuickSave != (receipt.Session, receipt.Generation))
+        {
+            var source = RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("Quicksave HUD has no owned source.");
+            var declaration = FalloutExecutableStringTable.ReadQuickSaveNotice(source.FalloutExecutablePath);
+            var player = _nativeRaceSexContract?.Player ?? throw new InvalidOperationException("Quicksave HUD has no actual player source.");
+            _nativeInventory.Notifications.Publish([new(FalloutHudEventKind.ExecutableNotice, player, 0, Text: declaration.Setting)]);
+            _announcedNativeQuickSave = (receipt.Session, receipt.Generation);
+        }
+        var completedPlayerInput = receipt.Origin == RuntimeManualSaveOrigin.PlayerInput && receipt.Disposition == "completed";
+        if (completedPlayerInput) CloseNativeManualSaveStatus();
+        if (_nativeSessionMenu is null && !completedPlayerInput)
         {
             if (_nativeManualSaveStatus is null)
             {

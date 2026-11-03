@@ -10,7 +10,7 @@ internal sealed record FalloutActorValue(float Base, float Permanent = 0, float 
     internal static string SourceSlot(int value) => SourceSlot((FalloutActorValueId)value);
     private static string SourceSlot(FalloutActorValueId id) =>
         id is >= FalloutActorValueId.Strength and <= FalloutActorValueId.Luck or
-            >= FalloutActorValueId.Barter and <= FalloutActorValueId.Unarmed or FalloutActorValueId.RadiationRads ||
+            >= FalloutActorValueId.Barter and <= FalloutActorValueId.Unarmed or FalloutActorValueId.RadiationRads or FalloutActorValueId.Karma or FalloutActorValueId.Fatigue ||
             FalloutActorValueNames.IsUser(id) || OpenNV.Runtime.Content.FalloutActorAiData.Contains(id) ? FalloutActorValueNames.Name(id) :
             throw new NotSupportedException($"Actor value {id} has no source base/formula owner.");
     internal static string SourceSlot(string name) => SourceSlot(FalloutActorValueNames.Parse(name));

@@ -5,15 +5,20 @@ namespace OpenNV.Runtime.Content;
 internal sealed record FalloutWeaponPresentation(FalloutFormKey Form, FalloutNpcAppearancePart? Model,
     string AnimationGroup, float AnimationMultiplier, byte Grip)
 {
-    internal byte ClipSize { get; init; }
+    internal int ClipSize { get; init; }
     internal int ConditionHealth { get; init; }
     internal byte AmmoUse { get; init; }
     internal byte ReloadAnimation { get; init; }
     internal byte AttackAnimation { get; init; }
     internal float AttackMultiplier { get; init; } = 1;
     internal bool Automatic { get; init; }
+    internal float SourceFireRate { get; init; }
     internal float AttackShotsPerSecond { get; init; }
     internal bool NpcsUseAmmo { get; init; }
+    // GECK Weapons: seconds per generated round, directly into the clip;
+    // positive values disable manual reload. Zero disables regeneration.
+    // https://geckwiki.com/index.php/Weapons
+    internal float AmmoRegenerationSeconds { get; init; }
     internal float SightFieldOfViewDegrees { get; init; }
     internal bool FirstPersonIronSightsAnimation { get; init; } = true;
     internal bool ThirdPersonIronSightsAnimation { get; init; } = true;
@@ -24,9 +29,14 @@ internal sealed record FalloutWeaponPresentation(FalloutFormKey Form, FalloutNpc
     internal uint OnHitBehavior { get; init; }
     internal bool IsMeleeWeapon => EquipmentType is 3 or 4 && WeaponAnimationType is not (11 or 12);
     internal bool IsMine => EquipmentType == 6 || WeaponAnimationType is 11 or 12;
+    internal bool IsNonDischargeAction => !IsMeleeWeapon && !IsMine && !HasAmmunitionSource && AmmoUse == 0 &&
+        !HasProjectile;
+    internal bool HasProjectile { get; init; }
     internal bool IsThrownWeapon => WeaponAnimationType is 10 or 13;
     internal bool Playable { get; init; }
     internal bool Embedded { get; init; }
+    internal FalloutFormKey? BipedList { get; init; }
+    internal bool DefaultUnarmed { get; init; }
     internal string? EmbeddedNodeName { get; init; }
 
     internal string ResolveEmbeddedProjectileNode(IEnumerable<string> sourceNodes)
@@ -45,6 +55,8 @@ internal sealed record FalloutWeaponPresentation(FalloutFormKey Form, FalloutNpc
     internal string? ShellModel { get; init; }
     // NAM0=None is distinct from a source ammo list whose rounds are absent.
     internal bool HasAmmunitionSource { get; init; }
+    internal static bool IsAttackGroup(string group) => group.StartsWith("attack", StringComparison.Ordinal) ||
+        group is "placemine" or "placemine2";
     internal string AttackGroup => AttackAnimation switch
     {
         26 => "attackleft",
@@ -221,22 +233,30 @@ internal sealed record FalloutWeaponPresentation(FalloutFormKey Form, FalloutNpc
             Automatic = (data[12] & 2) != 0,
             Playable = (data[12] & 0x80) == 0,
             Embedded = (data[12] & 0x20) != 0,
+            DefaultUnarmed = key == records.RuntimeFormKey(Definitions.FalloutEngineForms.DefaultUnarmedWeapon),
             EmbeddedNodeName = string.IsNullOrEmpty(embeddedNode) ? null : embeddedNode,
-            AttackShotsPerSecond = BinaryPrimitives.ReadSingleLittleEndian(data[88..]),
+            SourceFireRate = BinaryPrimitives.ReadSingleLittleEndian(data[64..]),
+            AttackShotsPerSecond = BinaryPrimitives.ReadSingleLittleEndian(data[64..]) * BinaryPrimitives.ReadSingleLittleEndian(data[60..]),
             NpcsUseAmmo = (BinaryPrimitives.ReadUInt32LittleEndian(data[56..]) & 2) != 0,
+            AmmoRegenerationSeconds = data.Length >= 180 ? FalloutProjectile.Number(data, 176) : 0,
             SightFieldOfViewDegrees = sightFov,
             FirstPersonIronSightsAnimation = (data[12] & 0x40) == 0,
             ThirdPersonIronSightsAnimation = (BinaryPrimitives.ReadUInt32LittleEndian(data[56..]) & 0x100) == 0,
             EquipmentType = equipmentType,
+            BipedList = Form("BIPL"),
             WeaponAnimationType = type,
             OnHitBehavior = BinaryPrimitives.ReadUInt32LittleEndian(data[52..]),
             Reach = FalloutProjectile.Number(data, 8),
             MaximumRange = FalloutProjectile.Number(data, 48),
             HasAmmunitionSource = ammunitionSource is not null,
+            HasProjectile = BinaryPrimitives.ReadUInt32LittleEndian(data[36..]) != 0,
             Ammunition = currentAmmunition ?? ammunition,
             Sounds = sounds,
             ShellModel = FalloutNpcAppearanceResolver.PathField(weapon, "MOD2", "meshes", false, fields)
         };
+        if (result.AmmoRegenerationSeconds < 0 || result.AmmoRegenerationSeconds > 0 &&
+            (!result.HasAmmunitionSource || result.ClipSize <= 0))
+            throw new InvalidDataException("Weapon regeneration has no positive magazine/ammunition source.");
         return FalloutWeaponModifications.Apply(records, result, weaponMods, firstPerson);
     }
 }

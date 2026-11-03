@@ -25,9 +25,23 @@ internal sealed partial class RuntimeNativeActorCombat
         // Preserve an existing presented choice. Retirement and replacement of
         // its attachment remain with the combat/package equipment owner.
         if (_enemyWeapon is { } enemy)
-            inventory.ResolveWeaponSelection(_records, enemy.Form);
+        {
+            if (_enemyWeaponHandling?.CanUse(enemy) == false)
+            {
+                // Combat replaces it at an animation decision boundary. If
+                // combat ended first, retire its stale attachment here before
+                // publishing the next ordinary inventory choice.
+                if (_state.Engagement is not null) return;
+                RetireCombatWeaponPresentation();
+                _engagementPrepared = false;
+                _ = SelectCombatWeapon();
+            }
+            else inventory.ResolveWeaponSelection(_records, enemy.Form);
+        }
         else if (_packageWeapon is { } package)
             inventory.ResolveWeaponSelection(_records, package.Weapon.Form);
+        else if (_packageBipedWeapon is { } biped)
+            inventory.ResolveWeaponSelection(_records, biped.Form);
         else
             _ = SelectCombatWeapon();
         _equipmentInventoryRevision = inventory.Contents.Revision;

@@ -29,7 +29,7 @@ internal sealed partial class RuntimeNativeActorCombat
     private object MotionObservation => new
     {
         radius = _radius,
-        sourceEnvelope = _humanoidMovementEnvelope?.Observation ?? (object?)_sourceMovementEnvelope,
+        sourceEnvelope = _humanoidMovementEnvelope?.Observation ?? _sourceMovementEnvelope?.Observation,
         routeDoor = DoorNavigationObservation,
         waypoints = _pursuitPath.Length,
         cursor = _pursuitCursor,
@@ -58,6 +58,15 @@ internal sealed partial class RuntimeNativeActorCombat
             receipt.Request.Intent.Resume
         } : null,
         routePlanning = _routeSearch is not null,
+        directReferenceApproach = _routeDirectOnly,
+        routeRequestedTarget = _routeRequests > 0 ? new[] { _routeTarget.X, _routeTarget.Y, _routeTarget.Z } : null,
+        routeCapturedGoal = _routeQueryGoal is { } goal ? new
+        {
+            target = new[] { goal.Target.X, goal.Target.Y, goal.Target.Z },
+            goal.Radius,
+            goal.Package,
+            goal.CombatTarget
+        } : null,
         routeWork = NativeCapsuleNavigation.Work(_routeSearch) ?? _routeWork,
         routeFailures = _routeFailures,
         routeRetrySeconds = Math.Max(0, _routeClock),
@@ -226,12 +235,15 @@ internal sealed partial class RuntimeNativeActorCombat
             motion = NativeCapsuleNavigation.RouteMotion(body.GlobalPosition, motion, destination);
             if (!motion.IsZeroApprox())
             {
-                if (_movementCorridorFloor is null) pathBlock = "source-corridor-floor-unbound";
+                if (_movementCorridorFloor is null && !_routeDirectOnly) pathBlock = "source-corridor-floor-unbound";
                 else
                 {
                     _movementEdge ??= new(body, _context!.StepHeight, Math.Max(.3f, _radius * 2), _context.Resident);
-                    if (!_movementEdge.ValidateSegment(body.GlobalPosition, body.GlobalPosition + motion,
-                        _movementCorridorFloor, out _, out pathBlock)) motion = Vector3.Zero;
+                    var accepted = _routeDirectOnly
+                        ? _movementEdge.ValidateDirectSegment(body.GlobalPosition, body.GlobalPosition + motion, out _, out pathBlock)
+                        : _movementEdge.ValidateSegment(body.GlobalPosition, body.GlobalPosition + motion,
+                            _movementCorridorFloor!, out _, out pathBlock);
+                    if (!accepted) motion = Vector3.Zero;
                 }
                 if (pathBlock is not null) motion = Vector3.Zero;
             }

@@ -283,6 +283,19 @@ internal static class CorpseEquipmentContracts
             Variants: [new(1, .42f)]) };
         if (ammunition) items.Add(new(Key(0x51), records.RuntimeFormId(Key(0x51)), "FixtureAmmo", "AMMO", 17, 0, 0));
         inventory.Contents.Restore(new(items, null), [records.RuntimeFormId(weapon)], 17);
+        // A live actor's selected weapon already has its process instance and
+        // physical magazine before corpse capture. Seed that actual owner here;
+        // later preparation/capture must retain the complete inventory byte shape.
+        static string ItemContents(IEnumerable<FalloutCampaignItem> contents) => JsonSerializer.Serialize(contents
+            .OrderBy(item => item.RuntimeFormId).Select(item => item with
+            {
+                Variants = item.Variants?.Select(extra => extra with { Instance = null, Magazine = null }).ToArray()
+            }));
+        var sourceContents = ItemContents(items);
+        new FalloutWeaponHandling(inventory.Contents, nativeNpc: true)
+            .CompleteReload(FalloutWeaponPresentation.Read(records, weapon, false));
+        Require(ItemContents(inventory.Contents.Items) == sourceContents,
+            "Initial process magazine preparation changed actual item totals, condition, ownership or source contents.");
         return inventory;
     }
     private static void AtomicReject(FalloutPluginStack records, FalloutReferenceSnapshot[] candidate)

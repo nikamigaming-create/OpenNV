@@ -71,6 +71,27 @@ internal static class NativeEventHistoryContracts
         var stopGeneration = stoppedVoice.Begin(records, selected, "Sound: FixturePartial", true, [source.LogicalPath]);
         stoppedVoice.BindMedia(stopGeneration, new string('a', 64)); stoppedVoice.Complete(stopGeneration, FalloutAnimationSoundEnd.SourceStopped);
         Require(stoppedVoice.Capture().Events[0].End == FalloutAnimationSoundEnd.SourceStopped, "Authored stop lost its distinct source receipt.");
+        var boundedHistory = new FalloutAnimationSoundEvents(caller);
+        var oldestFault = boundedHistory.Begin(records, selected, "Sound: oldest-fault", true, [source.LogicalPath]);
+        boundedHistory.Fail(oldestFault, "Original retained source failure.", "Sound: oldest-fault");
+        for (var index = 0; index < FalloutAnimationSoundEvents.DiagnosticEventLimit + 5; ++index)
+        {
+            var completed = boundedHistory.Begin(records, selected, "Sound: completed-tail", true, [source.LogicalPath]);
+            boundedHistory.BindMedia(completed, new string('a', 64));
+            boundedHistory.Complete(completed, FalloutAnimationSoundEnd.NativeFinished);
+        }
+        var fullHistory = boundedHistory.Capture(); var fullHistoryJson = JsonSerializer.Serialize(fullHistory);
+        var diagnosticTail = boundedHistory.RecentDiagnosticEvents;
+        Require(diagnosticTail.Count == FalloutAnimationSoundEvents.DiagnosticEventLimit &&
+            diagnosticTail[0].Generation == 7 && diagnosticTail[^1].Generation == boundedHistory.EventCount &&
+            fullHistory.Events.Count == FalloutAnimationSoundEvents.DiagnosticEventLimit + 6 &&
+            fullHistory.Events[0].End == FalloutAnimationSoundEnd.Faulted && fullHistory.Faults!.Count == 1 &&
+            fullHistoryJson == JsonSerializer.Serialize(boundedHistory.Capture()),
+            "Bounded diagnostic tail erased/reordered authoritative history, old faults or source random receipts.");
+        var coldHistory = new FalloutAnimationSoundEvents(caller); coldHistory.Restore(fullHistory, records);
+        Require(JsonSerializer.Serialize(coldHistory.Capture()) == fullHistoryJson &&
+            coldHistory.RecentDiagnosticEvents.Select(entry => entry.Generation).SequenceEqual(diagnosticTail.Select(entry => entry.Generation)),
+            "Diagnostic history tail changed cold authoritative continuation or its observed recent generations.");
         var failed = new FalloutAnimationSoundEvents(caller); failed.Fail(null, "Missing source emitter."); Reject(() => failed.Capture());
         var ownedPcm = new FalloutAnimationSoundEvents(caller);
         var pcmGeneration = ownedPcm.Begin(records, selected, "Sound: FixturePartial", true, [source.LogicalPath]);
@@ -89,6 +110,38 @@ internal static class NativeEventHistoryContracts
             { Playback = playback with { EmitterPath = "../DifferentEmitter" } }] }).Validate());
         Reject(() => (activePcm with { Events = [activePcm.Events[0] with
             { Playback = playback with { Samples = samples with { Position = double.NaN } } }] }).Validate());
+        Require(ownedPcm.ActiveEvents.Single().Generation == pcmGeneration && ownedPcm.HasPlaybackBinding(pcmGeneration),
+            "Live ledger index lost its actual active playback generation.");
+        ownedPcm.Complete(pcmGeneration, FalloutAnimationSoundEnd.NativeFinished);
+        Require(!ownedPcm.ActiveEvents.Any() && !ownedPcm.HasPlaybackBinding(pcmGeneration) && ownedPcm.CanCapture &&
+            ownedPcm.Events.Single().End == FalloutAnimationSoundEnd.NativeFinished,
+            "Native completion retained a dead playback closure or erased its authoritative receipt.");
+        Require(boundedHistory.PartialLanes.SequenceEqual(fullHistory.Events.SelectMany(entry => entry.PartialLanes.Select(lane => entry.Sound + ":" + lane)).Distinct(StringComparer.Ordinal)) &&
+            boundedHistory.OwnedLanes.SequenceEqual(boundedHistory.PartialLanes.Concat(fullHistory.Faults!.Select(fault => fault.TextKey + ":" + fault.Error))) &&
+            boundedHistory.OwnedLanes.All(boundedHistory.OwnsLane) && !boundedHistory.OwnsLane("unowned-lane") &&
+            !boundedHistory.ActiveEvents.Any() && boundedHistory.CanCapture && !boundedHistory.CanAwaitNativeCompletion,
+            "Derived live/lane indexes changed full-history ownership or its original lane order.");
+        var orderedLive = new FalloutAnimationSoundEvents(caller); var observedOrder = new List<long>();
+        long StartIndexedVoice()
+        {
+            var id = orderedLive.Begin(records, selected, "Sound: ordered-live", true, [source.LogicalPath]);
+            orderedLive.BindMedia(id, new string('a', 64));
+            orderedLive.BindPlayback(id, () => { observedOrder.Add(id); return playback; });
+            return id;
+        }
+        var firstIndexed = StartIndexedVoice(); var secondIndexed = StartIndexedVoice();
+        orderedLive.Complete(firstIndexed, FalloutAnimationSoundEnd.NativeFinished);
+        var thirdIndexed = StartIndexedVoice();
+        Require(orderedLive.CanCapture && observedOrder.SequenceEqual([secondIndexed, thirdIndexed]) &&
+            orderedLive.ActiveEvents.Select(entry => entry.Generation).SequenceEqual([secondIndexed, thirdIndexed]),
+            "Live index changed source generation/capture callback order after an earlier voice retired.");
+        var lateReceipt = new FalloutAnimationSoundEvents(caller);
+        var lateGeneration = lateReceipt.Begin(records, selected, "Sound: late-receipt", true, [source.LogicalPath]);
+        lateReceipt.Fail(lateGeneration, "Late source error.");
+        Require(!lateReceipt.CanCapture, "An unreceipted fault became capturable through the live index.");
+        lateReceipt.Fail(null, "Late source error.", "Sound: late-receipt");
+        Require(lateReceipt.CanCapture && lateReceipt.RequireEvent(lateGeneration).End == FalloutAnimationSoundEnd.Faulted,
+            "A genuine later matching source receipt did not resolve the indexed fault ownership.");
         var sourceFault = new FalloutAnimationSoundEvents(caller);
         var faultGeneration = sourceFault.Begin(records, selected, "Sound: FixturePartial", true, [source.LogicalPath]);
         sourceFault.Fail(faultGeneration, "Original decoder failed.", "Sound: FixturePartial");

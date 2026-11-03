@@ -12,6 +12,12 @@ internal partial class RuntimeNativeReferenceEvents
         if (node is null || !GodotObject.IsInstanceValid(node) || !node.IsInsideTree())
             throw new NotSupportedException($"Default activation of ACTI {reference} has no resident source presentation.");
         var motions = node.GetChildren().OfType<RuntimeNativeDoorMotion>().ToArray();
+        if (motions.Length == 0 && _presentation is { } presentation && !presentation.DeclaresOpenClose(reference))
+        {
+            _world.DefaultActivateUnanimatedActivator(reference);
+            GD.Print($"OPENNV_NATIVE_ACTIVATOR_DEFAULT reference={reference} actor={actor} source=owned-logical-open-state");
+            return;
+        }
         if (motions.Length != 1 || !GodotObject.IsInstanceValid(motions[0]) || !motions[0].IsInsideTree())
             throw new NotSupportedException($"Default activation of ACTI {reference} has no unique admitted source Open/Close motion owner.");
         // This is reached only by the shared source event's default action.

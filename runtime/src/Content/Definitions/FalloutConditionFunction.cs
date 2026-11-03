@@ -95,6 +95,7 @@ internal enum FalloutConditionFunction : ushort
     GetInZone = 446,
     HasPerk = 449,
     IsLastIdlePlayed = 451,
+    GetIsAlignment = 474,
     GetMapMarkerVisible = 492,
     IsPS3 = 523,
     IsWin32 = 524,

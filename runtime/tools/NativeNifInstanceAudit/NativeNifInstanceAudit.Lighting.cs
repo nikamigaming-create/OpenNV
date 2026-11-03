@@ -1,6 +1,7 @@
 using Godot;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Formats.Gamebryo;
+using OpenNV.Runtime.Presentation.Rendering;
 
 public partial class NativeNifInstanceAudit
 {
@@ -36,7 +37,45 @@ public partial class NativeNifInstanceAudit
         ExerciseLightFlicker(source, reference);
         ExerciseLightPulse(source, reference);
         ExercisePointLightOverflow();
+        ExerciseIsolatedModelLifetime();
         GD.Print("OPENNV_PLACED_LIGHT_BINDING_PASS signedAdjustment=true sourceReach=true units=true pixels=unverified");
+    }
+
+    private static void ExerciseIsolatedModelLifetime()
+    {
+        var tree = Engine.GetMainLoop() as SceneTree ?? throw new InvalidOperationException("Lighting audit requires its real SceneTree.");
+        var view = new SubViewport { OwnWorld3D = true };
+        using var environment = new Godot.Environment();
+        tree.Root.AddChild(view);
+        try
+        {
+            var camera = new Camera3D(); view.AddChild(camera);
+            camera.GetWorld3D().Environment = environment;
+            Node3D? model = new Node3D(); view.AddChild(model);
+            model.AddChild(new MeshInstance3D { Mesh = new BoxMesh() });
+            var bridge = new NativeIsolatedViewLighting();
+            bridge.Configure(camera, camera, () => model, 1, 1); view.AddChild(bridge);
+            bridge._Process(0);
+            // Free the actually bound model without an intervening lighting tick.
+            var retired = model; model = null; retired.Free();
+            view.AddChild(new MeshInstance3D { Mesh = new BoxMesh() });
+            // Also cover a hidden/absent model observed before its later free.
+            model = new Node3D(); view.AddChild(model);
+            model.AddChild(new MeshInstance3D { Mesh = new BoxMesh() });
+            bridge._Process(0);
+            retired = model; model = null; bridge._Process(0); retired.Free();
+            view.AddChild(new MeshInstance3D { Mesh = new BoxMesh() });
+            model = new Node3D(); view.AddChild(model);
+            model.AddChild(new MeshInstance3D { Mesh = new BoxMesh() });
+            bridge._Process(0);
+            if (bridge.HasMeta("opennv_isolated_lighting_error"))
+                throw new InvalidOperationException("Isolated lighting failed to bind the actual replacement model.");
+            view.RemoveChild(bridge); bridge.Free();
+            retired = model; model = null; retired.Free();
+            view.AddChild(new MeshInstance3D { Mesh = new BoxMesh() });
+            GD.Print("OPENNV_ISOLATED_MODEL_LIFETIME_PASS retiredModel=true nullModel=true replacement=true ownerUnsubscribed=true pixels=unverified");
+        }
+        finally { view.Free(); }
     }
 
     private static void ExercisePointLightOverflow()

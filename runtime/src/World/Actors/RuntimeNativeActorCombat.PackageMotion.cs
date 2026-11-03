@@ -62,8 +62,16 @@ internal sealed partial class RuntimeNativeActorCombat
         _routeSearch is null && _routeDoor is null && _packageSounds?.CanCaptureSilent != false;
     internal float PackageActivationRange => _context?.ActivationDistanceMeters is { } range && float.IsFinite(range) && range > 0
         ? range : throw new NotSupportedException("NPC portal has no validated configured interaction range.");
-    internal bool RequestPackagePortal(FalloutFormKey door) =>
-        (_context?.RequestPortal ?? throw new NotSupportedException("NPC Travel has no native portal activation owner."))(_state.Reference, door);
+    internal bool RequestPackagePortal(FalloutFormKey door)
+    {
+        var approach = _routeDoor;
+        var admitted = (_context?.RequestPortal ?? throw new NotSupportedException("NPC Travel has no native portal activation owner."))(_state.Reference, door);
+        // Publish the real event admission on the matching physical owner.
+        // A callback can transfer/retire/rebind this actor before returning.
+        if (admitted && approach is { Portal: true } && approach.Reference == door && ReferenceEquals(_routeDoor, approach))
+            approach.Requested = true;
+        return admitted;
+    }
     internal uint PackageRandom(uint bound) => _state.SoundRandom.NextBounded(bound);
     internal void SetPatrolProgress(FalloutPatrolProgress progress)
     {
@@ -308,17 +316,31 @@ internal sealed partial class RuntimeNativeActorCombat
         var offset = target - _actor.GlobalPosition;
         var moving = (requireArrivalHeight ? offset.Length() : new Vector2(offset.X, offset.Z).Length()) > distance;
         var movementRequested = moving;
+        var retained = deferred is null ? _state.PackageMotion : null;
+        var retainedArrival = retained?.Package == package.FormKey ? retained.ArrivalTurn : null;
+        if (retainedArrival is not null && movementRequested)
+            throw new NotSupportedException("Arrival heading has no admitted concurrent movement continuation.");
         Vector3? destination;
         using (OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Measure(OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Owner.PackagePursuit))
             destination = moving ? PursuitTarget(target, delta, distance, package.FormKey, navigationSha256) : null;
         moving &= destination.HasValue;
-        var retained = deferred is null ? _state.PackageMotion : null;
-        FalloutActorPathTurn? pathTurn = null;
+        FalloutActorPathTurn? pathTurn = null, arrivalTurn = null;
         var turnLeft = false;
         var headingTarget = destination;
         if (headingTarget is null && movementRequested && retained?.Package == package.FormKey && retained.PathTurn is { } pendingTurn)
             headingTarget = new Vector3(pendingTurn.TargetX, pendingTurn.TargetY, pendingTurn.TargetZ);
-        var turning = headingTarget is { } facingTarget &&
+        bool turning;
+        if (retainedArrival is { } arrival)
+        {
+            headingTarget = new Vector3(arrival.TargetX, arrival.TargetY, arrival.TargetZ);
+            var forward = -_actor.GlobalBasis.Orthonormalized().Z;
+            var current = MathF.Atan2(-forward.X, -forward.Z);
+            var alreadyReached = arrival.MinimumRemainingSeconds == 0 &&
+                MathF.Abs(WrappedHeading(arrival.HeadingRadians - current)) <= PathTurnAdmissionRadians;
+            turning = FacePath(headingTarget.Value, delta, arrival, out arrivalTurn, out turnLeft);
+            if (alreadyReached) { turning = false; _routeTurning = false; }
+        }
+        else turning = headingTarget is { } facingTarget &&
             FacePath(facingTarget, delta, retained?.Package == package.FormKey ? retained.PathTurn : null,
                 out pathTurn, out turnLeft);
         if (headingTarget is null) _routeTurning = false;
@@ -343,9 +365,10 @@ internal sealed partial class RuntimeNativeActorCombat
         var rootMotion = ConsumePackageAccumulation();
         // The latched source turn handler explicitly clears translation even
         // while old manager sequences continue their actual accumulation.
-        MoveActor(turning ? Vector3.Zero : rootMotion, delta, destination);
-        var nativeArrival = false;
-        if (navigationSha256 is { } sourceHash && _routeSearch is null && _routeDoor is null && _routeError is null)
+        MoveActor(turning || retainedArrival is not null ? Vector3.Zero : rootMotion, delta, destination);
+        var nativeArrival = navigationSha256 is not null && !movementRequested &&
+            NativePackageRouteReceipt.AlreadyWithinRegion(_actor.GlobalPosition, target, distance, _mover!.IsOnFloor(), requireArrivalHeight);
+        if (!nativeArrival && navigationSha256 is { } sourceHash && _routeSearch is null && _routeDoor is null && _routeError is null)
         {
             ConsumeReachedPursuitWaypoints();
             nativeArrival = _packageRouteReceipt?.Arrived(PackageRouteIdentity(package.FormKey, target, distance, sourceHash),
@@ -375,7 +398,7 @@ internal sealed partial class RuntimeNativeActorCombat
             Wander: retained?.Package == package.FormKey ? retained.Wander : null,
             Sandbox: retained?.Package == package.FormKey ? retained.Sandbox : null,
             Sleep: retained?.Package == package.FormKey ? retained.Sleep : null,
-            PathTurn: pathTurn, AnimationLayers: CapturePackageAnimationLayers());
+            PathTurn: pathTurn, AnimationLayers: CapturePackageAnimationLayers(), ArrivalTurn: arrivalTurn);
         if (deferred is not null)
         {
             _state.DeferredPackageContinuation = null;

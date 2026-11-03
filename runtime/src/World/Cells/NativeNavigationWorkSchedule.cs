@@ -61,8 +61,10 @@ internal sealed class NativeNavigationWorkSchedule
             var head = _queue.First.Value;
             if (head.LastProcessFrame is { } requested && processFrame - requested <= 1)
             { registration.DeniedTurn++; return false; }
-            _queue.RemoveFirst();
-            head.Node = _queue.AddLast(head);
+            // Registration owns this node until retirement. Rotation changes
+            // order only; do not allocate another node for the same cursor.
+            var skipped = _queue.First!;
+            _queue.Remove(skipped); _queue.AddLast(skipped);
             head.SkippedInactiveTurns++;
         }
         registration.Grants++;
@@ -82,7 +84,7 @@ internal sealed class NativeNavigationWorkSchedule
         // A single collision call can exceed the budget. Charge its actual
         // duration and rotate even then; never grant another call in that frame.
         if (registration.Node is { } node)
-        { _queue.Remove(node); registration.Node = _queue.AddLast(registration); }
+        { _queue.Remove(node); _queue.AddLast(node); }
     }
 
     internal void RequireQuery(Registration registration)

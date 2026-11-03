@@ -38,7 +38,9 @@ internal sealed record FalloutCampaignWeapon(
 
 internal sealed record FalloutCampaignInventory(
     IReadOnlyList<FalloutCampaignItem> Items,
-    FalloutCampaignWeapon? EquippedWeapon);
+    FalloutCampaignWeapon? EquippedWeapon,
+    IReadOnlyList<FalloutInventoryScriptOrderEntry>? ScriptOrder = null,
+    IReadOnlyList<FalloutInventoryScriptInitialization>? ScriptInitializations = null);
 
 internal sealed record FalloutOpeningInventoryGrant(
     FalloutCampaignInventory Inventory,
@@ -266,7 +268,7 @@ internal static class FalloutCampaignInventoryResolver
                 animation);
         }
 
-        return new FalloutCampaignInventory(resolved, weapon);
+        return new FalloutCampaignInventory(resolved, weapon, []);
     }
 
     private static (int? Value, float? Weight) ReadEconomics(

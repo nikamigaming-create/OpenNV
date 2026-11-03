@@ -149,10 +149,35 @@ public partial class NativeXrPlayerAudit : Node3D
                 GD.Print("OPENNV_XR_WRIST_DEVICE_PASS scale=2.25 roll=forearm-axis socket=fixed motionSweep=144 buttons=source-geometry release=shortest-angle duplicateMeshes=0");
                 if (weapon is { } weaponForm)
                 {
-                    var ammunition = saved.WeaponHandling!.Magazines.Single(row => row.Weapon == weaponForm).Ammunition;
+                    var savedItems = saved.Inventory.ToDictionary(item => item.RuntimeFormId);
+                    var grant = FalloutCampaignInventoryResolver.Resolve(records, saved.Inventory.Select(item =>
+                        new FalloutCampaignInventoryRequest(item.RuntimeFormId, item.EditorId, item.RecordType, item.Count)).ToArray(), null);
+                    grant = grant with
+                    {
+                        Items = grant.Items.Select(item => item with
+                        {
+                            Variants = savedItems[item.RuntimeFormId].Variants,
+                            UnequipLocked = savedItems[item.RuntimeFormId].UnequipLocked
+                        }).ToArray(),
+                        ScriptOrder = saved.PlayerInventoryChangeEntries,
+                        ScriptInitializations = saved.PlayerInventoryScriptInitializations
+                    };
+                    var inventory = new FalloutPlayerInventory();
+                    inventory.Restore(grant, saved.EquippedRuntimeFormIds.ToArray(), saved.InventoryRandomState);
+                    var handling = new FalloutWeaponHandling(inventory);
+                    handling.Restore(saved.WeaponHandling!, key => FalloutWeaponPresentation.Read(records, key),
+                        (key, mods) => FalloutWeaponPresentation.Read(records, key, weaponMods: mods));
+                    var ammunition = handling.Ammunition(actor.Weapon!) ??
+                        throw new InvalidOperationException("Saved equipped weapon has no carried source ammunition.");
                     var projectile = FalloutWeaponShot.Read(records, weaponForm, ammunition).Projectile;
-                    actor.PrepareMuzzle(projectile); actor.FlashMuzzle();
+                    var sounds = new NativeOwnedAnimationSoundPlayer(records, content, actor.Actor,
+                        actor.Skeleton.UnitsToMetres, new FalloutSoundRandomState(1));
+                    actor.Actor.AddChild(sounds);
+                    actor.PrepareMuzzle(projectile, sounds);
                     var light = actor.FindChildren("SourceMuzzleLight", "", true, false).OfType<OmniLight3D>().Single();
+                    actor.Advance(.25, Vector3.Zero, true, false);
+                    if (light.Visible) throw new InvalidOperationException("Preparing an inactive muzzle illuminated the scene before firing.");
+                    actor.FlashMuzzle();
                     var source = FalloutCellSceneReader.ReadLight(records.GetEffective(projectile.MuzzleLight!.Value));
                     if (!light.Visible || Math.Abs(light.OmniRange - source.RadiusGameUnits * actor.Skeleton.UnitsToMetres) > .00001f)
                         throw new InvalidOperationException("Muzzle light did not use the projectile's source LIGH radius.");

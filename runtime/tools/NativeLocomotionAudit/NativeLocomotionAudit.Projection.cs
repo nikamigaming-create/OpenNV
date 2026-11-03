@@ -70,6 +70,21 @@ public partial class NativeLocomotionAudit
                 throw new InvalidOperationException("Replanning from the actual portal lost the final source projection region.");
             var route = NativeCapsuleNavigation.FindRefined(body, pose.Origin, selected, .4f, .32f, .16f, _ => true,
                 corridor: tail.Corridor, arrival: Arrival);
+            // The source arrival region is reachable on this guide BEFORE
+            // its authored seed enters the real obstacle. The same supported
+            // arrival must not be discarded and rediscovered by a lattice.
+            using (var guided = NativeCapsuleNavigation.Search(body, pose.Origin, selected, .4f, .32f, _ => true,
+                corridor: tail.Corridor, arrival: Arrival).GetEnumerator())
+            {
+                IReadOnlyList<Vector3>? accepted = null;
+                while (guided.MoveNext())
+                    if (guided.Current is { } found) { accepted = found; break; }
+                var work = NativeCapsuleNavigation.Work(guided);
+                if (accepted is not { Count: > 0 } || !Arrival(accepted[^1]) || body.GlobalTransform != pose ||
+                    work is not { ExpandedNodes: 0, GuidedSamples: > 0 })
+                    throw new InvalidOperationException("Supported guide arrival continued into an occupied seed or fell back to lattice work: " +
+                        JsonSerializer.Serialize(work));
+            }
             using var placement = new NativeCapsulePlacementQuery(body);
             if (body.GlobalTransform != pose || !Arrival(route.Path[^1]) || !placement.CanStand(route.Path[^1]) ||
                 route.Path[^1].DistanceTo(selected) <= .5f || placement.CanStand(selected))

@@ -12,7 +12,7 @@ internal sealed record FalloutScriptSoundPlayback(FalloutScriptSoundMedia Media,
 // Script sound requests have world lifetime. A presentation adapter prepares the
 // owned stream before the command commits, then reports actual voice completion.
 // These transient voices are not campaign state and never replay on restoration.
-internal sealed class FalloutScriptSounds(FalloutPluginStack records, FalloutScriptMenus menus, ulong? seed = null)
+internal sealed partial class FalloutScriptSounds(FalloutPluginStack records, FalloutScriptMenus menus, ulong? seed = null)
 {
     private sealed class Voice(FalloutScriptSoundRequest request, FalloutScriptSoundPlayback playback)
     {
@@ -68,7 +68,8 @@ internal sealed class FalloutScriptSounds(FalloutPluginStack records, FalloutScr
 
     internal void PlayAtReference(FalloutFormKey reference, FalloutFormKey sound)
     {
-        if (records.RuntimeFormId(reference) != 0x14 && records.GetEffective(reference).Signature is not ("REFR" or "ACHR" or "ACRE"))
+        if (records.RuntimeFormId(reference) != 0x14 &&
+            !FalloutCellSceneReader.IsReferenceType(records.GetEffective(reference).Signature))
             throw new InvalidDataException("PlaySound3D caller is not a placed reference.");
         Play(reference, sound, false, reference);
     }

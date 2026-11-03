@@ -22,14 +22,23 @@ internal sealed partial class FalloutPlayerInventory
     private static void ValidateWeaponInstances(IEnumerable<FalloutCampaignItem> items)
     {
         var identities = new HashSet<Guid>();
+        var scripts = new HashSet<Guid>();
         foreach (var item in items)
             foreach (var extra in item.Variants ?? [])
             {
                 if (extra.Instance is { } instance && (instance == Guid.Empty || extra.Count != 1 ||
                     item.RecordType != "WEAP" || !identities.Add(instance)))
                     throw new InvalidDataException("Inventory weapon instance identity is invalid or duplicated.");
+                if (extra.ScriptState is { } script)
+                {
+                    script.ValidateShape();
+                    if (!scripts.Add(script.Identity)) throw new InvalidDataException("Inventory repeats a script event-list identity.");
+                    if (extra.Count != 1) throw new InvalidDataException("Inventory script state has no individual item stack.");
+                }
                 if (extra.Magazine is { } magazine && (extra.Instance is null || magazine.Loaded < 0 ||
-                    magazine.Ammunition.ObjectId == 0 || string.IsNullOrWhiteSpace(magazine.Ammunition.OwnerPlugin)))
+                    magazine.Ammunition.ObjectId == 0 || string.IsNullOrWhiteSpace(magazine.Ammunition.OwnerPlugin) ||
+                    !double.IsFinite(magazine.RechargeSeconds) || magazine.RechargeSeconds < 0 ||
+                    !magazine.Generated && magazine.RechargeSeconds != 0))
                     throw new InvalidDataException("Inventory magazine has no individual weapon or valid ammunition.");
             }
     }
@@ -44,7 +53,7 @@ internal sealed partial class FalloutPlayerInventory
             var changed = false;
             var variants = item.Variants!.Select(extra =>
             {
-                if (extra.Magazine is not { } magazine) return extra;
+                if (extra.Magazine is not { Generated: false } magazine) return extra;
                 var rounds = Math.Min(magazine.Loaded, available.GetValueOrDefault(magazine.Ammunition));
                 available[magazine.Ammunition] = available.GetValueOrDefault(magazine.Ammunition) - rounds;
                 changed |= rounds != magazine.Loaded;
@@ -56,7 +65,7 @@ internal sealed partial class FalloutPlayerInventory
 
     private void ValidateMagazineAmmunition()
     {
-        foreach (var group in Items.SelectMany(item => item.Variants ?? []).Where(extra => extra.Magazine is not null)
+        foreach (var group in Items.SelectMany(item => item.Variants ?? []).Where(extra => extra.Magazine is { Generated: false })
             .GroupBy(extra => extra.Magazine!.Ammunition))
         {
             var loaded = group.Sum(extra => extra.Magazine!.Loaded);
@@ -67,7 +76,7 @@ internal sealed partial class FalloutPlayerInventory
     }
 
     private static IReadOnlyList<(FalloutFormKey Ammunition, int Loaded)> LoadedRoundTransfers(IEnumerable<FalloutItemVariant> variants) =>
-        variants.Where(extra => extra.Magazine is { Loaded: > 0 }).GroupBy(extra => extra.Magazine!.Ammunition)
+        variants.Where(extra => extra.Magazine is { Loaded: > 0, Generated: false }).GroupBy(extra => extra.Magazine!.Ammunition)
             .Select(group => (group.Key, group.Sum(extra => extra.Magazine!.Loaded))).ToArray();
 
     // An explicit ammunition line is the total requested, including rounds in

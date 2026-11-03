@@ -136,7 +136,7 @@ internal static partial class NativeCapsuleNavigation
         float stepHeight, float spacing, Func<Vector3, bool> resident, int maximumNodes = 1200,
         NativeNavigationProbe? probe = null, float targetRadius = 0, IReadOnlyList<Vector3>? corridor = null, Func<Vector3, bool>? arrival = null,
         Action? partialResult = null, float minimumSearchRadius = 0, Func<Vector3, bool>? partialCandidate = null,
-        Func<Vector3, bool>? sourceFloor = null)
+        Func<Vector3, bool>? sourceFloor = null, bool directOnly = false)
     {
         var schedule = WorkSchedule;
         if (!GodotObject.IsInstanceValid(body) || !body.IsInsideTree() || body.IsQueuedForDeletion())
@@ -151,13 +151,13 @@ internal static partial class NativeCapsuleNavigation
         }
         return new NativeNavigationScheduledEnumerable<IReadOnlyList<Vector3>?>(schedule,
             work => SearchCore(body, start, target, stepHeight, spacing, resident, maximumNodes, probe,
-                targetRadius, corridor, arrival, partialResult, minimumSearchRadius, partialCandidate, sourceFloor, work).GetEnumerator(), OwnerValid, result => result is not null, BindRetirement);
+                targetRadius, corridor, arrival, partialResult, minimumSearchRadius, partialCandidate, sourceFloor, directOnly, work).GetEnumerator(), OwnerValid, result => result is not null, BindRetirement);
     }
 
     private static IEnumerable<IReadOnlyList<Vector3>?> SearchCore(CharacterBody3D body, Vector3 start, Vector3 target,
         float stepHeight, float spacing, Func<Vector3, bool> resident, int maximumNodes,
         NativeNavigationProbe? probe, float targetRadius, IReadOnlyList<Vector3>? corridor, Func<Vector3, bool>? arrival, Action? partialResult,
-        float minimumSearchRadius, Func<Vector3, bool>? partialCandidate, Func<Vector3, bool>? sourceFloor,
+        float minimumSearchRadius, Func<Vector3, bool>? partialCandidate, Func<Vector3, bool>? sourceFloor, bool directOnly,
         NativeNavigationWorkSchedule.Registration work)
     {
         if (!start.IsFinite() || !target.IsFinite() || !float.IsFinite(stepHeight) || !float.IsFinite(spacing) ||
@@ -183,7 +183,9 @@ internal static partial class NativeCapsuleNavigation
             return accepted;
         }
         static float Flat(Vector3 a, Vector3 b) => new Vector2(a.X - b.X, a.Z - b.Z).Length();
-        IEnumerable<Vector3?> Edge(Vector3 from, Vector3 desired, bool allowStep = true)
+        bool Arrived(Vector3 point) => arrival?.Invoke(point) ??
+            (targetRadius > 0 && point.DistanceTo(target) <= targetRadius);
+        IEnumerable<Vector3?> Edge(Vector3 from, Vector3 desired, bool allowStep = true, bool stopAtArrival = false)
         {
             var landing = from;
             var samples = Math.Max(1, (int)Math.Ceiling(Flat(from, desired) / sampleLength));
@@ -197,6 +199,10 @@ internal static partial class NativeCapsuleNavigation
                 yield return null;
                 if (!accepted) yield break;
                 landing = next;
+                // A region is reached at its first supported sample. Requiring
+                // the remainder of this edge to enter an occupied target body
+                // loses valid short approaches found between lattice nodes.
+                if (stopAtArrival && Arrived(landing)) break;
             }
             yield return landing;
         }
@@ -230,13 +236,25 @@ internal static partial class NativeCapsuleNavigation
                         if (rejected is { } contact) probe?.Record(contact, () => guided.Prepend(start).ToArray());
                         clear = false;
                     }
-                    else if (Math.Abs(landing.Y - desired.Y) >= SourceHeightTolerance)
+                    // A supplied source-floor receipt already validates the
+                    // landed position against its actual source layer. NAVM
+                    // interpolation height is not the physical ground height.
+                    else if (sourceFloor is null && Math.Abs(landing.Y - desired.Y) >= SourceHeightTolerance)
                     {
                         probe?.Reject("source-corridor-height", from, desired, null); probe?.RejectGuide(); clear = false;
                     }
                     else { guided.Add(landing); from = landing; }
                     yield return null;
                     if (!clear) break;
+                    // An admitted region is already a complete destination.
+                    // Do not continue a valid guide into an occupied seed after
+                    // a supported capsule sample has reached that same region.
+                    if (arrival?.Invoke(from) ?? (targetRadius > 0 && from.DistanceTo(target) <= targetRadius))
+                    {
+                        foreach (var result in SmoothRoute(guided, start, spacing, body.SafeMargin * 8, FlatEdge))
+                        { if (result is null) work.SmoothingSteps++; yield return result; }
+                        yield break;
+                    }
                 }
                 if (!clear) break;
             }
@@ -248,6 +266,7 @@ internal static partial class NativeCapsuleNavigation
                 yield break;
             }
         }
+        if (directOnly) throw new InvalidOperationException("No capsule-supported direct reference approach.");
         (int X, int Z, int Y) Key(Vector3 p) => ((int)MathF.Round((p.X - start.X) / spacing),
             (int)MathF.Round((p.Z - start.Z) / spacing), (int)MathF.Round(p.Y / .2f));
         var positions = new Dictionary<(int X, int Z, int Y), Vector3>();
@@ -294,13 +313,13 @@ internal static partial class NativeCapsuleNavigation
             }
             Vector3? goal = null;
             if (Flat(from, target) <= spacing * 1.5f)
-                foreach (var sample in Edge(from, target))
+                foreach (var sample in Edge(from, target, stopAtArrival: true))
                 {
                     if (sample is { } landing) goal = landing;
                     else yield return null;
                 }
-            if (goal is { } endpoint && Math.Abs(endpoint.Y - target.Y) < SourceHeightTolerance &&
-                (arrival is null || arrival(endpoint)))
+            if (goal is { } endpoint && (Arrived(endpoint) ||
+                Math.Abs(endpoint.Y - target.Y) < SourceHeightTolerance && (arrival is null || arrival(endpoint))))
             {
                 var path = new List<Vector3> { endpoint };
                 while (current != first) { path.Add(positions[current]); current = parents[current]; }

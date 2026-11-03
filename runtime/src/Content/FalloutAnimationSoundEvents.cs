@@ -19,7 +19,7 @@ internal sealed record FalloutAnimationSoundBoneEmitterSnapshot(FalloutFormKey R
     }
 }
 internal sealed record FalloutAnimationSoundPlaybackSnapshot(FalloutPcmPlaybackSnapshot Samples, string EmitterPath,
-    bool FollowEmitter, FalloutAnimationSoundBoneEmitterSnapshot? SourceBone = null);
+    bool FollowEmitter, FalloutAnimationSoundBoneEmitterSnapshot? SourceBone = null, string? SourceScene = null);
 internal sealed record FalloutAnimationSoundPlaybackDiagnostic(bool Ready, string? Error);
 internal sealed record FalloutAnimationSoundFault(string TextKey, string Error);
 
@@ -32,13 +32,13 @@ internal sealed record FalloutAnimationSoundEvent(long Generation, FalloutFormKe
     { PartialLanes = Array.AsReadOnly(PartialLanes.ToArray()), Variants = Array.AsReadOnly(Variants.ToArray()) };
 }
 
-internal sealed record FalloutAnimationSoundEventsSnapshot(FalloutFormKey Reference, long Generation,
+internal sealed record FalloutAnimationSoundEventsSnapshot(FalloutSpatialReferenceId Reference, long Generation,
     IReadOnlyList<FalloutAnimationSoundEvent> Events, string? OpaqueError = null, IReadOnlyList<FalloutAnimationSoundFault>? Faults = null)
 {
     internal void Validate()
     {
-        if (string.IsNullOrWhiteSpace(Reference.OwnerPlugin) || Reference.ObjectId is 0 or > FalloutFormKey.ObjectIdMask ||
-            Generation < 0 || Events is null || Events.Count != Generation)
+        Reference.Validate();
+        if (Generation < 0 || Events is null || Events.Count != Generation)
             throw new InvalidDataException("Saved animation sound history has invalid owner or generations.");
         if (Faults?.Any(fault => fault is null || string.IsNullOrWhiteSpace(fault.TextKey) || string.IsNullOrWhiteSpace(fault.Error)) == true ||
             OpaqueError is not null && Faults?.Any(fault => fault.Error == OpaqueError) != true)
@@ -71,7 +71,10 @@ internal sealed record FalloutAnimationSoundEventsSnapshot(FalloutFormKey Refere
                     playback.EmitterPath.StartsWith('/') || playback.EmitterPath.Split('/').Contains(".."))
                     throw new InvalidDataException("Active sound has no complete PCM/emitter continuation.");
                 playback.Samples.Validate();
-                playback.SourceBone?.Validate(Reference);
+                if (playback.SourceScene is { } scene &&
+                    (string.IsNullOrWhiteSpace(scene) || scene.Length > 128 || scene.Any(char.IsControl)))
+                    throw new InvalidDataException("Saved sound source-scene identity is invalid.");
+                playback.SourceBone?.Validate(Reference.RequireSource());
             }
             else if (entry.Playback is not null) throw new InvalidDataException("Ended sound retains active PCM continuation.");
         }
@@ -84,14 +87,29 @@ internal sealed record FalloutAnimationSoundEventsSnapshot(FalloutFormKey Refere
 
 // Native Finished and authored Stop are independent from a zero voice count.
 // The ledger schedules no playback and never executes a saved request.
-internal sealed class FalloutAnimationSoundEvents(FalloutFormKey reference, Func<bool>? referenceEnabled = null)
+internal sealed class FalloutAnimationSoundEvents(FalloutSpatialReferenceId reference, Func<bool>? referenceEnabled = null)
 {
     private readonly List<FalloutAnimationSoundEvent> _events = [];
     private long _generation;
     private string? _opaqueError;
     private readonly List<FalloutAnimationSoundFault> _faults = [];
     private readonly Dictionary<long, Func<FalloutAnimationSoundPlaybackSnapshot>> _playbackCaptures = [];
-    internal FalloutFormKey Reference => reference;
+    private readonly SortedList<long, FalloutAnimationSoundEvent> _activeEvents = [];
+    private readonly SortedList<long, FalloutAnimationSoundEvent> _diagnosticEvents = [];
+    private readonly HashSet<long> _cancelledGenerations = [], _unreceiptedFaults = [];
+    private readonly HashSet<string> _faultErrors = new(StringComparer.Ordinal), _ownedLanes = new(StringComparer.Ordinal);
+    private readonly HashSet<(string TextKey, string Error)> _faultPairs = [];
+    private readonly List<string> _partialLanes = [], _faultLanes = [];
+    private readonly HashSet<string> _partialLaneSet = new(StringComparer.Ordinal);
+    internal IEnumerable<FalloutAnimationSoundEvent> ActiveEvents => _activeEvents.Values;
+    internal FalloutAnimationSoundEvent? FindEvent(long generation) => generation > 0 && generation <= _events.Count
+        ? _events[checked((int)generation - 1)] : null;
+    internal FalloutAnimationSoundEvent RequireEvent(long generation) => Find(generation);
+    internal bool OwnsLane(string lane) => _ownedLanes.Contains(lane);
+    private bool FaultsOwned => (_opaqueError is null || _faultErrors.Contains(_opaqueError)) &&
+        _cancelledGenerations.Count == 0 && _unreceiptedFaults.Count == 0;
+    internal FalloutSpatialReferenceId Identity => reference;
+    internal FalloutFormKey Reference => reference.RequireSource();
     internal void RequireEnabledSourceEmitter()
     {
         if (referenceEnabled is null)
@@ -104,33 +122,33 @@ internal sealed class FalloutAnimationSoundEvents(FalloutFormKey reference, Func
     // Reuse this publication's observed readiness without probing a native
     // emitter again. This diagnostic never grants persistent capture.
     internal FalloutAnimationSoundHistoryDiagnostic ObserveCaptureDiagnostic(bool observedReady) => new(reference, _generation, observedReady, _opaqueError,
-        _events.Where(entry => entry.End is not (FalloutAnimationSoundEnd.NativeFinished or FalloutAnimationSoundEnd.SourceStopped or FalloutAnimationSoundEnd.ChanceSkipped or FalloutAnimationSoundEnd.SourceUnloaded))
+        _diagnosticEvents.Values
             .Select(entry => new FalloutAnimationSoundCaptureBlocker(entry.Generation, entry.Sound, entry.SoundSha256,
                 entry.TextKey, entry.Path, entry.MediaSha256, entry.End, entry.Error)).ToArray());
-    internal bool CanCapture => (_opaqueError is null || _faults.Any(fault => fault.Error == _opaqueError)) &&
-        _events.All(entry => entry.End switch
-        {
-            FalloutAnimationSoundEnd.Active => CanCapturePlayback(entry.Generation),
-            FalloutAnimationSoundEnd.Faulted => _faults.Any(fault => fault.TextKey == entry.TextKey && fault.Error == entry.Error),
-            FalloutAnimationSoundEnd.Cancelled => false,
-            _ => entry.End is FalloutAnimationSoundEnd.NativeFinished or FalloutAnimationSoundEnd.SourceStopped or FalloutAnimationSoundEnd.ChanceSkipped or FalloutAnimationSoundEnd.SourceUnloaded
-        });
+    internal bool CanCapture => FaultsOwned && (_activeEvents.Count == 0 ||
+        _activeEvents.Values.All(entry => CanCapturePlayback(entry.Generation)));
     internal IReadOnlyList<FalloutAnimationSoundEvent> Events => _events.AsReadOnly();
-    // This is admission to wait in the live session, never admission to capture.
-    internal bool CanAwaitNativeCompletion => (_opaqueError is null || _faults.Any(fault => fault.Error == _opaqueError)) &&
-        _events.Any(entry => entry.End == FalloutAnimationSoundEnd.Active) &&
-        _events.All(entry => entry.End switch
+    internal const int DiagnosticEventLimit = 32;
+    internal int EventCount => _events.Count;
+    internal IReadOnlyList<FalloutAnimationSoundEvent> RecentDiagnosticEvents
+    {
+        get
         {
-            FalloutAnimationSoundEnd.Active => entry.Played && FalloutAnimationSoundEventsSnapshot.Hash(entry.MediaSha256),
-            FalloutAnimationSoundEnd.Faulted => _faults.Any(fault => fault.TextKey == entry.TextKey && fault.Error == entry.Error),
-            _ => entry.Error is null && entry.End is FalloutAnimationSoundEnd.NativeFinished or FalloutAnimationSoundEnd.SourceStopped or FalloutAnimationSoundEnd.ChanceSkipped or FalloutAnimationSoundEnd.SourceUnloaded
-        });
+            var count = Math.Min(DiagnosticEventLimit, _events.Count);
+            var tail = new FalloutAnimationSoundEvent[count];
+            _events.CopyTo(_events.Count - count, tail, 0, count);
+            return Array.AsReadOnly(tail);
+        }
+    }
+    // This is admission to wait in the live session, never admission to capture.
+    internal bool CanAwaitNativeCompletion => FaultsOwned && _activeEvents.Count != 0 &&
+        _activeEvents.Values.All(entry => entry.Played && entry.Path is not null && FalloutAnimationSoundEventsSnapshot.Hash(entry.MediaSha256));
     internal IEnumerable<FalloutAnimationSoundEvent> PendingNativeCompletion =>
-        _events.Where(entry => entry.End == FalloutAnimationSoundEnd.Active && !CanCapturePlayback(entry.Generation));
+        _activeEvents.Values.Where(entry => !CanCapturePlayback(entry.Generation));
     internal bool HasPlaybackBinding(long generation) => _playbackCaptures.ContainsKey(generation);
     internal bool HasLivePlayback(long generation) => CanCapturePlayback(generation);
-    internal IEnumerable<string> PartialLanes => _events.SelectMany(entry => entry.PartialLanes.Select(lane => entry.Sound + ":" + lane)).Distinct(StringComparer.Ordinal);
-    internal IEnumerable<string> OwnedLanes => PartialLanes.Concat(_faults.Select(fault => fault.TextKey + ":" + fault.Error));
+    internal IEnumerable<string> PartialLanes => _partialLanes;
+    internal IEnumerable<string> OwnedLanes => _partialLanes.Concat(_faultLanes);
 
     internal void BindPlayback(long generation, Func<FalloutAnimationSoundPlaybackSnapshot> capture)
     {
@@ -163,6 +181,7 @@ internal sealed class FalloutAnimationSoundEvents(FalloutFormKey reference, Func
             selected.Play, selected.Play ? FalloutBsaArchive.CanonicalPath(selected.Path!) : null, null, selected.PitchScale,
             selected.RandomBefore, selected.RandomAfter, stereoOutput, Array.AsReadOnly(selected.Unbound.ToArray()),
             selected.Play ? FalloutAnimationSoundEnd.Active : FalloutAnimationSoundEnd.ChanceSkipped));
+        IndexEvent(_events[^1]);
         _generation = generation;
         return generation;
     }
@@ -196,7 +215,11 @@ internal sealed class FalloutAnimationSoundEvents(FalloutFormKey reference, Func
     internal void Fail(long? generation, string error, string? textKey = null)
     {
         _opaqueError = error;
-        if (!string.IsNullOrWhiteSpace(textKey)) _faults.Add(new(textKey, error));
+        if (!string.IsNullOrWhiteSpace(textKey))
+        {
+            var fault = new FalloutAnimationSoundFault(textKey, error);
+            _faults.Add(fault); IndexFault(fault);
+        }
         if (generation is { } id && Find(id) is { End: FalloutAnimationSoundEnd.Active } entry)
             Replace(entry with { End = FalloutAnimationSoundEnd.Faulted, Error = error });
     }
@@ -224,9 +247,11 @@ internal sealed class FalloutAnimationSoundEvents(FalloutFormKey reference, Func
         ValidateSource(snapshot, records, reference);
         _events.AddRange(snapshot.Events.Select(entry => entry.Copy())); _generation = snapshot.Generation;
         _opaqueError = snapshot.OpaqueError; _faults.AddRange(snapshot.Faults ?? []);
+        foreach (var fault in _faults) IndexFault(fault);
+        foreach (var entry in _events) IndexEvent(entry);
     }
 
-    internal static void ValidateSource(FalloutAnimationSoundEventsSnapshot snapshot, FalloutPluginStack records, FalloutFormKey reference)
+    internal static void ValidateSource(FalloutAnimationSoundEventsSnapshot snapshot, FalloutPluginStack records, FalloutSpatialReferenceId reference)
     {
         snapshot.Validate();
         if (snapshot.Reference != reference) throw new InvalidDataException("Animation sound history belongs to another reference.");
@@ -260,5 +285,43 @@ internal sealed class FalloutAnimationSoundEvents(FalloutFormKey reference, Func
 
     private FalloutAnimationSoundEvent Find(long generation) => generation > 0 && generation <= _events.Count
         ? _events[checked((int)generation - 1)] : throw new InvalidDataException("Unknown animation sound generation.");
-    private void Replace(FalloutAnimationSoundEvent entry) => _events[checked((int)entry.Generation - 1)] = entry;
+    private void Replace(FalloutAnimationSoundEvent entry)
+    {
+        _events[checked((int)entry.Generation - 1)] = entry;
+        IndexEvent(entry);
+        // Ended generations never capture PCM again. Release the retired
+        // emitter/node closure without removing its authoritative receipt.
+        if (entry.End != FalloutAnimationSoundEnd.Active) _playbackCaptures.Remove(entry.Generation);
+    }
+
+    private void IndexFault(FalloutAnimationSoundFault fault)
+    {
+        _faultErrors.Add(fault.Error); _faultPairs.Add((fault.TextKey, fault.Error));
+        var lane = fault.TextKey + ":" + fault.Error;
+        _faultLanes.Add(lane); _ownedLanes.Add(lane);
+        foreach (var generation in _unreceiptedFaults.ToArray())
+        {
+            var entry = Find(generation);
+            if (_faultPairs.Contains((entry.TextKey, entry.Error!))) _unreceiptedFaults.Remove(generation);
+        }
+    }
+
+    private void IndexEvent(FalloutAnimationSoundEvent entry)
+    {
+        var generation = entry.Generation;
+        _activeEvents.Remove(generation); _diagnosticEvents.Remove(generation);
+        _cancelledGenerations.Remove(generation); _unreceiptedFaults.Remove(generation);
+        if (entry.End == FalloutAnimationSoundEnd.Active) _activeEvents.Add(generation, entry);
+        if (entry.End is FalloutAnimationSoundEnd.Active or FalloutAnimationSoundEnd.Faulted or FalloutAnimationSoundEnd.Cancelled)
+            _diagnosticEvents.Add(generation, entry);
+        if (entry.End == FalloutAnimationSoundEnd.Cancelled) _cancelledGenerations.Add(generation);
+        if (entry.End == FalloutAnimationSoundEnd.Faulted && !_faultPairs.Contains((entry.TextKey, entry.Error!)))
+            _unreceiptedFaults.Add(generation);
+        foreach (var partial in entry.PartialLanes)
+        {
+            var lane = entry.Sound + ":" + partial;
+            if (_partialLaneSet.Add(lane)) _partialLanes.Add(lane);
+            _ownedLanes.Add(lane);
+        }
+    }
 }

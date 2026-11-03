@@ -33,12 +33,10 @@ internal sealed partial class RuntimeNativeShotEffects
         {
             var markers = root.FindChildren("*", "", true, false).OfType<Node3D>()
                 .Where(node => node.HasMeta("opennv_nif_source_name") && node.GetMeta("opennv_nif_source_name").AsString() == "BeamEnd").ToArray();
-            if (markers.Length != 1) throw new NotSupportedException($"Beam {source.Form} has no unique authored BeamEnd.");
-            var local = Transform3D.Identity;
-            for (var node = markers[0]; node != root; node = node.GetParent() as Node3D ??
-                throw new InvalidDataException("Beam endpoint left its model."))
-                local = node.Transform * local;
-            var sourceEnd = local.Origin;
+            if (markers.Length > 1) throw new NotSupportedException($"Beam {source.Form} has ambiguous authored BeamEnd markers.");
+            var sourceEnd = markers.Length == 1
+                ? BeamLocalTransform(markers[0], root).Origin
+                : BeamGeometryEnd(root);
             var length = sourceEnd.Length();
             if (!float.IsFinite(length) || length < .0001f)
                 throw new InvalidDataException($"Beam {source.Form} has a degenerate source extent.");
@@ -71,4 +69,39 @@ internal sealed partial class RuntimeNativeShotEffects
         }
         catch { root.Free(); throw; }
     }
+
+    private static Transform3D BeamLocalTransform(Node3D node, Node3D root)
+    {
+        var local = Transform3D.Identity;
+        for (; node != root; node = node.GetParent() as Node3D ??
+            throw new InvalidDataException("Beam geometry left its model."))
+            local = node.Transform * local;
+        return local;
+    }
+
+    private static Vector3 BeamGeometryEnd(Node3D root)
+    {
+        // Some owned beam models encode their length entirely in geometry and
+        // have no endpoint node. Preserve their root origin and transverse size.
+        Aabb? bounds = null;
+        foreach (var mesh in root.FindChildren("*", "MeshInstance3D", true, false).OfType<MeshInstance3D>())
+        {
+            if (mesh.Mesh is null) continue;
+            var local = BeamLocalTransform(mesh, root) * mesh.GetAabb();
+            bounds = bounds is { } current ? current.Merge(local) : local;
+        }
+        if (bounds is not { } geometry || !geometry.Position.IsFinite() || !geometry.Size.IsFinite())
+            throw new NotSupportedException("Beam has neither an endpoint marker nor finite authored geometry.");
+        var size = geometry.Size;
+        var axis = (int)size.MaxAxisIndex();
+        for (var other = 0; other < 3; other++)
+            if (other != axis && size[other] >= size[axis])
+                throw new NotSupportedException("Beam geometry has no unique longitudinal axis.");
+        var near = geometry.Position[axis];
+        var far = geometry.End[axis];
+        var end = Vector3.Zero;
+        end[axis] = Mathf.Abs(near) > Mathf.Abs(far) ? near : far;
+        return end;
+    }
+
 }

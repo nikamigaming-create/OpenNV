@@ -8,11 +8,13 @@ internal sealed record FalloutIngestibleEffect(int Index, FalloutFormKey Form, s
     uint Area, uint Range, bool AdditionalPresentation, IReadOnlyList<FalloutCondition> Conditions, int Resistance = -1, FalloutFormKey? Script = null)
 {
     internal uint EffectiveDuration => (Flags & 0x80) == 0 ? Duration : 0;
+    internal int DeclaredActorValue { get; init; }
 }
 internal sealed record FalloutIngestible(FalloutFormKey Form, string Hash, byte Flags,
     FalloutFormKey? Script, FalloutFormKey? Withdrawal, float AddictionChance,
     FalloutFormKey? Sound, IReadOnlyList<FalloutIngestibleEffect> Effects)
 {
+    internal byte? EnchantmentFlags { get; init; }
     internal static FalloutIngestible Read(FalloutPluginStack records, FalloutFormKey form)
     {
         var record = records.GetEffective(form);
@@ -51,6 +53,23 @@ internal sealed record FalloutIngestible(FalloutFormKey Form, string Hash, byte 
         return new(form, HashOf(record), 0, null, null, 0, null, effects);
     }
 
+    internal static FalloutIngestible ReadWeaponEnchantment(FalloutPluginStack records, FalloutFormKey form)
+    {
+        var record = records.GetEffective(form);
+        if (record.Signature != "ENCH") throw new NotSupportedException("Touch delivery requires a weapon ENCH declaration.");
+        var fields = record.ReadSubrecords().ToArray();
+        var declarations = fields.Where(field => field.Signature == "ENIT").ToArray();
+        if (declarations.Length != 1 || declarations[0].Data.Length != 16)
+            throw new InvalidDataException("Weapon enchantment requires one 16-byte ENIT.");
+        if (BinaryPrimitives.ReadUInt32LittleEndian(declarations[0].Data.Span) != 2)
+            throw new NotSupportedException("Touch delivery requires the weapon enchantment type.");
+        var effects = ReadEffects(records, record, fields);
+        if (effects.Count == 0) throw new InvalidDataException("Weapon enchantment has no source effects.");
+        var flags = declarations[0].Data.Span[12];
+        if ((flags & ~7) != 0) throw new NotSupportedException("Weapon enchantment has unbound source flags.");
+        return new(form, HashOf(record), 0, null, null, 0, null, effects) { EnchantmentFlags = flags };
+    }
+
     private static IReadOnlyList<FalloutIngestibleEffect> ReadEffects(FalloutPluginStack records,
         FalloutPluginRecord record, FalloutPluginSubrecord[] fields)
     {
@@ -84,7 +103,8 @@ internal sealed record FalloutIngestible(FalloutFormKey Form, string Hash, byte 
                 BinaryPrimitives.ReadUInt32LittleEndian(data), BinaryPrimitives.ReadUInt32LittleEndian(data[8..]),
                 BinaryPrimitives.ReadUInt32LittleEndian(data[4..]), BinaryPrimitives.ReadUInt32LittleEndian(data[12..]), presentation,
                 group.Where(field => field.Signature == "CTDA").Select(field => FalloutCondition.Read(record, field.Data.Span)).ToArray(),
-                BinaryPrimitives.ReadInt32LittleEndian(definition[16..]), script));
+                BinaryPrimitives.ReadInt32LittleEndian(definition[16..]), script)
+            { DeclaredActorValue = BinaryPrimitives.ReadInt32LittleEndian(data[16..]) });
             index = end - 1;
         }
         return effects;

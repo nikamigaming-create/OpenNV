@@ -56,6 +56,7 @@ internal sealed class FalloutReferenceInventory
             state.Unequipped.Any(key => records.GetEffective(key).Signature is not ("ARMO" or "WEAP")))
             throw new InvalidDataException("Saved actor unequipped items are invalid.");
         Contents.Restore(state.Contents.Inventory, state.Contents.EquippedRuntimeFormIds.ToArray(), state.Contents.InventoryRandomState);
+        FalloutWeaponRecharge.ValidateSource(records, Contents.Items);
         Contents.RestoreTraversal(records, state.Traversal);
         Unequipped.UnionWith(state.Unequipped);
         InitialArmorResolved = state.InitialArmorResolved;
@@ -97,6 +98,8 @@ internal sealed partial class FalloutReferenceWorld
     internal void BindPlayerInventory(FalloutPlayerInventory inventory)
     {
         inventory.BindLeveledItems(LeveledItems);
+        inventory.BindPlayerEquipmentProcess(FormLists);
+        inventory.BindScriptContainer(records.RuntimeFormKey(0x14), item => InventorySourceContribution(records.RuntimeFormKey(0x14), item));
         _playerInventory = new(inventory) { InitialArmorResolved = true };
     }
 
@@ -114,14 +117,42 @@ internal sealed partial class FalloutReferenceWorld
     internal FalloutReferenceInventory Inventory(FalloutFormKey reference, int level, FalloutGlobalState? globals = null)
     {
         if (reference == records.RuntimeFormKey(0x14))
-            return _playerInventory ??= SourceInventory(records.GetEffective(records.RuntimeFormKey(7)), level, globals);
+        {
+            _playerInventory ??= SourceInventory(records.GetEffective(records.RuntimeFormKey(7)), level, globals);
+            _playerInventory.Contents.BindScriptContainer(reference, item => InventorySourceContribution(reference, item));
+            return _playerInventory;
+        }
         var actor = InventoryOwner(reference);
         var npc = records.GetEffective(actor.Base);
         if (npc.Signature is "NPC_" or "CREA") InitializeActorTemplates(reference, level, globals);
         actor.Inventory ??= SourceInventory(actor, npc, level, globals);
         actor.Inventory.Contents.BindLeveledItems(LeveledItems);
+        actor.Inventory.Contents.BindScriptContainer(reference, item => InventorySourceContribution(reference, item), npc.Signature is "NPC_" or "CREA");
         BindInventoryRemoval(actor);
         return actor.Inventory;
+    }
+
+    private int InventorySourceContribution(FalloutFormKey reference, FalloutFormKey item)
+    {
+        FalloutPluginRecord source;
+        if (reference == records.RuntimeFormKey(0x14)) source = records.GetEffective(records.RuntimeFormKey(7));
+        else
+        {
+            var instance = InventoryOwner(reference);
+            var definition = records.GetEffective(instance.Base);
+            source = definition.Signature is "NPC_" or "CREA"
+                ? FalloutActorTemplateOwner.Resolve(records, definition, 256, instance.Templates) : definition;
+        }
+        var count = 0;
+        foreach (var field in source.ReadSubrecords())
+        {
+            if (field.Signature != "CNTO") continue;
+            if (field.Data.Length != 8) throw new InvalidDataException("Source inventory count extent is invalid.");
+            if (source.Plugin.AdjustFormId(BinaryPrimitives.ReadUInt32LittleEndian(field.Data.Span)) != item) continue;
+            count = checked(count + BinaryPrimitives.ReadInt32LittleEndian(field.Data.Span[4..]));
+        }
+        if (count < 0) throw new NotSupportedException("Script entry base contribution needs its signed-count owner.");
+        return count;
     }
 
     private FalloutReferenceInventory SourceInventory(FalloutReferenceInstance actor, FalloutPluginRecord npc,
@@ -189,6 +220,10 @@ internal sealed partial class FalloutReferenceWorld
         if (!duplicateBaseFood)
             inventory.Contents.RestoreTraversal(records, new(owner.FormKey,
                 Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(owner.ReadData())), forms));
+        inventory.Contents.ReserveSourceChangeEntries(changed,
+            form => declarations.Where(value => value.Form == form).Sum(value => value.Count), null);
+        inventory.Contents.InitializeSourceInventoryScripts(records,
+            declarations.Select(entry => (entry.Form, entry.Count)).ToArray(), Menus.Query(null) == 0);
         return inventory;
     }
 

@@ -39,6 +39,28 @@ internal static class ActivationParentContracts
                 world.ActivationParentIssues.Any(issue => issue.Error == "deleted winning parent") &&
                 world.ActivationParentIssues.Any(issue => issue.Error == "parent has non-reference type ACTI"),
                 "Broken winning XAPR endpoints disappeared from the source graph.");
+            Require(world.LogicalActivatorOpenState(parent) == 3, "Plain ACTI did not begin logically closed.");
+            world.DefaultActivateUnanimatedActivator(parent);
+            Require(world.Get(parent).DoorOpen && world.Get(parent).DoorMotion is null && world.LogicalActivatorOpenState(parent) == 1,
+                "Animationless ACTI did not open its real logical state, or fabricated a motion continuation.");
+            var logicalSave = JsonSerializer.Deserialize<FalloutReferenceSnapshot[]>(JsonSerializer.Serialize(world.Capture()))!;
+            using (var logicalCold = new FalloutReferenceWorld(records))
+            {
+                logicalCold.Restore(logicalSave); logicalCold.LoadCell(cell);
+                Require(logicalCold.LogicalActivatorOpenState(parent) == 1 && logicalCold.Get(parent).DoorMotion is null,
+                    "Cold restore lost an animationless ACTI's logical open bit or invented animation replay.");
+                logicalCold.DefaultActivateUnanimatedActivator(parent);
+                Require(logicalCold.LogicalActivatorOpenState(parent) == 3 && world.LogicalActivatorOpenState(parent) == 1,
+                    "Logical ACTI close did not preserve independent world ownership.");
+            }
+            world.DefaultActivateUnanimatedActivator(parent);
+            foreach (var blocked in new uint[] { 0x925, 0x926, 0x927, 0x928 })
+            {
+                var before = JsonSerializer.Serialize(world.Capture());
+                Reject(() => world.DefaultActivateUnanimatedActivator(Key(blocked)));
+                Require(JsonSerializer.Serialize(world.Capture()) == before,
+                    "Unsupported ACTI activation declaration partially toggled world state.");
+            }
             var unchanged = JsonSerializer.Serialize(world.Capture());
             foreach (var root in new uint[] { 0x912, 0x913, 0x916, 0x917, 0xa00, 1 })
             {
@@ -146,12 +168,20 @@ internal static class ActivationParentContracts
             Record("REFR", 0x916, Field("NAME", BitConverter.GetBytes(1u)), Field("DATA", new byte[24])),
             Record("REFR", 0x917, Field("NAME", BitConverter.GetBytes(1u)), Field("DATA", new byte[24])),
             Record("REFR", 0x918, Parent(0x919, 0), Field("XAPR", Join(BitConverter.GetBytes(0x917u), BitConverter.GetBytes(0f)))),
-            Record("REFR", 0x919, Parent(0x918, 0)));
+            Record("REFR", 0x919, Parent(0x918, 0)),
+            Record("REFR", 0x925, Field("NAME", BitConverter.GetBytes(3u)), Field("DATA", new byte[24])),
+            Record("REFR", 0x926, Field("NAME", BitConverter.GetBytes(4u)), Field("DATA", new byte[24])),
+            Record("REFR", 0x927, Field("NAME", BitConverter.GetBytes(5u)), Field("DATA", new byte[24])),
+            Record("REFR", 0x928, Field("NAME", BitConverter.GetBytes(6u)), Field("DATA", new byte[24])));
         var group = new byte[24 + children.Length]; Encoding.ASCII.GetBytes("GRUP").CopyTo(group, 0);
         UInt(group, 4, (uint)group.Length); UInt(group, 8, 0x800); UInt(group, 12, 6); children.CopyTo(group, 24);
         var scriptHeader = new byte[20]; UInt(scriptHeader, 12, 1);
         var local = new byte[24]; UInt(local, 0, 1);
         return Join(Record("TES4", 0, Field("HEDR", header)), Record("ACTI", 1),
+            Record("ACTI", 3, Field("VNAM", BitConverter.GetBytes(1u))),
+            Record("ACTI", 4, Field("WNAM", BitConverter.GetBytes(1u))),
+            Record("ACTI", 5, Field("RNAM", BitConverter.GetBytes(1u))),
+            Record("ACTI", 6, Field("INAM", [1])),
             Record("DOOR", 2, Field("SCRI", BitConverter.GetBytes(0x50u))),
             Record("SCPT", 0x50, Field("SCHR", scriptHeader), Field("SLSD", local), Field("SCVR", Text("calls")),
                 Field("SCRO", BitConverter.GetBytes(0x14u)), Field("SCTX", Text("begin OnActivate\nif IsActionRef player == 1\nelse\nset calls to calls + 1\nActivate\nendif\nend"))),
