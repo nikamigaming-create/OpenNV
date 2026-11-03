@@ -29,7 +29,7 @@ unaccepted.
 
 ## Integrated repair batch
 
-The pending batch retains source unarmed/BIPL equipment, player/source mines,
+The merged combat batch retains source unarmed/BIPL equipment, player/source mines,
 fatigue knockout/get-up and save continuation, actor hit reactions and pursuit,
 weapon recharge, firing/reload ownership, inventory script events and source
 sound/UI repairs. Existing live observations covered selected gecko retaliation,
@@ -53,6 +53,12 @@ November 3 shared corrections add:
 - An immutable triangle bounds index for repeated source-floor projection,
   preserving exact triangle/height admission and source-order ties.
 - Exact material-controller channel selection for shared weapon animations.
+- Enabled-only source connectivity and reuse of the exact source-route floor
+  predicate for combat arrival. Unfiltered off-path queries retain their directed
+  frontier and stop after discovering a reachable target; filtered callback
+  scopes keep their existing snapshot semantics.
+- Stack-scoped immutable weapon script metadata, including unscripted weapons,
+  without caching or weakening live exact firing-item admission.
 
 Active unowned DOT, scripts, resistance and effect presentation still fail
 visibly. Remote explosions outside residency remain delayed. Critical/sneak,
@@ -67,33 +73,48 @@ selected existing owned weapon audit completed all 496 records; 67 still report
 findings (previously 83). These are assembly checks, not accepted encounters.
 The current Release executable is `tmp/development-runtime/windows/OpenNV.exe`.
 
-Two recording-free source-area sessions closed normally. Hunting Shotgun fired
-and reloaded in both views but hit a tree/terrain before the selected gecko.
-Laser RCW equipped and became ready; ordinary bot approach exceeded its 30-second
-limit. Neither establishes a damaging encounter. The sessions lasted 234 and
-114 seconds, including startup/shutdown. The exit performance report sampled
-menu-scale state and cannot establish gameplay FPS. No new retail parity or
-sustained 4K60 result is claimed.
+Bounded source-gecko encounters used the existing guarded player MoveTo followed
+by ordinary input. Laser RCW changed target health from 40 to 31.075 and the
+gecko pursued/struck the player. On the final follow-up build, Hunting Shotgun
+changed target health from 40 to 19.3 and the gecko retaliated. These are selected
+contact/health observations, not all-pellet receipt or complete weapon acceptance.
+The two successful sessions closed normally after 121 and 119 seconds; no game
+or harness remains running and recording stayed off.
+
+The final build's unpaused 20-second moving window confirmed native 3840x2160 at
+scale 1, with ten FPS samples between 58 and 60, p95 frame interval 18.73 ms and
+maximum 22.50 ms across the 1,188 observed host-draw intervals. This is not
+sustained 4K60 or display-presentation acceptance. The earlier RCW window retained
+a 166.62 ms spike; different encounter states do not establish causal speedup.
+Beam/impact creation still performs synchronous per-shot work.
+
+The final combined runtime gate passes, including both navigation additions and
+immutable script caching. The existing owned Mojave route audit also passes:
+4,037 NAVMs, 589,719 triangles, the same 41 source waypoints, no unavailable meshes.
+This is one source route, not world traversal acceptance.
 
 A single bounded retry of the retained retail launcher produced neither bridge
 nor live state; the created process was closed. Do not leave it running or loop
 on harness recovery. Paired retail execution is currently unavailable.
 
-Next owner is root: publish the gated integrated batch, then repair shared
-navigation setup cost and qualify delivered-effect lifecycle. Existing route
-telemetry shows 123 ms synchronous source setup before the scheduled physical
-search; inspect eager arrival-region reachability before another live session.
-Two signed source projectile coefficients account for 16 parse rejections, but
-native negative-coefficient semantics remain unqualified. Preserve visible
-failures until their actual consumers are implemented. Keep short encounters and
-compact outcomes; do not accumulate frames, exports or proof archives.
+Next owner is root: continue bounded source-area weapon/mob encounters and shared
+capability repairs. Prioritize complete delivered timed/scripted effects,
+qualified negative projectile coefficients, and source beam/impact preparation
+with independent effect-instance lifetimes. Unreachable floor queries can still
+exhaust the remaining component synchronously; retained reachability does not
+certify a frame budget. Use existing in-world performance publication with cell,
+pose and loading state. Close sessions before coding, keep recording off, and
+exclude paused/menu timing from gameplay results.
 
 ## Publication and local candidate
 
-Working branch: `codex/combat-repair`, based on main/origin/main
-`67a5978e87d0286283006b30d66119a8483814df`. No task PR is open yet. The integrated
-first-party batch is pending publication. Unrelated classic asset import changes
-must remain outside the combat commit. Private assets, saves, captures and raw
-reverse-engineering outputs stay outside public history.
+The combat base is PR348 (`87a57ac8d7d6fbafca81ae5d3373beb0993d13cd`), with all
+five hosted checks passing. The navigation/script-cache follow-up source branch
+is `codex/combat-navigation-reachability`; its final required local gate and
+selected owned route check pass. Publish through the checked PR workflow and
+verify main against origin/main before the next feature branch.
 
-The November 2 local experimental ZIP predates this batch and is not current.
+The current Release executable is `tmp/development-runtime/windows/OpenNV.exe`.
+Unrelated classic import changes remain outside these commits. Private assets,
+saves, captures and raw reverse-engineering outputs stay outside public history.
+The November 2 experimental ZIP predates the repairs and is not current.

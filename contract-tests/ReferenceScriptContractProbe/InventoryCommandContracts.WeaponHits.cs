@@ -32,6 +32,7 @@ internal static partial class InventoryCommandContracts
                     Field("ETYP", BitConverter.GetBytes(2)), Field("SCRI", BitConverter.GetBytes(0x200u))),
                 Record("WEAP", 2, Field("EDID", Text("OtherContactWeapon")), Field("DATA", new byte[15]), Field("DNAM", weapon),
                     Field("ETYP", BitConverter.GetBytes(2)), Field("SCRI", BitConverter.GetBytes(0x201u))),
+                Record("WEAP", 3, Field("EDID", Text("UnscriptedContactWeapon")), Field("DATA", new byte[15]), Field("DNAM", weapon)),
                 Record("SCPT", 0x200, Field("SCHR", header), Field("SCDA", []), Field("SCRO", BitConverter.GetBytes(0x14u)), Field("SCTX", Text(program)),
                     Field("SLSD", number), Field("SCVR", Text("Visits")), Field("SLSD", targetLocal), Field("SCVR", Text("Target"))),
                 Record("SCPT", 0x201, Field("SCHR", header), Field("SCDA", []),
@@ -41,6 +42,33 @@ internal static partial class InventoryCommandContracts
                     Reference("ACHR", 0x900, 0x100, "Attacker"), Reference("ACRE", 0x901, 0x101, "TargetA"),
                     Reference("ACRE", 0x902, 0x103, "TargetB")))));
             using var records = FalloutPluginStack.Load(directory.FullName, ["Items.esm"]);
+            var previousReadObserver = FalloutPluginRecord.ReadObserver;
+            var scriptMetadataReads = 0;
+            try
+            {
+                FalloutPluginRecord.ReadObserver = (record, _) =>
+                {
+                    if (record.FormKey == Key(1) || record.FormKey == Key(3)) ++scriptMetadataReads;
+                };
+                Require(FalloutScriptLocals.AttachedWeaponScript(records, Key(1))?.FormKey == Key(0x200) &&
+                    FalloutScriptLocals.AttachedWeaponScript(records, Key(3)) is null,
+                    "Winning weapon script metadata lost its attached or unscripted declaration.");
+                for (var repeated = 0; repeated < 4; repeated++)
+                {
+                    _ = FalloutScriptLocals.AttachedWeaponScript(records, Key(1));
+                    _ = FalloutScriptLocals.AttachedWeaponScript(records, Key(3));
+                }
+                Require(scriptMetadataReads == 2, "Repeated weapon contacts decoded immutable SCRI metadata again.");
+                using var independent = FalloutPluginStack.Load(directory.FullName, ["Items.esm"]);
+                Require(FalloutScriptLocals.AttachedWeaponScript(independent, Key(1))?.FormKey == Key(0x200) &&
+                    scriptMetadataReads == 3, "Weapon script metadata escaped its selected stack lifetime.");
+                independent.Dispose();
+                var retiredMetadataRejected = false;
+                try { _ = FalloutScriptLocals.AttachedWeaponScript(independent, Key(1)); }
+                catch (ObjectDisposedException) { retiredMetadataRejected = true; }
+                Require(retiredMetadataRejected, "Cached weapon metadata outlived its source reader.");
+            }
+            finally { FalloutPluginRecord.ReadObserver = previousReadObserver; }
             using var world = new FalloutReferenceWorld(records);
             var cell = FalloutCellSceneReader.Read(records, Key(0x800)); world.LoadCell(cell);
             var player = new FalloutPlayerInventory(); world.BindPlayerInventory(player);

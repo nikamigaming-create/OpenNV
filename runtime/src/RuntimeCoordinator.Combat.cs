@@ -57,7 +57,8 @@ public partial class RuntimeCoordinator
         if (radius <= 0) return new(points, PrefixArrival: Prefix,
             SourceSha256: sourceHash, TerminalFloor: terminalFloor, CorridorFloor: OnCorridorFloor);
         var region = _botNavigation.ArrivalRegion(Source(from), Source(to), Source(selectedSourcePoint), radius / units,
-            .01f / units, NativeCapsuleNavigation.SourceHeightTolerance / units, actorHeightProjection: true);
+            .01f / units, NativeCapsuleNavigation.SourceHeightTolerance / units, actorHeightProjection: true,
+            reachableFloor: corridor);
         points = NativeCapsuleNavigation.TerminalRegionCorridor(points, point => region(Source(point)));
         return new(points, new(to, points[^1], radius), point => region(Source(point)), Prefix,
             sourceHash, terminalFloor, OnCorridorFloor);

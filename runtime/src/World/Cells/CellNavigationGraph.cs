@@ -504,26 +504,29 @@ internal sealed partial class CellNavigationGraph
             return best.Index >= 0 ? best : throw new InvalidDataException($"Owned NAVM {FormId} has no finite floor projection.");
         }
 
-        internal bool CanReach(int start, int destination) => start == destination ||
-            _internalComponents.Value[start] == _internalComponents.Value[destination];
+        internal bool CanReach(int start, int destination) =>
+            (Triangles[start].Flags & 8) == 0 && (Triangles[destination].Flags & 8) == 0 &&
+            (start == destination || _internalComponents.Value[start] == _internalComponents.Value[destination]);
 
         private int[] ReadInternalComponents()
         {
             // IsInternalNeighbor requires reciprocal authored edges. Preserve
-            // exactly that immutable relation; collision, source-floor and
-            // permitted-portal checks remain live with their existing owners.
+            // its enabled-triangle relation, matching Neighbors. Disabled
+            // triangles cannot join otherwise disconnected source floors.
+            // Collision and permitted-portal checks retain their live owners.
             var components = new int[Triangles.Count];
             Array.Fill(components, -1);
             var pending = new Queue<int>();
             for (var origin = 0; origin < components.Length; ++origin)
             {
-                if (components[origin] >= 0) continue;
+                if (components[origin] >= 0 || (Triangles[origin].Flags & 8) != 0) continue;
                 components[origin] = origin;
                 pending.Enqueue(origin);
                 while (pending.TryDequeue(out var current))
                     foreach (var adjacent in Triangles[current].AdjacentTriangles)
                     {
-                        if (!IsInternalNeighbor(current, adjacent) || components[adjacent] >= 0) continue;
+                        if (!IsInternalNeighbor(current, adjacent) || components[adjacent] >= 0 ||
+                            (Triangles[adjacent].Flags & 8) != 0) continue;
                         components[adjacent] = origin;
                         pending.Enqueue(adjacent);
                     }
