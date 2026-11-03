@@ -859,7 +859,10 @@ internal static partial class RuntimeNativeNifMeshBuilder
                 if (source.Billboard is { } mode)
                 {
                     var billboard = new NativeNifBillboard();
-                    children.AddChild(billboard); billboard.Configure(children, mode);
+                    children.AddChild(billboard);
+                    var authoredEmpty = source.Controller == -1 && source.CollisionObject == -1 &&
+                        source.Children.All(child => child == -1) && source.Effects.All(effect => effect == -1);
+                    billboard.Configure(children, mode, authoredEmpty);
                 }
                 return result;
             }

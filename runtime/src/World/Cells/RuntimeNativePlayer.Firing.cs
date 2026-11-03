@@ -314,6 +314,7 @@ internal partial class RuntimeNativePlayer
                 if (shot.Projectile.Type == 4)
                     foreach (var trace in traces)
                         TryShotEffect("beam", () => _shotEffects!.Beam(shot.Projectile, from, trace.Point));
+                var beamDone = System.Diagnostics.Stopwatch.GetTimestamp();
                 if (!weapon.IsThrownWeapon && !weapon.IsMine && weapon.ShellModel is not null && actor.HasShellSocket && !_shotEffectErrors.ContainsKey("casing-prepare"))
                     TryShotEffect("casing", () =>
                     {
@@ -369,7 +370,8 @@ internal partial class RuntimeNativePlayer
                         collisionMilliseconds = System.Diagnostics.Stopwatch.GetElapsedTime(started, collisionDone).TotalMilliseconds,
                         audioMilliseconds = System.Diagnostics.Stopwatch.GetElapsedTime(collisionDone, audioDone).TotalMilliseconds,
                         damageScheduleMilliseconds = System.Diagnostics.Stopwatch.GetElapsedTime(audioDone, damageDone).TotalMilliseconds,
-                        casingMilliseconds = System.Diagnostics.Stopwatch.GetElapsedTime(damageDone, casingDone).TotalMilliseconds,
+                        beamMilliseconds = System.Diagnostics.Stopwatch.GetElapsedTime(damageDone, beamDone).TotalMilliseconds,
+                        casingMilliseconds = System.Diagnostics.Stopwatch.GetElapsedTime(beamDone, casingDone).TotalMilliseconds,
                         impactMilliseconds = System.Diagnostics.Stopwatch.GetElapsedTime(casingDone, impactDone).TotalMilliseconds,
                         totalMilliseconds = System.Diagnostics.Stopwatch.GetElapsedTime(started, impactDone).TotalMilliseconds
                     },

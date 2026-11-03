@@ -38,7 +38,8 @@ internal sealed partial class RuntimeNativeShotEffects : Node3D
     private string? _shellPath;
     private RuntimeNativeNifPrototype? _shellPrototype;
     private string? _projectilePath;
-    private RuntimeNativeNifPrototype? _projectilePrototype;
+    private FalloutNifFile? _projectileSource;
+    private Node3D? _preparedProjectileModel;
     private readonly HashSet<RuntimeNativeProjectileFlight> _projectiles = [];
     private long _projectileLaunches, _projectileHits, _projectileMisses, _projectileErrors;
     private long _casings, _impacts;
@@ -74,8 +75,10 @@ internal sealed partial class RuntimeNativeShotEffects : Node3D
         impacts = _impacts,
         active = _effects.Count,
         retainedImpacts = _completedEffects.Count(effect => effect.Reusable is { Beam: false }),
+        preparedImpacts = _completedEffects.Count(effect => effect.Reusable is { Beam: false } && !effect.WasPlayed),
         particles = _effects.Where(effect => effect.Playback is not null).SelectMany(effect => effect.Playback!.Particles)
             .Select(particle => new { particle.BirthCount, particle.ActiveCount, particle.EmissionEnabled, particle.SimulatedSeconds }).ToArray(),
+        preparedProjectileModel = _preparedProjectileModel is not null,
         projectileLaunches = _projectileLaunches,
         projectileHits = _projectileHits,
         projectileMisses = _projectileMisses,
@@ -153,26 +156,61 @@ internal sealed partial class RuntimeNativeShotEffects : Node3D
         catch { root.Free(); throw; }
     }
 
+    internal void PrepareProjectileModel(FalloutProjectile? source)
+    {
+        var path = source is { IsInstantRayAttack: false }
+            ? source.Model ?? throw new NotSupportedException($"Projectile {source.Form} has no source model.")
+            : null;
+        if (_projectilePath != path) ClearProjectileModel();
+        if (path is null || _preparedProjectileModel is not null) return;
+
+        var model = _projectileSource ?? ReadModel(path);
+        // Detached nodes preserve their authored startup behavior on tree entry.
+        // Equip does not start controllers, physics, emitters, or a flight.
+        _preparedProjectileModel = BuildProjectileModel(model);
+        _projectileSource = model;
+        _projectilePath = path;
+    }
+
+    private Node3D BuildProjectileModel(FalloutNifFile model) =>
+        RuntimeNativeNifMeshBuilder.Build(model, _units, contentSource: _content, shareImmutableGeometry: true).Root;
+
+    private void ClearProjectileModel()
+    {
+        _preparedProjectileModel?.Free();
+        _preparedProjectileModel = null;
+        _projectileSource = null;
+        _projectilePath = null;
+    }
+
     internal RuntimeNativeProjectileFlight PrepareProjectile(FalloutProjectile source, float gravity,
         Vector3 origin, Vector3 direction, uint collisionMask, IEnumerable<Rid> exclusions)
     {
         source.RequireFlightBounceOwner();
-        var path = source.Model ?? throw new NotSupportedException($"Projectile {source.Form} has no source model.");
-        if (_projectilePath != path)
+        var friction = source.Type == 2 ? FalloutGameSettingFloats.Read(_records, "fGrenadeFriction") : 0;
+        var restitution = source.Type == 2 ? FalloutGameSettingFloats.Read(_records, "fGrenadeRestitution") : 0;
+        if (friction < 0 || restitution < 0)
+            throw new InvalidDataException("Source grenade contact settings are negative.");
+
+        if (_projectilePath != source.Model) PrepareProjectileModel(source);
+        var model = _preparedProjectileModel ?? BuildProjectileModel(_projectileSource ??
+            throw new NotSupportedException($"Projectile {source.Form} has no flight model owner."));
+        _preparedProjectileModel = null;
+        try
         {
-            _projectilePrototype?.Scene.Root.Free();
-            _projectilePrototype = new(ReadModel(path), _units);
-            _projectilePath = path;
+            var flight = new RuntimeNativeProjectileFlight(_records, source, model, _units, gravity, origin, direction, collisionMask, exclusions);
+            if (source.Type == 2)
+            {
+                flight.ContactFriction = friction;
+                flight.ContactRestitution = restitution;
+            }
+            return flight;
         }
-        var flight = new RuntimeNativeProjectileFlight(_records, source, _projectilePrototype!.Instantiate(), _units, gravity, origin, direction, collisionMask, exclusions);
-        if (source.Type == 2)
+        catch
         {
-            flight.ContactFriction = FalloutGameSettingFloats.Read(_records, "fGrenadeFriction");
-            flight.ContactRestitution = FalloutGameSettingFloats.Read(_records, "fGrenadeRestitution");
-            if (flight.ContactFriction < 0 || flight.ContactRestitution < 0)
-            { flight.Free(); throw new InvalidDataException("Source grenade contact settings are negative."); }
+            model.Free();
+            throw;
         }
-        return flight;
     }
 
     internal void LaunchProjectile(RuntimeNativeProjectileFlight projectile)
@@ -194,17 +232,10 @@ internal sealed partial class RuntimeNativeShotEffects : Node3D
         if (!direction.IsFinite() || direction.LengthSquared() < .0001f) throw new InvalidDataException("Impact frame is degenerate.");
         var key = new EffectKey(false, source.Form);
         var effect = TakeCompletedEffect(key);
-        var reused = effect is not null;
-        var root = effect?.Root ?? new Node3D();
-        if (!reused && source.Model is { } path)
-        {
-            try
-            {
-                root.AddChild(RuntimeNativeNifMeshBuilder.Build(ReadModel(path), _units,
-                    contentSource: _content, shareImmutableGeometry: true).Root);
-            }
-            catch { root.Free(); throw; }
-        }
+        var prepared = effect is { WasPlayed: false };
+        var reused = effect is { WasPlayed: true };
+        effect ??= BuildImpactEffect(source, key);
+        var root = effect.Root;
         var built = System.Diagnostics.Stopwatch.GetTimestamp();
         try
         {
@@ -212,18 +243,10 @@ internal sealed partial class RuntimeNativeShotEffects : Node3D
             var y = direction.Normalized(); var helper = Mathf.Abs(y.Dot(Vector3.Up)) < .99f ? Vector3.Up : Vector3.Right;
             var x = helper.Cross(y).Normalized();
             root.Transform = follow?.Invoke() ?? new(new Basis(x, y, x.Cross(y)), point);
-            if (!reused) AddChild(root);
-            var playback = effect?.Playback ?? (source.Model is null ? null : new NativeNifEffectPlayback(root, source.Duration, encoded: false, _sounds));
-            if (reused) playback!.RestartCompleted();
-            else playback?.Start();
-            if (effect is null)
-            {
-                // Concurrent shots keep independent controllers, particles and
-                // sounds. Physics-bearing effects are
-                // rebuilt because their full reset contract is not established.
-                var recyclable = playback is not null && !root.FindChildren("*", "", true, false).Any(node => node is CollisionObject3D);
-                effect = new(root, source.Duration, playback, recyclable ? key : null);
-            }
+            if (root.GetParent() is null) AddChild(root);
+            if (reused) effect.Playback!.RestartCompleted();
+            else effect.Playback?.Start();
+            effect.WasPlayed = true;
             effect.Remaining = source.Duration;
             effect.Follow = follow;
             var playing = System.Diagnostics.Stopwatch.GetTimestamp();
@@ -240,12 +263,71 @@ internal sealed partial class RuntimeNativeShotEffects : Node3D
                 normal = V(normal),
                 orientation = source.Orientation,
                 source.TextureSet,
+                prepared,
                 reused,
                 buildMilliseconds = System.Diagnostics.Stopwatch.GetElapsedTime(started, built).TotalMilliseconds,
                 playbackMilliseconds = System.Diagnostics.Stopwatch.GetElapsedTime(built, playing).TotalMilliseconds,
                 soundMilliseconds = System.Diagnostics.Stopwatch.GetElapsedTime(playing, sounded).TotalMilliseconds,
                 decal = !decal ? "separate-projection" : source.Decal is not null ? "source-projected" : "source-disabled"
             };
+        }
+        catch { root.Free(); throw; }
+    }
+
+    internal void PrepareImpact(FalloutImpact source)
+    {
+        foreach (var sound in source.Sounds) _sounds.PrepareSound(sound);
+        var key = new EffectKey(false, source.Form);
+        if (source.Model is null || _completedEffects.Count >= MaximumRetainedEffects ||
+            _completedEffects.Any(effect => effect.Reusable == key)) return;
+        var effect = BuildImpactEffect(source, key);
+        if (effect.Reusable is not null) RetainCompletedEffect(effect);
+        else effect.Root.Free();
+    }
+
+    internal void PrepareImpactDataSet(FalloutFormKey set)
+    {
+        var impacts = new Dictionary<FalloutFormKey, FalloutImpact>();
+        var failures = new List<string>();
+        for (var material = 0; material < 12; material++)
+        {
+            try
+            {
+                if (FalloutImpact.Resolve(_records, set, material) is { } impact)
+                    impacts.TryAdd(impact.Form, impact);
+            }
+            catch (Exception error) when (error is IOException or InvalidDataException or NotSupportedException or InvalidOperationException or KeyNotFoundException)
+            { failures.Add($"material {material}: {error.Message}"); }
+        }
+        // The equipped data set can reclaim old impact slots while a prepared
+        // beam keeps its slot. Live effects and their audio are never touched.
+        for (var index = _completedEffects.Count - 1; index >= 0; index--)
+        {
+            var effect = _completedEffects[index];
+            if (effect.Reusable is not { Beam: false } key || impacts.ContainsKey(key.Form)) continue;
+            _completedEffects.RemoveAt(index);
+            effect.Root.Free();
+        }
+        foreach (var impact in impacts.Values)
+        {
+            try { PrepareImpact(impact); }
+            catch (Exception error) when (error is IOException or InvalidDataException or NotSupportedException or InvalidOperationException or KeyNotFoundException)
+            { failures.Add($"impact {impact.Form}: {error.Message}"); }
+        }
+        if (failures.Count != 0) throw new NotSupportedException($"Impact data set {set} preparation: {string.Join("; ", failures)}");
+    }
+
+    private Effect BuildImpactEffect(FalloutImpact source, EffectKey key)
+    {
+        var root = new Node3D();
+        try
+        {
+            if (source.Model is not { } path) return new(root, source.Duration, null);
+            root.AddChild(RuntimeNativeNifMeshBuilder.Build(ReadModel(path), _units,
+                contentSource: _content, shareImmutableGeometry: true).Root);
+            var playback = new NativeNifEffectPlayback(root, source.Duration, encoded: false, _sounds);
+            var recyclable = !root.FindChildren("*", "", true, false).Any(node => node is CollisionObject3D);
+            return new(root, source.Duration, playback, recyclable ? key : null);
         }
         catch { root.Free(); throw; }
     }
@@ -324,7 +406,7 @@ internal sealed partial class RuntimeNativeShotEffects : Node3D
         _completedEffects.Clear();
         foreach (var effect in _effects) effect.Failed?.Invoke("Explosion effect retired before natural completion.");
         _shellPrototype?.Scene.Root.Free(); _shellPrototype = null;
-        _projectilePrototype?.Scene.Root.Free(); _projectilePrototype = null;
+        ClearProjectileModel();
         _beamPrototype?.Scene.Root.Free(); _beamPrototype = null; _beamPath = null;
     }
 

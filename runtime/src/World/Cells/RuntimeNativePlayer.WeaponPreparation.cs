@@ -8,9 +8,14 @@ internal partial class RuntimeNativePlayer
 {
     private void PrepareWeaponResources()
     {
-        if (_firstPerson?.Weapon is not { } weapon || IsMeleeWeapon(weapon) || weapon.IsMine) return;
+        if (_firstPerson?.Weapon is not { } weapon || IsMeleeWeapon(weapon) || weapon.IsMine)
+        {
+            _shotEffects?.PrepareProjectileModel(null);
+            return;
+        }
         var started = Stopwatch.GetTimestamp();
         string? error = null;
+        string? impactPreparationError = null;
         try
         {
             _shot = null;
@@ -32,13 +37,24 @@ internal partial class RuntimeNativePlayer
                 EnsureWeaponSounds();
                 _shotEffects ??= new(_presentationRecords!, RuntimeLiveContentSource.Current!, UnitsToMeters, this, CollisionMask, _weaponSounds);
                 if (!_shotEffects.IsInsideTree()) AddChild(_shotEffects);
+                _shotEffects.PrepareProjectileModel(_shot?.Projectile);
                 if (!weapon.IsNonDischargeAction) _shotEffects.PrepareShell(weapon);
                 if (_shot is { Projectile.Type: 4 } shot) _shotEffects.PrepareBeam(shot.Projectile);
+                if (_shot?.ImpactDataSet is { } impactSet)
+                {
+                    try { _shotEffects.PrepareImpactDataSet(impactSet); }
+                    catch (Exception failure) when (failure is IOException or InvalidDataException or NotSupportedException or InvalidOperationException)
+                    {
+                        impactPreparationError = failure.Message;
+                        GD.PushWarning($"OPENNV_IMPACT_PREPARATION_UNBOUND weapon={weapon.Form}: {impactPreparationError}");
+                    }
+                }
                 foreach (var sound in weapon.Sounds.Values.Distinct()) _weaponSounds!.PrepareSound(sound);
             }
         }
         catch (Exception failure) when (failure is IOException or InvalidDataException or NotSupportedException or InvalidOperationException)
         {
+            _shotEffects?.PrepareProjectileModel(null);
             error = failure.Message;
             GD.PushError($"OPENNV_WEAPON_RESOURCE_PREPARATION_UNBOUND weapon={weapon.Form}: {error}");
         }
@@ -47,6 +63,7 @@ internal partial class RuntimeNativePlayer
             weapon = weapon.Form.ToString(),
             milliseconds = Stopwatch.GetElapsedTime(started).TotalMilliseconds,
             error = error ?? _muzzleError,
+            impactPreparationError,
             owner = "equipped-source-resources;no-action-selection-or-playback"
         };
     }

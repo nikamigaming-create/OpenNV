@@ -12,8 +12,9 @@ contain repeated names and record labels that differ from the indexed shape.
 OpenNV retains those declarations while applying the indexed source texture set.
 The unset UInt32 key `0xffffffff` remains a declaration without selecting a
 shape. It neither redirects by name nor replaces a valid indexed entry.
-OpenNV rejects other out-of-range indices, cyclic/shared scene-child traversal and unknown
-scene objects. Particle texture substitution remains visibly unbound.
+Nonnegative indices outside the loaded geometry order remain unused declarations.
+OpenNV rejects other negative indices, cyclic or shared scene-child traversal and
+unknown scene objects. Particle texture substitution remains visibly unbound.
 
 The immutable geometry order is reused within each decoded NIF's lifetime.
 Actor and equipped weapon material binding share it. The native synthetic audit

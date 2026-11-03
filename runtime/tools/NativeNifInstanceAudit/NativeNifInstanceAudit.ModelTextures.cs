@@ -27,15 +27,18 @@ public partial class NativeNifInstanceAudit
             NativeNpcMaterial.Alternate(part with { AlternateTextures = [unset, Entry("surface", 0, "textures/valid.dds")] }, nif, order[0])?[0] != "textures/valid.dds" ||
             NativeNpcMaterial.Alternate(part with { AlternateTextures = [Entry("surface", 0, "textures/valid.dds"), unset] }, nif, order[0])?[0] != "textures/valid.dds")
             throw new InvalidDataException("Unset source model texture key became an override or erased a valid indexed entry.");
-        foreach (var invalid in new[] { -2, 3 })
+        var stale = Entry(order[0].Name, order.Count, "textures/stale.dds");
+        var staleOnly = part with { AlternateTextures = [stale] };
+        var staleAfterValid = part with { AlternateTextures = [Entry("obsolete label", 0, "textures/valid.dds"), stale] };
+        if (order.Any(shape => NativeNpcMaterial.Alternate(staleOnly, nif, shape) is not null) ||
+            NativeNpcMaterial.Alternate(staleAfterValid, nif, order[0])?[0] != "textures/valid.dds")
+            throw new InvalidDataException("Unused source texture index redirected by name or erased a valid indexed entry.");
+        try
         {
-            try
-            {
-                NativeNpcMaterial.Alternate(part with { AlternateTextures = [Entry("surface", invalid, "textures/no.dds")] }, nif, order[0]);
-                throw new InvalidOperationException("Unowned model texture index was accepted.");
-            }
-            catch (InvalidDataException) { }
+            NativeNpcMaterial.Alternate(part with { AlternateTextures = [Entry("surface", -2, "textures/no.dds")] }, nif, order[0]);
+            throw new InvalidOperationException("Unsupported signed model texture index was accepted.");
         }
+        catch (InvalidDataException) { }
         foreach (var shared in new[] { false, true })
         {
             try

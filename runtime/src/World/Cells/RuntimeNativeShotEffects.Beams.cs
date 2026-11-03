@@ -73,6 +73,13 @@ internal sealed partial class RuntimeNativeShotEffects
         if (source.Type != 4) return;
         _ = PrepareBeamSource(source);
         var key = new EffectKey(true, source.Form);
+        for (var index = _completedEffects.Count - 1; index >= 0; index--)
+        {
+            var previousEffect = _completedEffects[index];
+            if (previousEffect.Reusable is not { Beam: true } previous || previous == key) continue;
+            _completedEffects.RemoveAt(index);
+            previousEffect.Root.Free();
+        }
         if (_completedEffects.Any(effect => effect.Reusable == key)) return;
         var effect = BuildBeamEffect(source, key);
         if (effect.Reusable is not null) RetainCompletedEffect(effect);
