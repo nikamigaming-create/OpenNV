@@ -20,6 +20,7 @@ internal partial class RuntimeNativeOpeningStageDriver
     private string? _saveAdmissionBlocker;
     private CanvasLayer? _recipeLayer;
     private NativeOwnedRecipeMenu? _recipeMenu;
+    internal string? RecipeMenuError => _recipeMenu?.ExecutionError;
     private IDisposable? _recipeBackground;
     private bool _recipeWasPaused, _recipeOwnsPause;
     private CanvasLayer? _barterLayer;

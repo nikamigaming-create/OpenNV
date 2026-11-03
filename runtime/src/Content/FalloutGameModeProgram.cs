@@ -405,7 +405,7 @@ internal sealed partial class FalloutGameModeProgram
                             arguments.Add(new(Read(7, execute)));
                         else
                         {
-                            if (at >= tokens.Count || !Regex.IsMatch(tokens[at], @"^[A-Za-z_][A-Za-z0-9_.]*$", RegexOptions.CultureInvariant))
+                            if (at >= tokens.Count || !FalloutNvseNumericExpression.Identifier(tokens[at]))
                                 throw new InvalidDataException($"Script function {token} needs an identifier argument.");
                             arguments.Add(new(0, tokens[at++]));
                         }

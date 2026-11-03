@@ -27,6 +27,18 @@ non-Goodbye/Back alternatives, remembers attempted choices within the same
 observed menu and waits for an actual changed menu before proceeding. This is
 an exploration policy, not proof of an optimal narrative branch.
 
+Recipe input uses the same observed controls: a craftable recipe, quantity
+decrease to one, confirmation, then close. An owned source goal must name exactly
+one offered recipe through its source recipe/output names; ambiguous or absent
+matches stop for manual selection. The policy does not hard-code a tutorial item.
+With no source goal, the selected/first offered craftable row remains a bounded
+exploration choice.
+Only one craft attempt is allowed per opened recipe menu. Source message overlays
+take precedence, quantity input has an independent time bound, and recipe or
+quantity errors stop the attempt. The bot cannot adopt an unrelated quantity
+dialog. Generic recipe selection does not establish the intended quest output;
+the actual source quest must advance after ordinary crafting.
+
 An owned reference skill does not starve source menus while awaiting an
 interaction or player control. The campaign delivers only actually offered
 source controls, waits for a changed menu and then resumes the same skill.
@@ -64,8 +76,10 @@ requests ordinary Save input and waits for a new complete manual writer receipt.
 Input delivery, active finite-audio waiting and partial/failed capture are not
 checkpoints. Written receipts do not independently establish cold-load proof.
 Missing source/input/query/capture owners stop visibly. Death requires an
-ordinary complete-checkpoint load; automatic recovery and general character
-creation/all-menu policies remain incomplete.
+ordinary complete-checkpoint load. New Vegas name, appearance, SPECIAL, tag and
+trait menus publish source choices. Fallout 3's NIF-based SPECIAL book has ordinary
+keyboard/pointer input but no campaign choice projection yet. Complete automatic
+recovery and all-menu coverage remain unaccepted.
 
 A new campaign attempt owns reference-skill feedback only after issuing its
 first reference action. A stopped failed manual or earlier attempt cannot block

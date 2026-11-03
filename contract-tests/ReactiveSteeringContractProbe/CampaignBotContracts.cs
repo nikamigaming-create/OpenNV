@@ -12,11 +12,143 @@ internal static class CampaignBotContracts
     {
         SourceGoalSelection();
         SourceMenus();
+        RecipeMenus();
+        ObjectiveRecipes();
         ActiveSkillMenus();
         WrittenCheckpoint();
         StartupAndSafety();
         AttemptOwnedSkills();
-        Console.WriteLine("Campaign bot: source goal/portal selection, no fake primitive completion, offered paused menus during owned skills, bounded modal waits, real save receipts, startup, binding/fault/stale/missing-objective refusal PASS.");
+        Console.WriteLine("Campaign bot: source goal/portal selection, no fake primitive completion, offered paused menus during owned skills, bounded recipe/quantity input, bounded modal waits, real save receipts, startup, binding/fault/stale/missing-objective refusal PASS.");
+    }
+
+    private static void ObjectiveRecipes()
+    {
+        const string owner = "RecipeMenu:source-category:instance";
+        BotCampaignControl[] controls =
+        [
+            new("wrong-accept", "Craft", "accept", "recipe-accept", "source:meat", owner, SourceNames: ["Grilled Meat"]),
+            new("wrong-row", "Grilled Meat (3)", "row", "recipe-row", "source:meat", owner, SourceNames: ["Grilled Meat"]),
+            new("wanted-row", "Arbitrary rendered label (2)", "row", "recipe-row", "source:remedy", owner,
+                SourceNames: ["Remedy recipe", "Healing Powder"]),
+            new("close", "Close", "close", "recipe-back", "close", owner, true)
+        ];
+        var menu = State(2) with { Paused = true, ModalInput = true, Goals = [],
+            Choices = ReactiveCampaignBot.SourceMenuChoices(controls).ToArray() };
+        ReactiveCampaignBot Begin(string? objective)
+        {
+            var bot = new ReactiveCampaignBot(); bot.Start();
+            var start = State();
+            Require(bot.Tick(start with { Goals = [start.Goals[0] with { ObjectiveText = objective }] }, Idle, .2f).Reference == "door-a",
+                "Recipe objective fixture did not begin an ordinary source action.");
+            return bot;
+        }
+        var named = Begin("Use the station to make HEALING POWDER.");
+        Require(named.Tick(menu, Idle, .2f).Path == "wanted-row",
+            "A source-named recipe was displaced by the first/default craftable recipe or its decorated label.");
+        var selected = Begin("Make Healing Powder.");
+        Require(selected.Tick(menu with { Choices = [.. menu.Choices.Where(choice => choice.Kind != "recipe-accept"),
+            new("source:remedy", "wanted-accept", "Craft", "recipe-accept", owner, SourceNames: ["Remedy recipe", "Healing Powder"])] }, Idle, .2f).Path == "wanted-accept",
+            "Two controls for one matching source recipe became ambiguous or ignored the selected accept action.");
+        var localized = Begin("Fabriquez la poudre de guérison.");
+        Require(localized.Tick(menu with { Choices = [menu.Choices[2] with { SourceNames = ["Poudre de guérison"] }, menu.Choices[3]] }, Idle, .2f).Path == "wanted-row",
+            "Recipe matching depended on English verbs or rendered captions instead of shared localized source names.");
+        foreach (var objective in new string?[] { null, "Go to the station.", "Make Healing Powdered mixture.", "Make Unhealing Powder." })
+        {
+            var refused = Begin(objective);
+            Require(refused.Tick(menu, Idle, .2f).Kind == BotCampaignCommandKind.None && !refused.Active &&
+                refused.FailureKind == "bot-policy" && refused.Error!.Contains("manual recipe selection", StringComparison.Ordinal),
+                "An unnamed or partial-word recipe intention silently crafted the default recipe.");
+        }
+        var ambiguous = Begin("Make Healing Powder.");
+        Require(ambiguous.Tick(menu with { Choices = [.. menu.Choices,
+            new("source:another-remedy", "another-row", "Different recipe", "recipe-row", owner, SourceNames: ["Healing Powder"])] }, Idle, .2f).Kind ==
+            BotCampaignCommandKind.None && ambiguous.FailureKind == "bot-policy", "Two recipes naming the same output were guessed instead of refused.");
+        var multiple = Begin("Make Healing Powder and Grilled Meat.");
+        Require(multiple.Tick(menu, Idle, .2f).Kind == BotCampaignCommandKind.None && multiple.FailureKind == "bot-policy",
+            "An objective naming several offered recipes selected one arbitrarily.");
+    }
+
+    private static void RecipeMenus()
+    {
+        const string owner = "RecipeMenu:source-category:instance";
+        BotCampaignControl[] controls =
+        [
+            new("under", "Dialogue", "topic", "dialogue", "topic", "conversation"),
+            new("row", "Other recipe", "row", "recipe-row", "source:other", owner),
+            new("accept", "Localized action", "accept", "recipe-accept", "source:selected", owner),
+            new("close", "Localized close", "close", "recipe-back", "close", owner, true)
+        ];
+        var recipe = State() with { Paused = true, ModalInput = true, Goals = [],
+            Choices = ReactiveCampaignBot.SourceMenuChoices(controls).ToArray() };
+        Require(recipe.Choices.Count == 3 && recipe.Choices.All(choice => choice.Menu == owner),
+            "Recipe observation lost source identities or admitted underlying dialogue.");
+        BotCampaignObservation Quantity(long sample, int amount) => recipe with
+        {
+            Sample = sample,
+            Choices = ReactiveCampaignBot.SourceMenuChoices([.. controls,
+                new("quantity", "Localized quantity action", "quantity",
+                    amount == 1 ? "recipe-quantity-confirm" : "recipe-quantity-decrease", "source:selected:" + amount, owner),
+                new("cancel", "Localized cancel", "cancel", "recipe-quantity-cancel", "cancel:" + amount, owner, true)]).ToArray()
+        };
+        var bot = new ReactiveCampaignBot(); bot.Start();
+        Require(bot.Tick(recipe, Idle, .2f).Path == "accept", "Recipe policy ignored the actual selected craftable recipe.");
+        Require(bot.Tick(recipe with { Sample = 2 }, Idle, .2f).Kind == BotCampaignCommandKind.None,
+            "Recipe activation repeated without an observed quantity dialog.");
+        var quantity = Quantity(3, 3);
+        Require(quantity.Choices.Count == 2 && quantity.Choices.All(choice => choice.Kind.StartsWith("recipe-quantity", StringComparison.Ordinal)),
+            "Quantity overlay admitted an underlying recipe or dialogue button.");
+        Require(ReactiveCampaignBot.SourceMenuChoices([.. controls,
+            new("quantity-under", "Quantity", "quantity", "recipe-quantity-confirm", "source:selected:1", owner),
+            new("message", "Source result", "message", "message", "0", "source-message")]).Single().Path == "message",
+            "A source message over crafting admitted an underlying recipe or quantity button.");
+        Require(bot.Tick(quantity, Idle, .2f).Path == "quantity", "Recipe quantity did not begin ordinary decrease input.");
+        Require(bot.Tick(quantity with { Sample = 4 }, Idle, .2f).Kind == BotCampaignCommandKind.None,
+            "Quantity decrease repeated without observing a changed amount.");
+        Require(bot.Tick(Quantity(5, 2), Idle, .2f).Path == "quantity" &&
+            bot.Tick(Quantity(6, 1), Idle, .2f).Path == "quantity", "Quantity did not reach the offered one-item confirmation.");
+        var refreshed = recipe with { Sample = 7, Progress = 2, Choices = [.. recipe.Choices,
+            new("source:new", "new-row", "Newly available", "recipe-row", owner)] };
+        Require(bot.Tick(refreshed, Idle, .2f).Path == "close", "Inventory/quest changes caused another craft in the same menu.");
+        Require(bot.Tick(State(8, 2), Idle, .2f).Reference == "door-a", "Closing recipe input did not resume ordinary source goals.");
+
+        var single = new ReactiveCampaignBot(); single.Start(); single.Tick(recipe, Idle, .2f);
+        Require(single.Tick(Quantity(2, 1), Idle, .2f).Path == "quantity", "Default one-item quantity was decreased or cancelled.");
+        var message = recipe with { Sample = 3, Choices = ReactiveCampaignBot.SourceMenuChoices([.. controls,
+            new("message", "Source result", "message", "message", "0", "source-message")]).ToArray() };
+        Require(single.Tick(message, Idle, .2f).Path == "message" &&
+            single.Tick(recipe with { Sample = 4, Progress = 2 }, Idle, .2f).Path == "close",
+            "A source result message displaced recipe ownership or caused a repeated craft.");
+        var fallback = new ReactiveCampaignBot(); fallback.Start();
+        Require(fallback.Tick(recipe with { Choices = recipe.Choices.Where(choice => choice.Kind != "recipe-accept").ToArray() }, Idle, .2f).Path == "row",
+            "A displayed craftable recipe row was not selectable when the selected recipe was unavailable.");
+        var empty = new ReactiveCampaignBot(); empty.Start();
+        Require(empty.Tick(recipe with { Choices = recipe.Choices.Where(choice => choice.Kind == "recipe-back").ToArray() }, Idle, .2f).Path == "close",
+            "A recipe menu without an offered craftable recipe invented a crafting action.");
+        var foreign = new ReactiveCampaignBot(); foreign.Start();
+        Require(foreign.Tick(Quantity(1, 1), Idle, .2f).Kind == BotCampaignCommandKind.None && foreign.FailureKind == "input-owner",
+            "An unowned quantity dialog was confirmed.");
+        var mismatched = new ReactiveCampaignBot(); mismatched.Start(); mismatched.Tick(recipe, Idle, .2f);
+        Require(mismatched.Tick(Quantity(2, 1) with { Choices = [new("other", "other", "Other", "recipe-quantity-confirm", "different-owner")] }, Idle, .2f).Kind ==
+            BotCampaignCommandKind.None && mismatched.FailureKind == "input-owner", "A different recipe's quantity dialog was confirmed.");
+        var failed = new ReactiveCampaignBot(); failed.Start(); failed.Tick(recipe, Idle, .2f);
+        Require(failed.Tick(Quantity(2, 1) with { Error = "Actual craft/quantity owner failure." }, Idle, .2f).Kind ==
+            BotCampaignCommandKind.None && failed.Error == "Actual craft/quantity owner failure.", "A recipe owner fault was hidden by offered controls.");
+        var bounded = new ReactiveCampaignBot(); bounded.Start(); bounded.Tick(recipe, Idle, .2f);
+        for (var amount = 1000; amount > 900 && bounded.Active; amount--) bounded.Tick(Quantity(1002 - amount, amount), Idle, 1);
+        Require(!bounded.Active && bounded.FailureKind == "bot-policy" && bounded.Error!.Contains("quantity input exceeded", StringComparison.Ordinal),
+            "Changing quantity observations reset the total quantity-input bound indefinitely.");
+        try
+        {
+            _ = ReactiveCampaignBot.SourceMenuChoices([controls[1] with { Identity = null }]).ToArray();
+            throw new InvalidOperationException("A recipe choice without source identity was admitted.");
+        }
+        catch (InvalidDataException) { }
+        try
+        {
+            _ = ReactiveCampaignBot.SourceMenuChoices([controls[1] with { Menu = null }]).ToArray();
+            throw new InvalidOperationException("A recipe choice without its owning menu was admitted.");
+        }
+        catch (InvalidDataException) { }
     }
 
     private static void AttemptOwnedSkills()

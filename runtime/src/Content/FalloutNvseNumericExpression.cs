@@ -293,8 +293,11 @@ internal static class FalloutNvseNumericExpression
         });
     }
 
-    private static bool Identifier(string token) => Regex.IsMatch(token,
-        @"^[A-Za-z_][A-Za-z0-9_.]*$", RegexOptions.CultureInvariant);
+    // Owned editor IDs can start with digits. Keep the same complete token
+    // that the lexer retained; actual numeric literals still take precedence.
+    internal static bool Identifier(string token) => Regex.IsMatch(token,
+        @"^(?:[A-Za-z_]|[0-9]+[A-Za-z_])[A-Za-z0-9_.]*$", RegexOptions.CultureInvariant) &&
+        (!char.IsAsciiDigit(token[0]) || !TryLiteral(token, out _));
 
     // Optional command arguments are whitespace-delimited in compiled source.
     // A bare prefix operator after the last required argument is therefore an

@@ -18,6 +18,7 @@ internal sealed partial class NativeGameSessionMenu : Control
     private VBoxContainer _body = null!;
     private Label _status = null!;
     private bool _browser, _confirming, _busy, _saving;
+    private string? _retiredFailure;
     private RuntimeManualSaveReceipt? _manualSaveReceipt;
     private readonly Dictionary<Button, bool> _saveDisabledButtons = [];
     private Button? _cancelSaveButton;
@@ -63,7 +64,7 @@ internal sealed partial class NativeGameSessionMenu : Control
         if (_busy) { _status.Text = "Loading is still in progress."; return; }
         if (_confirming) { if (_browser) ShowSaves(); else ShowPause(); }
         else if (_browser && _inGame) ShowPause();
-        else if (!_defeated) _resume();
+        else if (!_defeated && _retiredFailure is null) _resume();
     }
 
     private void BeginPage(string title)
@@ -95,13 +96,22 @@ internal sealed partial class NativeGameSessionMenu : Control
 
     internal void ShowFailure(string message)
     {
+        if (_retiredFailure is not null) { ShowRetiredFailure(message); return; }
         _busy = false;
         _status.Text = "Unable to load: " + message;
     }
 
+    internal void ShowRetiredFailure(string message)
+    {
+        _retiredFailure = "This session has ended and cannot be resumed or saved. Return to the main menu or quit. " + message;
+        _busy = false; _saving = false; _manualSaveReceipt = null;
+        _saveDisabledButtons.Clear();
+        ShowPause();
+    }
+
     internal void ShowManualSaveReceipt(RuntimeManualSaveReceipt? receipt)
     {
-        if (receipt is null) return;
+        if (receipt is null || _retiredFailure is not null) return;
         _manualSaveReceipt = receipt;
         if (_status is null || _confirming || _busy && !_saving) return;
         var wasSaving = _saving;
@@ -141,20 +151,25 @@ internal sealed partial class NativeGameSessionMenu : Control
 
     private void ShowPause()
     {
-        _browser = false; BeginPage(_defeated ? "YOU DIED" : "PAUSED");
-        if (!_defeated) AddButton("Resume", "RESUME", _resume).GrabFocus();
-        if (_inGame && !_defeated) AddSaveCancel();
-        var saves = AddButton("SaveLoad", _defeated ? "LOAD GAME" : "SAVE / LOAD", ShowSaves);
-        if (_defeated) saves.GrabFocus();
-        AddButton("Title", "MAIN MENU", () => Confirm("Return to the title screen? Unsaved progress will be lost.", _title));
+        _browser = false; BeginPage(_retiredFailure is not null ? "SESSION ENDED" : _defeated ? "YOU DIED" : "PAUSED");
+        if (_retiredFailure is null)
+        {
+            if (!_defeated) AddButton("Resume", "RESUME", _resume).GrabFocus();
+            if (_inGame && !_defeated) AddSaveCancel();
+            var saves = AddButton("SaveLoad", _defeated ? "LOAD GAME" : "SAVE / LOAD", ShowSaves);
+            if (_defeated) saves.GrabFocus();
+        }
+        var title = AddButton("Title", "MAIN MENU", () => Confirm("Return to the title screen? Unsaved progress will be lost.", _title));
+        if (_retiredFailure is not null) title.GrabFocus();
         AddButton("Quit", "QUIT GAME", () => Confirm("Quit the game? Unsaved progress will be lost.", _quit));
-        _status.Text = _defeated ? "Health reached zero. Load an earlier save to continue." :
-            "Escape / controller Menu / right stick click: back";
+        _status.Text = _retiredFailure ?? (_defeated ? "Health reached zero. Load an earlier save to continue." :
+            "Escape / controller Menu / right stick click: back");
         ShowManualSaveReceipt(_manualSaveReceipt);
     }
 
     private void ShowSaves()
     {
+        if (_retiredFailure is not null) { ShowPause(); return; }
         _browser = true; BeginPage("SAVE / LOAD");
         var failures = new List<string>();
         _slots = _catalog.ReadSlots(includeCurrent: true, (path, error) => failures.Add(Path.GetFileName(path) + ": " + error.Message));

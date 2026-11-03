@@ -33,6 +33,8 @@ internal sealed partial class NativeOwnedRecipeMenu : Control
     internal bool QuantityOpen => _quantity is not null;
     internal string? Error { get; private set; }
     internal string? ActionError { get; private set; }
+    internal string? ExecutionError => Error ?? ActionError ?? _quantity?.Error;
+    private string ChoiceMenu => $"RecipeMenu:{_category.Form}:{GetInstanceId()}";
     internal object State => new
     {
         source = "menus/recipe_menu.xml",
@@ -114,7 +116,8 @@ internal sealed partial class NativeOwnedRecipeMenu : Control
             SetRows(_recipeList, available.Select(value => new SourceRow(
                 value.Recipe.Outputs[0].Count > 1 ? value.Recipe.Name + " (" + value.Recipe.Outputs[0].Count.ToString(CultureInfo.InvariantCulture) + ")" : value.Recipe.Name,
                 value.Admission.Maximum > 0 ? 255 : 127,
-                () => Select(value.Recipe), () => { Select(value.Recipe); Accept(); }, value.Recipe.Record.FormKey)).ToArray());
+                () => Select(value.Recipe), () => { Select(value.Recipe); Accept(); }, value.Recipe.Record.FormKey,
+                value.Admission.Maximum > 0 && value.Admission.Failure is null, RecipeChoiceNames(value.Recipe))).ToArray());
             _tiles.Text[_title] = _filter < 0 ? FalloutGameSettingStrings.Read(_records, "sRecipes") : _filters[_filter].Name;
             BindDetails(); _revision = _inventory.Revision;
             LayoutLists(); LayoutActions(); QueueRedraw();
@@ -202,7 +205,7 @@ internal sealed partial class NativeOwnedRecipeMenu : Control
             }
             catch (Exception error) { ActionError = error.Message; GD.PushError("OPENNV_RECIPE_CRAFT_UNBOUND " + error.Message); }
             Refresh();
-        }, minimum: 0);
+        }, minimum: 0, choiceMenu: ChoiceMenu, choiceIdentity: recipe.Record.FormKey.ToString());
         AddChild(_quantity);
     }
     private void Close() { if (_closed) return; _closed = true; _close(); }
@@ -229,7 +232,26 @@ internal sealed partial class NativeOwnedRecipeMenu : Control
         {
             control.Position = _tiles.Position(tile); control.Size = new(_tiles.Number(tile, "width"), _tiles.Number(tile, "height"));
             control.Disabled = _tiles.Number(tile, "target") == 0;
+            if (tile == _accept && _selected is { } recipe && !control.Disabled)
+                BindChoice(control, "recipe-accept", recipe.Record.FormKey.ToString(), sourceNames: RecipeChoiceNames(recipe));
+            else if ((string?)tile.Attribute("name") == "RM_ButtonB")
+                BindChoice(control, "recipe-back", "close", goodbye: true);
+            else control.RemoveMeta("opennv_source_choice_kind");
         }
+    }
+    private string[] RecipeChoiceNames(FalloutRecipe recipe) => new[] { recipe.Name }
+        .Concat(recipe.Outputs.SelectMany(output => _records.GetEffective(output.Form).ReadSubrecords()
+            .Where(field => field.Signature == "FULL").Select(field => FalloutDialogueTopic.Text(field.Data.Span))))
+        .Where(name => !string.IsNullOrWhiteSpace(name)).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+
+    private void BindChoice(BaseButton control, string kind, string identity, bool goodbye = false, string[]? sourceNames = null)
+    {
+        control.SetMeta("opennv_source_choice_kind", kind);
+        control.SetMeta("opennv_source_choice_id", identity);
+        control.SetMeta("opennv_source_choice_menu", ChoiceMenu);
+        control.SetMeta("opennv_source_choice_goodbye", goodbye);
+        if (sourceNames is not null) control.SetMeta("opennv_source_choice_names", sourceNames);
+        else control.RemoveMeta("opennv_source_choice_names");
     }
     public override void _Process(double delta)
     {

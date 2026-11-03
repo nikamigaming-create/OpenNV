@@ -103,6 +103,8 @@ public partial class NativeInteractionUiAudit : Node
             ContainerRow().EmitSignal(BaseButton.SignalName.Pressed);
             var quantityMenu = menu.GetChildren().OfType<NativeOwnedQuantityMenu>().Single();
             if (quantityMenu.Error is not null) throw new InvalidDataException(quantityMenu.Error);
+            if (quantityMenu.GetChildren().OfType<BaseButton>().Any(button => button.HasMeta("opennv_source_choice_kind")))
+                throw new InvalidDataException("Container quantity input acquired recipe automation ownership.");
             quantityMenu._Input(new InputEventKey { Pressed = true, PhysicalKeycode = Key.Home });
             quantityMenu._Input(new InputEventKey { Pressed = true, PhysicalKeycode = Key.Right });
             if (quantityMenu.Quantity != 2) throw new InvalidDataException("Quantity controls did not select two.");
@@ -140,10 +142,88 @@ public partial class NativeInteractionUiAudit : Node
                 menu.GetChildren().OfType<NativeOwnedQuantityMenu>().Any())
                 throw new InvalidDataException("A stack below the source threshold did not transfer one item.");
             GD.Print("OPENNV_NATIVE_QUANTITY_UI_PASS sourceTemplates=true cancel=true modal=true partialTransfer=true staleChoice=true smallStack=true coldCounts=true");
+            var selectedRecipe = records.EffectiveRecords("RCPE").Select(record => FalloutRecipe.Read(records, record))
+                .First(recipe => recipe.Category is not null && recipe.Conditions.Count == 0 && recipe.Ingredients.Count > 0);
+            var sourceRecipeInventory = new FalloutPlayerInventory();
+            foreach (var ingredient in selectedRecipe.Ingredients)
+                sourceRecipeInventory.Add(records, ingredient.Form, ingredient.Count * 3, 1, silent: true, globals);
+            var recipeAmount = 0; var recipeClosed = false;
+            var sourceRecipeMenu = new NativeOwnedRecipeMenu(records, sourceRecipeInventory,
+                FalloutRecipeCategory.Read(records, selectedRecipe.Category!.Value), [selectedRecipe],
+                _ => throw new InvalidDataException("Condition-free recipe unexpectedly queried a condition."), _ => 100,
+                (_, amount, _) => recipeAmount = amount, () => recipeClosed = true);
+            AddChild(sourceRecipeMenu);
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            BaseButton Choice(Node owner, string kind) => owner.GetChildren().OfType<BaseButton>().Single(button =>
+                button.HasMeta("opennv_source_choice_kind") && button.GetMeta("opennv_source_choice_kind").AsString() == kind);
+            var recipeAccept = Choice(sourceRecipeMenu, "recipe-accept");
+            var recipeRow = Choice(sourceRecipeMenu, "recipe-row");
+            if (recipeRow.GetMeta("opennv_source_choice_id").AsString() != selectedRecipe.Record.FormKey.ToString() ||
+                recipeRow.GetMeta("opennv_source_choice_menu").AsString() != recipeAccept.GetMeta("opennv_source_choice_menu").AsString() ||
+                !recipeRow.GetMeta("opennv_source_choice_names").AsStringArray().Contains(selectedRecipe.Name, StringComparer.Ordinal) ||
+                !recipeRow.GetMeta("opennv_source_choice_names").AsStringArray().SequenceEqual(recipeAccept.GetMeta("opennv_source_choice_names").AsStringArray()))
+                throw new InvalidDataException("Recipe controls lost their source form or owning menu identity.");
+            recipeRow.EmitSignal(BaseButton.SignalName.Pressed);
+            var recipeQuantity = sourceRecipeMenu.GetChildren().OfType<NativeOwnedQuantityMenu>().Single();
+            if (recipeQuantity.Quantity != 3) throw new InvalidDataException("Recipe quantity did not retain its actual available maximum.");
+            Choice(recipeQuantity, "recipe-quantity-decrease").EmitSignal(BaseButton.SignalName.Pressed);
+            Choice(recipeQuantity, "recipe-quantity-decrease").EmitSignal(BaseButton.SignalName.Pressed);
+            var confirm = Choice(recipeQuantity, "recipe-quantity-confirm");
+            if (recipeQuantity.Quantity != 1 || confirm.GetMeta("opennv_source_choice_menu").AsString() != recipeAccept.GetMeta("opennv_source_choice_menu").AsString())
+                throw new InvalidDataException("Recipe quantity controls lost their one-item selection or parent ownership.");
+            confirm.EmitSignal(BaseButton.SignalName.Pressed);
+            if (recipeAmount != 1 || sourceRecipeMenu.ExecutionError is not null)
+                throw new InvalidDataException("The offered recipe confirmation did not reach the existing craft callback once.");
+            Choice(sourceRecipeMenu, "recipe-back").EmitSignal(BaseButton.SignalName.Pressed);
+            if (!recipeClosed) throw new InvalidDataException("The offered recipe close control did not close its owner.");
+            sourceRecipeMenu.Free();
+            GD.Print("OPENNV_NATIVE_RECIPE_INPUT_PASS sourceIdentity=true selectedRecipe=true quantityOne=true existingCallbacks=true ordinaryInput=unverified questCompletion=unverified");
+            VerifyRetiredSessionMenu();
             GD.Print("OPENNV_NATIVE_INTERACTION_UI_PASS sourceTemplates=true targetActions=true containerLists=true pickupState=true ordinaryInput=unverified pixels=unverified");
             menu.Free(); hud.Free(); GetTree().Quit();
         }
         catch (Exception error) { GD.PushError($"OPENNV_NATIVE_INTERACTION_UI_FAIL {error}"); GetTree().Quit(1); }
+    }
+
+    private void VerifyRetiredSessionMenu()
+    {
+        var catalog = new RuntimeSaveSlotCatalog(Path.Combine(Path.GetTempPath(), "opennv-session-menu-" + Guid.NewGuid().ToString("N") + ".json"), _ => { });
+        var resumed = 0; var titles = 0; var quits = 0;
+        var menu = new NativeGameSessionMenu(catalog, true, false, false, () => resumed++,
+            () => throw new InvalidDataException("Retired menu invoked its save writer."), () => { },
+            _ => throw new InvalidDataException("Retired menu invoked its load owner."), () => titles++, () => quits++, slot => slot.Id);
+        AddChild(menu);
+        try
+        {
+            Button Button(string name) => menu.FindChildren(name, "", true, false).OfType<Button>().Single();
+            void Press(string name) => Button(name).EmitSignal(BaseButton.SignalName.Pressed);
+            bool HasFailure(string text) => menu.FindChildren("*", "", true, false).OfType<Label>().Any(label => label.Text.Contains(text, StringComparison.Ordinal));
+            void RequireRetired(string failure)
+            {
+                if (resumed != 1 || !HasFailure(failure) ||
+                    !menu.FindChildren("*", "", true, false).OfType<Button>().Select(button => button.Name.ToString()).Order().SequenceEqual(["Quit", "Title"]))
+                    throw new InvalidDataException("Retired session failure lost its cause or offered a resume/save/load action.");
+            }
+            menu.ShowFailure("Recoverable load failure.");
+            menu.Back();
+            if (resumed != 1) throw new InvalidDataException("Recoverable session failure prevented ordinary Resume.");
+            Press("SaveLoad");
+            _ = Button("CreateSave");
+            menu.ShowRetiredFailure("Reload failed after actor retirement.");
+            menu.Back();
+            RequireRetired("Reload failed after actor retirement.");
+            Press("Title"); menu.Back(); menu.Back();
+            RequireRetired("Reload failed after actor retirement.");
+            menu.ShowFailure("Main-menu retry failed.");
+            RequireRetired("Main-menu retry failed.");
+            Press("Title"); Press("Confirm");
+            if (titles != 1) throw new InvalidDataException("Retired session prevented the ordinary main-menu retry callback.");
+            menu.ShowRetiredFailure("Quit preparation failed.");
+            Press("Quit"); Press("Confirm");
+            if (quits != 1 || resumed != 1) throw new InvalidDataException("Retired session prevented Quit or resumed its retired gameplay.");
+            GD.Print("OPENNV_NATIVE_SESSION_FAILURE_MENU_PASS recoverableResume=true retiredResumeBlocked=true retiredSaveLoadHidden=true backBlocked=true mainMenuRetry=true quitRetry=true boundary=actual-menu-component");
+        }
+        finally { menu.Free(); }
     }
 
     private static void VerifyImageColorDefaults()

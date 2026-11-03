@@ -1,5 +1,38 @@
 # Product status
 
+The active November 3 direction is offline-first implementation and tests across
+FO3/FNV systems, using complete owned-stack inspection and existing probes.
+No campaign is launched during this block. The implementation plan contains the
+full system checklist and explicit proof boundaries. The first later integrated
+routes remain Goodsprings/tutorials/departure and standalone Vault 101 to populated
+Megaton; neither route nor either complete campaign is accepted.
+
+The offline candidate repairs digit-leading form identifiers, compiled-local
+admission with trailing source punctuation, and missing loaded-ammunition entry
+history in barter. Focused script/reference contracts and owned FO3/FNV pistol
+reload/trade/cold-state checks pass. Complete selected-stack audits preserve all
+source identities and raw program-field accounting while reducing unbound
+statements from 1,308 to 1,294 in FNV and 844 to 808 in FO3; FO3's one local
+declaration failure is removed. FNV's selected stack includes the installed
+diagnostic weapon comparison plugin. Its 628,471 winning records and FO3's
+930,306 winning records are source denominators, not completed game objects.
+Both audits instantiate zero world references and retain nonzero readiness
+exits. FNV retains 12 source-parser/three compiled-extent findings; FO3 retains
+ten source-parser/one compiled-extent finding. Stale empty-program metadata is
+distinct from missing bytecode execution. Complete SCDA, branch effects and
+gameplay remain unaccepted. The integrated required runtime gate passes,
+including Release/Debug, formatting/analyzers, contract probes, native plugin
+domains, launcher tests and headless Godot components. Release export succeeds
+without launching a campaign; tmp/development-runtime/windows/OpenNV.exe is updated.
+
+The November 3 opening-route candidate passes the complete required runtime gate
+and Release export. Its shared palette decoder passes the rendered owned FO3/FNV
+system-color audit; recipe/quantity controls and retired-session failure behavior
+pass the existing owned native UI audit. Candidate gameplay launch was rejected
+by the execution environment, so live crafting, FO3 New Game and actor retirement
+continuation remain unverified. Gameplay verification remains separate from the
+current offline publication scope.
+
 OpenNV is in active gameplay repair, not whole-game acceptance. The target is
 native 3840x2160 at sustained 60 FPS, with retail behavior, presentation and
 persistent gameplay. Flat and XR share authoritative state; physical XR still

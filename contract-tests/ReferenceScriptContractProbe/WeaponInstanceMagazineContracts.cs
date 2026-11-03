@@ -17,8 +17,9 @@ internal static class WeaponInstanceMagazineContracts
         DropPickupAndTrade(records, weapon);
         BatchTransfer(records, weapon, reverse: false);
         BatchTransfer(records, weapon, reverse: true);
+        TradeEntryHistory(records, weapon);
         Console.WriteLine("OPENNV_WEAPON_INSTANCE_MAGAZINE_CONTRACT_PASS distinctInstances=true selectedShot=true " +
-            "dropPickupCold=true ownership=true tradeExplicitTotals=true takeAllOrderIndependent=true rollback=true synthetic=true");
+            "dropPickupCold=true ownership=true tradeExplicitTotals=true tradeEntryHistory=true takeAllOrderIndependent=true rollback=true synthetic=true");
     }
 
     private static FalloutPlayerInventory Inventory(FalloutPluginStack records)
@@ -132,6 +133,51 @@ internal static class WeaponInstanceMagazineContracts
             Instance(target, First).Magazine?.Loaded == 3 && Instance(target, Second).Magazine is null &&
             AmmoOwnership(target.Item(Key(2))!.Variants!) == ammoBefore,
             "Take All depends on request order or duplicates loaded ammunition/ownership.");
+    }
+
+    private static void TradeEntryHistory(FalloutPluginStack records, FalloutWeaponPresentation weapon)
+    {
+        foreach (var receiving in new[] { false, true })
+            for (var layout = 0; layout < 4; layout++)
+            {
+                var source = Inventory(records);
+                new FalloutWeaponHandling(source).CompleteReload(weapon);
+                var target = new FalloutPlayerInventory(789);
+                var quantity = layout == 0 ? 3 : 5;
+                var rows = new List<FalloutTradeTransfer> { new(Key(1), 1, !receiving) };
+                if (layout == 1) rows.Insert(0, new(Key(2), quantity, !receiving));
+                if (layout == 2) rows.Add(new(Key(2), quantity, !receiving));
+                if (layout == 3)
+                {
+                    rows.Insert(0, new(Key(2), 2, !receiving));
+                    rows.Add(new(Key(2), 3, !receiving));
+                }
+                void Trade()
+                {
+                    if (receiving) target.Exchange(source, rows);
+                    else source.Exchange(target, rows);
+                }
+                var sourceBefore = JsonSerializer.Serialize(source.Capture());
+                var targetBefore = JsonSerializer.Serialize(target.Capture());
+                var sourceRevision = source.Revision; var targetRevision = target.Revision;
+                target.PrepareChange = (_, _) => new(() => throw new InvalidOperationException("Refused trade entry publication."), () => { });
+                Reject(Trade);
+                Require(source.Revision == sourceRevision && target.Revision == targetRevision &&
+                    JsonSerializer.Serialize(source.Capture()) == sourceBefore && JsonSerializer.Serialize(target.Capture()) == targetBefore,
+                    "Refused trade retained items, clips or speculative source entry history.");
+                target.PrepareChange = null;
+                Trade();
+                Require(target.NativeScriptEntries.Select(entry => entry.Item).SequenceEqual([Key(1), Key(2)]) &&
+                    target.Item(Key(2))?.Count == quantity && source.Item(Key(2))?.Count == 17 - quantity &&
+                    Instance(target, First).Magazine?.Loaded == 3,
+                    "Trade history omitted implicit clip ammunition, duplicated explicit ammunition or followed UI row order.");
+                var saved = target.Capture();
+                var cold = new FalloutPlayerInventory();
+                cold.Restore(saved.Inventory, saved.EquippedRuntimeFormIds.ToArray(), saved.InventoryRandomState);
+                Require(JsonSerializer.Serialize(cold.Capture()) == JsonSerializer.Serialize(saved) &&
+                    cold.NativeScriptEntries.Select(entry => entry.Item).SequenceEqual([Key(1), Key(2)]),
+                    "Cold trade inventory lost the executed weapon/ammunition entry history.");
+            }
     }
 
     private static string AmmoOwnership(IEnumerable<FalloutItemVariant> extras) => string.Join(";", extras

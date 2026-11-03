@@ -1460,6 +1460,11 @@ if (args is ["--audit-player-start-inventory", var inventoryRoot])
     OwnedInventoryProbe.Run(inventoryRoot);
     return;
 }
+if (args is ["--audit-weapon-magazine-transfer", var transferRoot, var transferGame])
+{
+    OwnedInventoryProbe.RunWeaponTransfer(transferRoot, transferGame);
+    return;
+}
 if (args.Length >= 6 && args[0] == "--audit-inventory-commands")
 {
     OwnedInventoryCommandProbe.Run(args[1], args[2], args[3], args[4], short.Parse(args[5], System.Globalization.CultureInfo.InvariantCulture), args[6..]);
@@ -1540,6 +1545,11 @@ try
         .Concat(Record("SCPT", 0x508, Local(1, "owner"), Field("SCTX", Text("ref owner\nshort owner"))))
         .Concat(Record("SCPT", 0x509, Local(1, "1stFloor"), Local(2, "enabled"), Field("SCTX", Text(
             "int 1stFloor\nshort enabled // trailing author note [unparsed]"))))
+        .Concat(Record("SCPT", 0x50a, Local(1, "counter"), Local(2, "owner"), Local(3, "text"), Local(4, "values"),
+            Field("SCTX", Text("short counter]\nref owner]\nstring_var text]\narray_var values]"))))
+        .Concat(Record("SCPT", 0x50b, Local(1, "counter"), Field("SCTX", Text("short counterSuffix]"))))
+        .Concat(Record("SCPT", 0x50c, Local(1, "owner"), Field("SCTX", Text("ref owner]\nshort owner]"))))
+        .Concat(Record("SCPT", 0x50d, Local(1, "counter"), Field("SCTX", Text("short ]"))))
         .Concat(Record("SCPT", 0x503, Field("SCTX", Text("begin OnActivate\nend"))))
         .Concat(Record("SCPT", 0x520, Local(1, "count"), Local(2, "timer"), Field("SCTX", Text(
             "begin GameMode\nif GetDisabled == 0\nset count to GetCurrentTime\nset timer to timer + 1\nendif\nend"))))
@@ -1610,6 +1620,16 @@ try
     Reject(() => FalloutScriptLocals.Read(records.GetEffective(Key(0x508))));
     Require(FalloutScriptLocals.ReadDeclarations(records.GetEffective(Key(0x509))).Count == 2,
         "Compiled numeric local admission rejected source name spelling or trailing author notes.");
+    var punctuatedLocals = FalloutScriptLocals.ReadDeclarations(records.GetEffective(Key(0x50a)));
+    Require(punctuatedLocals.Count == 4 &&
+        punctuatedLocals["counter"] == new FalloutScriptLocalDeclaration(1, FalloutScriptLocalKind.Number) &&
+        punctuatedLocals["owner"] == new FalloutScriptLocalDeclaration(2, FalloutScriptLocalKind.Form) &&
+        punctuatedLocals["text"] == new FalloutScriptLocalDeclaration(3, FalloutScriptLocalKind.String) &&
+        punctuatedLocals["values"] == new FalloutScriptLocalDeclaration(4, FalloutScriptLocalKind.Array),
+        "Trailing source punctuation changed compiled local identity or value kind.");
+    Reject(() => FalloutScriptLocals.ReadDeclarations(records.GetEffective(Key(0x50b))));
+    Reject(() => FalloutScriptLocals.ReadDeclarations(records.GetEffective(Key(0x50c))));
+    Reject(() => FalloutScriptLocals.ReadDeclarations(records.GetEffective(Key(0x50d))));
     Require(FalloutScriptLocals.ReadDeclarations(records.GetEffective(Key(0x507)))["owner"].Kind == FalloutScriptLocalKind.Form,
         "Unsupported executable syntax prevented compiled reference-local admission.");
     var unownedArray = FalloutGameModeProgram.Read("ref owner\nbegin GameMode\nset owner to unsupported[index]\nend");

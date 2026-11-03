@@ -29,12 +29,7 @@ public partial class RuntimeCoordinator
         }
         // The dialogue remains drawn beneath barter. Only its topmost modal
         // can receive pointer input until the player closes it.
-        foreach (var control in ReactiveCampaignBot.ActiveMenuControls(controls))
-            if (control.Kind is "dialogue" or "terminal" or "terminal-back" or "barter-back" or "message" or "chargen" or "special")
-                choices.Add(new(control.Identity ?? throw new InvalidDataException("Source choice has no identity."),
-                    control.Path, control.Text, control.Kind,
-                    control.Menu ?? throw new InvalidDataException("Source choice has no owning menu."),
-                    control.Goodbye || control.Kind == "terminal-back"));
+        choices.AddRange(ReactiveCampaignBot.SourceMenuChoices(controls));
         var binding = NativeBotSkillBinding(player);
         var world = _nativeReferences;
         var driver = _nativeOpeningStageDriver;
@@ -43,7 +38,7 @@ public partial class RuntimeCoordinator
         var loading = world is null || driver is null || movieActive || NativeBotLoading(world);
         var defeated = _nativeDeathPresented || player.IsDefeated?.Invoke() == true;
         var error = driver?.BlockingExecutionFault ?? _nativeQuestScripts?.StartupError ??
-            world?.PlayerMoves.Error ?? _nativeReferencePresentation?.Error ?? _nativeTerminalMenu?.Error;
+            world?.PlayerMoves.Error ?? _nativeReferencePresentation?.Error ?? _nativeTerminalMenu?.Error ?? driver?.RecipeMenuError;
         var goals = new List<BotCampaignGoal>();
         if (!loading && !defeated && !player.ModalInput && !GetTree().Paused)
         {
@@ -78,6 +73,7 @@ public partial class RuntimeCoordinator
                         var objective = driver.Quests.Objective(quest.Quest, target.Objective);
                         if (!objective.Displayed || objective.Completed) continue;
                         if (!FalloutCondition.AllPass(target.Conditions, condition => driver.EvaluateTargetCondition(target.Reference, condition), evaluateRunOn: true)) continue;
+                        var objectiveText = driver.Quests.ObjectiveText(quest.Quest, target.Objective);
                         try
                         {
                             var source = records.GetEffective(target.Reference);
@@ -97,7 +93,6 @@ public partial class RuntimeCoordinator
                                 targetPriority += ReactiveCampaignBot.NearbyUnselectedQuestBonus(player.GlobalPosition.DistanceTo(sourcePosition));
                             }
                             var action = target.Reference;
-                            var objectiveText = driver.Quests.ObjectiveText(quest.Quest, target.Objective);
                             var defeatObjective = ReactiveCampaignBot.RequestsDefeat(objectiveText);
                             var hostile = actorTarget && defeatObjective && world.IsResident(target.Reference) &&
                                 NativeBotHostileToPlayer(world, world.Get(target.Reference), records.RuntimeFormKey(0x14));
@@ -125,7 +120,7 @@ public partial class RuntimeCoordinator
                             else if (mode != "follow" && !world.IsResident(target.Reference) && placement.Cell != current.FormKey) mode = "travel";
                             var identity = quest.Quest + ":" + target.Objective + ":" + target.Ordinal + ":" + mode + ":" + scene;
                             goals.Add(new(identity, quest.Quest.ToString(), target.Objective, target.Reference.ToString(),
-                                action.ToString(), mode, targetPriority));
+                                action.ToString(), mode, targetPriority, ObjectiveText: objectiveText));
                         }
                         catch (Exception targetError) when (targetError is InvalidDataException or
                             InvalidOperationException or NotSupportedException or KeyNotFoundException)
@@ -133,7 +128,7 @@ public partial class RuntimeCoordinator
                             var identity = quest.Quest + ":" + target.Objective + ":" + target.Ordinal + ":interact:" + scene;
                             goals.Add(new(identity, quest.Quest.ToString(), target.Objective,
                                 target.Reference.ToString(), target.Reference.ToString(), "interact", priority,
-                                "Source campaign target " + target.Reference + ": " + targetError.Message));
+                                "Source campaign target " + target.Reference + ": " + targetError.Message, objectiveText));
                         }
                     }
                     // Quest-linked hostile actors may not have acquired the
@@ -157,7 +152,8 @@ public partial class RuntimeCoordinator
                         {
                             var identity = quest.Quest + ":" + objective.Index + ":actor:" + candidate.Reference + ":" + scene;
                             goals.Add(new(identity, quest.Quest.ToString(), (uint)objective.Index,
-                                candidate.Reference.ToString(), candidate.Reference.ToString(), "shoot", priority + 1));
+                                candidate.Reference.ToString(), candidate.Reference.ToString(), "shoot", priority + 1,
+                                ObjectiveText: driver.Quests.ObjectiveText(quest.Quest, (uint)objective.Index)));
                         }
                     }
                     if (goals.Count == questGoalsBefore)
@@ -179,7 +175,8 @@ public partial class RuntimeCoordinator
                                 if (candidate.Variables.Values.Any(v => v != 0)) continue;
                                 var identity = quest.Quest + ":" + objective.Index + ":" + candidate.Reference + ":" + scene;
                                 goals.Add(new(identity, quest.Quest.ToString(), (uint)objective.Index,
-                                    candidate.Reference.ToString(), candidate.Reference.ToString(), "shoot", priority));
+                                    candidate.Reference.ToString(), candidate.Reference.ToString(), "shoot", priority,
+                                    ObjectiveText: driver.Quests.ObjectiveText(quest.Quest, (uint)objective.Index)));
                             }
 
                             if (goals.Count == questGoalsBefore && targets.Count > 0)
@@ -187,7 +184,8 @@ public partial class RuntimeCoordinator
                                 var fallbackTarget = targets[0].Reference;
                                 var identity = quest.Quest + ":" + objective.Index + ":fallback:" + fallbackTarget + ":" + scene;
                                 goals.Add(new(identity, quest.Quest.ToString(), (uint)objective.Index,
-                                    fallbackTarget.ToString(), fallbackTarget.ToString(), "interact", priority - 10));
+                                    fallbackTarget.ToString(), fallbackTarget.ToString(), "interact", priority - 10,
+                                    ObjectiveText: driver.Quests.ObjectiveText(quest.Quest, (uint)objective.Index)));
                             }
                         }
                     }
