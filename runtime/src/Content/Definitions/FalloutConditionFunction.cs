@@ -78,6 +78,7 @@ internal enum FalloutConditionFunction : ushort
     IsInInterior = 300,
     IsWaterObject = 304,
     IsXBox = 309,
+    GetIsGhost = 337,
     IsEssential = 354,
     IsChild = 365,
     IsInList = 372,

@@ -64,8 +64,9 @@ hashes, record counts and the source compatibility identity.
 
 The shared SCDA reader now accounts for instruction headers, reference prefixes
 and payload extents independently of SCTX. Full selected FO3/FNV audits retain
-instruction counts and opaque opcodes, including malformed fields. Operand
-decoding and compiled execution remain open.
+instruction counts and opcodes, including malformed fields. Operands and
+expressions are decoded and compiled-only programs execute through runtime
+owners; see [the behavioral contracts](compiled-script-contracts.md).
 
 The effect-local storage owner now truncates finite, in-range integer assignments
 toward zero, retains floats and untouched cells, and preserves exact cold-state

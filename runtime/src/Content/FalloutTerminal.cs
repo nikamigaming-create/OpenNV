@@ -21,19 +21,20 @@ internal sealed record FalloutTerminalResultProgram(FalloutPluginRecord Terminal
     IReadOnlyList<FalloutTerminalScriptReference> References)
 {
     internal bool HasSource => FalloutDialogueTopic.CodeLines(Source).Any();
+    internal ReadOnlyMemory<byte> Compiled => Optional(Fields, "SCDA")?.Data ?? ReadOnlyMemory<byte>.Empty;
 
     internal void RequireSourceExecution()
     {
         if (CompiledSize != 0 && !HasSource)
-            throw new NotSupportedException($"TERM {Terminal.FormKey} entry {EntryIndex} has a compiled-only result.");
+            _ = FalloutCompiledScript.Decode(Compiled.Span);
         if (HasSource && CompiledSize == 0)
             throw new InvalidDataException("Terminal result source has no compiled program extent.");
-        if (HasSource && (Type is not (0 or 1) || Flags != 1))
+        if (CompiledSize != 0 && (Type is not (0 or 1) || Flags != 1))
             throw new NotSupportedException("Terminal result script type or execution flags have no source owner.");
         // The shared result interpreter binds world/quest locals to their
         // attached SCPT. An embedded event-list local needs its own demonstrated
         // lifetime; never substitute an unrelated attached slot with that index.
-        if (HasSource && (Locals.Count != 0 || References.Any(reference => reference.LocalIndex is not null)))
+        if (CompiledSize != 0 && (Locals.Count != 0 || References.Any(reference => reference.LocalIndex is not null)))
             throw new NotSupportedException("Terminal result embedded locals have no event-list state owner.");
     }
 

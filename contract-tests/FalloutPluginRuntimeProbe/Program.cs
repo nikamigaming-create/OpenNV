@@ -8,6 +8,7 @@ using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.World.Cells;
 
 if (args is ["--test-runtime-knowledge"]) { RuntimeKnowledgeGraphContracts.Run(); CompiledScriptContracts.Run(); ScriptIntegerCellContracts.Run(); return; }
+if (args is ["--audit-compiled-scripts", var compiledInstall]) { CompiledScriptContracts.Owned(compiledInstall); return; }
 if (args is ["--audit-script-integer-locals", var integerInstall]) { ScriptIntegerCellContracts.Owned(integerInstall); return; }
 if (args is ["--test-model-roots"]) { CellModelPathContracts.Run(); return; }
 if (args is ["--owned-tree-nif-models", var treeModelsRoot])

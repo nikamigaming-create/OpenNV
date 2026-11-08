@@ -759,7 +759,7 @@ internal partial class RuntimeNativeSpeech : Node
 
     private void RunResults(FalloutDialogueInfo info, FalloutFormKey speaker, bool begin)
     {
-        if (!FalloutDialogueTopic.CodeLines(begin ? info.BeginScript : info.EndScript).Any()) return;
+        if (!info.HasResultScript(begin)) return;
         (ExecuteResults ?? throw new NotSupportedException($"INFO {info.Record.FormKey} has no result-script owner."))(info, speaker, begin);
     }
 

@@ -25,6 +25,11 @@ internal sealed record FalloutDialogueInfo(FalloutPluginRecord Record, FalloutFo
     byte NextSpeaker, byte Flags, byte Flags2, IReadOnlyList<byte[]> Conditions,
     IReadOnlyList<FalloutDialogueResponse> Responses, string BeginScript, string EndScript)
 {
+    internal ReadOnlyMemory<byte> BeginCompiled { get; init; }
+    internal ReadOnlyMemory<byte> EndCompiled { get; init; }
+    internal bool HasResultScript(bool begin) =>
+        FalloutDialogueTopic.CodeLines(begin ? BeginScript : EndScript).Any() ||
+        !(begin ? BeginCompiled : EndCompiled).IsEmpty;
     internal IReadOnlyList<FalloutFormKey> Choices { get; init; } = [];
     internal IReadOnlyList<FalloutFormKey> AddedTopics { get; init; } = [];
     internal IReadOnlyList<FalloutFormKey> FollowUps { get; init; } = [];
@@ -254,12 +259,26 @@ internal sealed partial class FalloutDialogueTopic
         return new FalloutDialogueInfo(record, RequiredForm(record, "QSTI"), data[0], data[1], data[2],
             data.Length == 4 ? data[3] : (byte)0, conditions, responses, ResultSource(fields, true), ResultSource(fields, false))
         {
+            BeginCompiled = ResultCompiled(fields, true),
+            EndCompiled = ResultCompiled(fields, false),
             Choices = Forms("TCLT"),
             AddedTopics = Forms("NAME"),
             FollowUps = Forms("TCFU"),
             Prompt = prompts.Length == 0 ? null : Text(prompts[0].Data.Span),
             Speaker = speakers.Count == 0 ? null : speakers[0],
         };
+    }
+
+    private static ReadOnlyMemory<byte> ResultCompiled(FalloutPluginSubrecord[] fields, bool begin)
+    {
+        var split = Array.FindIndex(fields, field => field.Signature == "NEXT");
+        var selected = begin ? (split < 0 ? fields : fields[..split]) : (split < 0 ? [] : fields[(split + 1)..]);
+        var headers = selected.Where(field => field.Signature == "SCHR").ToArray();
+        if (headers.Length == 1 && FalloutScriptHeader.Read(headers[0].Data.Span).CompiledBytes == 0)
+            return ReadOnlyMemory<byte>.Empty;
+        var bodies = selected.Where(field => field.Signature == "SCDA").ToArray();
+        if (bodies.Length > 1) throw new InvalidDataException("INFO result repeats its compiled body.");
+        return bodies.Length == 1 ? bodies[0].Data : ReadOnlyMemory<byte>.Empty;
     }
 
     private static string ResultSource(FalloutPluginSubrecord[] fields, bool begin)

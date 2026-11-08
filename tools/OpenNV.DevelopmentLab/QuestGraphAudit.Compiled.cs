@@ -5,7 +5,7 @@ internal static partial class QuestGraphAudit
 {
     private sealed class CompiledInventory(StreamWriter rows)
     {
-        internal long Bodies, DecodedBodies, FailedBodies, Bytes, DecodedBytes, Instructions;
+        internal long Bodies, DecodedBodies, FailedBodies, Bytes, DecodedBytes, Instructions, DecodedInstructions, FailedInstructions;
         private readonly Dictionary<ushort, long> _opcodes = [];
 
         internal void Inspect(string scope, int fieldOrdinal, ReadOnlyMemory<byte> data)
@@ -13,17 +13,21 @@ internal static partial class QuestGraphAudit
             ++Bodies; Bytes += data.Length;
             try
             {
-                var instructions = FalloutCompiledScript.Read(data.Span);
-                foreach (var instruction in instructions)
+                var statements = FalloutCompiledScript.Decode(data.Span);
+                foreach (var statement in statements)
                 {
+                    var instruction = statement.Framing;
                     Instructions++;
+                    DecodedInstructions++;
                     _opcodes[instruction.Opcode] = _opcodes.GetValueOrDefault(instruction.Opcode) + 1;
                     rows.WriteLine(JsonSerializer.Serialize(new
                     {
                         scope,
                         fieldOrdinal,
                         instruction,
-                        disposition = "framed-operands-and-effects-unverified"
+                        kind = statement.Kind.ToString(),
+                        command = statement.Command?.Name ?? statement.BlockName,
+                        disposition = "operands-and-expressions-decoded"
                     }));
                 }
                 ++DecodedBodies; DecodedBytes += data.Length;
@@ -31,12 +35,13 @@ internal static partial class QuestGraphAudit
             catch (InvalidDataException error)
             {
                 ++FailedBodies;
+                FailedInstructions++;
                 rows.WriteLine(JsonSerializer.Serialize(new
                 {
                     scope,
                     fieldOrdinal,
                     bytes = data.Length,
-                    disposition = "framing-failed-no-partial-instructions-admitted",
+                    disposition = "decoding-failed-no-partial-instructions-admitted",
                     error = error.Message
                 }));
             }
@@ -50,11 +55,13 @@ internal static partial class QuestGraphAudit
             bytes = Bytes,
             decodedBytes = DecodedBytes,
             instructions = Instructions,
+            decodedInstructions = DecodedInstructions,
+            failedInstructions = FailedInstructions,
             opcodes = _opcodes.OrderBy(pair => pair.Key).Select(pair => new { opcode = pair.Key, count = pair.Value }),
             allBodiesAccountedFor = Bodies == DecodedBodies + FailedBodies,
-            framing = "opcode-reference-prefix-and-payload-extents-only",
-            operandDecoding = "unimplemented",
-            execution = "unimplemented",
+            framing = "opcode-reference-prefix-and-payload-extents-verified",
+            operandDecoding = "command-parameters-and-postfix-expressions-decoded",
+            execution = "compiled-vm-wired-to-runtime-owners",
             retailParity = "unverified"
         };
     }

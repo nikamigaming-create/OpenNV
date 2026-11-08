@@ -110,8 +110,9 @@ internal sealed partial class FalloutReferenceWorld
         var actor = Actor(reference);
         var health = Health(reference);
         var injury = actor.Injury!;
-        var healthDamage = source.Invulnerable || injury.Dead ? 0 : damage * (healthOnly ? 1 : part.DamageMultiplier);
-        var limbDamage = source.Invulnerable || healthOnly ? 0 : damage * limbMultiplier;
+        var invulnerable = source.Invulnerable || actor.Ghost;
+        var healthDamage = invulnerable || injury.Dead ? 0 : damage * (healthOnly ? 1 : part.DamageMultiplier);
+        var limbDamage = invulnerable || healthOnly ? 0 : damage * limbMultiplier;
         var changed = health with { Damage = health.Damage - healthDamage };
         var limbs = new Dictionary<byte, float>(injury.LimbDamage);
         if (!healthOnly) limbs[partType] = limbs.GetValueOrDefault(partType) + limbDamage;

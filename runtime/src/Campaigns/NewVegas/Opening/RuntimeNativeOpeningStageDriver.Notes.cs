@@ -30,7 +30,8 @@ internal partial class RuntimeNativeOpeningStageDriver
                 var info = FalloutDialogueTopic.Read(_pluginStack, topic).Select(actor, new HashSet<FalloutFormKey>(),
                     quest => _quests.Stage(quest), conditions.Evaluate, random: _ingestibleSoundRandom.NextBounded)
                     ?? throw new InvalidDataException("The note has no available voice response.");
-                if (!string.IsNullOrWhiteSpace(info.BeginScript) || !string.IsNullOrWhiteSpace(info.EndScript))
+                if (!string.IsNullOrWhiteSpace(info.BeginScript) || !string.IsNullOrWhiteSpace(info.EndScript) ||
+                    info.HasResultScript(true) || info.HasResultScript(false))
                     throw new NotSupportedException("The note's response script is not connected to note playback.");
                 _pipBoyNoteVoices ??= new(source.ResourcePathsUnder("sound/voice"));
                 for (var index = 0; index < info.Responses.Count; index++)

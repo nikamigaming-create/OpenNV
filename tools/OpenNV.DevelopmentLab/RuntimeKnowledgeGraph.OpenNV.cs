@@ -78,9 +78,23 @@ internal static partial class RuntimeKnowledgeGraph
             var rows = File.ReadAllLines(InputPath(root, plan));
             for (var index = 0; index < rows.Length; ++index)
             {
+                var line = rows[index].Trim();
+                if (line.StartsWith("### M", StringComparison.Ordinal) && line.Length > 5 && char.IsAsciiDigit(line[5]))
+                {
+                    var obligation = graph.Node("obligation:milestone:" + index, "acceptance-obligation", line[4..].Trim(),
+                        new
+                        {
+                            file = plan,
+                            line = index + 1,
+                            kind = "milestone-section",
+                            acceptance = "unverified"
+                        });
+                    graph.Edge(planFile, "requires-acceptance", obligation, "authored-plan-not-execution-evidence");
+                    continue;
+                }
                 var columns = rows[index].Split('|');
                 if (columns.Length != 5 || columns[1].Trim() is "System" or "---") continue;
-                var obligation = graph.Node("obligation:" + index, "acceptance-obligation", columns[1].Trim(),
+                var tableObligation = graph.Node("obligation:" + index, "acceptance-obligation", columns[1].Trim(),
                     new
                     {
                         file = plan,
@@ -89,7 +103,7 @@ internal static partial class RuntimeKnowledgeGraph
                         remains = columns[3].Trim(),
                         acceptance = "unverified"
                     });
-                graph.Edge(planFile, "requires-acceptance", obligation, "authored-plan-not-execution-evidence");
+                graph.Edge(planFile, "requires-acceptance", tableObligation, "authored-plan-not-execution-evidence");
             }
         }
         return new

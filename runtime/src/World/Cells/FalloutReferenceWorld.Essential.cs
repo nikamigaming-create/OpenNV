@@ -38,6 +38,11 @@ internal sealed partial class FalloutReferenceWorld
     internal void SetActorRefEssential(FalloutFormKey reference, bool essential) =>
         Actor(reference).ReferenceEssential = essential;
 
+    internal bool IsGhost(FalloutFormKey reference) => Actor(reference).Ghost;
+
+    internal void SetGhost(FalloutFormKey reference, bool ghost) =>
+        Actor(reference).Ghost = ghost;
+
     private bool EssentialProtection(FalloutFormKey reference) => IsEssential(reference) &&
         records.IniSettings.Boolean("bEssentialTakeNoDamage:GamePlay");
 

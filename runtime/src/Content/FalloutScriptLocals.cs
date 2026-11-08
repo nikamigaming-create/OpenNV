@@ -78,20 +78,51 @@ internal static class FalloutScriptLocals
         }
         if (index is not null) throw new InvalidDataException("Script variable has no source name.");
 
-        var sourceKinds = ReadSourceKinds(script);
+        var sourceKinds = ReadSourceKinds(script, declarations);
         if (sourceKinds.Keys.Any(name => !variables.ContainsKey(name)))
             throw new InvalidDataException("Script source declares a variable without a compiled slot.");
         return variables.ToDictionary(pair => pair.Key,
             pair => new FalloutScriptLocalDeclaration(pair.Value.Index,
-                sourceKinds.GetValueOrDefault(pair.Key, FalloutScriptLocalKind.Number)),
+                sourceKinds.GetValueOrDefault(pair.Key, FalloutScriptLocalKind.Number),
+                (pair.Value.Flags & 1) != 0),
             StringComparer.OrdinalIgnoreCase);
     }
 
+    internal static IReadOnlyDictionary<uint, FalloutScriptLocalDeclaration> ReadSlots(
+        FalloutPluginRecord script) =>
+        ReadDeclarations(script).Values.ToDictionary(declaration => declaration.Index);
+
     private static IReadOnlyDictionary<string, FalloutScriptLocalKind> ReadSourceKinds(
-        FalloutPluginRecord script)
+        FalloutPluginRecord script, IReadOnlyDictionary<uint, (byte Flags, string Name)> declarations)
     {
         var source = script.ReadSubrecords().Where(field => field.Signature == "SCTX").ToArray();
-        if (source.Length == 0) return new Dictionary<string, FalloutScriptLocalKind>();
+        if (source.Length == 0)
+        {
+            var compiledResult = new Dictionary<string, FalloutScriptLocalKind>(StringComparer.OrdinalIgnoreCase);
+            foreach (var field in script.ReadSubrecords())
+            {
+                if (field.Signature == "SCRV" && field.Data.Length == 4)
+                {
+                    var slotIndex = BinaryPrimitives.ReadUInt32LittleEndian(field.Data.Span);
+                    if (declarations.TryGetValue(slotIndex, out var slot))
+                        compiledResult[slot.Name] = FalloutScriptLocalKind.Form;
+                }
+                else if (field.Signature == "SCDA" && field.Data.Length > 0)
+                {
+                    foreach (var instruction in FalloutCompiledScript.Read(field.Data.Span))
+                    {
+                        if (instruction.Opcode == 0x001F && instruction.PayloadLength == 2)
+                        {
+                            var slotIndex = BinaryPrimitives.ReadUInt16LittleEndian(
+                                field.Data.Span.Slice(instruction.PayloadOffset, 2));
+                            if (declarations.TryGetValue(slotIndex, out var slot))
+                                compiledResult[slot.Name] = FalloutScriptLocalKind.Form;
+                        }
+                    }
+                }
+            }
+            return compiledResult;
+        }
         if (source.Length != 1) throw new InvalidDataException("Script source is ambiguous.");
         var result = new Dictionary<string, FalloutScriptLocalKind>(StringComparer.OrdinalIgnoreCase);
         foreach (var raw in FalloutDialogueTopic.ScriptText(source[0].Data.Span).Split('\n'))

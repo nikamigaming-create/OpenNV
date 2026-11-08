@@ -143,13 +143,19 @@ internal sealed record FalloutPackageEvent(FalloutPluginRecord Package, string K
         }
     }
 
+    internal ReadOnlyMemory<byte> Compiled =>
+        Fields.SingleOrDefault(subrecord => subrecord.Signature == "SCDA").Data;
+
     internal void RequireEmptyScript()
         => ExecuteScript(_ => throw new NotSupportedException($"PACK {Package.FormKey} {Kind} event script execution is unbound."));
 
     internal void ExecuteScript(Action<string> execute)
     {
         ValidateScript();
-        foreach (var line in FalloutDialogueTopic.CodeLines(Source)) execute(line);
+        var lines = FalloutDialogueTopic.CodeLines(Source).ToArray();
+        if (lines.Length == 0 && !Compiled.IsEmpty)
+            throw new NotSupportedException($"PACK {Package.FormKey} {Kind} compiled event script requires a VM execution owner.");
+        foreach (var line in lines) execute(line);
         RequireEmptyTopic();
     }
 
@@ -168,7 +174,7 @@ internal sealed record FalloutPackageEvent(FalloutPluginRecord Package, string K
                 Fields.Count(field => field.Signature is "SCRO" or "SCRV")))
             throw new InvalidDataException("Package event compiled extents disagree with its header.");
         if (compiled.Length == 1 && compiled[0].Data.Length != 0 && !FalloutDialogueTopic.CodeLines(Source).Any())
-            throw new NotSupportedException($"PACK {Package.FormKey} {Kind} compiled program has no source execution owner.");
+            _ = FalloutCompiledScript.Decode(compiled[0].Data.Span);
         if (FalloutDialogueTopic.CodeLines(Source).Any() &&
             (headers.Length != 1 || compiled.Length != 1 || compiled[0].Data.Length == 0))
             throw new InvalidDataException("Package event source has no complete compiled program owner.");

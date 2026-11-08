@@ -1,15 +1,17 @@
 # Product status
 
-The November 7 reference-mapping batch adds a private runtime knowledge graph,
-SCDA instruction framing, effect-local integer assignment truncation, and the
-durable M0–M12 complete-game plan in implementation-plan.md.
-All 26,257 compiled fields in the explicit official FO3/FNV selections frame
-235,750 instructions without errors; operands and VM execution remain open in M1.
-Synthetic graph/framing/storage checks and 618 owned integer-cell/cold-state
-cases pass. FNV's previously selected diagnostic comparison plugin is absent,
-so its current 628,463-record denominator differs from the earlier 628,471.
-FO3 retains 930,306 winning records. The required full C#/Godot gate passed.
-No new campaign or parity acceptance is claimed.
+The November 8 M1 batch decodes compiled SCDA operands and expressions and
+executes compiled programs through the existing runtime script owners. All
+26,257 compiled fields in the explicit official FO3/FNV selections decode
+235,750 typed instructions without errors. All four compiled-only programs in
+those stacks execute against owned data through real quest, inventory, faction,
+actor and placement owners. FNV retains 628,463 and FO3 930,306 winning records;
+broad audits keep 15 and 11 structural findings. No campaign or parity
+acceptance is claimed; M2 (full script/NVSE/condition/event surface) is next.
+
+The November 7 reference-mapping batch added the private runtime knowledge
+graph, SCDA instruction framing, effect-local integer assignment truncation and
+the durable M0–M12 complete-game plan in implementation-plan.md.
 
 The active November 3 direction is offline-first implementation and tests across
 FO3/FNV systems, using complete owned-stack inspection and existing probes.
@@ -141,7 +143,7 @@ Unrelated classic import changes remain outside the combat publication.
 | NPCs and creatures | Source actor placement, selected combat/routines and Follow/Accompany work in checked cases. Ten distinct NPC capture blockers were recorded across four regional snapshots. No complete missing-NPC census or all-routine acceptance exists. |
 | Combat and VATS | Selected weapon changes, queued attacks, ammo/AP spending, damage and persistence work. The retained two-torso VATS receipts record actual torso hits; the prior head-hit headline was unsupported. Two concrete cancellation/reopen ownership fixes are live; native aim, cinematic timing and broader weapon/creature behavior remain open. Earlier ordinary gecko pursuit, melee and player death have evidence. The composed melee/navigation repair produces two natural scorpion deaths, mantis pursuit and stationary-player death in both games at about38seconds in one fresh encounter. Earlier repeats failed and timing/target selection still differ; those repeated runs are finished and have not established repeatability. This does not establish combat parity. |
 | Crafting and repair | Ordinary ammo breakdown, repair-kit use and a two-shell quantity batch have persistence evidence. All recipes, workbenches, skill/perk requirements and repair variants are not accepted. |
-| Quests and dialogue | The source-driven opening and selected dialogue/tutorial paths execute. All quest branches, faction outcomes and campaign continuation remain unverified. Compiled SCDA execution is still missing; source-text execution does not establish compiled-script support. |
+| Quests and dialogue | The source-driven opening and selected dialogue/tutorial paths execute. All quest branches, faction outcomes and campaign continuation remain unverified. Compiled SCDA programs now decode and execute through runtime owners; event timing and every command guard are not yet qualified. |
 | Travel and rooms | Ordinary McCarran and Freeside transitions and selected outdoor walks pass. Freeside additionally crosses its next CELL boundary after the geometry-free LAND repair. Both games enter Vault 11 through the ordinary door; its interior exposes missing joints/effects and mantises reaching unowned furniture behavior; native selection/failure semantics are being qualified. The inner control pod now closes and reopens the gear through ordinary activation after shared ACTI and initial-open repairs. Source arrivals are diagnostic placement, not ordinary travel proof. |
 | Fire and lighting | Two Boulder barrel references now render source flames/smoke in a paired close view. Brightness differs and persistent fire sounds remain missing. Three other lamps still reject controller chains. Selected cinematic channel mapping and pulse/slow-pulse repairs are integrated. |
 | Models and vegetation | Grass renders, and stationary grazing no longer translates the body in selected samples. SpeedTree shrubs remain missing: 582 reference failures in three regional captures. Those captures also contain 32 ragdoll-joint failures, seven shader-semantic failures and two door-controller failures. Counts describe captured instances, not unique implementation bugs. |

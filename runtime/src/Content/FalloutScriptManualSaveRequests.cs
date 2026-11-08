@@ -100,7 +100,7 @@ internal sealed class FalloutScriptManualSaveRequests(FalloutPluginStack records
         _enginePhase = enginePhase;
     }
 
-    private Invocation Enter(FalloutFormKey caller, FalloutPluginRecord program, FalloutGameModeProgram executing,
+    private Invocation Enter(FalloutFormKey caller, FalloutPluginRecord program, string programHash,
         FalloutScriptInventoryCaller? inventory)
     {
         if (inventory is not null)
@@ -124,15 +124,19 @@ internal sealed class FalloutScriptManualSaveRequests(FalloutPluginStack records
             _recordHashes.Add(program.FormKey, recordHash =
                 Convert.ToHexString(SHA256.HashData(program.ReadData())).ToLowerInvariant());
         var entered = new Entered(caller, program.FormKey, recordHash,
-            executing.ProgramSha256, checked(++_invocation), inventory);
+            programHash, checked(++_invocation), inventory);
         _entered.Add(entered.Invocation);
         return new(this, entered);
     }
 
     internal IEnumerable<bool> Execute(FalloutFormKey caller, FalloutPluginRecord source,
-        FalloutGameModeProgram program, IEnumerable<bool> steps, FalloutScriptInventoryCaller? inventory = null)
+        FalloutGameModeProgram program, IEnumerable<bool> steps, FalloutScriptInventoryCaller? inventory = null) =>
+        Execute(caller, source, program.ProgramSha256, steps, inventory);
+
+    internal IEnumerable<bool> Execute(FalloutFormKey caller, FalloutPluginRecord source,
+        string programHash, IEnumerable<bool> steps, FalloutScriptInventoryCaller? inventory = null)
     {
-        using var invocation = Enter(caller, source, program, inventory);
+        using var invocation = Enter(caller, source, programHash, inventory);
         using var enumerator = steps.GetEnumerator();
         while (true)
         {
