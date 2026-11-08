@@ -31,6 +31,12 @@ internal static partial class QuestGraphAuditContracts
                     root.GetProperty("emptyCompiledRows").GetInt32() == 1 && root.GetProperty("compiledOnlyPrograms").GetInt32() == 1,
                     "Winning/deleted/empty/orphan/compiled-only program bodies lost their original denominator.");
                 var invariants = root.GetProperty("invariants");
+                var compiledInventory = root.GetProperty("compiledInstructions");
+                Require(compiledInventory.GetProperty("bodies").GetInt32() == 4 &&
+                    compiledInventory.GetProperty("decodedBodies").GetInt32() == 1 &&
+                    compiledInventory.GetProperty("failedBodies").GetInt32() == 3 &&
+                    compiledInventory.GetProperty("instructions").GetInt32() == 0,
+                    "Failed/orphan SCDA framing disappeared or malformed prefixes became decoded instructions.");
                 Require(invariants.GetProperty("allRawProgramFieldsAccountedFor").GetBoolean() &&
                     invariants.GetProperty("allSourceBodiesHaveParseDisposition").GetBoolean() &&
                     invariants.GetProperty("allSourceProgramsAccountedFor").GetBoolean() &&

@@ -1,5 +1,16 @@
 # Product status
 
+The November 7 reference-mapping batch adds a private runtime knowledge graph,
+SCDA instruction framing, effect-local integer assignment truncation, and the
+durable M0–M12 complete-game plan in implementation-plan.md.
+All 26,257 compiled fields in the explicit official FO3/FNV selections frame
+235,750 instructions without errors; operands and VM execution remain open in M1.
+Synthetic graph/framing/storage checks and 618 owned integer-cell/cold-state
+cases pass. FNV's previously selected diagnostic comparison plugin is absent,
+so its current 628,463-record denominator differs from the earlier 628,471.
+FO3 retains 930,306 winning records. The required full C#/Godot gate passed.
+No new campaign or parity acceptance is claimed.
+
 The active November 3 direction is offline-first implementation and tests across
 FO3/FNV systems, using complete owned-stack inspection and existing probes.
 No campaign is launched during this block. The implementation plan contains the

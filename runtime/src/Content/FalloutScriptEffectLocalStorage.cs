@@ -74,8 +74,13 @@ internal sealed class FalloutScriptEffectLocalStorage
             payload = checked((ulong)FalloutScriptValue.Form(value.Number).Number);
         else
         {
-            ValidateNumber(entry.Flags, value.Number);
-            payload = BitConverter.DoubleToUInt64Bits(value.Number);
+            var number = value.Number;
+            // Assignment converts integer slots toward zero before storing the
+            // numeric cell. Reading/cold restoration must not coerce old bits.
+            if (entry.Flags == 1) number = Math.Truncate(number);
+            ValidateNumber(entry.Flags, number);
+            if (entry.Flags == 1) number = (int)number;
+            payload = BitConverter.DoubleToUInt64Bits(number);
         }
         _entries[ordinal] = (entry.Index, entry.Flags, payload);
     }
@@ -88,6 +93,6 @@ internal sealed class FalloutScriptEffectLocalStorage
     {
         if (!double.IsFinite(value)) throw new InvalidDataException("Reached active-effect numeric payload is non-finite.");
         if (flags == 1 && (value != Math.Truncate(value) || value < int.MinValue || value > int.MaxValue))
-            throw new NotSupportedException("Active-effect integer local coercion is unbound for this value.");
+            throw new NotSupportedException("Active-effect integer local is outside its supported Int32 domain.");
     }
 }

@@ -7,6 +7,8 @@ using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.World.Cells;
 
+if (args is ["--test-runtime-knowledge"]) { RuntimeKnowledgeGraphContracts.Run(); CompiledScriptContracts.Run(); ScriptIntegerCellContracts.Run(); return; }
+if (args is ["--audit-script-integer-locals", var integerInstall]) { ScriptIntegerCellContracts.Owned(integerInstall); return; }
 if (args is ["--test-model-roots"]) { CellModelPathContracts.Run(); return; }
 if (args is ["--owned-tree-nif-models", var treeModelsRoot])
 {
@@ -53,6 +55,7 @@ if (args is ["--test-corpus"])
 }
 if (args is ["--test-quest-graph"])
 {
+    CompiledScriptContracts.Run();
     QuestGraphAuditContracts.Run();
     return;
 }
@@ -183,6 +186,9 @@ WeatherLightingContracts.Run();
 CellLightingContracts.Run();
 PlacedLightEnableContracts.Run();
 CellGraphAuditContracts.Run();
+CompiledScriptContracts.Run();
+RuntimeKnowledgeGraphContracts.Run();
+ScriptIntegerCellContracts.Run();
 QuestGraphAuditContracts.Run();
 QuestGraphAuditContracts.RecordCache();
 QuestGraphAuditContracts.EmbeddedScriptCount();
