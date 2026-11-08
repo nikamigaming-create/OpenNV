@@ -55,7 +55,7 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
     FalloutActorLastIdleRequest? LastIdleRequest = null, bool ReferenceEssential = false, FalloutActorEssentialKnockout? EssentialKnockout = null,
     FalloutHitKnockback? HitKnockback = null, FalloutAmbientIdleSnapshot? AmbientIdle = null,
     bool RegionCellAttached = false, bool RegionImposterRole = false, FalloutSandboxRescanSnapshot? SandboxRescan = null,
-    FalloutFatigueKnockout? FatigueKnockout = null, FalloutMineState? Mine = null)
+    FalloutFatigueKnockout? FatigueKnockout = null, FalloutMineState? Mine = null, bool Ghost = false)
 {
     internal static void Validate(IReadOnlyList<FalloutReferenceSnapshot> snapshots)
     {
@@ -337,6 +337,7 @@ internal sealed partial class FalloutReferenceInstance
     internal bool Restrained { get; set; }
     internal bool PlayerTeammate { get; set; }
     internal bool ReferenceEssential { get; set; }
+    internal bool Ghost { get; set; }
     internal FalloutActorEssentialKnockout? EssentialKnockout { get; set; }
     internal bool TalkedToPlayer { get; set; }
     internal bool? BroadcastState { get; set; }
@@ -620,7 +621,7 @@ internal sealed partial class FalloutReferenceInstance
             SandboxMarker: CaptureSandboxMarker is { } captureMarker ? captureMarker() : SandboxMarker?.Copy(),
             SandboxIdleSelection: SandboxIdleSelection, LastIdleRequest: LastIdleRequest, ReferenceEssential: ReferenceEssential, EssentialKnockout: EssentialKnockout,
             HitKnockback: HitKnockback, AmbientIdle: AmbientIdle?.Capture(),
-            RegionCellAttached: RegionCellAttached, RegionImposterRole: RegionImposterRole, FatigueKnockout: FatigueKnockout, Mine: Mine);
+            RegionCellAttached: RegionCellAttached, RegionImposterRole: RegionImposterRole, FatigueKnockout: FatigueKnockout, Mine: Mine, Ghost: Ghost);
     }
 }
 
@@ -1087,12 +1088,13 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
                 validated.SetBroadcastState(snapshot.Reference, broadcast ? 1 : 0);
             var talkingActivator = snapshot.TalkedToPlayer && records.GetEffective(instance.Base).Signature == "TACT";
             if (talkingActivator) _ = FalloutDialogueSpeaker.Read(records, instance.Base);
-            if (snapshot.Restrained || snapshot.PlayerTeammate || snapshot.ReferenceEssential || snapshot.EssentialKnockout is not null || snapshot.FatigueKnockout is not null || snapshot.TalkedToPlayer && !talkingActivator || snapshot.PackageMotion is not null ||
+            if (snapshot.Restrained || snapshot.PlayerTeammate || snapshot.ReferenceEssential || snapshot.Ghost || snapshot.EssentialKnockout is not null || snapshot.FatigueKnockout is not null || snapshot.TalkedToPlayer && !talkingActivator || snapshot.PackageMotion is not null ||
                 snapshot.HitReaction is not null || snapshot.HitReactionRandomState is not null || snapshot.AttackRandomState is not null)
                 _ = validated.Actor(snapshot.Reference);
             instance.Restrained = snapshot.Restrained;
             instance.PlayerTeammate = snapshot.PlayerTeammate;
             instance.ReferenceEssential = snapshot.ReferenceEssential;
+            instance.Ghost = snapshot.Ghost;
             instance.EssentialKnockout = snapshot.EssentialKnockout;
             instance.TalkedToPlayer = snapshot.TalkedToPlayer;
             if (snapshot.PackageAssignment is { } assignment)

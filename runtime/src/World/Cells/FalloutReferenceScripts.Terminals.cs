@@ -28,12 +28,26 @@ internal sealed partial class FalloutReferenceScripts
             throw new InvalidDataException("Terminal result fragment differs from its selection receipt.");
         entry.Program.RequireSourceExecution();
         if (entry.Program.CompiledSize == 0) return;
-        var program = FalloutGameModeProgram.Read("begin Result\n" + entry.Program.Source + "\nend", "Result");
-        try { Execute(selection.Reference, Bindings(reference, current.Record, entry.Program.Fields), program, null, 0); }
-        catch (Exception error)
+        var bindings = Bindings(reference, current.Record, entry.Program.Fields);
+        if (entry.Program.HasSource)
         {
-            _terminalResultFailure = new(selection, program.LastStatement, program.StatementCount, error);
-            throw;
+            var program = FalloutGameModeProgram.Read("begin Result\n" + entry.Program.Source + "\nend", "Result");
+            try { Execute(selection.Reference, bindings, program, null, 0); }
+            catch (Exception error)
+            {
+                _terminalResultFailure = new(selection, program.LastStatement, program.StatementCount, error);
+                throw;
+            }
+        }
+        else
+        {
+            var compiled = new FalloutCompiledScriptVm(entry.Program.Compiled.Span);
+            try { ExecuteCompiled(selection.Reference, bindings, compiled, null, 0); }
+            catch (Exception error)
+            {
+                _terminalResultFailure = new(selection, compiled.LastStatement, compiled.StatementCount, error);
+                throw;
+            }
         }
     }
 }

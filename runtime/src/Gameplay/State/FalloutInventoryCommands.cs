@@ -87,6 +87,19 @@ internal sealed class FalloutInventoryCommands(FalloutPluginStack records, Fallo
             command.Item is { } zeroItem && records.GetEffective(zeroItem).Signature == "NOTE") return;
         if (command.Kind is FalloutInventoryCommandKind.Add or FalloutInventoryCommandKind.Remove && command.Count <= 0)
             throw new InvalidDataException("Inventory command count must be positive.");
+        // A form-list item operand applies the same count to every current
+        // list member, in list order. Live list edits remain authoritative.
+        if (command.Kind is FalloutInventoryCommandKind.Add or FalloutInventoryCommandKind.Remove &&
+            command.Item is FalloutFormKey listItem && records.GetEffective(listItem).Signature == "FLST")
+        {
+            foreach (var entry in FalloutFormList.Entries(records, listItem, world.FormLists).ToArray())
+            {
+                if (entry is not FalloutFormKey member) continue;
+                if (command.Kind == FalloutInventoryCommandKind.Remove && ItemCount(command.Target, member) <= 0) continue;
+                Execute(command with { Item = member });
+            }
+            return;
+        }
         var isPlayer = IsPlayer(command.Target);
         var inventory = Inventory(command.Target);
         switch (command.Kind)

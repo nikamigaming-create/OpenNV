@@ -6,7 +6,7 @@ namespace OpenNV.Runtime.World.Cells;
 internal static class FalloutScriptActorFlags
 {
     internal static bool Supports(string name, bool scoped) => name == "setessential" && !scoped ||
-        name is "setactorrefessential" or "isactorrefessential";
+        name is "setactorrefessential" or "isactorrefessential" or "setghost" or "getisghost";
 
     internal static FalloutScriptFunction? Function(string name, bool scoped, FalloutPluginStack records,
         Func<FalloutReferenceWorld> world, Func<FalloutFormKey> subject)
@@ -26,6 +26,14 @@ internal static class FalloutScriptActorFlags
             });
         if (name == "isactorrefessential")
             return new([], _ => world().IsActorRefEssential(subject()) ? 1 : 0) { ReadOnly = true };
+        if (name == "setghost")
+            return new([FalloutScriptArgumentKind.Number], arguments =>
+            {
+                world().SetGhost(subject(), FalloutPlayerActorValues.SignedInteger(arguments[0].Number) != 0);
+                return 0;
+            });
+        if (name == "getisghost")
+            return new([], _ => world().IsGhost(subject()) ? 1 : 0) { ReadOnly = true };
         return null;
     }
 }

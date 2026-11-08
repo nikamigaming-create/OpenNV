@@ -262,13 +262,21 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
     internal void ExecuteResult(FalloutDialogueInfo info, FalloutFormKey speaker, bool begin)
     {
         var source = begin ? info.BeginScript : info.EndScript;
-        if (!FalloutDialogueTopic.CodeLines(source).Any()) return;
+        var compiled = begin ? info.BeginCompiled : info.EndCompiled;
+        if (!FalloutDialogueTopic.CodeLines(source).Any() && compiled.IsEmpty) return;
         var fields = info.Record.ReadSubrecords().ToArray();
         var split = Array.FindIndex(fields, field => field.Signature == "NEXT");
         var selected = begin ? (split < 0 ? fields : fields[..split]) : (split < 0 ? [] : fields[(split + 1)..]);
         var bindings = Bindings(records.GetEffective(info.Quest), info.Record, selected);
-        var program = FalloutGameModeProgram.Read("begin Result\n" + source + "\nend", "Result");
-        Execute(speaker, bindings, program, null, 0);
+        if (FalloutDialogueTopic.CodeLines(source).Any())
+        {
+            var program = FalloutGameModeProgram.Read("begin Result\n" + source + "\nend", "Result");
+            Execute(speaker, bindings, program, null, 0);
+        }
+        else
+        {
+            ExecuteCompiled(speaker, bindings, new FalloutCompiledScriptVm(compiled.Span), null, 0);
+        }
     }
 
     internal void ExecuteProgram(FalloutPluginRecord owner, FalloutPluginRecord script, FalloutGameModeProgram program, double seconds)
@@ -303,8 +311,16 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
         var reference = records.GetEffective(actor);
         if (reference.Signature is not ("ACHR" or "ACRE"))
             throw new InvalidDataException("Package results require a placed actor as their calling reference.");
-        Execute(actor, Bindings(reference, program.Package, program.Fields),
-            FalloutGameModeProgram.Read("begin Result\n" + program.Source + "\nend", "Result"), null, 0);
+        var bindings = Bindings(reference, program.Package, program.Fields);
+        if (FalloutDialogueTopic.CodeLines(program.Source).Any())
+        {
+            Execute(actor, bindings,
+                FalloutGameModeProgram.Read("begin Result\n" + program.Source + "\nend", "Result"), null, 0);
+        }
+        else if (!program.Compiled.IsEmpty)
+        {
+            ExecuteCompiled(actor, bindings, new FalloutCompiledScriptVm(program.Compiled.Span), null, 0);
+        }
         // Topic selection observes the committed script result. Native speech
         // owns its voice/results; the following event IDLE stays with the actor.
         // A failed owner retains this prefix in the package lifecycle latch.
@@ -317,13 +333,20 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
         }
     }
 
-    internal void ExecuteStage(FalloutPluginRecord quest, IReadOnlyList<FalloutPluginSubrecord> fields, string source) =>
-        Execute(quest.FormKey, Bindings(quest, quest, fields),
-            FalloutGameModeProgram.Read("begin Result\n" + source + "\nend", "Result"), null, 0);
+    internal void ExecuteStage(FalloutPluginRecord quest, IReadOnlyList<FalloutPluginSubrecord> fields, string source)
+    {
+        foreach (var _ in StageSteps(quest, fields, source)) { }
+    }
 
-    internal IEnumerable<bool> StageSteps(FalloutPluginRecord quest, IReadOnlyList<FalloutPluginSubrecord> fields, string source) =>
-        Steps(quest.FormKey, Bindings(quest, quest, fields),
-            FalloutGameModeProgram.Read("begin Result\n" + source + "\nend", "Result"), null, 0);
+    internal IEnumerable<bool> StageSteps(FalloutPluginRecord quest, IReadOnlyList<FalloutPluginSubrecord> fields, string source)
+    {
+        var bindings = Bindings(quest, quest, fields);
+        if (FalloutDialogueTopic.CodeLines(source).Any())
+            return Steps(quest.FormKey, bindings,
+                FalloutGameModeProgram.Read("begin Result\n" + source + "\nend", "Result"), null, 0);
+        var compiled = fields.SingleOrDefault(field => field.Signature == "SCDA").Data;
+        return compiled.IsEmpty ? [] : CompiledSteps(quest.FormKey, bindings, new FalloutCompiledScriptVm(compiled.Span), null, 0);
+    }
 
     internal IReadOnlyList<FalloutScriptStatementInspection> Inspect(FalloutPluginRecord owner,
         FalloutPluginRecord source, IEnumerable<FalloutPluginSubrecord> fields,
@@ -347,11 +370,22 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
         foreach (var _ in Steps(source, bindings, program, actor, seconds)) { }
     }
 
+    internal void ExecuteCompiled(FalloutFormKey source, FalloutScriptBindings bindings, FalloutCompiledScriptVm compiledProgram,
+        FalloutFormKey? actor, double seconds)
+    {
+        foreach (var _ in CompiledSteps(source, bindings, compiledProgram, actor, seconds)) { }
+    }
+
+    internal IEnumerable<bool> CompiledSteps(FalloutFormKey source, FalloutScriptBindings bindings,
+        FalloutCompiledScriptVm compiledProgram, FalloutFormKey? actor, double seconds,
+        FalloutScriptExecutionBudget? budget = null) =>
+        Steps(source, bindings, null!, actor, seconds, budget: budget, compiledProgram: compiledProgram);
+
     private IEnumerable<bool> Steps(FalloutFormKey source, FalloutScriptBindings bindings, FalloutGameModeProgram program,
         FalloutFormKey? actor, double seconds, FalloutUserFunctionFrame? frame = null, FalloutScriptExecutionBudget? budget = null,
         Action<Func<string, FalloutScriptFunction?>>? inspectFunctions = null,
         Action<FalloutScriptInspectionContext>? inspectProgram = null, FalloutScriptEffectLocals? effectLocals = null,
-        FalloutInventoryScriptContext? inventoryContext = null)
+        FalloutInventoryScriptContext? inventoryContext = null, FalloutCompiledScriptVm? compiledProgram = null)
     {
         budget ??= new();
         var valueStore = world.ScriptValues;
@@ -784,7 +818,7 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
             {
                 if (parts.Length != 1 || arguments.Count != 0)
                     throw new InvalidDataException("ForceSave is a global zero-argument command.");
-                world.ScriptManualSaves.Request(program.LastStatement);
+                world.ScriptManualSaves.Request(compiledProgram?.LastStatement ?? program.LastStatement);
                 return;
             }
             if (operation == "call")
@@ -1113,7 +1147,7 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                 case "setplayerteammate" when arguments.Count == 1:
                     world.SetPlayerTeammate(target, Boolean(arguments[0]));
                     break;
-                case "moveto" when arguments.Count is >= 1 and <= 4:
+                case "moveto" or "movetomarker" or "movetomarkerwithfade" or "movetofade" when arguments.Count is >= 1 and <= 4:
                     var moveDestination = Reference(arguments[0]);
                     var moveX = arguments.Count > 1 ? (float)Number(arguments[1]) : 0;
                     var moveY = arguments.Count > 2 ? (float)Number(arguments[2]) : 0;
@@ -1393,6 +1427,26 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
         }
         if (inspectFunctions is not null) { inspectFunctions(Function); return []; }
         if (inspectProgram is not null) { inspectProgram(new(values, Function, UserFunction)); return []; }
+        if (compiledProgram is not null)
+        {
+            var env = new FalloutCompiledExecutionEnvironment(
+                records,
+                bindings,
+                globalKey => (host.Globals ?? throw new NotSupportedException("Script global has no state owner.")).Get(globalKey),
+                (globalKey, stored) => (host.Globals ?? throw new NotSupportedException("Script global has no state owner.")).Set(globalKey, stored),
+                (owner, index) => records.GetEffective(owner).Signature == "QUST" ? quests.Variable(owner, index) : world.Get(owner).Read(index),
+                (owner, index, value) =>
+                {
+                    if (records.GetEffective(owner).Signature == "QUST") quests.SetVariable(owner, index, value);
+                    else world.Get(owner).Write(index, value);
+                },
+                Call,
+                Function,
+                values,
+                index => records.GetEffective(source).Signature == "QUST" ? quests.Variable(source, index) : world.Get(source).Read(index));
+            return world.ScriptManualSaves.Execute(source, records.GetEffective(bindings.Source),
+                compiledProgram.ProgramSha256, compiledProgram.Steps(env, budget), inventoryContext?.Caller);
+        }
         return world.ScriptManualSaves.Execute(source, records.GetEffective(bindings.Source), program,
             program.Steps(Read, Write, Call, Function, UserFunction, budget, values), inventoryContext?.Caller);
     }

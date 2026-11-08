@@ -5,10 +5,18 @@ internal static partial class RuntimeKnowledgeGraph
 
     private static readonly Contract[] ReviewedContracts =
     [
-        new("compiled-framing", "SCDA instruction framing", "ParseOutput", "ScriptRunner",
+        new("compiled-framing", "SCDA instruction framing and operand decoding", "ParseOutput", "ScriptRunner",
             "runtime/src/Content/FalloutCompiledScript.cs",
             "contract-tests/FalloutPluginRuntimeProbe/CompiledScriptContracts.cs",
-            "structural framing; operands, references and execution unimplemented"),
+            "SCDA framing, block/expression/command operand decoding across 26,257 owned FNV+FO3 compiled bodies"),
+        new("compiled-vm-execution", "SCDA compiled VM execution", "Run", "ScriptRunner",
+            "runtime/src/Content/FalloutCompiledScriptVm.cs",
+            "contract-tests/FalloutPluginRuntimeProbe/CompiledScriptContracts.cs",
+            "postfix expression evaluation, branch skip counts, variable assignment and command dispatch"),
+        new("compiled-expression-eval", "SCDA postfix expression evaluation", "Eval", "ExpressionEvaluator",
+            "runtime/src/Content/FalloutCompiledScriptVm.cs",
+            "contract-tests/FalloutPluginRuntimeProbe/CompiledScriptContracts.cs",
+            "postfix stack evaluation with integer/float promotion"),
         new("effect-integer-assignment", "Effect-local integer assignment", "ParseBlock", "ScriptRunner",
             "runtime/src/Content/FalloutScriptEffectLocalStorage.cs",
             "contract-tests/FalloutPluginRuntimeProbe/ScriptIntegerCellContracts.cs",

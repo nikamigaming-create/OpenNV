@@ -114,6 +114,7 @@ internal sealed partial class FalloutConditionRuntime
             "getunconscious" => None(Function.GetUnconscious),
             "getknockedstate" => None(Function.GetKnockedState),
             "isessential" => None(Function.IsEssential),
+            "getisghost" => None(Function.GetIsGhost),
             "gethealthpercentage" => None(Function.GetHealthPercentage),
             "isincombat" => None(Function.IsInCombat),
             "isininterior" => None(Function.IsInInterior),

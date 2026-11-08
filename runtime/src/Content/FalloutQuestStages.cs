@@ -77,7 +77,7 @@ internal sealed partial class FalloutQuestStages(FalloutPluginStack records, Fal
                     if (sources.Length == 1)
                         foreach (var step in execute(quest, entry, FalloutDialogueTopic.ScriptText(sources[0].Data.Span))) yield return step;
                     else if (entry.Any(field => field.Signature == "SCDA" && field.Data.Length > 0))
-                        throw new NotSupportedException("Quest stage compiled program has no source execution owner.");
+                        foreach (var step in execute(quest, entry, "")) yield return step;
                     foreach (var field in entry.Where(field => field.Signature == "NAM0"))
                     {
                         if (field.Data.Length != 4) throw new InvalidDataException("Quest stage next-quest extent is invalid.");

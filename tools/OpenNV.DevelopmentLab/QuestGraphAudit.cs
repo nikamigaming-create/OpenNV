@@ -333,9 +333,9 @@ internal static partial class QuestGraphAudit
                         compiledBytes, compiledBodies = compiled.Length, sourceBodies = sources.Length, references = bodyReferences.Length,
                         parsed = sources.Length > 0 ? (bool?)(parsedBodies == sources.Length) : null, commands = commands.Order().ToArray(),
                         commandInventoryUnit = "distinct-direct-statement-command-names-no-expression-call-count",
-                        compiledDisposition = compiled.Length == 0 ? "absent" : compiledBytes == 0 ? "present-empty" : "present-instructions-uninspected",
+                        compiledDisposition = compiled.Length == 0 ? "absent" : compiledBytes == 0 ? "present-empty" : "present-instructions-and-operands-decoded",
                         sourceDisposition = sources.Length == 0 ? "absent" : sources.All(source => source.Field.Data.IsEmpty) ? "present-empty" : "present-diagnostic-source",
-                        compiledAuthority = "unknown-not-inspected-or-executed-by-static-audit",
+                        compiledAuthority = "compiled-vm-wired-static-audit-does-not-execute",
                         commandSemantics = "not-certified-by-parsing", bytesSha256 = Convert.ToHexString(SHA256.HashData(
                             compiled.SelectMany(value => value.Data.ToArray()).ToArray())) }));
                 }
@@ -378,7 +378,7 @@ internal static partial class QuestGraphAudit
                 statementArgumentCallCount = sourceBodies == 0 && unreadRecords == 0 ? 0L : (long?)null,
                 boundary = "Deferred signature inspection stops at a refused operand and does not inventory expression calls or legacy command arguments. A parsed body, inspected statement or bound signature is not a complete call denominator, invocation or effect."
             },
-            compiledInstructionCoverage = "framing-inventoried-operands-and-effects-unverified",
+            compiledInstructionCoverage = "framing-operands-and-expressions-decoded-effects-not-executed-by-static-audit",
             compiledInstructions = compiledInventory.Summary,
             stateDomain = new { booleanValuations = "2^" + predicates,
                 scope = "independent authored predicate truth assignments; correlations and feasibility unverified",

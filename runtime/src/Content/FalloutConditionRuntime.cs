@@ -238,6 +238,8 @@ internal sealed partial class FalloutConditionRuntime(FalloutPluginStack records
                     Required(world, "actor knockdown process").GetKnockedState(subject);
             case Function.IsEssential:
                 NoArguments(condition); return Required(world, "actor flags").IsEssential(subject) ? 1 : 0;
+            case Function.GetIsGhost:
+                NoArguments(condition); return Required(world, "actor flags").IsGhost(subject) ? 1 : 0;
             case Function.GetUnconscious: NoArguments(condition); return subject == records.RuntimeFormKey(0x14) ? NativeValue(subject, condition) : Required(world, "unconscious state").IsUnconscious(subject) ? 1 : 0;
             case Function.GetRestrained: NoArguments(condition); return Required(world, "restraint state").Get(subject).Restrained ? 1 : 0;
             case Function.IsWeaponOut: NoArguments(condition); return WeaponOut is { } weaponOut ? weaponOut(subject) ? 1 : 0 : NativeValue(subject, condition);

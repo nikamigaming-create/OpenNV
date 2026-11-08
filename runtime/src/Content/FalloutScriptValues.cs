@@ -11,7 +11,7 @@ internal enum FalloutScriptLocalKind
     Array,
 }
 
-internal readonly record struct FalloutScriptLocalDeclaration(uint Index, FalloutScriptLocalKind Kind);
+internal readonly record struct FalloutScriptLocalDeclaration(uint Index, FalloutScriptLocalKind Kind, bool IsInteger = false);
 
 internal enum FalloutScriptValueKind
 {
