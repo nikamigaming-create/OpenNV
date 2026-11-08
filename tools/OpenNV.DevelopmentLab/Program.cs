@@ -3,6 +3,17 @@ using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Campaigns.Classic.Native;
 using OpenNV.Runtime.Formats.Gamebryo;
 
+if (args.Length >= 3 && args[0] == "runtime-knowledge-graph") return RuntimeKnowledgeGraph.Run(args[1], args[2], args[3..]);
+if (args is ["runtime-knowledge-query", var knowledgeDirectory, var knowledgeTerm]) return RuntimeKnowledgeGraph.Query(knowledgeDirectory, knowledgeTerm);
+if (args is ["quest-graph", var selectedInstall, var selectedOutput, "--plugins", var selectedPlugins])
+{
+    var selection = JsonSerializer.Deserialize<string[]>(File.ReadAllText(selectedPlugins))
+        ?? throw new InvalidDataException("The explicit plugin selection must be a filename list.");
+    using var selectedContent = RuntimeLiveContentSource.Open(selectedInstall, DevelopmentLabSource.Campaign(selectedInstall),
+        activePlugins: selection, includeImplicitPlugins: false);
+    using var selectedRecords = FalloutPluginStack.Load(selectedContent.PluginSources);
+    return QuestGraphAudit.Run(selectedRecords, selectedContent, selectedOutput);
+}
 if (args is ["classic-combat-contract", var combatInstall]) return ClassicCombatProbe.Contract(combatInstall);
 if (args is ["classic-combat-source", var combatSource]) return ClassicCombatProbe.Run(combatSource);
 if (args is ["classic-map-space", var spaceInstall, var spaceCampaign, var spaceOutput]) return ClassicCombatProbe.MapSpace(spaceInstall, spaceCampaign, spaceOutput);
@@ -28,6 +39,8 @@ if (args.Length >= 1 && args[0] == "corpus") return CorpusInventory.RunCommand(a
 if (args.Length < 2 || args.Length < 3 && args[0] is not ("classic-movement" or "caravan-source" or "creature-sound-graph" or "find-target-graph" or "sandbox-capability-graph" or "light-graph" or "item-events" or "menu-audit" or "menu-graph") || args[0] is not ("route" or "classic-items" or "classic-campaign-start" or "classic-script" or "classic-item-systems" or "classic-inventory" or "classic-resource" or "classic-frm" or "classic-assets" or "classic-scenery" or "classic-movement" or "classic-player" or "cells" or "exterior" or "actors" or "script" or "record" or "record-find" or "record-layout" or "caravan-source" or "creature-sound-graph" or "find-target-graph" or "sandbox-capability-graph" or "light-graph" or "item-events" or "menu-audit" or "menu-graph" or "menu-source-events" or "settings" or "dialogue" or "dialogue-voice-topic" or "replay" or "lifecycle" or "corpus" or "quest-graph" or "resources" or "resource" or "nif" or "menu"))
 {
     Console.Error.WriteLine("Development only; reads owned files in place.\n" +
+        "runtime-knowledge-graph <private-reference-checkout> <fresh-local-output> [quest-audit-directory ...]\n" +
+        "runtime-knowledge-query <graph-directory> <name-or-path-fragment>\n" +
         "cells <installation-or-source-stack> <CELL editor ID or name fragment> [...]\n" +
         "route <installation-or-source-stack> <request.json: world runtime hex, start/end game units>\n" +
         "cell-review <installation-or-source-stack> <native detailed state.json>\n" +
@@ -58,7 +71,7 @@ if (args.Length < 2 || args.Length < 3 && args[0] is not ("classic-movement" or 
         "replay <installation-or-source-stack> <scenario.json>\n" +
         "lifecycle <installation-or-source-stack> <CELL editor ID> [...] (or --all)\n" +
         "corpus <installation-or-source-stack> <fresh-output-directory> [--selection-variants] [source options]\n" +
-        "quest-graph <installation-or-source-stack> <fresh-output-directory> [source options]\n" +
+        "quest-graph <installation-or-source-stack> <fresh-output-directory> [source options | --plugins <explicit-filename-list.json>]\n" +
         "item-events <installation-or-source-stack> [source options]\n" +
         "menu-audit <installation-or-source-stack> [source options]\n" +
         "menu-graph <installation-or-source-stack> [source options]\n" +

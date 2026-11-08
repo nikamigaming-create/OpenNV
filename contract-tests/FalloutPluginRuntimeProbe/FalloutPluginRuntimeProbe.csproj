@@ -14,6 +14,10 @@
     <Compile Include="../../tools/OpenNV.DevelopmentLab/CellReview.cs" Link="CellGraphAudit/CellReview.cs" />
     <Compile Include="../../tools/OpenNV.DevelopmentLab/DevelopmentLabSource.cs" Link="DevelopmentLabSource.cs" />
     <Compile Include="../../tools/OpenNV.DevelopmentLab/QuestGraphAudit*.cs" Link="QuestGraphAudit/%(Filename)%(Extension)" />
+    <Compile Include="../../tools/OpenNV.DevelopmentLab/RuntimeKnowledgeGraph*.cs" Link="RuntimeKnowledgeGraph/%(Filename)%(Extension)" />
+    <Compile Include="../../tools/OpenNV.DevelopmentLab/ScriptDispatchIndex.cs" Link="RuntimeKnowledgeGraph/ScriptDispatchIndex.cs" />
+    <Reference Include="Microsoft.CodeAnalysis" HintPath="$(MSBuildToolsPath)/Roslyn/bincore/Microsoft.CodeAnalysis.dll" Private="true" />
+    <Reference Include="Microsoft.CodeAnalysis.CSharp" HintPath="$(MSBuildToolsPath)/Roslyn/bincore/Microsoft.CodeAnalysis.CSharp.dll" Private="true" />
     <Compile Include="../ReferenceScriptContractProbe/ScriptInspectionContracts.cs" Link="QuestGraphAudit/ScriptInspectionContracts.cs" />
   </ItemGroup>
 </Project>

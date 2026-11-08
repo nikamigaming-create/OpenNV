@@ -27,6 +27,8 @@ internal static partial class QuestGraphAudit
         using var questRows = new StreamWriter(Path.Combine(directory, "quests.jsonl"));
         using var conditionRows = new StreamWriter(Path.Combine(directory, "conditions.jsonl"));
         using var statementRows = new StreamWriter(Path.Combine(directory, "statements.jsonl"));
+        using var compiledRows = new StreamWriter(Path.Combine(directory, "compiled-instructions.jsonl"));
+        var compiledInventory = new CompiledInventory(compiledRows);
         using var world = new FalloutReferenceWorld(records);
         var inspector = new FalloutReferenceScripts(records, world, new(records),
             new((_, _) => throw new InvalidOperationException("Static audit queried furniture."),
@@ -164,6 +166,9 @@ internal static partial class QuestGraphAudit
                     var compiledBytes = compiled.Sum(value => (long)value.Data.Length);
                     var bodyReferences = body.Where(value => value.Signature is "SCRO" or "SCRV").ToArray();
                     var scopeIdentity = record.FormKey + "/" + program.Scope + "/field:" + program.FieldStart;
+                    for (var ordinal = program.FieldStart; ordinal < program.FieldEnd; ++ordinal)
+                        if (fields[ordinal].Signature == "SCDA")
+                            compiledInventory.Inspect(scopeIdentity, ordinal, fields[ordinal].Data);
                     if (compiled.Length > 0) ++compiledProgramRows;
                     if (compiled.Length > 0 && compiledBytes == 0) ++emptyCompiledRows;
                     if (!program.HasHeader) ++orphanPrograms;
@@ -373,11 +378,13 @@ internal static partial class QuestGraphAudit
                 statementArgumentCallCount = sourceBodies == 0 && unreadRecords == 0 ? 0L : (long?)null,
                 boundary = "Deferred signature inspection stops at a refused operand and does not inventory expression calls or legacy command arguments. A parsed body, inspected statement or bound signature is not a complete call denominator, invocation or effect."
             },
-            compiledInstructionCoverage = "unknown-byte-program-not-decoded-by-this-audit",
+            compiledInstructionCoverage = "framing-inventoried-operands-and-effects-unverified",
+            compiledInstructions = compiledInventory.Summary,
             stateDomain = new { booleanValuations = "2^" + predicates,
                 scope = "independent authored predicate truth assignments; correlations and feasibility unverified",
                 execution = "not-enumerated-or-executed", numericAndLoopState = "unbounded-not-exhaustively-certified" },
             invariants = new { programRows = programs, discoveredProgramFields = discoveredFields, accountedProgramFields = accountedFields,
+                allCompiledFieldsInventoried = compiledInventory.Bodies == discoveredFields.GetValueOrDefault("SCDA"),
                 allRawProgramFieldsAccountedFor = allFieldsAccounted,
                 discoveredProgramFieldIdentities = discoveredFieldIdentities.Count, accountedProgramFieldIdentities = accountedFieldIdentities.Count,
                 allSourceBodiesHaveParseDisposition = parsedSourceBodies + parsedSourceFailures == sourceBodies,
