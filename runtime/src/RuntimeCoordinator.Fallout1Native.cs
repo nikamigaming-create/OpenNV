@@ -13,7 +13,7 @@ public partial class RuntimeCoordinator
         var source = Fallout1OwnedContentSource.LoadInstall(installRoot);
         var browser = new ClassicWorldBrowser(); AddChild(browser);
         browser.Configure(source, isolatedSavePath, _options.GetValueOrDefault("appearance-data-root"),
-            fallout3WorldRoot: _options.GetValueOrDefault("world-fallout3-data-root"));
+            fallout3WorldRoot: _options.GetValueOrDefault("world-fallout3-data-root"), xr: _nativeXr);
         DismissLoadingScreen();
         GD.Print($"OPENNV_FO1_NATIVE_INSTALL_READY profile={source.ProfileId} preparedInputs=0 movement=available campaign=unimplemented");
         if (DisplayServer.GetName() == "headless")

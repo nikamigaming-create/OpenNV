@@ -15,6 +15,7 @@ internal sealed partial class NativeXrCanvas : Node3D
     private double _scrollDelay;
     private long _scrollEvents;
     private Vector2 _pointer = new(-1, -1);
+    internal bool PointerInside => _panel.Visible && _pointer.X >= 0 && _pointer.Y >= 0;
     private const float Width = 1.8f, Height = 1.1571429f;
     internal object State => new
     {
@@ -70,9 +71,17 @@ internal sealed partial class NativeXrCanvas : Node3D
         _cursor = new ColorRect { Size = new(7, 7), Color = new(1, .7f, .2f), MouseFilter = Control.MouseFilterEnum.Ignore, Visible = false };
         cursorLayer.AddChild(_cursor);
     }
-    internal void Admit(CanvasLayer layer)
+    internal void Admit(CanvasLayer layer, bool preserveParent = false)
     {
         if (!_layers.Add(layer)) return;
+        if (preserveParent)
+        {
+            // Classic screens release modal state in _ExitTree. Redirect their
+            // canvas without reparenting and prematurely closing that state.
+            layer.CustomViewport = _view;
+            layer.TreeExiting += () => _layers.Remove(layer);
+            return;
+        }
         var owner = layer.GetParent();
         layer.Reparent(_view, false);
         var release = Callable.From(() => { if (IsInstanceValid(layer) && !layer.IsQueuedForDeletion()) layer.QueueFree(); });

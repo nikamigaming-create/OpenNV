@@ -24,9 +24,9 @@
           "status": "FPS gameplay from the earlier build awaits restoration"
         },
         "openxr": {
-          "launchable": false,
-          "previewOnly": false,
-          "status": "VR integration and headset acceptance remain incomplete"
+          "launchable": true,
+          "previewOnly": true,
+          "status": "Experimental stereo world and menu preview; controller gameplay and physical headset acceptance remain incomplete"
         }
       }
     },
@@ -46,9 +46,9 @@
           "status": "FPS gameplay is incomplete"
         },
         "openxr": {
-          "launchable": false,
-          "previewOnly": false,
-          "status": "VR integration and headset acceptance remain incomplete"
+          "launchable": true,
+          "previewOnly": true,
+          "status": "Experimental stereo world and menu preview; controller gameplay and physical headset acceptance remain incomplete"
         }
       }
     },

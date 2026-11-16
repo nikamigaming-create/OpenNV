@@ -76,9 +76,9 @@ internal static class RuntimeLaunchValidator
         if (options.TryGetValue("fo1-start-presentation", out var previousPresentation) &&
             previousPresentation != presentation)
             throw new ArgumentException("Conflicting classic presentation selections.");
-        if (presentation != "hex-tactical" || options.ContainsKey("vr"))
+        if (presentation is not ("hex-tactical" or "openxr") || options.ContainsKey("vr") && presentation != "openxr")
             throw new NotSupportedException(
                 $"{expectedCampaign} {presentation} is unavailable in the current native runtime; " +
-                "the hex scene preview does not implement FPS or VR gameplay.");
+                "select hex-tactical or the experimental OpenXR world preview.");
     }
 }
