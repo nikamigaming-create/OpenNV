@@ -1,6 +1,8 @@
 using Godot;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Campaigns.Classic.Native;
+using OpenNV.Runtime.Presentation.OpenXR;
+using OpenNV.Runtime.Campaigns.Fallout1;
 
 namespace OpenNV.Runtime.Campaigns.Classic.Native;
 
@@ -29,10 +31,22 @@ internal sealed partial class ClassicWorldBrowser : Node
     private Button _resume = null!, _save = null!;
     private bool _menuOpen;
     internal ClassicPlayerController? PlayerController { get; private set; }
+    private NativeXrRig? _xr;
+    private bool _xrTrigger;
+    private bool _xrTurnReady = true;
+    private Vector3 _xrEntry;
 
     internal void Configure(IFalloutClassicOwnedSource source, string savePath, string? appearanceRoot, string campaign = "fallout-1",
-        string? fallout3WorldRoot = null)
+        string? fallout3WorldRoot = null, NativeXrRig? xr = null)
     {
+        _xr = xr;
+        if (_xr is not null)
+        {
+            _xr.PreserveCanvasParents = true;
+            _xr.Modal = () => _menuOpen || _error.Visible || GetTree().Paused;
+            _xr.GameplayCanvasVisible = () => PlayerController is not null;
+            _xr.MenuRequested = () => SetMenuOpen(!_menuOpen);
+        }
         _campaign = campaign; _source = new ClassicMapCatalog(source, campaign);
         if (campaign == "fallout-2")
         {
@@ -132,7 +146,7 @@ internal sealed partial class ClassicWorldBrowser : Node
         if (_start is null) return;
         var active = PlayerController is not null;
         _inspection.Visible = !active; _start.Visible = !active; _continue.Visible = !active;
-        _panel.Visible = !active || _menuOpen || _error.Visible;
+        _panel.Visible = (_xr is null && !active) || _menuOpen || _error.Visible;
         _resume.Visible = active; _save.Visible = active;
         _start.Disabled = active || _choice is null || File.Exists(_savePath);
         _start.Text = _choice is null ? "Choose character to begin" : $"Begin · {_choice.Character.Name}";
@@ -156,7 +170,7 @@ internal sealed partial class ClassicWorldBrowser : Node
         var controller = new ClassicPlayerController(); _world!.AddChild(controller);
         try { controller.Configure(_source, _world, player, _savePath, _appearanceRoot); }
         catch { _world.RemoveChild(controller); controller.Free(); throw; }
-        PlayerController = controller; BindSounds(player.Sounds); _menuOpen = false; RefreshActions();
+        PlayerController = controller; BindSounds(player.Sounds); SetMenuOpen(false);
         controller.ExitRequested += exit => Callable.From(() => Try(() => Transition(exit))).CallDeferred();
         controller.MenuRequested += () => SetMenuOpen(true);
         GD.Print($"OPENNV_CLASSIC_PLAYER_ENTER name={player.Choice.Character.Name} map={player.MapPath} tile={player.Tile} " +
@@ -229,10 +243,48 @@ internal sealed partial class ClassicWorldBrowser : Node
         RefreshActions();
     }
 
-    public override void _ExitTree() { _worldAssets?.Dispose(); _authoredScenery?.Dispose(); _source?.Dispose(); }
+    public override void _ExitTree()
+    {
+        if (_xr is not null && IsInstanceValid(_xr)) { _xr.Modal = null; _xr.MenuRequested = null; _xr.GameplayCanvasVisible = null; }
+        _worldAssets?.Dispose(); _authoredScenery?.Dispose(); _source?.Dispose();
+    }
+
+    public override void _Process(double delta)
+    {
+        if (_xr is null || _world is null) return;
+        _xr.Position = PlayerController?.PlayerPosition ?? _xrEntry;
+        _xr.Camera.CullMask = _world.Camera.CullMask;
+        _xr.Camera.MakeCurrent();
+        var tracked = _xr.RightAim.GetHasTrackingData() && _xr.RightGrip.GetHasTrackingData();
+        var pressed = tracked && _xr.RightGrip.GetFloat(NativeXrActions.Fire) >= 0.6f;
+        if (!_menuOpen && !_error.Visible && !_xr.CanvasPointerActive && PlayerController is { } controller && pressed && !_xrTrigger)
+        {
+            var origin = _xr.RightAim.GlobalPosition;
+            var direction = -_xr.RightAim.GlobalBasis.Z;
+            if (direction.Y < -0.00001f)
+            {
+                var tile = Fo1HexMath.NearestTile(origin + direction * (-origin.Y / direction.Y));
+                if (controller.Player.Walkable.Contains(tile))
+                {
+                    try { controller.Player.RequestMove(tile); }
+                    catch (InvalidOperationException error) { controller.Hud.Message(error.Message); }
+                }
+            }
+        }
+        _xrTrigger = pressed;
+        var turn = tracked ? _xr.RightGrip.GetVector2(NativeXrActions.Turn).X : 0;
+        if (Math.Abs(turn) < 0.2f) _xrTurnReady = true;
+        if (!_menuOpen && _xrTurnReady && Math.Abs(turn) >= 0.7f)
+        {
+            var before = _xr.Camera.GlobalPosition;
+            _xr.Origin.RotateY(-Math.Sign(turn) * Mathf.Pi / 6);
+            var correction = before - _xr.Camera.GlobalPosition; correction.Y = 0;
+            _xr.Origin.GlobalPosition += correction; _xrTurnReady = false;
+        }
+    }
 
     private void BindChrome(ClassicWorldPreview world) =>
-        world.PresentationChromeChanged += visible => _panel.Visible = visible && (PlayerController is null || _menuOpen || _error.Visible);
+        world.PresentationChromeChanged += visible => _panel.Visible = visible && ((_xr is null && PlayerController is null) || _menuOpen || _error.Visible);
 
     internal void Select(string path, int? elevation = null)
     {
@@ -245,6 +297,14 @@ internal sealed partial class ClassicWorldBrowser : Node
                 sharedAssets: _worldAssets, sharedAuthored: _authoredScenery);
             if (_world is not null) { RemoveChild(_world); _world.Free(); }
             _world = next;
+            if (_xr is not null)
+            {
+                _xrEntry = Fo1HexMath.Center(map.EnteringTile);
+                _xr.Position = _xrEntry;
+                _xr.Camera.CullMask = next.Camera.CullMask;
+                _xr.Camera.MakeCurrent();
+                GD.Print($"OPENNV_CLASSIC_XR_READY campaign={_campaign} map={path} sourceTile={map.EnteringTile} mode=world-preview");
+            }
             BindChrome(next);
             _selectedMap = path;
             _map.Select(_maps.ToList().FindIndex(candidate => candidate.Replace('\\', '/').Equals(path.Replace('\\', '/'), StringComparison.OrdinalIgnoreCase)));

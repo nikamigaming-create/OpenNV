@@ -42,7 +42,7 @@ public partial class RuntimeCoordinator
         var scene = GD.Load<PackedScene>("res://src/Campaigns/Fallout2/CharacterStart/Fo2CharacterStart.tscn");
         var host = scene.Instantiate<Fo2CharacterStartHost>();
         host.Configure(installRoot, savePath, _options.GetValueOrDefault("appearance-data-root"),
-            _options.GetValueOrDefault("world-fallout3-data-root"));
+            _options.GetValueOrDefault("world-fallout3-data-root"), _nativeXr);
         AddChild(host);
         DismissLoadingScreen();
     }

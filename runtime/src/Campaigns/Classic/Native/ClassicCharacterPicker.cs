@@ -26,6 +26,7 @@ internal sealed partial class ClassicCharacterPicker : CanvasLayer
     private NativeOwnedActorPreview? _portrait;
     private FalloutPluginStack? _records;
     private ClassicPortraitMode _mode;
+    private Viewport? _resizeViewport;
     internal event Action<ClassicCharacterDraft>? Selected;
     internal IReadOnlyList<ClassicPremade> Premades => _premades;
     internal ClassicCharacterProfile Character => _character;
@@ -99,7 +100,8 @@ internal sealed partial class ClassicCharacterPicker : CanvasLayer
         _envision = ButtonAt("CharacterEnvision", "ENVISION · ILLUSTRATED", new(54, 244), new(201, 25), () => SetMode(
             _mode == ClassicPortraitMode.Illustrated ? ClassicPortraitMode.Live3D : ClassicPortraitMode.Illustrated));
         _editors = new Control { Position = new(274, 32), Size = new(316, 230), Visible = false }; _canvas.AddChild(_editors);
-        GetViewport().SizeChanged += Resize; Resize();
+        _resizeViewport = GetViewport();
+        _resizeViewport.SizeChanged += Resize; Resize();
         var saved = ClassicCharacterDraft.Read(save + ".character.json", campaign, profile, _premades);
         if (saved is { PremadeId: null })
         {
@@ -292,6 +294,8 @@ internal sealed partial class ClassicCharacterPicker : CanvasLayer
     public override void _ExitTree()
     {
         if (_ownsPause) { GetTree().Paused = _previousPause; _ownsPause = false; }
-        GetViewport().SizeChanged -= Resize; ReleasePortrait();
+        if (IsInstanceValid(_resizeViewport)) _resizeViewport!.SizeChanged -= Resize;
+        _resizeViewport = null;
+        ReleasePortrait();
     }
 }

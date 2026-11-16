@@ -28,6 +28,9 @@ internal sealed partial class NativeXrRig : Node3D
     internal int SnapTurns { get; private set; }
     internal float MaximumSnapPivotError { get; private set; }
     internal Func<bool>? Modal { get; set; }
+    internal Func<bool>? GameplayCanvasVisible { get; set; }
+    internal bool PreserveCanvasParents { get; set; }
+    internal bool CanvasPointerActive => _canvas.PointerInside;
     private Func<Transform3D, bool, bool, Vector3?>? _pointAtPipBoy;
     internal Func<Transform3D, bool, bool, Vector3?>? PointAtPipBoy
     {
@@ -115,7 +118,7 @@ internal sealed partial class NativeXrRig : Node3D
         if (layer.GetViewport() != GetViewport()) return;
         Callable.From(() =>
         {
-            if (IsInstanceValid(layer) && !layer.IsQueuedForDeletion()) _canvas.Admit(layer);
+            if (IsInstanceValid(layer) && !layer.IsQueuedForDeletion()) _canvas.Admit(layer, PreserveCanvasParents);
         }).CallDeferred();
     }
     internal void Attach(RuntimeNativePlayer player)
@@ -172,7 +175,8 @@ internal sealed partial class NativeXrRig : Node3D
         _pointerPressed = fire;
         var fireEdge = Edge("fire", fire);
         _player?.XrFire(fire && !modal && PointAtPipBoy is null && !WorldPointer);
-        if (PointAtPipBoy is null && modal) _canvas.Point(RightAim, CombatWheelOpen?.Invoke() != true && right && RightAim.GetHasTrackingData(), CombatWheelOpen?.Invoke() != true && fire);
+        var gameplayCanvas = GameplayCanvasVisible?.Invoke() == true;
+        if (PointAtPipBoy is null && (modal || gameplayCanvas)) _canvas.Point(RightAim, CombatWheelOpen?.Invoke() != true && right && RightAim.GetHasTrackingData(), CombatWheelOpen?.Invoke() != true && fire);
         else if (PointAtPipBoy is null && fireEdge)
         {
             if (WorldPointer) _player?.XrActivate();
@@ -197,7 +201,7 @@ internal sealed partial class NativeXrRig : Node3D
         }
         // User VR policy: no floating gameplay HUD. Menus remain stereo world
         // surfaces; the wrist device runs without pausing the world or headset.
-        _canvas.Present(modal && PointAtPipBoy is null, modal && PointAtPipBoy is null);
+        _canvas.Present(modal && PointAtPipBoy is null, (modal || gameplayCanvas) && PointAtPipBoy is null);
         _canvas.Scroll(right && PointAtPipBoy is null && modal && CombatWheelOpen?.Invoke() != true ? RightGrip.GetVector2(NativeXrActions.Turn).Y : 0, delta);
         ScrollPipBoy?.Invoke(right && PointAtPipBoy is not null ? RightGrip.GetVector2(NativeXrActions.Turn).Y : 0, delta);
     }

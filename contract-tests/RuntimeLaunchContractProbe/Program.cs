@@ -27,11 +27,15 @@ foreach (var (game, campaign) in campaigns)
     options["campaign"] = campaign;
     if (game is not (NativeGame.Fallout1 or NativeGame.Fallout2))
         continue;
-    foreach (var mode in new[] { "first-person", "openxr", "unknown" })
+    foreach (var mode in new[] { "first-person", "unknown" })
     {
         options["presentation"] = mode;
         MustReject<NotSupportedException>(() => RuntimeLaunchValidator.ValidateInstallation(options, installation));
     }
+    options["presentation"] = "openxr";
+    RuntimeLaunchValidator.NormalizePresentation(options);
+    RuntimeLaunchValidator.ValidateInstallation(options, installation);
+    options.Remove("vr");
     options["presentation"] = "hex-tactical";
     RuntimeLaunchValidator.ValidateInstallation(options, installation);
     options["vr"] = "true";

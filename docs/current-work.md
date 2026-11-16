@@ -11,7 +11,7 @@ campaign or recording is active.
 
 ## Verified state
 
-Base main is 412b0371 (PR353, M0 baseline). This batch completes M1: compiled
+Base main is b96bbc22 (PR354). M1 is merged: compiled
 SCDA operand/expression decoding, the compiled VM and its connection to the
 existing dialogue, package, patrol, quest-stage, terminal and reference script
 owners. Form-list AddItem/RemoveItem operands, actor ghost state and the
@@ -41,7 +41,30 @@ Current graph: local/runtime-knowledge-20261107. Keep current outputs, not
 duplicate archives. See runtime-knowledge-graph.md and
 compiled-script-contracts.md for commands, contracts and proof limits.
 
-After M1 merges to main, Root owns M2 on a fresh codex/ branch: the full
+The current user-directed interruption restores experimental classic OpenXR
+presentation: FO1/FO2 owned map views and original menus/HUD share the normal
+classic session. Classic modal canvases retain their parents so entering VR
+does not close inventory through an unintended tree-exit callback. Controller
+ground selection uses the ordinary movement owner; unsupported combat remains
+visible. These changes do not restore the earlier FPS combat implementation.
+
+The requested local combat video is a separately recovered August 31 demo
+from 0f5f011e, with a stereo observer following its existing camera and original
+UI. It is not footage of current-main combat, physical headset acceptance, or
+retail parity. Recovery code and reproduction instructions are kept locally;
+owned generated inputs are disposable after the requested video is exported.
+
+Owned-data checks: the FO1 inventory probe passed transfer/return/cold restore;
+the FO2 inventory probe explicitly skipped source-container looting. The FO2
+campaign-start probe passed all three premades, cold restore and source
+rejection. Simulator captures showed the original HUD and FO2 inventory; the
+optional FO2 humanoid outfit remains unresolved. Recovered Natalia's separate
+demo reported four kills, two FPS kills and one reload. None of these results
+certifies current-main classic combat or full campaign support.
+The full Godot 4.8-dev7 runtime gate and `git diff --check` passed for the
+classic OpenXR change.
+
+After the showcase work, Root owns M2 on a fresh codex/ branch: the full
 script, NVSE, condition and event surface from implementation-plan.md, starting
 from the knowledge graph's ranked unbound-command and condition gaps.
 
